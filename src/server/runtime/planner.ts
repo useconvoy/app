@@ -163,7 +163,7 @@ function planClosedWon(
       tool: "chat.post",
       args: {
         channel: params.notification_channel ?? "#revops",
-        text: `📄 Closed-Won paperwork complete for ${deal.name} (${fmtAmount}). Order form + kickoff checklist ready${deal.contactEmail ? "; invoice email queued." : "; no invoice sent (missing billing contact)."}`,
+        text: `Closed-Won paperwork complete for ${deal.name} (${fmtAmount}). Order form + kickoff checklist ready${deal.contactEmail ? "; invoice email queued." : "; no invoice sent (missing billing contact)."}`,
       },
     };
   }

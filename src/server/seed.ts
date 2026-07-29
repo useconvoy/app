@@ -137,7 +137,6 @@ export function seedDatabase(): Database {
     agents.push({
       id: agentId,
       name: t.name,
-      emoji: t.emoji,
       description: t.description,
       templateId: t.id,
       paused: false,
@@ -294,7 +293,7 @@ export function seedDatabase(): Database {
     const orderDocId = id("doc");
     docs.push({ id: orderDocId, environmentId: PRODUCTION_ID, title: `Order Form — ${d.company} — Platform`, content: `ORDER FORM (Meridian Standard Order Form v3)\n\nCustomer: ${d.company}\nTotal: USD ${d.amount.toLocaleString("en-US")}\nTerms: Net 30`, status: "published", createdAt: hoursAgo(9 - i * 0.5), createdByRunId: `run_hist_${histSeq + 1}` });
     emails.push({ id: id("em"), environmentId: PRODUCTION_ID, from: "billing@meridianlabs.dev", to: d.contact, subject: `Invoice & Order Form — ${d.company} — Platform`, body: `Please find attached the order form for ${d.company} — Platform. Total: USD ${d.amount.toLocaleString("en-US")}. Terms: Net 30.`, attachmentDocId: orderDocId, status: "sent", sentByRunId: `run_hist_${histSeq + 1}`, ts: hoursAgo(9 - i * 0.5) });
-    chatMessages.push({ id: id("msg"), environmentId: PRODUCTION_ID, channel: "#revops", text: `📄 Closed-Won paperwork complete for ${d.company} — Platform (USD ${d.amount.toLocaleString("en-US")}). Order form + kickoff checklist ready; invoice sent.`, byRunId: `run_hist_${histSeq + 1}`, ts: hoursAgo(9 - i * 0.5) });
+    chatMessages.push({ id: id("msg"), environmentId: PRODUCTION_ID, channel: "#revops", text: `Closed-Won paperwork complete for ${d.company} — Platform (USD ${d.amount.toLocaleString("en-US")}). Order form + kickoff checklist ready; invoice sent.`, byRunId: `run_hist_${histSeq + 1}`, ts: hoursAgo(9 - i * 0.5) });
     mkHistoricalRun({
       templateId: "closed_won_paperwork",
       environmentId: PRODUCTION_ID,

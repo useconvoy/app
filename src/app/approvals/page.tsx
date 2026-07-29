@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { timeAgo } from "@/components/bits";
+import { Badge, EnvBadge, timeAgo } from "@/components/bits";
 import type { Agent, Approval, Environment } from "@/server/types";
 
 type ApprovalItem = Approval & {
@@ -12,7 +12,7 @@ type ApprovalItem = Approval & {
 };
 
 export default function Approvals() {
-  const [items, setItems] = useState<ApprovalItem[]>([]);
+  const [items, setItems] = useState<ApprovalItem[] | null>(null);
   const [deciding, setDeciding] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -43,58 +43,86 @@ export default function Approvals() {
     }, 300);
   };
 
-  const pending = items.filter((a) => a.status === "pending" && a.run?.triggerType !== "test");
-  const decided = items.filter((a) => a.status !== "pending").slice(0, 20);
+  const pending = (items ?? []).filter((a) => a.status === "pending" && a.run?.triggerType !== "test");
+  const decided = (items ?? []).filter((a) => a.status !== "pending").slice(0, 20);
 
   return (
     <div>
-      <h1 className="page-title">Approvals</h1>
-      <p className="page-sub">
-        One inbox, two paths in: <b>policy-gated</b> (the environment forces review of specific tools, no matter how
-        confident the model is) and <b>agent-flagged</b> (the model escalated itself via <span className="mono">flag_for_review</span>).
-      </p>
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">Approvals</h1>
+          <p className="page-sub">
+            One inbox, two paths in: <b>policy-gated</b> — the environment forces review of specific tools regardless of
+            model confidence — and <b>agent-flagged</b> — the model escalated itself via{" "}
+            <span className="mono">flag_for_review</span>. Approving executes the action and resumes the run; rejecting
+            terminates the run cleanly with the decision on the trace.
+          </p>
+        </div>
+      </div>
 
-      <div className="section-title">Pending · {pending.length}</div>
+      <div className="section-head">
+        <div className="section-title">Pending ({pending.length})</div>
+      </div>
       <div className="stack">
-        {pending.length === 0 && <div className="card muted">Queue is clear. The fleet is working autonomously within policy.</div>}
-        {pending.map((a) => (
-          <div className="approval-card" key={a.id}>
-            <div className="flex-between" style={{ flexWrap: "wrap", gap: 8 }}>
-              <b>{a.agent?.emoji} {a.title}</b>
-              <span className="flex">
-                <span className={`pill ${a.kind === "agent_flagged" ? "pill-amber" : "pill-accent"}`}>
-                  {a.kind === "agent_flagged" ? "🚩 agent-flagged" : "✋ policy gate"}
+        {items === null ? (
+          <div className="faint">Loading…</div>
+        ) : pending.length === 0 ? (
+          <div className="empty">The queue is clear. The fleet is working autonomously within policy.</div>
+        ) : (
+          pending.map((a) => (
+            <div className="approval-card" key={a.id}>
+              <div className="flex-between flex-wrap">
+                <b style={{ fontSize: 13.5 }}>{a.title}</b>
+                <span className="flex">
+                  <Badge tone={a.kind === "agent_flagged" ? "warning" : "accent"}>
+                    {a.kind === "agent_flagged" ? "Agent-flagged" : "Policy gate"}
+                  </Badge>
+                  <EnvBadge kind={a.environment?.kind} name={a.environment?.name} />
                 </span>
-                <span className={`pill ${a.environment?.kind === "production" ? "pill-accent" : "pill-dim"}`}>{a.environment?.name}</span>
-              </span>
+              </div>
+              <Detail a={a} />
+              <div className="approval-actions">
+                <button className="btn btn-success" disabled={deciding === a.id} onClick={() => decide(a.id, "approve")}>Approve</button>
+                <button className="btn btn-danger" disabled={deciding === a.id} onClick={() => decide(a.id, "reject")}>Reject</button>
+                <Link className="btn" href={`/runs/${a.runId}`}>View trace context</Link>
+                <span className="faint small">Requested {timeAgo(a.requestedAt)} · approver: {a.approvers.join(", ")}</span>
+              </div>
             </div>
-            <Detail a={a} />
-            <div className="approval-actions">
-              <button className="btn btn-green" disabled={deciding === a.id} onClick={() => decide(a.id, "approve")}>✓ Approve</button>
-              <button className="btn btn-red" disabled={deciding === a.id} onClick={() => decide(a.id, "reject")}>✕ Reject</button>
-              <Link className="btn" href={`/runs/${a.runId}`}>View trace context →</Link>
-              <span className="muted small">requested {timeAgo(a.requestedAt)} · approver: {a.approvers.join(", ")}</span>
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       <div className="section">
-        <div className="section-title">Recently decided</div>
-        <div className="card" style={{ padding: 0 }}>
+        <div className="section-head">
+          <div className="section-title">Recently decided</div>
+        </div>
+        <div className="card card-flush">
           <table className="table">
-            <thead><tr><th>Item</th><th>Kind</th><th>Decision</th><th>Approver</th><th>Latency</th><th>Trace</th></tr></thead>
+            <thead>
+              <tr><th>Item</th><th>Kind</th><th>Decision</th><th>Approver</th><th className="num">Latency</th><th>Trace</th></tr>
+            </thead>
             <tbody>
               {decided.map((a) => (
                 <tr key={a.id}>
-                  <td style={{ maxWidth: 400 }}>{a.agent?.emoji} {a.title}</td>
-                  <td><span className={`pill ${a.kind === "agent_flagged" ? "pill-amber" : "pill-dim"}`}>{a.kind === "agent_flagged" ? "agent-flagged" : "policy gate"}</span></td>
-                  <td><span className={`pill ${a.status === "approved" ? "pill-green" : "pill-red"}`}>{a.status}</span></td>
+                  <td style={{ maxWidth: 420 }}>{a.title}</td>
+                  <td>
+                    <Badge tone={a.kind === "agent_flagged" ? "warning" : "neutral"}>
+                      {a.kind === "agent_flagged" ? "Agent-flagged" : "Policy gate"}
+                    </Badge>
+                  </td>
+                  <td>
+                    <Badge tone={a.status === "approved" ? "success" : "danger"}>
+                      {a.status === "approved" ? "Approved" : "Rejected"}
+                    </Badge>
+                  </td>
                   <td className="muted small">{a.approver}</td>
-                  <td className="muted small">{a.decidedAt ? `${Math.max(1, Math.round((new Date(a.decidedAt).getTime() - new Date(a.requestedAt).getTime()) / 60000))}m` : "—"}</td>
-                  <td><Link href={`/runs/${a.runId}`} className="pill pill-dim">trace →</Link></td>
+                  <td className="num muted small">
+                    {a.decidedAt ? `${Math.max(1, Math.round((new Date(a.decidedAt).getTime() - new Date(a.requestedAt).getTime()) / 60000))}m` : "—"}
+                  </td>
+                  <td><Link href={`/runs/${a.runId}`} className="tag">Open trace</Link></td>
                 </tr>
               ))}
+              {decided.length === 0 && <tr><td colSpan={6} className="faint">Nothing decided yet.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -118,7 +146,7 @@ function Detail({ a }: { a: ApprovalItem }) {
       <dl className="kv">
         <dt>To</dt><dd className="mono">{String(dt.to ?? "")}</dd>
         <dt>Subject</dt><dd>{String(dt.subject ?? "")}</dd>
-        <dt>Body</dt><dd><pre className="doc-view" style={{ padding: 10, fontSize: 12 }}>{String(dt.body ?? "")}</pre></dd>
+        <dt>Body</dt><dd><div className="doc-view" style={{ padding: 10, fontSize: 12 }}>{String(dt.body ?? "")}</div></dd>
       </dl>
     );
   }

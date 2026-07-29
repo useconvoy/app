@@ -7,7 +7,6 @@ export const TEMPLATES: AgentTemplate[] = [
   {
     id: "closed_won_paperwork",
     name: "Closed-Won Paperwork Agent",
-    emoji: "📄",
     description:
       "When a deal moves to Closed-Won, assemble its paperwork: order form, CRM fields, kickoff checklist, team notification, and the invoice email to the customer.",
     instructions: `You are Meridian Labs' Closed-Won Paperwork agent. When a deal reaches Closed-Won:
@@ -41,7 +40,6 @@ Never invent numbers. If anything about the deal looks out-of-distribution, use 
   {
     id: "lead_research",
     name: "Lead Research Agent",
-    emoji: "🔎",
     description:
       "When a new lead is created, research the company, write enrichment fields back to the CRM, and produce a research brief. Marking a lead research-qualified is gated in Production.",
     instructions: `You are Meridian Labs' Lead Research agent. For each new lead: read the lead record, research the company, write enrichment fields (industry, headcount band, fit notes) back to the CRM, and create a one-page research brief doc. If the lead clearly meets the ICP, mark it research-qualified — that action is consequential, so expect it to be gated in Production.`,
@@ -52,7 +50,6 @@ Never invent numbers. If anything about the deal looks out-of-distribution, use 
   {
     id: "docs_sync",
     name: "Docs Sync Agent",
-    emoji: "📚",
     description:
       "When a product change is flagged, draft updates to the affected docs. Publishing is gated in Production.",
     instructions: `You are Meridian Labs' Docs Sync agent. When a product change is flagged, read the change log entry, find the affected docs, and draft updated versions. Never publish directly — publishing is a gated action; create drafts and request publication.`,
@@ -63,7 +60,6 @@ Never invent numbers. If anything about the deal looks out-of-distribution, use 
   {
     id: "crm_hygiene",
     name: "CRM Hygiene Agent",
-    emoji: "🧹",
     description:
       "Nightly: dedupe and normalize CRM fields, flag stale records. Merging duplicate records is gated in Production.",
     instructions: `You are Meridian Labs' CRM Hygiene agent. Each night: scan for malformed or inconsistent fields and normalize them, flag records untouched for 90+ days, and detect duplicate records. Merging two records is destructive and consequential — always route merges through review.`,

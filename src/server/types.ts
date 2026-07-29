@@ -53,7 +53,6 @@ export interface PolicyRule {
 export interface AgentTemplate {
   id: string;
   name: string;
-  emoji: string;
   description: string;
   instructions: string;
   toolGrants: string[];
@@ -64,7 +63,6 @@ export interface AgentTemplate {
 export interface Agent {
   id: string;
   name: string;
-  emoji: string;
   description: string;
   templateId?: string;
   paused: boolean; // fleet-wide kill switch

@@ -19,7 +19,6 @@ export async function POST(req: NextRequest) {
   const agent: Agent = {
     id: id("agent"),
     name: String(body.name),
-    emoji: String(body.emoji ?? "🤖"),
     description: String(body.description ?? ""),
     templateId: body.templateId || undefined,
     paused: false,

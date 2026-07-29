@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { StateChip, timeAgo } from "@/components/bits";
+import { Badge, EnvBadge, Monogram, StateChip, timeAgo } from "@/components/bits";
 import type { Agent, AgentVersion, Deployment, Environment, PromotionDiff, Run, TestRun, TestScenario } from "@/server/types";
 
 interface Detail {
@@ -39,6 +39,7 @@ export default function AgentDetail({ params }: { params: Promise<{ id: string }
   const { agent, latestVersion, deployments, scenarios, suite, runs } = data;
   const prodDeployment = deployments.find((x) => x.environment?.kind === "production" && x.status === "active");
   const sandboxDeployment = deployments.find((x) => x.environment?.kind === "sandbox" && x.status === "active");
+  const suiteGreen = suite.total > 0 && suite.passed === suite.total;
 
   const runSuite = async () => {
     setTesting(true);
@@ -57,7 +58,7 @@ export default function AgentDetail({ params }: { params: Promise<{ id: string }
   const triggerSandboxRun = async () => {
     setNotice(null);
     if (!sandboxDeployment) return;
-    if (data.demoSandboxDeal && agent.templateId === "closed_won_paperwork") {
+    if (data.demoSandboxDeal && agent.templateId === "closed_won_paperwork" && data.demoSandboxDeal.stage !== "closedwon") {
       // Marking the sandbox deal Closed-Won fires the CRM webhook (CUJ-3).
       const res = await fetch("/api/webhooks/crm", {
         method: "POST",
@@ -66,7 +67,7 @@ export default function AgentDetail({ params }: { params: Promise<{ id: string }
       });
       const body = await res.json();
       if (body.runIds?.[0]) router.push(`/runs/${body.runIds[0]}`);
-      else setNotice("Webhook fired but no run started — is the agent paused?");
+      else setNotice("Webhook fired but no run started — check whether the agent is paused.");
       return;
     }
     const res = await fetch("/api/runs", {
@@ -104,70 +105,85 @@ export default function AgentDetail({ params }: { params: Promise<{ id: string }
 
   return (
     <div>
-      <div className="flex-between">
+      <div className="page-head">
         <div>
-          <h1 className="page-title">{agent.emoji} {agent.name}</h1>
-          <p className="page-sub" style={{ marginBottom: 0 }}>{agent.description}</p>
+          <h1 className="page-title flex" style={{ gap: 12 }}>
+            <Monogram name={agent.name} /> {agent.name}
+          </h1>
+          <p className="page-sub">{agent.description}</p>
         </div>
-        <div className="flex">
-          {agent.paused && <span className="pill pill-red">paused fleet-wide</span>}
-          <span className="pill pill-dim">v{latestVersion.version}</span>
+        <div className="page-actions">
+          {agent.paused && <Badge tone="danger">Paused fleet-wide</Badge>}
+          <span className="tag" style={{ alignSelf: "center" }}>v{latestVersion.version}</span>
+          <button className="btn" onClick={triggerSandboxRun} disabled={!sandboxDeployment}>
+            Run in Sandbox
+          </button>
+          <button className="btn btn-primary" onClick={openPreflight}>Promote to Production</button>
         </div>
       </div>
 
       {notice && (
-        <div className="card" style={{ marginTop: 16, borderColor: "rgba(240,106,106,0.5)" }}>
-          <b style={{ color: "var(--red)" }}>{notice}</b>
+        <div className="notice notice-danger" style={{ marginBottom: 16 }}>
+          <b>{notice}</b>
         </div>
       )}
 
-      <div className="section grid grid-2">
+      <div className="grid grid-2">
         <div className="card">
           <div className="card-title">Deployments</div>
-          <div className="stack" style={{ marginTop: 10, gap: 8 }}>
+          <div className="stack" style={{ marginTop: 12, gap: 8 }}>
             {deployments.filter((x) => x.status === "active").map((dep) => (
               <div key={dep.id} className="flex-between" style={{ fontSize: 13 }}>
-                <span className={`pill ${dep.environment?.kind === "production" ? "pill-accent" : "pill-dim"}`}>{dep.environment?.name}</span>
-                <span className="muted small">bound {timeAgo(dep.createdAt)}</span>
+                <EnvBadge kind={dep.environment?.kind} name={dep.environment?.name} />
+                <span className="faint small">bound {timeAgo(dep.createdAt)}</span>
               </div>
             ))}
-            {!prodDeployment && <div className="muted small">Not yet in Production — promote once the suite is green.</div>}
-          </div>
-          <div className="flex" style={{ marginTop: 14, flexWrap: "wrap" }}>
-            <button className="btn" onClick={triggerSandboxRun} disabled={!sandboxDeployment}>
-              ▶ Test-fire in Sandbox
-              {agent.templateId === "closed_won_paperwork" && data.demoSandboxDeal ? ` (close '${data.demoSandboxDeal.name.split(" — ")[0]}')` : ""}
-            </button>
-            <button className="btn btn-primary" onClick={openPreflight}>⬆ Promote to Production…</button>
+            {!prodDeployment && (
+              <div className="faint small">Not in Production yet — promote once the scenario suite is green.</div>
+            )}
           </div>
         </div>
 
         <div className="card">
-          <div className="card-title">Configuration (v{latestVersion.version})</div>
+          <div className="card-title">Configuration — v{latestVersion.version}</div>
           <dl className="kv">
             <dt>Trigger</dt>
-            <dd className="mono">{latestVersion.trigger.type}{latestVersion.trigger.config.to_stage ? ` → ${latestVersion.trigger.config.to_stage}` : ""}</dd>
+            <dd className="mono">
+              {latestVersion.trigger.type}
+              {latestVersion.trigger.config.to_stage ? ` → ${latestVersion.trigger.config.to_stage}` : ""}
+            </dd>
             <dt>Tool grants</dt>
-            <dd>{latestVersion.toolGrants.map((g) => <span key={g} className="pill pill-dim mono" style={{ marginRight: 4, marginBottom: 4 }}>{g}</span>)}</dd>
+            <dd>
+              {latestVersion.toolGrants.map((g) => (
+                <span key={g} className="tag" style={{ marginRight: 4, marginBottom: 4 }}>{g}</span>
+              ))}
+            </dd>
             <dt>Parameters</dt>
-            <dd className="mono small">{Object.entries(latestVersion.params).map(([k, v]) => <div key={k}>{k} = {v}</div>)}</dd>
+            <dd className="mono small">
+              {Object.entries(latestVersion.params).map(([k, v]) => (
+                <div key={k}>{k} = {v}</div>
+              ))}
+            </dd>
           </dl>
         </div>
       </div>
 
       <div className="section">
-        <div className="flex-between">
-          <div className="section-title" style={{ marginBottom: 0 }}>
-            Scenario suite · {suite.passed}/{suite.total || scenarios.length} green on v{latestVersion.version}
+        <div className="section-head">
+          <div className="section-title flex" style={{ gap: 10 }}>
+            Scenario suite
+            <Badge tone={suiteGreen ? "success" : "neutral"}>
+              {suite.passed}/{suite.total || scenarios.length} green on v{latestVersion.version}
+            </Badge>
           </div>
           <button className="btn btn-primary btn-sm" onClick={runSuite} disabled={testing || scenarios.length === 0}>
-            {testing ? "Running suite against sandbox state…" : "Run scenario suite"}
+            {testing ? "Running against sandbox state…" : "Run scenario suite"}
           </button>
         </div>
         {scenarios.length === 0 ? (
-          <div className="card muted" style={{ marginTop: 12 }}>No scenario suite for this agent yet — suites are required before promotion.</div>
+          <div className="empty">No scenario suite exists for this agent yet. A green suite is required before promotion.</div>
         ) : (
-          <div className="matrix" style={{ marginTop: 12 }}>
+          <div className="matrix">
             {scenarios.map((s) => {
               const tr = suite.runs.find((r) => r.scenarioId === s.id);
               const cls = tr ? tr.status : "";
@@ -176,25 +192,30 @@ export default function AgentDetail({ params }: { params: Promise<{ id: string }
                   <div className="flex-between">
                     <b style={{ fontSize: 13 }}>{s.name}</b>
                     {tr ? (
-                      <span className={`pill ${tr.status === "pass" ? "pill-green" : tr.status === "fail" ? "pill-red" : "pill-amber"}`}>
-                        {tr.status}
-                      </span>
+                      <Badge tone={tr.status === "pass" ? "success" : tr.status === "fail" ? "danger" : "warning"}>
+                        {tr.status === "pass" ? "Pass" : tr.status === "fail" ? "Fail" : "Running"}
+                      </Badge>
                     ) : (
-                      <span className="pill pill-dim">not run</span>
+                      <Badge tone="neutral">Not run</Badge>
                     )}
                   </div>
-                  <div className="muted small" style={{ marginTop: 4 }}>{s.description}</div>
+                  <div className="faint small" style={{ marginTop: 4 }}>{s.description}</div>
                   {tr && (
-                    <details className="small" style={{ marginTop: 6 }}>
-                      <summary className="muted" style={{ cursor: "pointer" }}>
-                        {tr.results.filter((r) => r.pass).length}/{tr.results.length} assertions · trace
+                    <details className="small" style={{ marginTop: 8 }}>
+                      <summary className="muted">
+                        {tr.results.filter((r) => r.pass).length}/{tr.results.length} assertions
                       </summary>
                       {tr.results.map((r, i) => (
-                        <div key={i} style={{ marginTop: 4 }}>
-                          {r.pass ? "✅" : "❌"} <span className="mono">{r.spec.type}</span> — <span className="muted">{r.detail}</span>
+                        <div key={i} style={{ marginTop: 5 }} className={r.pass ? "muted" : ""}>
+                          <span style={{ color: r.pass ? "var(--success-text)" : "var(--danger-text)", fontWeight: 600 }}>
+                            {r.pass ? "Pass" : "Fail"}
+                          </span>{" "}
+                          <span className="mono">{r.spec.type}</span> — <span className="faint">{r.detail}</span>
                         </div>
                       ))}
-                      <Link href={`/runs/${tr.runId}`} className="pill pill-dim" style={{ marginTop: 6 }}>open run trace →</Link>
+                      <div style={{ marginTop: 8 }}>
+                        <Link href={`/runs/${tr.runId}`} className="tag">Open run trace</Link>
+                      </div>
                     </details>
                   )}
                 </div>
@@ -202,28 +223,35 @@ export default function AgentDetail({ params }: { params: Promise<{ id: string }
             })}
           </div>
         )}
-        <p className="muted small" style={{ marginTop: 10 }}>
-          Every assertion is checked against actual sandbox system state — CRM field values, doc existence and content,
-          email presence — never against agent self-report.
+        <p className="faint small" style={{ marginTop: 10 }}>
+          Every assertion is checked against actual sandbox system state — CRM field values, document existence and
+          content, email presence — never against agent self-report.
         </p>
       </div>
 
       <div className="section">
-        <div className="section-title">Recent runs</div>
-        <div className="card" style={{ padding: 0 }}>
+        <div className="section-head">
+          <div className="section-title">Recent runs</div>
+        </div>
+        <div className="card card-flush">
           <table className="table">
-            <thead><tr><th>Run</th><th>Env</th><th>Trigger</th><th>State</th><th>Started</th><th>Summary</th></tr></thead>
+            <thead>
+              <tr><th>Run</th><th>Environment</th><th>Trigger</th><th>Status</th><th>Started</th><th>Summary</th></tr>
+            </thead>
             <tbody>
               {runs.map((r) => (
                 <tr key={r.id}>
-                  <td><Link href={`/runs/${r.id}`} className="mono" style={{ fontWeight: 600 }}>{r.id.slice(0, 14)}…</Link></td>
+                  <td><Link href={`/runs/${r.id}`} className="row-link mono">{r.id.slice(0, 16)}</Link></td>
                   <td className="muted">{deployments.find((x) => x.id === r.deploymentId)?.environment?.name ?? "—"}</td>
                   <td className="muted">{r.triggerType}</td>
                   <td><StateChip state={r.state} /></td>
-                  <td className="muted">{timeAgo(r.startedAt)}</td>
+                  <td className="faint" style={{ whiteSpace: "nowrap" }}>{timeAgo(r.startedAt)}</td>
                   <td className="muted small" style={{ maxWidth: 360 }}>{r.summary ?? "—"}</td>
                 </tr>
               ))}
+              {runs.length === 0 && (
+                <tr><td colSpan={6} className="faint">No runs yet — run the agent in Sandbox to validate it.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -232,42 +260,49 @@ export default function AgentDetail({ params }: { params: Promise<{ id: string }
       {preflight && (
         <div className="modal-backdrop" onClick={() => setPreflight(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ fontSize: 17, marginBottom: 4 }}>Promote to Production — pre-flight diff</h2>
-            <p className="muted small">Same agent, same version. Different environment, different credentials, different rules.</p>
+            <h2>Promote to Production — pre-flight review</h2>
+            <p className="muted small" style={{ marginTop: 4 }}>
+              Same agent, same version. Different environment, different credentials, different rules.
+            </p>
 
-            <div className="label">Credentials swap</div>
+            <div className="label">Credential changes</div>
             {preflight.credentialChanges.map((c) => (
               <div key={c.connector} className="rule">
-                <span className="mono">{c.connector}</span>
-                <span className="small">{c.from} <span className="muted">→</span> <b>{c.to}</b></span>
+                <span className="tag">{c.connector}</span>
+                <span className="small">{c.from} <span className="faint">→</span> <b>{c.to}</b></span>
               </div>
             ))}
 
-            <div className="label">Policy delta</div>
-            {preflight.policyDeltas.length === 0 && <div className="muted small">No policy changes for this agent&apos;s tools.</div>}
+            <div className="label">Policy changes</div>
+            {preflight.policyDeltas.length === 0 && (
+              <div className="faint small">No policy changes for this agent&apos;s tools.</div>
+            )}
             {preflight.policyDeltas.map((p) => (
               <div key={p.tool} className="rule">
-                <span className="mono">{p.tool}</span>
-                <span className="small">{p.from} <span className="muted">→</span> <b style={{ color: "var(--amber)" }}>{p.to}</b></span>
+                <span className="tag">{p.tool}</span>
+                <span className="small">
+                  {p.from} <span className="faint">→</span> <b style={{ color: "var(--warning-text)" }}>{p.to}</b>
+                </span>
               </div>
             ))}
 
             <div className="label">Test status</div>
-            <div className={`pill ${preflight.testStatus.passed === preflight.testStatus.total && preflight.testStatus.total > 0 ? "pill-green" : "pill-red"}`}>
+            <Badge tone={preflight.testStatus.passed === preflight.testStatus.total && preflight.testStatus.total > 0 ? "success" : "danger"}>
               {preflight.testStatus.passed}/{preflight.testStatus.total} scenarios green on v{preflight.testStatus.version} — this exact version
-            </div>
+            </Badge>
 
             {preflight.blocked && (
-              <div className="card" style={{ marginTop: 14, borderColor: "rgba(240,106,106,0.5)" }}>
-                <b style={{ color: "var(--red)" }}>Blocked:</b> {preflight.blocked}
+              <div className="notice notice-danger" style={{ marginTop: 14 }}>
+                <div><b>Promotion blocked.</b> {preflight.blocked}</div>
               </div>
             )}
 
             <div className="approval-actions" style={{ marginTop: 18 }}>
-              <button className="btn btn-green" disabled={!!preflight.blocked || promoting} onClick={confirmPromotion}>
-                {promoting ? "Promoting…" : "Sign off & promote"}
+              <button className="btn btn-primary" disabled={!!preflight.blocked || promoting} onClick={confirmPromotion}>
+                {promoting ? "Promoting…" : "Sign off and promote"}
               </button>
               <button className="btn" onClick={() => setPreflight(null)}>Cancel</button>
+              <span className="faint small">Sign-off is recorded in the audit log.</span>
             </div>
           </div>
         </div>

@@ -2,8 +2,9 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { TEMPLATES, templateById } from "@/server/templates";
+import { templateById } from "@/server/templates";
 import { CONNECTORS } from "@/server/connectors";
+import type { TriggerSpec } from "@/server/types";
 
 export default function NewAgentPage() {
   return (
@@ -19,12 +20,11 @@ function Builder() {
   const template = templateById(params.get("template") ?? "");
 
   const [name, setName] = useState(template?.name ?? "");
-  const [emoji] = useState(template?.emoji ?? "🤖");
   const [description, setDescription] = useState(template?.description ?? "");
   const [instructions, setInstructions] = useState(template?.instructions ?? "");
   const [grants, setGrants] = useState<string[]>(template?.toolGrants ?? []);
   const [paramsJson, setParamsJson] = useState(JSON.stringify(template?.params ?? {}, null, 2));
-  const [triggerType, setTriggerType] = useState(template?.trigger.type ?? "manual");
+  const [triggerType, setTriggerType] = useState<TriggerSpec["type"]>(template?.trigger.type ?? "manual");
   const [error, setError] = useState<string | null>(null);
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -36,6 +36,13 @@ function Builder() {
 
   const toggle = (tool: string) =>
     setGrants((g) => (g.includes(tool) ? g.filter((x) => x !== tool) : [...g, tool]));
+
+  const buildTrigger = (): TriggerSpec => {
+    if (template && triggerType === template.trigger.type) return template.trigger;
+    if (triggerType === "crm_webhook") return { type: "crm_webhook", config: { event: "deal.stage_changed", to_stage: "closedwon" } };
+    if (triggerType === "schedule") return { type: "schedule", config: { cron: "0 2 * * *" } };
+    return { type: "manual", config: {} };
+  };
 
   const save = async () => {
     setBusy(true);
@@ -54,13 +61,12 @@ function Builder() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name,
-        emoji,
         description,
         templateId: template?.id,
         instructions,
         toolGrants: grants,
         params: parsedParams,
-        trigger: template && triggerType === template.trigger.type ? template.trigger : { type: triggerType, config: {} },
+        trigger: buildTrigger(),
       }),
     });
     const data = await res.json();
@@ -74,63 +80,67 @@ function Builder() {
   };
 
   return (
-    <div style={{ maxWidth: 760 }}>
-      <h1 className="page-title">Hire a company agent</h1>
-      <p className="page-sub">
-        {template ? (
-          <>Starting from the <b>{template.name}</b> template. Saved as <b>v1</b>, owned by the workspace, and bound to <b>Sandbox</b> — binding validates every granted tool is available and permitted there.</>
-        ) : (
-          <>From scratch: instructions, tool grants, parameters, trigger. Saved as v1 and bound to Sandbox.</>
-        )}
-      </p>
+    <div style={{ maxWidth: 780 }}>
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">New agent</h1>
+          <p className="page-sub">
+            {template ? (
+              <>Starting from the <b>{template.name}</b> template. The agent is saved as <b>v1</b>, owned by the workspace, and bound to <b>Sandbox</b> — binding validates that every granted tool is available and permitted there.</>
+            ) : (
+              <>Define the agent&apos;s instructions, tool grants, parameters, and trigger. It is saved as v1 and bound to Sandbox for validation.</>
+            )}
+          </p>
+        </div>
+      </div>
 
       <div className="card">
-        <label className="label">Name</label>
-        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Closed-Won Paperwork Agent" />
+        <label className="label" htmlFor="agent-name">Name</label>
+        <input id="agent-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Closed-Won Paperwork Agent" />
 
-        <label className="label">Description</label>
-        <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does this agent do?" />
+        <label className="label" htmlFor="agent-desc">Description</label>
+        <input id="agent-desc" className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does this agent do?" />
 
-        <label className="label">Instructions — the agent&apos;s operating prompt</label>
-        <textarea className="textarea" value={instructions} onChange={(e) => setInstructions(e.target.value)} />
+        <label className="label" htmlFor="agent-instructions">Instructions <span className="hint">— the agent&apos;s operating prompt</span></label>
+        <textarea id="agent-instructions" className="textarea" value={instructions} onChange={(e) => setInstructions(e.target.value)} />
 
-        <label className="label">Tool grants — picked from what the environment offers</label>
-        <div className="grid grid-2" style={{ gap: 6 }}>
+        <label className="label">Tool grants <span className="hint">— selected from what the target environment offers</span></label>
+        <div className="grid grid-2" style={{ gap: 2 }}>
           {allTools.map((t) => (
-            <label key={t.name} className="flex" style={{ fontSize: 13, cursor: "pointer" }}>
+            <label key={t.name} className="checkbox-row">
               <input type="checkbox" checked={grants.includes(t.name)} onChange={() => toggle(t.name)} />
               <span className="mono">{t.name}</span>
-              <span className="muted small">{t.connector}{t.kind === "write" ? " · write" : ""}</span>
+              <span className="faint small">{t.connector}{t.kind === "write" ? " · write" : ""}</span>
             </label>
           ))}
         </div>
 
-        <label className="label">Parameters (JSON)</label>
-        <textarea className="textarea" style={{ minHeight: 110 }} value={paramsJson} onChange={(e) => setParamsJson(e.target.value)} />
+        <label className="label" htmlFor="agent-params">Parameters <span className="hint">(JSON)</span></label>
+        <textarea id="agent-params" className="textarea" style={{ minHeight: 110 }} value={paramsJson} onChange={(e) => setParamsJson(e.target.value)} />
 
-        <label className="label">Trigger</label>
-        <select className="select" value={triggerType} onChange={(e) => setTriggerType(e.target.value as typeof triggerType)}>
-          <option value="crm_webhook">CRM webhook — deal stage change</option>
+        <label className="label" htmlFor="agent-trigger">Trigger</label>
+        <select id="agent-trigger" className="select" value={triggerType} onChange={(e) => setTriggerType(e.target.value as TriggerSpec["type"])}>
+          <option value="crm_webhook">CRM webhook — deal moves to Closed-Won</option>
           <option value="manual">Manual</option>
-          <option value="schedule">Schedule (nightly)</option>
+          <option value="schedule">Schedule — nightly</option>
         </select>
 
         {error && (
-          <div className="card" style={{ marginTop: 16, borderColor: "rgba(240,106,106,0.5)" }}>
-            <b style={{ color: "var(--red)" }}>{error}</b>
-            {problems.map((p, i) => (
-              <div key={i} className="small muted">• {p}</div>
-            ))}
+          <div className="notice notice-danger" style={{ marginTop: 16 }}>
+            <div>
+              <b>{error}</b>
+              {problems.map((p, i) => (
+                <div key={i} className="small">{p}</div>
+              ))}
+            </div>
           </div>
         )}
 
         <div className="flex" style={{ marginTop: 20 }}>
           <button className="btn btn-primary" onClick={save} disabled={busy || !name || !instructions || grants.length === 0}>
-            {busy ? "Validating binding…" : "Save v1 → bind to Sandbox"}
+            {busy ? "Validating binding…" : "Save v1 and bind to Sandbox"}
           </button>
-          {!template && (
-            <span className="muted small">or pick a template: {TEMPLATES.map((t) => t.emoji).join(" ")}</span>
-          )}
+          <span className="faint small">Requires a name, instructions, and at least one tool grant.</span>
         </div>
       </div>
     </div>

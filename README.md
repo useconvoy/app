@@ -6,6 +6,8 @@ This repository is the working POC behind the investor demo: the full product sp
 
 ## Quick start
 
+Requires Node.js 20.9+ (Next.js 16).
+
 ```bash
 npm install
 npm run dev

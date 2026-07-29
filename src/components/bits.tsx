@@ -1,30 +1,52 @@
-import type { PolicyEffect, RunState, ToolCallStatus } from "@/server/types";
+import type { EnvironmentKind, PolicyEffect, RunState, ToolCallStatus } from "@/server/types";
+
+export function Badge({ tone, children }: { tone: "neutral" | "success" | "warning" | "danger" | "info" | "accent"; children: React.ReactNode }) {
+  return (
+    <span className={`badge${tone === "neutral" ? "" : ` badge-${tone}`}`}>
+      <span className="dot" />
+      {children}
+    </span>
+  );
+}
 
 export function StateChip({ state }: { state: RunState }) {
-  const map: Record<RunState, { cls: string; label: string }> = {
-    queued: { cls: "pill-dim", label: "queued" },
-    running: { cls: "pill-accent", label: "running" },
-    paused_pending_approval: { cls: "pill-amber", label: "paused — awaiting approval" },
-    succeeded: { cls: "pill-green", label: "succeeded" },
-    failed: { cls: "pill-red", label: "failed" },
-    rejected: { cls: "pill-red", label: "rejected" },
-    killed: { cls: "pill-red", label: "killed" },
+  const map: Record<RunState, { tone: "neutral" | "success" | "warning" | "danger" | "info" | "accent"; label: string }> = {
+    queued: { tone: "neutral", label: "Queued" },
+    running: { tone: "info", label: "Running" },
+    paused_pending_approval: { tone: "warning", label: "Awaiting approval" },
+    succeeded: { tone: "success", label: "Succeeded" },
+    failed: { tone: "danger", label: "Failed" },
+    rejected: { tone: "danger", label: "Rejected" },
+    killed: { tone: "danger", label: "Stopped" },
   };
-  const m = map[state] ?? { cls: "pill-dim", label: state };
-  return <span className={`pill ${m.cls}`}>{m.label}</span>;
+  const m = map[state] ?? { tone: "neutral" as const, label: state };
+  return <Badge tone={m.tone}>{m.label}</Badge>;
 }
 
 export function PolicyChip({ effect, status }: { effect: PolicyEffect | "agent_flagged" | "builtin"; status: ToolCallStatus }) {
   if (effect === "agent_flagged") {
-    return <span className="pill pill-amber">🚩 agent-flagged{status === "approved_executed" ? " · approved" : status === "rejected" ? " · rejected" : ""}</span>;
+    const suffix = status === "approved_executed" ? " · approved" : status === "rejected" ? " · rejected" : " · pending";
+    return <Badge tone="warning">Agent-flagged{suffix}</Badge>;
   }
   if (effect === "require_approval") {
-    if (status === "pending_approval") return <span className="pill pill-amber">✋ policy gate · pending</span>;
-    if (status === "approved_executed") return <span className="pill pill-green">✋ policy gate · approved</span>;
-    return <span className="pill pill-red">✋ policy gate · rejected</span>;
+    if (status === "pending_approval") return <Badge tone="warning">Policy gate · pending</Badge>;
+    if (status === "approved_executed") return <Badge tone="success">Policy gate · approved</Badge>;
+    return <Badge tone="danger">Policy gate · rejected</Badge>;
   }
-  if (effect === "deny") return <span className="pill pill-red">✕ denied by policy</span>;
-  return <span className="pill pill-green">✓ allowed</span>;
+  if (effect === "deny") return <Badge tone="danger">Denied by policy</Badge>;
+  return <Badge tone="success">Allowed</Badge>;
+}
+
+export function EnvBadge({ kind, name }: { kind?: EnvironmentKind; name?: string }) {
+  if (!name) return <span className="faint">—</span>;
+  return <Badge tone={kind === "production" ? "accent" : "neutral"}>{name}</Badge>;
+}
+
+/** Two-letter monogram — the enterprise replacement for emoji avatars. */
+export function Monogram({ name, small }: { name: string; small?: boolean }) {
+  const words = name.replace(/\bAgent\b/gi, "").trim().split(/\s+/).filter(Boolean);
+  const initials = ((words[0]?.[0] ?? "") + (words[1]?.[0] ?? words[0]?.[1] ?? "")).toUpperCase();
+  return <span className={`monogram${small ? " monogram-sm" : ""}`}>{initials || "AG"}</span>;
 }
 
 export function timeAgo(iso: string): string {
