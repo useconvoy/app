@@ -1,0 +1,25 @@
+{
+  "name": "convoy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Convoy — where company agents are hired, badged, and put to work.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "reset": "rm -rf .data && echo 'Demo data cleared. It will be reseeded on next app start.'"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
+    "next": "^15.3.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "typescript": "^5.8.0"
+  }
+}
