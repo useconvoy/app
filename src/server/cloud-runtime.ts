@@ -18,10 +18,86 @@ export function isCloudRuntimeEnabled(): boolean {
   return process.env.CONVOY_CLOUD_RUNTIME === "1";
 }
 
+export interface CloudMissionLaunch {
+  objective: string;
+  workspaceId?: string;
+  deadline?: string;
+  maxParallelAgents?: number;
+  maxTotalAgents?: number;
+  maxDepth?: number;
+  checkpointIntervalSeconds?: number;
+  computeMode?: "auto" | "fast" | "economy" | "dedicated";
+  budgetCents?: number;
+  deploymentId?: string;
+  environmentId?: string;
+  policyRef?: string;
+  toolRefs?: string[];
+  inputRefs?: string[];
+}
+
 export async function startCloudMission(
   missionId: string,
-  objective: string,
-): Promise<void> {
+  input: string | CloudMissionLaunch,
+): Promise<string> {
+  const launch: CloudMissionLaunch =
+    typeof input === "string" ? { objective: input } : input;
+  const environment = [
+    { name: "MISSION_ID", value: missionId },
+    { name: "MISSION_OBJECTIVE", value: launch.objective },
+    launch.workspaceId
+      ? { name: "WORKSPACE_ID", value: launch.workspaceId }
+      : undefined,
+    launch.deadline
+      ? { name: "MISSION_DEADLINE", value: launch.deadline }
+      : undefined,
+    launch.maxParallelAgents !== undefined
+      ? {
+          name: "DEFAULT_MAX_PARALLEL_AGENTS",
+          value: String(launch.maxParallelAgents),
+        }
+      : undefined,
+    launch.maxTotalAgents !== undefined
+      ? {
+          name: "DEFAULT_MAX_TOTAL_AGENTS",
+          value: String(launch.maxTotalAgents),
+        }
+      : undefined,
+    launch.maxDepth !== undefined
+      ? { name: "DEFAULT_MAX_DEPTH", value: String(launch.maxDepth) }
+      : undefined,
+    launch.checkpointIntervalSeconds !== undefined
+      ? {
+          name: "CHECKPOINT_INTERVAL_SECONDS",
+          value: String(launch.checkpointIntervalSeconds),
+        }
+      : undefined,
+    launch.computeMode
+      ? { name: "COMPUTE_MODE", value: launch.computeMode }
+      : undefined,
+    launch.budgetCents !== undefined
+      ? {
+          name: "DEFAULT_MAX_COST_CENTS",
+          value: String(launch.budgetCents),
+        }
+      : undefined,
+    launch.deploymentId
+      ? { name: "DEPLOYMENT_ID", value: launch.deploymentId }
+      : undefined,
+    launch.environmentId
+      ? { name: "ENVIRONMENT_ID", value: launch.environmentId }
+      : undefined,
+    launch.policyRef
+      ? { name: "POLICY_REF", value: launch.policyRef }
+      : undefined,
+    launch.toolRefs
+      ? { name: "TOOL_REFS", value: launch.toolRefs.join(",") }
+      : undefined,
+    launch.inputRefs
+      ? { name: "INPUT_REFS", value: launch.inputRefs.join(",") }
+      : undefined,
+  ].filter(
+    (item): item is { name: string; value: string } => item !== undefined,
+  );
   const response = await ecs.send(
     new RunTaskCommand({
       cluster: required("ECS_CLUSTER_ARN"),
@@ -39,10 +115,7 @@ export async function startCloudMission(
         containerOverrides: [
           {
             name: "coordinator",
-            environment: [
-              { name: "MISSION_ID", value: missionId },
-              { name: "MISSION_OBJECTIVE", value: objective },
-            ],
+            environment,
           },
         ],
       },
@@ -60,6 +133,7 @@ export async function startCloudMission(
       `ECS coordinator launch failed: ${JSON.stringify(response.failures ?? [])}`,
     );
   }
+  return response.tasks[0].taskArn!;
 }
 
 export async function readCloudMission(
