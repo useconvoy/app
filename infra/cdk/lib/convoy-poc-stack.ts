@@ -88,6 +88,11 @@ export class ConvoyPocStack extends Stack {
       "TemporalSecret",
       "convoy/dev/temporal-cloud",
     );
+    const anthropicSecret = secretsmanager.Secret.fromSecretNameV2(
+      this,
+      "AnthropicSecret",
+      "convoy/dev/anthropic",
+    );
 
     const agentLogGroup = new logs.LogGroup(this, "AgentLogGroup", {
       logGroupName: "/convoy/poc/agent",
@@ -139,8 +144,14 @@ export class ConvoyPocStack extends Stack {
         TEMPORAL_SECRET_ID: temporalSecret.secretName,
         MISSION_TABLE_NAME: missionTable.tableName,
         ARTIFACT_BUCKET_NAME: artifactBucket.bucketName,
+        CONVOY_MODEL: "claude-sonnet-5",
+        CONVOY_MAX_OUTPUT_TOKENS: "1600",
       },
     });
+    agentContainer.addSecret(
+      "ANTHROPIC_API_KEY",
+      ecs.Secret.fromSecretsManager(anthropicSecret, "apiKey"),
+    );
     agentContainer.addMountPoints({
       sourceVolume: "tmp",
       containerPath: "/tmp",

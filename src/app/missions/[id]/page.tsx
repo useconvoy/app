@@ -29,6 +29,10 @@ interface CloudAgent {
   depth: number;
   status: string;
   computeProvider?: string;
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  thesis?: string;
   artifactKey?: string;
   completedAt?: string;
 }
@@ -128,6 +132,8 @@ export default function MissionPage() {
                   <th>Depth</th>
                   <th>Status</th>
                   <th>Compute</th>
+                  <th>Model</th>
+                  <th>Tokens</th>
                   <th>Artifact</th>
                 </tr>
               </thead>
@@ -147,6 +153,13 @@ export default function MissionPage() {
                     </td>
                     <td className="muted">
                       {agent.computeProvider ?? "AWS Fargate"}
+                    </td>
+                    <td className="muted">{agent.model ?? "—"}</td>
+                    <td className="faint small">
+                      {agent.inputTokens !== undefined ||
+                      agent.outputTokens !== undefined
+                        ? `${agent.inputTokens ?? 0} in / ${agent.outputTokens ?? 0} out`
+                        : "—"}
                     </td>
                     <td className="faint small">
                       {agent.artifactKey ?? "—"}

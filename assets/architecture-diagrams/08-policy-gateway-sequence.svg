@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="990" viewBox="0 0 1500 990">
+  <title>Every consequential action crosses the gateway</title>
+  <desc>UML-style sequence for authorization, credentials, approval, execution, and audit</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#132238" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#24364E"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#79A7FF"/>
+    </marker>
+    <style>
+      text { font-family: Inter, Arial, sans-serif; fill: #132238; }
+      .title { font-size: 29px; font-weight: 700; }
+      .subtitle { font-size: 16px; fill: #617083; }
+      .label { font-size: 17px; font-weight: 650; }
+      .small { font-size: 14px; fill: #617083; }
+      .tiny { font-size: 12px; fill: #617083; }
+      .lane { font-size: 15px; font-weight: 650; }
+      .seq { font-size: 13px; }
+    </style>
+  </defs>
+  <rect width="1500" height="990" fill="#F7F6F2"/>
+  <text x="48" y="50" class="title">Every consequential action crosses the gateway</text>
+  <text x="48" y="78" class="subtitle">UML-style sequence for authorization, credentials, approval, execution, and audit</text><rect x="27.5" y="105" width="155" height="54" rx="12" fill="#DDF3EA" stroke="#24364E" stroke-width="2"  /><text x="105" y="138" text-anchor="middle" class="lane">Agent Runner</text>
+  <path d="M 105 159 L 105 925" stroke="#617083" stroke-width="1.5" stroke-dasharray="6 6"/><rect x="222.5" y="105" width="155" height="54" rx="12" fill="#FFF0C7" stroke="#24364E" stroke-width="2"  /><text x="300" y="138" text-anchor="middle" class="lane">Gateway</text>
+  <path d="M 300 159 L 300 925" stroke="#617083" stroke-width="1.5" stroke-dasharray="6 6"/><rect x="422.5" y="105" width="155" height="54" rx="12" fill="#FFF0C7" stroke="#24364E" stroke-width="2"  /><text x="500" y="138" text-anchor="middle" class="lane">Policy Engine</text>
+  <path d="M 500 159 L 500 925" stroke="#617083" stroke-width="1.5" stroke-dasharray="6 6"/><rect x="622.5" y="105" width="155" height="54" rx="12" fill="#FBE1E3" stroke="#24364E" stroke-width="2"  /><text x="700" y="138" text-anchor="middle" class="lane">Approval</text>
+  <path d="M 700 159 L 700 925" stroke="#617083" stroke-width="1.5" stroke-dasharray="6 6"/><rect x="822.5" y="105" width="155" height="54" rx="12" fill="#ECE5FF" stroke="#24364E" stroke-width="2"  /><text x="900" y="138" text-anchor="middle" class="lane">Vault</text>
+  <path d="M 900 159 L 900 925" stroke="#617083" stroke-width="1.5" stroke-dasharray="6 6"/><rect x="1032.5" y="105" width="155" height="54" rx="12" fill="#DDE9FF" stroke="#24364E" stroke-width="2"  /><text x="1110" y="138" text-anchor="middle" class="lane">Connector</text>
+  <path d="M 1110 159 L 1110 925" stroke="#617083" stroke-width="1.5" stroke-dasharray="6 6"/><rect x="1262.5" y="105" width="155" height="54" rx="12" fill="#FBE1E3" stroke="#24364E" stroke-width="2"  /><text x="1340" y="138" text-anchor="middle" class="lane">Audit + Cost</text>
+  <path d="M 1340 159 L 1340 925" stroke="#617083" stroke-width="1.5" stroke-dasharray="6 6"/><path d="M 113 215 L 292 215" fill="none" stroke="#24364E" stroke-width="2"  marker-end="url(#arrow)"/>
+  <text x="202.5" y="207" text-anchor="middle" class="seq">1  tool + args + capability</text><path d="M 308 280 L 492 280" fill="none" stroke="#24364E" stroke-width="2"  marker-end="url(#arrow)"/>
+  <text x="400" y="272" text-anchor="middle" class="seq">2  evaluate pinned policy</text><path d="M 492 345 L 308 345" fill="none" stroke="#24364E" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+  <text x="400" y="337" text-anchor="middle" class="seq">allow / deny / require approval</text><path d="M 308 410 L 692 410" fill="none" stroke="#24364E" stroke-width="2"  marker-end="url(#arrow)"/>
+  <text x="500" y="402" text-anchor="middle" class="seq">3  create approval request</text><path d="M 692 475 L 308 475" fill="none" stroke="#24364E" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+  <text x="500" y="467" text-anchor="middle" class="seq">approved or edited args</text><path d="M 308 540 L 892 540" fill="none" stroke="#24364E" stroke-width="2"  marker-end="url(#arrow)"/>
+  <text x="600" y="532" text-anchor="middle" class="seq">4  resolve credential reference</text><path d="M 892 605 L 308 605" fill="none" stroke="#24364E" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+  <text x="600" y="597" text-anchor="middle" class="seq">short-lived use inside gateway</text><path d="M 308 670 L 1102 670" fill="none" stroke="#24364E" stroke-width="2"  marker-end="url(#arrow)"/>
+  <text x="705" y="662" text-anchor="middle" class="seq">5  perform approved call</text><path d="M 1102 735 L 308 735" fill="none" stroke="#24364E" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+  <text x="705" y="727" text-anchor="middle" class="seq">bounded + sanitized response</text><path d="M 308 800 L 1332 800" fill="none" stroke="#24364E" stroke-width="2"  marker-end="url(#arrow)"/>
+  <text x="820" y="792" text-anchor="middle" class="seq">6  immutable audit + usage</text><path d="M 292 865 L 113 865" fill="none" stroke="#24364E" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+  <text x="202.5" y="857" text-anchor="middle" class="seq">7  result, never credentials</text><rect x="220" y="170" width="1190" height="755" rx="20" fill="none" stroke="#E7B84B" stroke-width="2" stroke-dasharray="10 8"/>
+  <text x="815" y="965" text-anchor="middle" class="small">The runner can ask. Only the gateway can authorize and act.</text></svg>
