@@ -1,0 +1,45 @@
+{
+  "apiVersion": "convoy.ai/v1alpha1",
+  "kind": "Run",
+  "metadata": {
+    "id": "vendor-assurance-portfolio-001",
+    "mission_id": "portfolio-vendor-assurance",
+    "labels": {
+      "customer": "aurelia-cloud",
+      "environment": "demo",
+      "scale": "50-vendors"
+    }
+  },
+  "runtime": {
+    "executor": "local-docker",
+    "image": "convoy/agent-runtime:dev",
+    "command": ["node", "/opt/convoy/mock-agent.mjs"],
+    "timeout_seconds": 600,
+    "resources": {
+      "cpu": 1,
+      "memory_mb": 512,
+      "pids": 128
+    },
+    "network": {
+      "mode": "world-only",
+      "allowed_hosts": ["world"]
+    },
+    "environment": {
+      "CONVOY_AGENT_MODE": "deterministic-replay"
+    }
+  },
+  "world": {
+    "id": "aurelia-vendor-assurance",
+    "image": "convoy/world-runtime:dev",
+    "scenario_actions": "worlds/catalog/aurelia-vendor-assurance/successful-run.json"
+  },
+  "secrets": [],
+  "artifacts": {
+    "paths": [
+      "/convoy/output/events.jsonl",
+      "/convoy/output/result.json",
+      "/convoy/output/mission-result.json"
+    ],
+    "retention_days": 30
+  }
+}

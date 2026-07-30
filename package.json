@@ -8,7 +8,14 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "reset": "rm -rf .data && echo 'Demo data cleared. It will be reseeded on next app start.'"
+    "reset": "rm -rf .data && echo 'Demo data cleared. It will be reseeded on next app start.'",
+    "world:test": "node --test tests/*.test.mjs",
+    "world:test:e2e": "node tests/e2e-docker.mjs",
+    "world:catalog": "node worlds/runtime/cli.mjs catalog",
+    "world:validate": "node scripts/validate-specs.mjs",
+    "world:build": "node runtime/local/cli.mjs build",
+    "world:generate:vendor-assurance": "node worlds/catalog/aurelia-vendor-assurance/generator/generate-fixture.mjs",
+    "world:demo:vendor-assurance": "node runtime/local/cli.mjs run examples/runs/vendor-assurance-portfolio.json"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
