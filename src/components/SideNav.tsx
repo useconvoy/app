@@ -19,6 +19,7 @@ const GROUPS: { label: string; items: { href: string; label: string; icon: React
     items: [
       { href: "/start", label: "Start here", icon: <IconFlag /> },
       { href: "/dashboard", label: "Fleet overview", icon: <IconGrid /> },
+      { href: "/missions", label: "Missions", icon: <IconPlay /> },
       { href: "/runs", label: "Runs", icon: <IconPlay /> },
       { href: "/approvals", label: "Approvals", icon: <IconHand /> },
     ],
@@ -26,6 +27,7 @@ const GROUPS: { label: string; items: { href: string; label: string; icon: React
   {
     label: "Configure",
     items: [
+      { href: "/workspaces", label: "Workspaces", icon: <IconLayers /> },
       { href: "/agents", label: "Agents", icon: <IconBot /> },
       { href: "/environments", label: "Environments", icon: <IconLayers /> },
     ],

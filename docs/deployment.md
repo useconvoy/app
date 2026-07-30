@@ -72,6 +72,28 @@ beyond one host — that's M1.
 - The container runs as a non-root user, exposes a `/api/health` probe, and
   restarts on failure via compose.
 
+### Optional AWS recursive-runtime adapter
+
+The application can submit non-test runs to the Convoy Temporal/Fargate POC
+instead of executing the in-process loop. This path is opt-in; without
+`CONVOY_CLOUD_RUNTIME=1`, existing local and DigitalOcean deployments behave
+exactly as before.
+
+| Variable | Purpose |
+|---|---|
+| `CONVOY_CLOUD_RUNTIME` | Set to `1` to enable the provider. |
+| `ECS_CLUSTER_ARN` | ECS cluster that accepts coordinator tasks. |
+| `COORDINATOR_TASK_DEFINITION_ARN` | One-shot Temporal coordinator task definition. |
+| `AGENT_SUBNET_IDS` | Comma-separated subnets used by the coordinator task. |
+| `AGENT_SECURITY_GROUP_ID` | No-ingress security group for the coordinator task. |
+| `MISSION_TABLE_NAME` | DynamoDB table containing the live mission projection. |
+
+On AWS App Runner, attach an instance role with narrowly scoped
+`ecs:RunTask`, `ecs:TagResource`, `iam:PassRole`, and DynamoDB read access.
+Do not copy long-lived AWS keys into the application. A non-AWS host such as
+DigitalOcean should call a small authenticated AWS mission API instead of
+receiving direct ECS and DynamoDB credentials.
+
 ---
 
 ## Phase M1 — reference topology for the real runtime with permissions

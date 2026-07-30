@@ -87,11 +87,11 @@ export default function LandingPage() {
                 test the exact version, and keep consequential decisions on a human desk.
               </p>
               <div className="hero-actions">
-                <Link className="btn btn-primary marketing-hero-button" href="/start">
-                  Explore the guided demo <IconArrowUpRight size={16} />
+                <Link className="btn btn-primary marketing-hero-button" href="/register">
+                  Create your workspace <IconArrowUpRight size={16} />
                 </Link>
-                <Link className="btn marketing-hero-button" href="/dashboard">
-                  Open the sample workspace
+                <Link className="btn marketing-hero-button" href="/start">
+                  Explore the guided demo
                 </Link>
               </div>
               <div className="hero-proof">

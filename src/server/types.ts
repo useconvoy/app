@@ -122,6 +122,28 @@ export interface Run {
   modelMessages?: unknown[];
   /** Live-model mode only: the tool_use id awaiting an approval decision. */
   pendingModelToolUseId?: string;
+  /** Runtime provider selected when the run was created. */
+  provider?: "local" | "temporal-fargate";
+}
+
+export interface CloudMissionAgent {
+  agentId: string;
+  depth: number;
+  status: "RUNNING" | "COMPLETED";
+  computeProvider?: string;
+  artifactKey?: string;
+  artifact?: string;
+  completedAt?: string;
+}
+
+export interface CloudMission {
+  missionId: string;
+  status: "QUEUED" | "RUNNING" | "COMPLETED";
+  mission: {
+    totalAgents?: number;
+    completedAt?: string;
+  } | null;
+  agents: CloudMissionAgent[];
 }
 
 export type ToolCallStatus =

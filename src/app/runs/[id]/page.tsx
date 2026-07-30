@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Badge, EnvBadge, PolicyChip, StateChip, fmtTime } from "@/components/bits";
-import type { Agent, Approval, Environment, Run, ToolCall } from "@/server/types";
+import type { Agent, Approval, CloudMission, Environment, Run, ToolCall } from "@/server/types";
 
 interface RunDetail {
   run: Run;
@@ -11,6 +11,7 @@ interface RunDetail {
   environment?: Environment;
   toolCalls: ToolCall[];
   approvals: Approval[];
+  cloudMission?: CloudMission;
 }
 
 export default function RunTrace({ params }: { params: Promise<{ id: string }> }) {
@@ -35,7 +36,11 @@ export default function RunTrace({ params }: { params: Promise<{ id: string }> }
     void load();
     const es = new EventSource(`/api/stream?runId=${id}`);
     es.onmessage = () => void load();
-    return () => es.close();
+    const poll = window.setInterval(() => void load(), 1500);
+    return () => {
+      es.close();
+      window.clearInterval(poll);
+    };
   }, [id, load]);
 
   useEffect(() => {
@@ -55,7 +60,7 @@ export default function RunTrace({ params }: { params: Promise<{ id: string }> }
     );
   }
   if (!data) return <div className="muted" role="status">Loading trace…</div>;
-  const { run, agent, environment, toolCalls, approvals } = data;
+  const { run, agent, environment, toolCalls, approvals, cloudMission } = data;
   const pending = approvals.filter((a) => a.status === "pending");
 
   const decide = async (approvalId: string, decision: "approve" | "reject") => {
@@ -92,6 +97,59 @@ export default function RunTrace({ params }: { params: Promise<{ id: string }> }
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="card-title">Completion report</div>
           <div className="muted" style={{ marginTop: 6, fontSize: 13.5 }}>{run.summary}</div>
+        </div>
+      )}
+
+      {cloudMission && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="flex-between">
+            <div>
+              <div className="card-title">Elastic agent compute pool</div>
+              <div className="faint small" style={{ marginTop: 4 }}>
+                Temporal coordinates the mission; each row is an isolated AWS Fargate agent episode.
+              </div>
+            </div>
+            <Badge tone={cloudMission.status === "COMPLETED" ? "success" : "accent"}>
+              {cloudMission.agents.filter((item) => item.status === "COMPLETED").length}
+              /{cloudMission.agents.length || 1} complete
+            </Badge>
+          </div>
+          <div className="trace" style={{ marginTop: 14 }}>
+            {cloudMission.agents.map((item) => {
+              let artifact: { finding?: string } | undefined;
+              try {
+                artifact = item.artifact ? JSON.parse(item.artifact) : undefined;
+              } catch {
+                artifact = undefined;
+              }
+              return (
+                <div
+                  className="trace-row"
+                  key={item.agentId}
+                  style={{ marginLeft: item.depth * 22 }}
+                >
+                  <div className="trace-seq">{item.agentId}</div>
+                  <div>
+                    <div className="trace-head">
+                      <span className="trace-tool">Agent Episode</span>
+                      <Badge tone={item.status === "COMPLETED" ? "success" : "warning"}>
+                        {item.status}
+                      </Badge>
+                      <span className="faint small">{item.computeProvider ?? "AWS Fargate"}</span>
+                    </div>
+                    {artifact?.finding && (
+                      <div className="muted small" style={{ marginTop: 5 }}>
+                        {artifact.finding}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {cloudMission.agents.length === 0 && (
+              <div className="empty">Temporal is admitting the root agent…</div>
+            )}
+          </div>
         </div>
       )}
 

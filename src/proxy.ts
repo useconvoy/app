@@ -1,18 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Optional shared-credential gate for hosted deployments. Set
-// CONVOY_BASIC_AUTH="user:password" to require HTTP Basic auth on every
-// route. This is a stopgap for demo hosting — real identity/RBAC (SSO,
-// per-approver auth) is the M1 workstream in docs/architecture-v2.md.
-// Unset the variable (local dev) and this is a no-op.
+export default async function proxy(req: NextRequest) {
+  if (isPublicPath(req.nextUrl.pathname)) return NextResponse.next();
 
-export default function proxy(req: NextRequest) {
+  if (process.env.CONVOY_ACCOUNTS_ENABLED === "1") {
+    const secret =
+      process.env.CONVOY_SESSION_SECRET ?? process.env.CONVOY_BASIC_AUTH;
+    const session = req.cookies.get("convoy_session")?.value;
+    if (secret && session && (await hasValidSessionSignature(session, secret))) {
+      return NextResponse.next();
+    }
+    if (req.nextUrl.pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "Authentication required." },
+        { status: 401 },
+      );
+    }
+    const login = new URL("/login", req.url);
+    login.searchParams.set(
+      "next",
+      `${req.nextUrl.pathname}${req.nextUrl.search}`,
+    );
+    return NextResponse.redirect(login);
+  }
+
+  // Optional shared credential remains available for the seeded demo when
+  // account authentication is disabled.
   const expected = process.env.CONVOY_BASIC_AUTH;
   if (!expected) return NextResponse.next();
-
-  // Keep the explanatory landing, guided tour, discovery metadata, and
-  // health probe public. Workspace routes and APIs remain behind the gate.
-  if (isPublicPath(req.nextUrl.pathname)) return NextResponse.next();
 
   const header = req.headers.get("authorization") ?? "";
   if (header.startsWith("Basic ")) {
@@ -30,7 +45,56 @@ export default function proxy(req: NextRequest) {
 }
 
 function isPublicPath(pathname: string): boolean {
-  return ["/", "/start", "/robots.txt", "/sitemap.xml", "/icon", "/og.png", "/api/health"].includes(pathname);
+  return (
+    [
+      "/",
+      "/start",
+      "/login",
+      "/register",
+      "/robots.txt",
+      "/sitemap.xml",
+      "/icon",
+      "/og.png",
+      "/api/health",
+      "/api/auth/login",
+      "/api/auth/register",
+    ].includes(pathname) ||
+    pathname.startsWith("/_next/")
+  );
+}
+
+async function hasValidSessionSignature(
+  value: string,
+  secret: string,
+): Promise<boolean> {
+  const separator = value.lastIndexOf(".");
+  if (separator < 1) return false;
+  const token = value.slice(0, separator);
+  const supplied = value.slice(separator + 1);
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(token),
+  );
+  const expected = base64Url(new Uint8Array(signature));
+  return timingSafeEqual(supplied, expected);
+}
+
+function base64Url(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
 }
 
 function timingSafeEqual(a: string, b: string): boolean {
