@@ -1,0 +1,6 @@
+allowBuilds:
+  '@swc/core': true
+  protobufjs: true
+onlyBuiltDependencies:
+  - "@swc/core"
+  - protobufjs
