@@ -14,12 +14,11 @@ next intent. A `spawn_agents` intent is admitted against the mission deadline,
 maximum depth, total-agent ceiling, estimated budget, and a DynamoDB-backed
 parallel-slot semaphore before child Agent Workflows start.
 
-The deterministic demo agent requests three investigative branches until depth
-2, so the default dynamic graph is:
-
-```text
-1 root + 3 children + 9 grandchildren = 13 Fargate Agent Episodes
-```
+Each isolated episode calls the Anthropic Messages API for a structured thesis,
+supporting findings, and either a bounded child-agent plan or a completion
+summary. The default model is `claude-sonnet-5`; `CONVOY_MODEL` can override it.
+The API key is injected from the `convoy/dev/anthropic` Secrets Manager secret
+and never stored in the image or plain task-definition environment.
 
 There are no always-on ECS services. After the coordinator and agent tasks
 exit, the POC has no running compute.
