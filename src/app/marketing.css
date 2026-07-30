@@ -100,7 +100,9 @@
 
 .site-header {
   position: sticky; top: 0; z-index: 40;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  /* Opaque enough to stay readable where backdrop-filter is unsupported or
+     disabled; the blur is an enhancement, not the thing doing the work. */
+  background: color-mix(in srgb, var(--bg) 96%, transparent);
   backdrop-filter: saturate(180%) blur(12px);
   border-bottom: 1px solid var(--border);
 }
@@ -780,7 +782,7 @@ a.lane:hover .lane-go { color: var(--accent); }
   display: grid; grid-template-columns: minmax(0, 1fr) max-content; gap: 8px 16px;
   align-items: center;
   margin-bottom: 18px; padding: 12px 15px;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  background: color-mix(in srgb, var(--surface) 97%, transparent);
   backdrop-filter: saturate(180%) blur(10px);
   border: 1px solid var(--border-strong); border-radius: 10px;
   box-shadow: var(--shadow-xs);
