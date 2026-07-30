@@ -111,7 +111,9 @@ export default function StartPage() {
         </section>
 
         <section className="band band-paper" aria-labelledby="next-title">
-          <div className="wrap">
+          {/* Same measure as the walkthrough above it, so the page reads on one
+              left edge below the hero instead of jogging back and forth. */}
+          <div className="wrap-narrow">
             <div className="band-head">
               <p className="eyebrow">
                 <span className="eyebrow-rule" aria-hidden="true" />

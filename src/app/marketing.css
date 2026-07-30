@@ -724,7 +724,9 @@ a.lane:hover .lane-go { color: var(--accent); }
    Start Here
    =========================================================================== */
 
-.start-hero { padding: clamp(44px, 5.5vw, 72px) 0 clamp(40px, 5vw, 60px); }
+/* The walkthrough band supplies its own top padding, so the hero closes
+   tighter than a landing-page section would. */
+.start-hero { padding: clamp(44px, 5.5vw, 72px) 0 clamp(20px, 2.5vw, 32px); }
 .start-hero-grid { display: grid; gap: clamp(30px, 4vw, 52px); grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 940px) { .start-hero-grid { grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr); align-items: start; } }
 .start-hero .display { margin-top: 18px; }
@@ -743,7 +745,9 @@ a.lane:hover .lane-go { color: var(--accent); }
 .start-brief dt.is-real { color: var(--success-text); }
 .start-brief dt.is-sim { color: var(--warning-text); }
 .start-brief dd { margin-top: 5px; font-size: 12.5px; line-height: 1.55; color: var(--text-secondary); }
-.start-brief > p {
+/* Only the closing note gets the divider. Without :last-child this also hits
+   the leading .eyebrow paragraph and draws a stray rule across the card. */
+.start-brief > p:last-child {
   margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border);
   font-size: 11.5px; line-height: 1.55; color: var(--text-tertiary);
 }
