@@ -361,11 +361,11 @@ export default function LandingPage() {
               <p className="trace-panel-foot">
                 The seeded Production path, drawn from the run this agent actually produces. Trigger
                 it yourself from{" "}
-                <Link className="code" href="/systems?env=env_production&amp;tab=crm">
+                <Link className="code code-link" href="/systems?env=env_production&amp;tab=crm">
                   /systems
                 </Link>{" "}
                 and the trace streams live, or read a completed one at{" "}
-                <Link className="code" href="/runs/run_hist_1">
+                <Link className="code code-link" href="/runs/run_hist_1">
                   /runs/run_hist_1
                 </Link>
                 .
@@ -730,7 +730,7 @@ export default function LandingPage() {
                   <h3>The systems on the other side</h3>
                   <p>
                     Database-backed stand-ins carrying the real tool manifests, browsable at{" "}
-                    <Link className="code" href="/systems">
+                    <Link className="code code-link" href="/systems">
                       /systems
                     </Link>
                     .
@@ -781,7 +781,7 @@ export default function LandingPage() {
               </h2>
               <p className="lede">
                 The{" "}
-                <Link className="code" href="/start">
+                <Link className="text-link" href="/start">
                   guided walkthrough
                 </Link>{" "}
                 takes about eight minutes and covers all three of the routes below, in order. If you

@@ -64,6 +64,29 @@
 .micro { font-size: 12px; line-height: 1.5; color: var(--text-tertiary); }
 .code { font-family: var(--mono); font-size: 0.92em; }
 
+/* Inline prose links carry an underline as well as colour, so they never rely
+   on hue alone to be identifiable (WCAG 1.4.1 / the link-in-text-block rule).
+   Mono is reserved for real identifiers — a link set in mono reads as a
+   variable name, not as something you can click. */
+.text-link {
+  color: var(--accent-text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+.text-link:hover { color: var(--accent); text-decoration-thickness: 2px; }
+
+/* A route path inside prose: keep the mono, because the path is a real
+   identifier, but make it obviously clickable too. */
+.code-link {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+.code-link:hover { color: var(--accent); text-decoration-thickness: 2px; }
+
 .skip-link {
   position: fixed; top: 8px; left: 8px; z-index: 100;
   transform: translateY(-160%);
