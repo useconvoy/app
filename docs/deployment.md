@@ -50,6 +50,7 @@ Basic auth over plain HTTP is not acceptable even for a demo.
 | `CONVOY_LIVE_MODEL` | For live mode | `1` switches the runtime from the deterministic demo planner to the live model. |
 | `CONVOY_MODEL` | No | Model override (default `claude-opus-5`). |
 | `CONVOY_DATA_DIR` | Set by image | Where the JSON store lives (`/data`, volume-mounted). Delete the volume to reseed. |
+| `NEXT_PUBLIC_SITE_URL` | For public hosting | Canonical URL used by `robots.txt`/`sitemap.xml`. **Build-time**, not runtime — pass it as a Docker build arg (the compose file forwards it); setting it on a running container has no effect because those routes are statically generated. |
 
 ### What this gives you
 

@@ -4,6 +4,10 @@
 # ---- build ----
 FROM node:22-alpine AS builder
 WORKDIR /app
+# Canonical URL for robots.txt/sitemap.xml/OG tags. Build-time, not runtime:
+# these routes are statically generated, so the value is baked into the image.
+ARG NEXT_PUBLIC_SITE_URL
+ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
