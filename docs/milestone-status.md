@@ -3,8 +3,9 @@
 Audited against `main @ 44bbfba`. Every claim below was checked against the code, not inferred
 from the design docs. Milestones are the M1–M5 sequence from `docs/architecture-v2.md` §6.
 
-Read `HANDOFF.md` first for orientation (three execution stacks, two data stores, three auth
-modes). This document is narrower: it scores the roadmap and orders the remaining work.
+For orientation, read the [root README](../README.md) for the two halves of the repository, then
+§7 below for the cross-cutting shape (three execution stacks, two data stores). This document
+scores the roadmap and orders the remaining work.
 
 ---
 
@@ -145,11 +146,11 @@ So the repo contains two eval systems that do not know about each other:
 | Coverage | 1 agent template | 3 worlds |
 | Wired to the product UI | **yes** | **no** |
 
-`vinny-readme.md` already prescribes the right resolution: *"The Closed-Won Paperwork suite should
-become the third World rather than being rewritten. Its fixtures are the seed-state generator,
-gateway tools are the typed World surface, and assertions are already the evaluator
-specification."* That is the highest-leverage M3 task — it converts a demo fixture into a real
-hermetic environment and unifies the two systems instead of maintaining both.
+The right resolution is to make the Closed-Won Paperwork suite a World rather than rewriting it:
+its fixtures are the seed-state generator, gateway tools are the typed World surface, and its
+assertions are already the evaluator specification. That is the highest-leverage M3 task — it
+converts a demo fixture into a real hermetic environment and unifies the two systems instead of
+maintaining both.
 
 ### 4.2 In-app eval gaps
 
@@ -190,7 +191,7 @@ hermetic environment and unifies the two systems instead of maintaining both.
 | Per-entity locking | **Missing** | Two runs can paper the same deal concurrently. |
 | Retries / DLQ | **Missing** | A failed run is terminal with no retry path and no dead-letter surface. |
 | Shadow mode / canary | **Missing** | Design only. |
-| Cloud provider adapter | **Partial and bypasses governance** | See `HANDOFF.md` §3 — a `temporal-fargate` run produces zero trace rows, zero policy evaluations, and zero approvals in the app, and the kill switch has no effect on it. |
+| Cloud provider adapter | **Partial and bypasses governance** | See §7.1 — a `temporal-fargate` run produces zero trace rows, zero policy evaluations, and zero approvals in the app, and the kill switch has no effect on it. |
 
 **The cheapest high-credibility wins here** are webhook signature verification + idempotency keys
 (hours, and closes a real double-write bug) and per-entity locking. The scheduler is a genuine

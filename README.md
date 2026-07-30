@@ -146,3 +146,19 @@ Design detail lives in [`docs/runtime-architecture.md`](docs/runtime-architectur
 (application/provider boundary, state machine, profiles, security posture,
 rollout gates) and [`worlds/README.md`](worlds/README.md) (how to add a use case
 without building bespoke infrastructure).
+
+## Documentation map
+
+| Document | What it is |
+|---|---|
+| [`docs/product-spec.md`](docs/product-spec.md) | Original product spec and investor demo plan — the product source of truth |
+| [`docs/milestone-status.md`](docs/milestone-status.md) | Audited M1–M5 gap analysis: what is built, what is missing, recommended build order |
+| [`docs/architecture-v2.md`](docs/architecture-v2.md) | Design proposal for the real runtime, environments, evals, and deploy |
+| [`docs/runtime-architecture.md`](docs/runtime-architecture.md) | Execution architecture after a mission is accepted |
+| [`docs/deployment.md`](docs/deployment.md) | Phase 0 container deploy and the M1 reference topology |
+| [`docs/control-plane-deployment.md`](docs/control-plane-deployment.md) | DigitalOcean control plane → AWS execution plane wiring |
+| [`docs/landing-brief.md`](docs/landing-brief.md) | Positioning and content rules for the landing and `/start` routes |
+| [`assets/architecture-diagrams/`](assets/architecture-diagrams/) | Ten architecture figures with SVG/PNG sources and their generator |
+
+Start with `docs/milestone-status.md` if you are picking up work — it scores
+every milestone against the actual code and orders what to do next.

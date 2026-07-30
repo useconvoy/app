@@ -140,12 +140,17 @@ are sharded across supervisor Workflows and Continue-As-New boundaries.
 
 ## Expected result
 
-A default mission completes a depth-2, fanout-3 tree: 13 Fargate Agent
-Episodes, 14 DynamoDB records marked `COMPLETED`, 14 S3 objects (13 episode
-artifacts plus the mission summary), coordinator exit code `0`, and zero
-running ECS tasks afterward. Launched from the hosted application, admission
-holds no more than `maxParallelAgents` active slot leases along the way.
+The tree shape is model-decided, not fixed: each episode proposes up to
+`MAX_FANOUT` children when decomposition helps, so episode count varies between
+runs. What should hold every time is the envelope:
 
-Use those numbers to check a run. A coordinator that exits before creating
-agent work should also leave zero running tasks — failure containment is part
-of the contract, not just the happy path.
+- no episode deeper than `MAX_DEPTH`, and no more than `maxTotalAgents` overall;
+- never more than `maxParallelAgents` active slot leases at once;
+- one DynamoDB record per episode plus the mission, all `COMPLETED`;
+- one S3 artifact per episode plus the mission summary;
+- coordinator exit code `0`; and
+- zero running ECS tasks afterward.
+
+Check a run against those bounds rather than an episode count. A coordinator
+that exits before creating agent work should also leave zero running tasks —
+failure containment is part of the contract, not just the happy path.
