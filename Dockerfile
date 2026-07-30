@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-RUN npm run build
+RUN npm run build -- --webpack
 
 # ---- run ----
 FROM node:22-alpine AS runner
@@ -32,4 +32,6 @@ VOLUME ["/data"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s \
   CMD wget -qO- http://127.0.0.1:3000/api/health || exit 1
 
-CMD ["node", "server.js"]
+# App Runner injects its own HOSTNAME value. Force the standalone server to
+# listen on all interfaces instead of binding only to the container hostname.
+CMD ["sh", "-c", "HOSTNAME=0.0.0.0 exec node server.js"]
