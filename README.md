@@ -1,6 +1,6 @@
-# Convoy
+# Convoy Labs
 
-**Employees spawn personal agents; companies need company agents.** Convoy is where a company creates, permissions, tests, and runs its fleet of routine-work agents — LLMs that reason and make decisions, execute only the actions their environment allows, and flag consequential decisions for human approval.
+**Employees spawn personal agents; companies need company agents.** Convoy Labs is where a company creates, permissions, tests, and runs its fleet of routine-work agents — LLMs that reason and make decisions, execute only the actions their environment allows, and flag consequential decisions for human approval.
 
 This repository is the working POC behind the investor demo: the full product spec and demo plan live in [`docs/product-spec.md`](docs/product-spec.md).
 

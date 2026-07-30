@@ -69,7 +69,7 @@ export default function Dashboard() {
         <div className="card kpi"><div className="kpi-label">CRM records cleaned</div><div className="kpi-value">{overnight.cleaned}</div><div className="kpi-meta">CRM Hygiene Agent</div></div>
       </div>
 
-      <div className="section grid grid-4" style={{ gridTemplateColumns: "2fr 1fr 1fr" }}>
+      <div className="section grid grid-kpi-3">
         <Link
           href="/approvals"
           className="card kpi"

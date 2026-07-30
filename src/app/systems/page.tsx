@@ -72,7 +72,7 @@ export default function Systems() {
           <h1 className="page-title">Connected systems</h1>
           <p className="page-sub">
             The systems of record the convoy works against — instantiated per environment with environment-scoped
-            credentials. Marking a deal Closed-Won here fires the CRM webhook into Convoy.
+            credentials. Marking a deal Closed-Won here fires the CRM webhook into Convoy Labs.
           </p>
         </div>
         <div className="page-actions">
@@ -194,7 +194,7 @@ export default function Systems() {
             {data.chatMessages.map((m) => (
               <div key={m.id} style={{ fontSize: 13 }}>
                 <span className="faint small mono">{fmtTime(m.ts)}</span>{" "}
-                <b>{m.byRunId ? "Convoy Agent" : "Convoy"}</b>
+                <b>{m.byRunId ? "Convoy Labs Agent" : "Convoy Labs"}</b>
                 <div className="muted" style={{ marginTop: 2 }}>{m.text}</div>
               </div>
             ))}

@@ -1,8 +1,8 @@
 {
-  "name": "convoy",
+  "name": "convoy-labs",
   "version": "0.1.0",
   "private": true,
-  "description": "Convoy — where company agents are hired, badged, and put to work.",
+  "description": "Convoy Labs — where company agents are hired, badged, and put to work.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

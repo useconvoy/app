@@ -168,7 +168,7 @@ function createApprovalGate(
       id: id("msg"),
       environmentId: run.environmentId,
       channel: slack.config.channel ?? "#revops",
-      text: `Approval needed: ${title}. Review in Convoy → Approvals.`,
+      text: `Approval needed: ${title}. Review in Convoy Labs → Approvals.`,
       ts: now(),
     });
   }
