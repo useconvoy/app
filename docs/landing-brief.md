@@ -58,7 +58,7 @@ The Meridian Labs workspace, its activity counts, people, companies, credentials
 - **Secondary:** Open the sample workspace → `/dashboard`
 - Contextual deep links lead to real environment, agent, trace, approval, system, and audit routes.
 
-There is no signup, pricing, sales, install, or public documentation flow in the repository, so the landing page must not imply one.
+Account routes (`/register`, `/login`, `/workspaces/new`, `/missions`) exist but are gated behind `CONVOY_ACCOUNTS_ENABLED`; the landing page should only surface them when that flow is enabled. There is still no pricing, sales, install, or public documentation flow in the repository, so the landing page must not imply one.
 
 ## Visitor journeys
 
@@ -83,8 +83,8 @@ A modal overlay tour would be fragile because the walkthrough spans several rout
 ## Content and evidence gaps
 
 - No customers, testimonials, production usage, independent benchmarks, or verified commercial metrics.
-- No real OAuth integrations, credential vault, Postgres, MCP transport, Slack notification, or production security evidence.
-- No signup, demo booking, install, pricing, API reference, legal, security, privacy, team, or contact destinations.
+- No real OAuth integrations, credential vault, MCP transport to real systems, Slack notification, or production security evidence. (Postgres now backs the account/mission control plane; the demo workspace is still the JSON store.)
+- No demo booking, install, pricing, API reference, legal, security, privacy, team, or contact destinations.
 - Naming clearance and the final company/product name remain open; the current repository UI uses “Convoy Labs.”
 - Only the Closed-Won Paperwork agent has a complete scenario suite.
 - RBAC, SSO, multi-tenant hardening, connector marketplace, rollback, rate limits, PII redaction, and multi-model routing are roadmap items.

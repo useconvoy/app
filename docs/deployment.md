@@ -79,14 +79,9 @@ instead of executing the in-process loop. This path is opt-in; without
 `CONVOY_CLOUD_RUNTIME=1`, existing local and DigitalOcean deployments behave
 exactly as before.
 
-| Variable | Purpose |
-|---|---|
-| `CONVOY_CLOUD_RUNTIME` | Set to `1` to enable the provider. |
-| `ECS_CLUSTER_ARN` | ECS cluster that accepts coordinator tasks. |
-| `COORDINATOR_TASK_DEFINITION_ARN` | One-shot Temporal coordinator task definition. |
-| `AGENT_SUBNET_IDS` | Comma-separated subnets used by the coordinator task. |
-| `AGENT_SECURITY_GROUP_ID` | No-ingress security group for the coordinator task. |
-| `MISSION_TABLE_NAME` | DynamoDB table containing the live mission projection. |
+Set `CONVOY_CLOUD_RUNTIME=1` plus the ECS and DynamoDB variables listed in
+[`control-plane-deployment.md`](./control-plane-deployment.md), which is the
+single source of truth for that variable set.
 
 On AWS App Runner, attach an instance role with narrowly scoped
 `ecs:RunTask`, `ecs:TagResource`, `iam:PassRole`, and DynamoDB read access.
