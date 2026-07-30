@@ -1,0 +1,67 @@
+[
+  {
+    "actor": "vendor-researcher",
+    "tool": "chat.send",
+    "input": {
+      "channel_id": "ch-vendor-assurance",
+      "text": "Helix AI needs a production decision covering security, privacy, architecture, and the remaining remediation."
+    }
+  },
+  {
+    "actor": "security-analyst",
+    "tool": "evidence.attach",
+    "input": {
+      "vendor_id": "vendor-helix",
+      "category": "security",
+      "source": "SOC 2 Type II report",
+      "summary": "Access controls and audit logging are covered; pen-test remediation remains open."
+    }
+  },
+  {
+    "actor": "privacy-analyst",
+    "tool": "evidence.attach",
+    "input": {
+      "vendor_id": "vendor-helix",
+      "category": "privacy",
+      "source": "Data processing addendum",
+      "summary": "Customer transcripts are processed in the US with a 30-day deletion commitment."
+    }
+  },
+  {
+    "actor": "architecture-reviewer",
+    "tool": "evidence.attach",
+    "input": {
+      "vendor_id": "vendor-helix",
+      "category": "architecture",
+      "source": "Production architecture diagram",
+      "summary": "Tenant data is logically isolated and encryption keys are managed by the vendor."
+    }
+  },
+  {
+    "actor": "remediation-planner",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-helix",
+      "title": "Verify closure of the critical pen-test finding",
+      "owner": "Priya Shah",
+      "due_date": "2026-08-05"
+    }
+  },
+  {
+    "actor": "decision-synthesizer",
+    "tool": "drive.write_document",
+    "input": {
+      "title": "Helix AI vendor risk memo",
+      "body": "Security: controls are adequate if the pen-test finding closes. Privacy: the DPA establishes a 30-day deletion boundary. Architecture: tenant isolation is logical and vendor-managed encryption is documented. Recommend conditional approval."
+    }
+  },
+  {
+    "actor": "decision-synthesizer",
+    "tool": "approval.request",
+    "input": {
+      "type": "vendor_decision",
+      "target_id": "vendor-helix",
+      "reason": "Helix AI can launch only after a human accepts the residual pen-test and data-retention risk."
+    }
+  }
+]
