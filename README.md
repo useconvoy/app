@@ -21,6 +21,20 @@ No credentials, no database, no API keys required — the demo runs fully self-c
 npm run reset   # one-command reseed (demo-day risk mitigation, spec §6.8)
 ```
 
+## Deploy to a cloud server
+
+```bash
+export CONVOY_BASIC_AUTH="user:strong-password"   # required when internet-facing
+docker compose up -d --build
+```
+
+One container, one volume, TLS in front. Set `ANTHROPIC_API_KEY` and
+`CONVOY_LIVE_MODEL=1` to drive agents with the live model. Full guidance —
+including why serverless platforms won't work and the M1 reference topology
+for running agents with real permissions — is in
+[`docs/deployment.md`](docs/deployment.md). The next-phase design lives in
+[`docs/architecture-v2.md`](docs/architecture-v2.md).
+
 ## The 6-minute demo path
 
 1. **Cold open** — `/` fleet dashboard: 47 leads researched, 6 deals papered, 12 doc drafts, 31 records cleaned overnight.

@@ -8,7 +8,8 @@ import { seedDatabase } from "./seed";
 // The production seam is swapping this module for Postgres — nothing above it
 // (gateway, runtime, harness, UI) knows the difference.
 
-const DATA_DIR = path.join(process.cwd(), ".data");
+// Overridable so containers can mount a persistent volume (docs/deployment.md).
+const DATA_DIR = process.env.CONVOY_DATA_DIR ?? path.join(process.cwd(), ".data");
 const DATA_FILE = path.join(DATA_DIR, "db.json");
 
 const g = globalThis as unknown as { __convoyDb?: Database; __convoySaveTimer?: NodeJS.Timeout };
