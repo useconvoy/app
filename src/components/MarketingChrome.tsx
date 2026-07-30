@@ -16,11 +16,11 @@ export function MarketingHeader() {
           <Link href="/#faq">FAQ</Link>
         </nav>
         <div className="marketing-header-actions">
-          <Link className="marketing-link" href="/dashboard">
-            Sample workspace
+          <Link className="marketing-link" href="/login">
+            Sign in
           </Link>
-          <Link className="btn btn-primary marketing-cta" href="/start">
-            Start here <IconArrowUpRight size={15} />
+          <Link className="btn btn-primary marketing-cta" href="/register">
+            Create account <IconArrowUpRight size={15} />
           </Link>
         </div>
       </div>
@@ -45,6 +45,7 @@ export function MarketingFooter() {
         <nav aria-label="Product">
           <span>Product</span>
           <Link href="/start">Guided demo</Link>
+          <Link href="/register">Create account</Link>
           <Link href="/dashboard">Sample workspace</Link>
           <Link href="/environments">Environments</Link>
           <Link href="/audit">Audit log</Link>

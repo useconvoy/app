@@ -990,6 +990,79 @@ html { scroll-behavior: smooth; scroll-padding-top: 88px; }
   .start-notice { white-space: normal; text-align: center; }
 }
 
+/* Account, workspace, and mission control */
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(99, 102, 241, 0.14), transparent 32%),
+    var(--surface-subtle);
+}
+.auth-card {
+  width: min(100%, 440px);
+  display: grid;
+  gap: 18px;
+  padding: 30px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+.auth-card h1 { font-size: 28px; letter-spacing: -0.03em; margin: 0 0 6px; }
+.auth-card p { color: var(--text-secondary); margin: 0; }
+.auth-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+.auth-switch { text-align: center; font-size: 13px; }
+.auth-switch a { color: var(--accent); font-weight: 600; }
+.mission-envelope-grid { margin-top: 18px; }
+.mission-objective { max-width: 820px; font-size: 15px; line-height: 1.6; }
+.mission-state {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.state-running, .state-preparing, .state-accepted {
+  background: var(--accent-soft);
+  border-color: #c7d7fe;
+  color: var(--accent);
+}
+.state-succeeded, .state-completed {
+  background: var(--success-bg);
+  border-color: var(--success-border);
+  color: var(--success-text);
+}
+.state-failed, .state-cancelled {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger-text);
+}
+.mission-envelope {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 24px;
+  margin: 18px 0 0;
+}
+.mission-envelope div {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.mission-envelope dt { color: var(--text-secondary); font-size: 12px; }
+.mission-envelope dd { margin: 4px 0 0; font-weight: 600; }
+@media (max-width: 620px) {
+  .auth-card { padding: 22px; }
+  .mission-envelope { grid-template-columns: 1fr; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after {

@@ -16,11 +16,13 @@
     "@aws-sdk/client-ecs": "^3.859.0",
     "@aws-sdk/lib-dynamodb": "^3.859.0",
     "next": "^16.2.12",
+    "pg": "^8.16.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
+    "@types/pg": "^8.15.5",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "typescript": "^5.8.0"

@@ -21,6 +21,22 @@ No credentials, no database, no API keys required — the demo runs fully self-c
 npm run reset   # one-command reseed (demo-day risk mitigation, spec §6.8)
 ```
 
+### Account and mission control
+
+The application also supports real accounts, workspaces, and AWS-backed
+missions. Locally, control-plane records use `.data/control-plane.json`. When
+`DATABASE_URL` is present they use PostgreSQL instead.
+
+```bash
+CONVOY_ACCOUNTS_ENABLED=1 \
+CONVOY_SESSION_SECRET=replace-with-a-long-random-value \
+npm run dev
+```
+
+Set `CONVOY_CLOUD_RUNTIME=1` plus the ECS and DynamoDB variables documented in
+[`docs/control-plane-deployment.md`](docs/control-plane-deployment.md) to have
+new missions launch the AWS/Temporal runtime.
+
 ## Deploy to a cloud server
 
 ```bash

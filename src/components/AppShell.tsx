@@ -13,14 +13,34 @@ function Brand() {
   );
 }
 
-function Persona() {
+interface AccountContext {
+  account: { name: string; email: string };
+  workspaces: Array<{ id: string; name: string; role: string }>;
+}
+
+function Persona({ context }: { context: AccountContext | null }) {
+  const initials = context?.account.name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() ?? "MT";
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.assign("/login");
+  };
   return (
     <div className="sidebar-foot">
-      <span className="avatar">MT</span>
+      <span className="avatar">{initials}</span>
       <div className="who">
-        <b>Maya Torres</b>
-        <span>RevOps Lead · Approver</span>
+        <b>{context?.account.name ?? "Maya Torres"}</b>
+        <span>{context?.account.email ?? "RevOps Lead · Approver"}</span>
       </div>
+      {context && (
+        <button className="btn btn-ghost btn-sm" onClick={logout}>
+          Sign out
+        </button>
+      )}
     </div>
   );
 }
@@ -28,11 +48,27 @@ function Persona() {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [accountContext, setAccountContext] =
+    useState<AccountContext | null>(null);
   const pathname = usePathname();
   const menuRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const wasOpen = useRef(false);
-  const isMarketing = pathname === "/" || pathname === "/start";
+  const isMarketing =
+    pathname === "/" ||
+    pathname === "/start" ||
+    pathname === "/login" ||
+    pathname === "/register";
+
+  useEffect(() => {
+    if (isMarketing) return;
+    fetch("/api/auth/me")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((result) => {
+        if (result?.account) setAccountContext(result);
+      })
+      .catch(() => {});
+  }, [isMarketing]);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 900px)");
@@ -135,9 +171,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </svg>
           </button>
         </div>
-        <div className="workspace">Meridian Labs · RevOps workspace</div>
+        <div className="workspace">
+          {accountContext?.workspaces[0]?.name ??
+            "Meridian Labs · RevOps workspace"}
+        </div>
         <SideNav />
-        <Persona />
+        <Persona context={accountContext} />
       </aside>
 
       <main
