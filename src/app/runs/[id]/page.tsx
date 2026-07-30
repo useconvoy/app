@@ -16,12 +16,19 @@ interface RunDetail {
 export default function RunTrace({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [data, setData] = useState<RunDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [deciding, setDeciding] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/runs/${id}`);
-    if (res.ok) setData(await res.json());
+    try {
+      const res = await fetch(`/api/runs/${id}`);
+      if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+      setData(await res.json());
+      setError(null);
+    } catch {
+      setError("This trace could not be loaded. Check your connection and try again.");
+    }
   }, [id]);
 
   useEffect(() => {
@@ -32,10 +39,22 @@ export default function RunTrace({ params }: { params: Promise<{ id: string }> }
   }, [id, load]);
 
   useEffect(() => {
-    if (data?.run.state === "running") bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (data?.run.state === "running") {
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      bottomRef.current?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "nearest" });
+    }
   }, [data?.toolCalls.length, data?.run.state]);
 
-  if (!data) return <div className="muted">Loading trace…</div>;
+  if (error && !data) {
+    return (
+      <div className="error-state" role="alert">
+        <strong>Run trace unavailable.</strong>
+        <span>{error}</span>
+        <button className="btn btn-sm" type="button" onClick={() => void load()}>Try again</button>
+      </div>
+    );
+  }
+  if (!data) return <div className="muted" role="status">Loading trace…</div>;
   const { run, agent, environment, toolCalls, approvals } = data;
   const pending = approvals.filter((a) => a.status === "pending");
 
@@ -97,7 +116,7 @@ export default function RunTrace({ params }: { params: Promise<{ id: string }> }
       <div className="section" style={{ marginTop: 20 }}>
         <div className="section-head">
           <div className="section-title">Tool calls</div>
-          <div className="section-note">Inputs, outputs, and policy verdicts — immutable trace</div>
+          <div className="section-note">Inputs, outputs, and policy verdicts — recorded causal trace</div>
         </div>
         <div className="trace">
           {toolCalls.map((tc) => (

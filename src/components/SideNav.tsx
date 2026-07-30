@@ -6,6 +6,7 @@ import {
   IconBot,
   IconGrid,
   IconHand,
+  IconFlag,
   IconLayers,
   IconList,
   IconPlay,
@@ -16,7 +17,8 @@ const GROUPS: { label: string; items: { href: string; label: string; icon: React
   {
     label: "Operate",
     items: [
-      { href: "/", label: "Fleet overview", icon: <IconGrid /> },
+      { href: "/start", label: "Start here", icon: <IconFlag /> },
+      { href: "/dashboard", label: "Fleet overview", icon: <IconGrid /> },
       { href: "/runs", label: "Runs", icon: <IconPlay /> },
       { href: "/approvals", label: "Approvals", icon: <IconHand /> },
     ],
@@ -40,8 +42,7 @@ const GROUPS: { label: string; items: { href: string; label: string; icon: React
 
 export function SideNav() {
   const pathname = usePathname();
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
+  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
   return (
     <nav aria-label="Primary">
       {GROUPS.map((g) => (
