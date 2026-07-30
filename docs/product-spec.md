@@ -5,6 +5,14 @@
 **POC scope:** user-set-up environments (Sandbox + Production) · tools attached to environments with permissions · create-or-select agents · run in Sandbox to test, in Production to work.
 **Demo target:** Fully working end-to-end, ~6 minutes, investor audience.
 
+> **Status: original spec, kept as the product source of truth.** It is written
+> as a plan, so it deliberately reads ahead of the code. Two places where the
+> implementation chose differently: §6.5's real HubSpot/Google/Slack accounts
+> became DB-backed simulations with real tool manifests, and §6.7's Supabase
+> became a JSON store with a Postgres seam. What the code actually does is in
+> the [root README](../README.md); what comes next is in
+> [`architecture-v2.md`](./architecture-v2.md).
+
 ---
 
 ## 1. Positioning

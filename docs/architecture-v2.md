@@ -8,6 +8,13 @@ attached/enterprise/custom tooling, a sandboxed execution model, a first-class
 eval system, and production deployment. It ends with the gap list — things
 not in the original ask that will bite if unplanned.
 
+> **Superseded in one place.** The run queue proposed in §1.1 (Postgres
+> `FOR UPDATE SKIP LOCKED`) was replaced by Temporal for recursive mission
+> execution — see [`runtime-architecture.md`](./runtime-architecture.md).
+> Everything else here still stands. The environment, gateway, credential,
+> policy, approval, hermetic-eval, and immutable-deployment model is the
+> product foundation.
+
 ---
 
 ## 0. Where the POC actually is (honest baseline)
@@ -21,8 +28,8 @@ not in the original ask that will bite if unplanned.
 | Sandbox | None (trust boundary is the gateway API only) | Process → container isolation for the agent loop |
 | Evals | 8 hardcoded scenarios, one template, namespaced fixtures in the shared sandbox | User-authored eval sets, hermetic per-task env instances, layered graders, certified promotion |
 | Deploy | Flag flip in one process | Pinned immutable releases, trigger infra, canary/rollback, ops |
-| Store | JSON file | Postgres + migrations |
-| Identity | Hardcoded persona | SSO, RBAC, authenticated approvals |
+| Store | JSON file for the demo workspace; Postgres for accounts/missions | Postgres + migrations throughout |
+| Identity | Hardcoded persona in the demo; email/password accounts behind a flag | SSO, RBAC, authenticated approvals |
 
 The single most load-bearing POC decision that carries forward unchanged:
 **agents never hold credentials; every action passes the policy gateway.**

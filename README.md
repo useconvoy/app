@@ -2,7 +2,10 @@
 
 **Employees spawn personal agents; companies need company agents.** Convoy Labs is where a company creates, permissions, tests, and runs its fleet of routine-work agents — LLMs that reason and make decisions, execute only the actions their environment allows, and flag consequential decisions for human approval.
 
-This repository is the working POC behind the investor demo: the full product spec and demo plan live in [`docs/product-spec.md`](docs/product-spec.md).
+This repository holds two halves that meet through versioned contracts:
+
+- **The control plane and demo application** (`src/`) — the Next.js workspace where agents are created, permissioned, tested, promoted, and audited. This is the working POC behind the investor demo; the full product spec and demo plan live in [`docs/product-spec.md`](docs/product-spec.md).
+- **The agent runtime and Worlds** (`contracts/`, `runtime/`, `worlds/`, `poc/`, `infra/`) — isolated execution sessions that accept a versioned run contract, stream events, and run against resettable company simulations. See [Runtime and Worlds](#runtime-and-worlds) below.
 
 ## Quick start
 
@@ -78,6 +81,8 @@ src/server/
   promotion.ts      pre-flight diff + green-suite promotion gate
   seed.ts           Meridian Labs workspace seed
   db.ts             JSON-persisted store (.data/db.json) — Postgres is the production seam
+  control-plane/    accounts, sessions, workspaces, missions (JSON or Postgres store)
+  cloud-runtime.ts  optional adapter: submit runs to the AWS/Temporal runtime
 src/app/            Next.js control plane UI + API routes (SSE live traces)
 ```
 
@@ -96,5 +101,48 @@ The live engine (`claude.ts`) runs a manual tool-use loop against `claude-opus-5
 ### Deliberate POC simplifications
 
 - **Simulated external systems.** HubSpot/Gmail/Docs/Slack are DB-backed simulations with real tool manifests, viewable at `/systems`. The gateway is protocol-level, so swapping in real MCP connectors changes `gateway.ts`'s executor — nothing above it.
-- **JSON store instead of Postgres.** Table shapes match spec §6.3 exactly; `db.ts` is the swap point.
+- **JSON store instead of Postgres.** Table shapes match spec §6.3 exactly; `db.ts` is the swap point. (The account/mission control plane already speaks Postgres when `DATABASE_URL` is set.)
 - **Single workspace, two personas** — per the spec's non-goals.
+
+## Runtime and Worlds
+
+The second half of the repository is the execution substrate: isolated agent
+sessions that run against **Worlds** — resettable slices of a company with
+typed tools, policy gates, and state-based evaluators. The application creates
+a `RunSpec` and consumes ordered `RunEvent` records; it does not know whether
+the executor is local Docker, ECS/Fargate, or a future provider.
+
+```
+contracts/                 RunSpec, WorldSpec, RunEvent JSON schemas
+runtime/supervisor/        PID 1 process inside every agent container
+runtime/local/             local Docker executor
+runtime/providers/         provider adapter designs (AgentCore, ECS, Firecracker)
+worlds/runtime/            provider-neutral World HTTP API and MCP surface
+worlds/catalog/            versioned simulation definitions and seed data
+examples/runs/             reproducible RunSpecs
+poc/recursive-agents/      Temporal + Fargate recursive mission POC image
+infra/cdk/                 AWS CDK stack for the POC (ConvoyPocStack)
+scripts/ · tests/          spec validation, contract/World/e2e tests
+```
+
+```bash
+npm run world:validate   # validate contracts and World specs
+npm run world:test       # contract, MCP, World, and evaluator tests
+npm run world:catalog    # list available Worlds
+npm run world:build      # build the agent + World Docker images
+npm run world:test:e2e   # end-to-end run through the local Docker executor
+```
+
+No model or cloud credentials are needed for those commands — deterministic
+agents exercise the same isolation, event, policy, and evaluation path a
+model-backed image uses. To inspect a scenario without Docker:
+
+```bash
+node worlds/runtime/cli.mjs replay aurelia-renewal-ops \
+  worlds/catalog/aurelia-renewal-ops/successful-run.json
+```
+
+Design detail lives in [`docs/runtime-architecture.md`](docs/runtime-architecture.md)
+(application/provider boundary, state machine, profiles, security posture,
+rollout gates) and [`worlds/README.md`](worlds/README.md) (how to add a use case
+without building bespoke infrastructure).

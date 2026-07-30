@@ -139,22 +139,14 @@ and exits after the mission reaches a terminal state. Production uses the same
 Workflow definitions behind an always-available Worker pool; very large trees
 are sharded across supervisor Workflows and Continue-As-New boundaries.
 
-## Verified live result
+## Expected result
 
-Mission `convoy-poc-20260730T054646Z` completed on July 29, 2026:
+A default mission completes a depth-2, fanout-3 tree: 13 Fargate Agent
+Episodes, 14 DynamoDB records marked `COMPLETED`, 14 S3 objects (13 episode
+artifacts plus the mission summary), coordinator exit code `0`, and zero
+running ECS tasks afterward. Launched from the hosted application, admission
+holds no more than `maxParallelAgents` active slot leases along the way.
 
-- 13 agent episodes: `1 + 3 + 9`;
-- 14 DynamoDB records, all `COMPLETED`;
-- 14 S3 objects: 13 agent artifacts plus one mission summary;
-- coordinator exit code `0`;
-- approximately 92 seconds from Workflow start to mission completion; and
-- zero running ECS tasks after completion.
-
-The first smoke run also proved failure containment: a missing OS CA bundle
-caused the coordinator to exit before creating any agent work, and ECS returned
-to zero running tasks. The corrected image then completed the full tree.
-
-The governed runtime was subsequently verified from the hosted application with
-mission `run_ms75cbt80cf4jtw`. It dynamically admitted 13 agents, never held
-more than 6 active slot leases, wrote 14 S3 objects, completed the app run, and
-returned ECS to zero running and pending tasks.
+Use those numbers to check a run. A coordinator that exits before creating
+agent work should also leave zero running tasks — failure containment is part
+of the contract, not just the happy path.
