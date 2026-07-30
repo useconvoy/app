@@ -32,7 +32,7 @@ const CALLS: Call[] = [
     connectorId: "google_email",
     args: {
       to: "ap@northwindsystems.com",
-      subject: "Invoice & Order Form — Northwind Systems",
+      subject: "Invoice & Order Form — Northwind Systems — Platform (85 seats)",
     },
   },
   {
@@ -113,9 +113,12 @@ export function PolicyVerdict() {
           <h2 id="verdict-title">One tool call, two environments</h2>
           <p className="micro">Evaluated by the gateway&rsquo;s own policy engine</p>
         </div>
+        {/* Not "Live": these verdicts are computed at build time. What is true —
+            and stronger — is that they come from the real evaluator rather than
+            from a designer's guess. */}
         <span className="verdict-live">
           <i aria-hidden="true" />
-          Live
+          Real evaluator
         </span>
       </div>
 
@@ -140,7 +143,7 @@ export function PolicyVerdict() {
         </div>
       </fieldset>
 
-      <div className="verdict-panels">
+      <div className="verdict-panels" aria-live="polite">
         {CALLS.map((call) => (
           <div className="verdict-panel" data-call={call.id} key={call.id}>
             <dl className="verdict-args">

@@ -39,9 +39,9 @@ const STEPS = [
     href: "/agents/agent_closed_won_paperwork",
     action: "Inspect the agent",
     mutates: false,
-    text: "The Closed-Won Paperwork agent: its trigger, the tools its version declared, its parameters, its deployment in each environment, and the eight scenarios it has to survive.",
+    text: "The Closed-Won Paperwork agent: its trigger, the tools its version declared, its parameters, its deployment in each environment, and the scenarios it has to survive.",
     notice:
-      "It is a versioned workspace asset with a numbered version — not a prompt sitting in someone's account.",
+      "Everything here belongs to the workspace and carries a version number, including the tool grants.",
   },
   {
     id: "sandbox",
@@ -63,7 +63,7 @@ const STEPS = [
     href: "/agents/agent_closed_won_paperwork#scenario-suite",
     action: "Run the scenario suite",
     mutates: true,
-    text: "Run all eight scenarios, then open Promotion. Every assertion reads sandbox system state rather than the agent's summary, and promotion stays blocked until the suite is green on this exact version.",
+    text: "Run the whole suite, then open Promotion. Every assertion reads sandbox system state rather than the agent's summary, and promotion stays blocked until the suite is green on this exact version.",
     notice:
       "The pre-flight diff puts the credential swap, the policy changes and the test status in one place.",
   },
@@ -188,6 +188,7 @@ export function StartGuide() {
                     <input
                       type="checkbox"
                       checked={isDone}
+                      aria-label={`Mark step ${step.number}, ${step.title}, as visited`}
                       onChange={(event) => setStep(step.id, event.target.checked)}
                     />
                     Mark visited

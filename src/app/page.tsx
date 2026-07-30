@@ -25,6 +25,10 @@ const GATED_RULES = SEED_POLICIES.filter((r) => r.effect === "require_approval")
 const SCENARIOS = CLOSED_WON_SCENARIOS.length;
 const ASSERTIONS = CLOSED_WON_SCENARIOS.reduce((total, s) => total + s.assertions.length, 0);
 const AGENTS = TEMPLATES.length;
+const CONNECTOR_COUNT = CONNECTORS.length;
+const PAUSING_SCENARIOS = CLOSED_WON_SCENARIOS.filter((s) =>
+  s.assertions.some((a) => a.type === "run_state" && a.expect === "paused_pending_approval"),
+).length;
 const TOOLS = CONNECTORS.reduce((total, c) => total + c.tools.length, 0);
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://shark-app-dj8b4.ondigitalocean.app";
@@ -80,7 +84,7 @@ const faqSchema = {
       name: "What exactly does the gateway check, and in what order?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Kill switch, escalation short-circuit, tool grant on the version, connector instance and health for this environment, then the permission rule for that environment, connector and tool including any conditions on the arguments. Only a call that survives all of it gets credentials and executes. A trace row is written on every branch, refusals included.",
+        text: "Kill switch, escalation short-circuit, tool grant on the version, whether the name resolves to a connector at all, whether a healthy instance of that connector is attached to this environment, then the permission rule for that environment, connector and tool including any conditions on the arguments. Only a call that survives all six gets credentials and executes. A trace row is written on every branch, refusals included.",
       },
     },
     {
@@ -307,8 +311,7 @@ export default function LandingPage() {
                     <p>
                       The invoice is addressed outside{" "}
                       <span className="code">meridianlabs.dev</span>, so the Production rule holds
-                      it for a named approver. Nothing about the model&rsquo;s confidence enters
-                      into it.
+                      it for a named approver, whatever the agent itself concluded.
                     </p>
                   </div>
                 </li>
@@ -317,7 +320,7 @@ export default function LandingPage() {
               <p className="prose" style={{ marginTop: 22 }}>
                 The two mechanisms do not depend on each other. Take away the agent&rsquo;s
                 judgment and the policy gate still fires. Loosen the policy and the agent still
-                escalates. That redundancy is the design, not a coincidence of this particular deal.
+                escalates. That redundancy is the design. It is not a property of this one deal.
               </p>
             </div>
 
@@ -344,9 +347,9 @@ export default function LandingPage() {
                   verdict="Agent-flagged"
                   gate
                 />
-                <TraceRow seq="05" tool="docs.create" note="Order Form — Northwind Systems" />
+                <TraceRow seq="05" tool="docs.create" note="Order Form — Northwind Systems — Platform (85 seats)" />
                 <TraceRow seq="06" tool="crm.update_deal" note="paperwork_status: complete" />
-                <TraceRow seq="07" tool="docs.create" note="Kickoff Checklist — Northwind Systems" />
+                <TraceRow seq="07" tool="docs.create" note="Kickoff Checklist — Northwind Systems — Platform (85 seats)" />
                 <TraceRow seq="08" tool="chat.post" note="#revops" />
                 <TraceRow
                   seq="09"
@@ -391,7 +394,7 @@ export default function LandingPage() {
                 run to its deployment and environment, runs the checks below in order, injects the
                 environment&rsquo;s credentials only if the call survives all of them, executes,
                 and writes the trace before it returns. Refusals and kill-switch stops are traced
-                too. Nothing exits quietly.
+                too.
               </p>
             </div>
 
@@ -430,33 +433,36 @@ export default function LandingPage() {
                     <li>
                       <i>03</i>
                       <span>
-                        <b>Tool grant.</b> Did this agent <em>version</em> declare this tool? Not
-                        the agent — the version.
+                        <b>Tool grant.</b> Did this agent <em>version</em> declare this tool? The
+                        version, not the agent.
                       </span>
                     </li>
                     <li>
                       <i>04</i>
                       <span>
-                        <b>Connector.</b> Is a healthy connector instance attached to this
-                        environment?
+                        <b>Known tool.</b> Does the name resolve to a connector at all? An
+                        unrecognised one is refused, not ignored.
                       </span>
                     </li>
                     <li>
                       <i>05</i>
                       <span>
-                        <b>Policy.</b> What does the rule for this environment, connector and tool
-                        say — including its conditions on the arguments?
+                        <b>Connector.</b> Is a healthy instance of that connector attached to this
+                        environment?
                       </span>
                     </li>
                     <li>
                       <i>06</i>
                       <span>
-                        <b>Credentials.</b>{" "}
-                        Inject the environment&rsquo;s handle, execute, write
-                        the trace row.
+                        <b>Policy.</b> What does the rule for this environment, connector and tool
+                        say — including its conditions on the arguments?
                       </span>
                     </li>
                   </ol>
+                  <p className="gw-after">
+                    Only then: inject the environment&rsquo;s credential handle, execute, write the
+                    trace row.
+                  </p>
                 </div>
 
                 <Arrow />
@@ -533,7 +539,7 @@ export default function LandingPage() {
                   </p>
                   <p className="lifecycle-proof">
                     <b>In the sample</b>
-                    {AGENTS} agents · {TOOLS} tools across 4 connectors
+                    {AGENTS} agents · {TOOLS} tools across {CONNECTOR_COUNT} connectors
                   </p>
                 </article>
 
@@ -639,7 +645,7 @@ export default function LandingPage() {
                   <h3>Judgment and taste</h3>
                   <p>
                     Anything where the voice, the relationship or the creative call is the product.
-                    Not a roadmap item — a boundary.
+                    A boundary, not a roadmap item.
                   </p>
                 </div>
               </div>
@@ -815,7 +821,7 @@ export default function LandingPage() {
                   <h3>Inspect one agent completely</h3>
                   <p>
                     Its trigger, declared tool grants, parameters, both deployments, and the{" "}
-                    {SCENARIOS} edge cases it has to survive before it can be promoted.
+                    {SCENARIOS} scenarios it has to survive before it can be promoted.
                   </p>
                   <ul className="lane-steps">
                     <li>
@@ -859,11 +865,10 @@ export default function LandingPage() {
                 Objections
               </p>
               <h2 className="h2" id="faq-title" style={{ marginTop: 14 }}>
-                The questions a careful reviewer asks second.
+                The questions that come after &ldquo;what is it.&rdquo;
               </h2>
               <p className="prose" style={{ marginTop: 18 }}>
-                The first question is always &ldquo;what is it.&rdquo; These are the ones that
-                follow, answered against what the code does.
+                Answered against what the code does, including where the answer is unflattering.
               </p>
             </div>
 
@@ -891,15 +896,16 @@ export default function LandingPage() {
                 <summary>What exactly does the gateway check, and in what order?</summary>
                 <div>
                   <p>
-                    Kill switch, escalation short-circuit, tool grant on the version, connector
-                    instance and health for this environment, then the permission rule for that
-                    environment, connector and tool including any conditions on the arguments. Only
-                    a call that survives all of it gets credentials and executes.
+                    Kill switch, escalation short-circuit, tool grant on the version, whether the
+                    name resolves to a connector at all, whether a healthy instance of that
+                    connector is attached to this environment, then the permission rule for that
+                    environment, connector and tool including its conditions. Only a call that
+                    survives all six gets credentials and executes.
                   </p>
                   <p>
                     A trace row is written on every branch — refusals, kill-switch stops and
-                    approval holds included. It is about fifty lines in{" "}
-                    <code>src/server/gateway.ts</code>, which is deliberate: the whole trust
+                    approval holds included. <code>callTool</code> in <code>src/server/gateway.ts</code> is about fifty
+                    lines, which is deliberate: the whole trust
                     boundary should fit on one screen.
                   </p>
                 </div>
@@ -916,8 +922,9 @@ export default function LandingPage() {
                     summary cannot fake.
                   </p>
                   <p>
-                    Three scenarios also assert that the run <em>paused</em>, with a specific
-                    escalation reason. Stopping correctly is graded the same way finishing is.
+                    {PAUSING_SCENARIOS} of them assert that the run <em>paused</em>, with a
+                    specific escalation reason. Stopping correctly is graded the same way finishing
+                    is.
                   </p>
                 </div>
               </details>
@@ -1017,7 +1024,7 @@ export default function LandingPage() {
                 <p>
                   Seven steps through the sample workspace: compare the two environments, inspect
                   the agent, run it where mistakes are cheap, earn the promotion, then watch
-                  Production hold two decisions for a human. No account, no key, no install.
+                  Production hold two decisions for a human. No signup, no API key, no install.
                 </p>
               </div>
               <div className="closer-actions">

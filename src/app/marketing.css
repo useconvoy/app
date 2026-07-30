@@ -230,7 +230,7 @@
    keeping the fieldset/legend semantics that name the radio group. */
 .verdict-picker-label {
   float: left; width: 100%; padding: 0; margin-bottom: 9px;
-  font: 650 10px/1.4 var(--mono); letter-spacing: 0.09em; text-transform: uppercase;
+  font: 650 11px/1.4 var(--mono); letter-spacing: 0.09em; text-transform: uppercase;
   color: var(--text-tertiary);
 }
 /* The legend is floated back into normal flow (a <legend> otherwise renders
@@ -289,7 +289,7 @@
 }
 .verdict-args > div { display: contents; }
 .verdict-args dt {
-  font: 600 10px/1.6 var(--mono); letter-spacing: 0.07em; text-transform: uppercase;
+  font: 600 11px/1.6 var(--mono); letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--text-tertiary);
 }
 .verdict-args dd { font: 12px/1.6 var(--mono); color: var(--text-secondary); overflow-wrap: anywhere; min-width: 0; }
@@ -471,6 +471,11 @@
 .gw-checks li > i {
   font-style: normal; font: 650 10px/1.5 var(--mono); color: var(--accent-text);
 }
+.gw-after {
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px dashed var(--accent-border);
+  font-size: 12px; line-height: 1.5; color: var(--accent-text);
+}
 .gw-outputs { list-style: none; display: grid; gap: 6px; margin-top: 14px; }
 .gw-outputs li {
   display: flex; align-items: center; gap: 9px;
@@ -589,7 +594,8 @@
 .trace-main code { font: 640 12px/1.5 var(--mono); color: var(--text); overflow-wrap: anywhere; }
 .trace-main em {
   font-style: normal; margin-left: auto;
-  font: 650 10px/1.5 var(--mono); letter-spacing: 0.05em; text-transform: uppercase;
+  /* This is the verdict — load-bearing content, not a decorative label. */
+  font: 650 11.5px/1.5 var(--mono); letter-spacing: 0.04em; text-transform: uppercase;
   color: var(--success-text); white-space: nowrap;
 }
 .trace-main small { flex-basis: 100%; font-size: 11.5px; line-height: 1.5; color: var(--text-tertiary); }
@@ -620,7 +626,7 @@
 .reality-badge {
   display: inline-flex; align-items: center; gap: 7px; align-self: flex-start;
   padding: 5px 10px; border-radius: 999px; border: 1px solid;
-  font: 650 10px/1 var(--mono); letter-spacing: 0.07em; text-transform: uppercase;
+  font: 650 11px/1.3 var(--mono); letter-spacing: 0.06em; text-transform: uppercase;
 }
 .reality-shipped { color: var(--success-text); background: var(--success-bg); border-color: var(--success-border); }
 .reality-sim { color: var(--warning-text); background: var(--warning-bg); border-color: var(--warning-border); }
@@ -777,6 +783,8 @@ a.lane:hover .lane-go { color: var(--accent); }
   font-size: 11.5px; line-height: 1.55; color: var(--text-tertiary);
 }
 
+/* Aligned with the step cards, not with the <li> that also holds the 40px
+   marker gutter — otherwise the bar juts 56px past every card it sits over. */
 .start-progress {
   position: sticky; top: 60px; z-index: 20;
   display: grid; grid-template-columns: minmax(0, 1fr) max-content; gap: 8px 16px;
@@ -812,12 +820,19 @@ a.lane:hover .lane-go { color: var(--accent); }
   color: var(--text-tertiary); font: 650 11px/1 var(--mono);
   position: sticky; top: 130px;
 }
-@media (min-width: 760px) { .start-marker { display: inline-flex; } }
+@media (min-width: 760px) {
+  .start-marker { display: inline-flex; }
+  .start-progress { margin-left: 56px; }
+}
 .start-steps li.is-done .start-marker { color: var(--success-text); background: var(--success-bg); border-color: var(--success-border); }
 
 .start-steps article {
   padding: 20px; border-radius: 12px;
   border: 1px solid var(--border); background: var(--surface);
+  /* Clear the sticky header AND the progress bar. Without this a step scrolled
+     to by anchor or keyboard lands with its "Changes sample state" flag hidden
+     behind the bar — the one thing this page promises to show before you act. */
+  scroll-margin-top: 128px;
 }
 .start-steps li.is-done article { border-color: var(--success-border); }
 .start-step-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
@@ -826,9 +841,10 @@ a.lane:hover .lane-go { color: var(--accent); }
 .start-step-head h3 { margin-top: 8px; font-size: 17px; font-weight: 640; letter-spacing: -0.015em; }
 .start-flag {
   flex: 0 0 auto;
-  padding: 5px 9px; border-radius: 999px;
+  padding: 5px 10px; border-radius: 999px;
   border: 1px solid var(--border-strong); background: var(--surface-subtle);
-  font: 650 10px/1.3 var(--mono); letter-spacing: 0.05em; text-transform: uppercase;
+  /* "Changes sample state" is a warning, so it does not get the 10px treatment. */
+  font: 650 11.5px/1.4 var(--mono); letter-spacing: 0.04em; text-transform: uppercase;
   color: var(--text-tertiary);
 }
 .start-flag.is-mutating { color: var(--warning-text); background: var(--warning-bg); border-color: var(--warning-border); }
@@ -840,8 +856,8 @@ a.lane:hover .lane-go { color: var(--accent); }
   font-size: 12.5px; line-height: 1.55; color: var(--text-secondary);
 }
 .start-notice > span {
-  display: block; margin-bottom: 3px;
-  font: 700 9.5px/1 var(--mono); letter-spacing: 0.09em; text-transform: uppercase;
+  display: block; margin-bottom: 4px;
+  font: 700 11px/1.3 var(--mono); letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--accent-text);
 }
 .start-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 16px; }
