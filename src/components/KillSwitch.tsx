@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ModalDialog } from "./ModalDialog";
 
 export function KillSwitch({ agentId, agentName, paused }: { agentId: string; agentName: string; paused: boolean }) {
   const router = useRouter();
@@ -30,9 +31,8 @@ export function KillSwitch({ agentId, agentName, paused }: { agentId: string; ag
         {paused ? "Resume" : "Pause fleet-wide"}
       </button>
       {confirming && (
-        <div className="modal-backdrop" onClick={() => setConfirming(false)}>
-          <div className="modal" style={{ width: 480 }} onClick={(e) => e.stopPropagation()}>
-            <h2>Pause {agentName} fleet-wide?</h2>
+        <ModalDialog labelledBy={`pause-title-${agentId}`} onClose={() => setConfirming(false)} className="modal-sm">
+            <h2 id={`pause-title-${agentId}`}>Pause {agentName} fleet-wide?</h2>
             <p className="muted small" style={{ marginTop: 8 }}>
               This is the kill switch. No new runs will start in any environment, and in-flight runs stop at their next
               action. The pause is recorded in the audit log and is reversible at any time.
@@ -43,8 +43,7 @@ export function KillSwitch({ agentId, agentName, paused }: { agentId: string; ag
               </button>
               <button className="btn" onClick={() => setConfirming(false)}>Cancel</button>
             </div>
-          </div>
-        </div>
+        </ModalDialog>
       )}
     </>
   );
