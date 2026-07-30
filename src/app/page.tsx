@@ -189,8 +189,8 @@ export default function LandingPage() {
                 Every company already has agents. None of them belong to the company.
               </h2>
               <p className="lede">
-                People have been running assistants on their own logins for two years now. Those
-                assistants inherit one person&rsquo;s access, keep their history in one
+                People have been running assistants on their own logins since the first useful ones
+                shipped. They inherit one person&rsquo;s access, keep their history in one
                 person&rsquo;s account, and leave when that person does. For helping someone think,
                 that is fine. For doing the company&rsquo;s work — writing to the CRM, sending the
                 invoice, publishing the page — it is the wrong shape.
@@ -609,7 +609,7 @@ export default function LandingPage() {
               </h2>
               <p className="lede">
                 One end of company work is fully scriptable, and code already owns it. The other end
-                needs voice, relationships and taste, and should stay with people. Convoy is built
+                needs voice, relationships and taste, and should stay with people. Convoy Labs is built
                 for the band between them — work too variable for an if-statement and too routine to
                 deserve someone&rsquo;s afternoon.
               </p>
@@ -784,8 +784,9 @@ export default function LandingPage() {
                 <Link className="code" href="/start">
                   guided walkthrough
                 </Link>{" "}
-                covers all three paths in order and takes about eight minutes. If you would rather
-                go straight to the part you care about, start where you already have questions.
+                takes about eight minutes and covers all three of the routes below, in order. If you
+                would rather go straight to the part you care about, start where you already have
+                questions.
               </p>
             </div>
 
