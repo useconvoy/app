@@ -10,8 +10,9 @@ export default function proxy(req: NextRequest) {
   const expected = process.env.CONVOY_BASIC_AUTH;
   if (!expected) return NextResponse.next();
 
-  // Health probes must stay unauthenticated for load balancers.
-  if (req.nextUrl.pathname === "/api/health") return NextResponse.next();
+  // Keep the explanatory landing, guided tour, discovery metadata, and
+  // health probe public. Workspace routes and APIs remain behind the gate.
+  if (isPublicPath(req.nextUrl.pathname)) return NextResponse.next();
 
   const header = req.headers.get("authorization") ?? "";
   if (header.startsWith("Basic ")) {
@@ -26,6 +27,10 @@ export default function proxy(req: NextRequest) {
     status: 401,
     headers: { "WWW-Authenticate": 'Basic realm="Convoy Labs"' },
   });
+}
+
+function isPublicPath(pathname: string): boolean {
+  return ["/", "/start", "/robots.txt", "/sitemap.xml", "/icon", "/og.png", "/api/health"].includes(pathname);
 }
 
 function timingSafeEqual(a: string, b: string): boolean {

@@ -45,7 +45,7 @@ Basic auth over plain HTTP is not acceptable even for a demo.
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `CONVOY_BASIC_AUTH` | Yes, if internet-facing | `user:password` shared credential enforced by `src/proxy.ts` on every route (except `/api/health`). The stopgap until M1 identity lands — the approve/reject buttons must not be public. |
+| `CONVOY_BASIC_AUTH` | Yes, if internet-facing | `user:password` shared credential enforced by `src/proxy.ts` on workspace routes and APIs. The public landing, guided tour, metadata assets, and `/api/health` stay open; consequential workspace actions remain gated. The stopgap until M1 identity lands — the approve/reject buttons must not be public. |
 | `ANTHROPIC_API_KEY` | For live mode | Enables the real Claude tool loop. |
 | `CONVOY_LIVE_MODEL` | For live mode | `1` switches the runtime from the deterministic demo planner to the live model. |
 | `CONVOY_MODEL` | No | Model override (default `claude-opus-5`). |
