@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Badge, fmtTime } from "@/components/bits";
 import type { ChatMessage, CrmDeal, CrmLead, Doc, Email, Environment } from "@/server/types";
 
@@ -15,19 +15,53 @@ interface SystemsData {
 }
 
 const TABS = ["CRM — HubSpot", "Email — Gmail", "Docs — Google Docs", "Chat — Slack"] as const;
+const TAB_KEYS: Record<string, (typeof TABS)[number]> = {
+  crm: TABS[0],
+  email: TABS[1],
+  docs: TABS[2],
+  chat: TABS[3],
+};
+const KEY_BY_TAB = Object.fromEntries(Object.entries(TAB_KEYS).map(([key, value]) => [value, key]));
 
-export default function Systems() {
+export default function SystemsPage() {
+  return (
+    <Suspense fallback={<div className="faint" role="status">Loading connected systems…</div>}>
+      <Systems />
+    </Suspense>
+  );
+}
+
+function Systems() {
   const router = useRouter();
-  const [env, setEnv] = useState("env_sandbox");
-  const [tab, setTab] = useState<(typeof TABS)[number]>(TABS[0]);
+  const searchParams = useSearchParams();
+  const requestedEnv = searchParams.get("env");
+  const requestedTab = searchParams.get("tab");
+  const [env, setEnv] = useState(requestedEnv === "env_production" ? "env_production" : "env_sandbox");
+  const [tab, setTab] = useState<(typeof TABS)[number]>(TAB_KEYS[requestedTab ?? ""] ?? TABS[0]);
   const [data, setData] = useState<SystemsData | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [openDoc, setOpenDoc] = useState<Doc | null>(null);
   const [openEmail, setOpenEmail] = useState<Email | null>(null);
   const [closing, setClosing] = useState<string | null>(null);
 
+  useEffect(() => {
+    const nextEnv = requestedEnv === "env_production" ? "env_production" : "env_sandbox";
+    const nextTab = TAB_KEYS[requestedTab ?? ""] ?? TABS[0];
+    setEnv(nextEnv);
+    setTab(nextTab);
+    setOpenDoc(null);
+    setOpenEmail(null);
+  }, [requestedEnv, requestedTab]);
+
   const load = useCallback(async () => {
-    const res = await fetch(`/api/systems?env=${env}`);
-    if (res.ok) setData(await res.json());
+    try {
+      const res = await fetch(`/api/systems?env=${env}`);
+      if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+      setData(await res.json());
+      setError(null);
+    } catch {
+      setError("Connected systems could not be loaded. Check your connection and try again.");
+    }
   }, [env]);
 
   useEffect(() => {
@@ -43,13 +77,30 @@ export default function Systems() {
   // Selections belong to one environment/tab — clear them on switch.
   const switchEnv = (e: string) => {
     setEnv(e);
+    setData(null);
+    setError(null);
     setOpenDoc(null);
     setOpenEmail(null);
+    window.history.pushState(null, "", `/systems?env=${e}&tab=${KEY_BY_TAB[tab]}`);
   };
   const switchTab = (t: (typeof TABS)[number]) => {
     setTab(t);
     setOpenDoc(null);
     setOpenEmail(null);
+    window.history.pushState(null, "", `/systems?env=${env}&tab=${KEY_BY_TAB[t]}`);
+  };
+  const moveTabFocus = (event: React.KeyboardEvent<HTMLButtonElement>, current: (typeof TABS)[number]) => {
+    const index = TABS.indexOf(current);
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % TABS.length;
+    if (event.key === "ArrowLeft") nextIndex = (index - 1 + TABS.length) % TABS.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = TABS.length - 1;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    const nextTab = TABS[nextIndex];
+    switchTab(nextTab);
+    requestAnimationFrame(() => document.getElementById(`system-tab-${KEY_BY_TAB[nextTab]}`)?.focus());
   };
 
   const closeWon = async (dealId: string) => {
@@ -77,22 +128,46 @@ export default function Systems() {
         </div>
         <div className="page-actions">
           <div className="segment" role="group" aria-label="Environment">
-            <button className={env === "env_sandbox" ? "active" : ""} onClick={() => switchEnv("env_sandbox")}>Sandbox</button>
-            <button className={env === "env_production" ? "active" : ""} onClick={() => switchEnv("env_production")}>Production</button>
+            <button aria-pressed={env === "env_sandbox"} className={env === "env_sandbox" ? "active" : ""} onClick={() => switchEnv("env_sandbox")}>Sandbox</button>
+            <button aria-pressed={env === "env_production"} className={env === "env_production" ? "active" : ""} onClick={() => switchEnv("env_production")}>Production</button>
           </div>
         </div>
       </div>
 
-      <div className="tabs">
+      <div className="tabs" role="tablist" aria-label="Connected system">
         {TABS.map((t) => (
-          <button key={t} className={`tab ${tab === t ? "active" : ""}`} onClick={() => switchTab(t)}>{t}</button>
+          <button
+            key={t}
+            id={`system-tab-${KEY_BY_TAB[t]}`}
+            role="tab"
+            aria-selected={tab === t}
+            aria-controls="system-panel"
+            tabIndex={tab === t ? 0 : -1}
+            className={`tab ${tab === t ? "active" : ""}`}
+            onClick={() => switchTab(t)}
+            onKeyDown={(event) => moveTabFocus(event, t)}
+          >
+            {t}
+          </button>
         ))}
       </div>
 
-      {!data ? (
-        <div className="faint">Loading…</div>
+      <div
+        id="system-panel"
+        role="tabpanel"
+        aria-labelledby={`system-tab-${KEY_BY_TAB[tab]}`}
+      >
+      {error && !data ? (
+        <div className="error-state" role="alert">
+          <strong>Connected systems are unavailable.</strong>
+          <span>{error}</span>
+          <button className="btn btn-sm" type="button" onClick={() => void load()}>Try again</button>
+        </div>
+      ) : !data ? (
+        <div className="faint" role="status">Loading connected systems…</div>
       ) : tab === "CRM — HubSpot" ? (
-        <div className="card card-flush">
+        <>
+        <div className="card card-flush systems-deal-table">
           <table className="table">
             <thead>
               <tr>
@@ -136,6 +211,29 @@ export default function Systems() {
             </tbody>
           </table>
         </div>
+        <div className="systems-deal-cards">
+          {data.deals.map((deal) => (
+            <article className="systems-deal-card" key={deal.id}>
+              <div className="flex-between">
+                <strong>{deal.name}</strong>
+                <Badge tone={deal.stage === "closedwon" ? "success" : "neutral"}>
+                  {deal.stage === "closedwon" ? "Closed-Won" : deal.stage}
+                </Badge>
+              </div>
+              <dl>
+                <dt>Amount</dt><dd className="mono">{deal.currency} {deal.amount.toLocaleString("en-US")}</dd>
+                <dt>Contact</dt><dd>{deal.contactName}<br /><span className="faint mono">{deal.contactEmail || "(none)"}</span></dd>
+                <dt>PO / discount</dt><dd className="mono">{deal.poNumber ?? "—"} · {deal.discountPct}%</dd>
+              </dl>
+              {deal.stage !== "closedwon" && (
+                <button className="btn btn-primary" disabled={closing === deal.id} onClick={() => closeWon(deal.id)}>
+                  {closing === deal.id ? "Firing webhook…" : "Mark deal Closed-Won"}
+                </button>
+              )}
+            </article>
+          ))}
+        </div>
+        </>
       ) : tab === "Email — Gmail" ? (
         <div className="grid grid-2">
           <div className="card card-flush">
@@ -143,9 +241,13 @@ export default function Systems() {
               <thead><tr><th>To</th><th>Subject</th><th>Sent</th></tr></thead>
               <tbody>
                 {data.emails.map((em) => (
-                  <tr key={em.id} onClick={() => setOpenEmail(em)} style={{ cursor: "pointer" }}>
+                  <tr key={em.id}>
                     <td className="mono small">{em.to}</td>
-                    <td className="small">{em.subject}</td>
+                    <td className="small">
+                      <button className="table-row-button" onClick={() => setOpenEmail(em)}>
+                        {em.subject}
+                      </button>
+                    </td>
                     <td className="faint small" style={{ whiteSpace: "nowrap" }}>{fmtTime(em.ts)}</td>
                   </tr>
                 ))}
@@ -171,8 +273,12 @@ export default function Systems() {
               <thead><tr><th>Title</th><th>Status</th><th>Created</th></tr></thead>
               <tbody>
                 {data.docs.map((doc) => (
-                  <tr key={doc.id} onClick={() => setOpenDoc(doc)} style={{ cursor: "pointer" }}>
-                    <td className="small" style={{ fontWeight: 600 }}>{doc.title}</td>
+                  <tr key={doc.id}>
+                    <td className="small" style={{ fontWeight: 600 }}>
+                      <button className="table-row-button" onClick={() => setOpenDoc(doc)}>
+                        {doc.title}
+                      </button>
+                    </td>
                     <td><Badge tone={doc.status === "published" ? "success" : "neutral"}>{doc.status}</Badge></td>
                     <td className="faint small" style={{ whiteSpace: "nowrap" }}>{fmtTime(doc.createdAt)}</td>
                   </tr>
@@ -202,6 +308,7 @@ export default function Systems() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

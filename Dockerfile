@@ -23,6 +23,7 @@ RUN addgroup -S convoy && adduser -S convoy -G convoy \
 
 COPY --from=builder --chown=convoy:convoy /app/.next/standalone ./
 COPY --from=builder --chown=convoy:convoy /app/.next/static ./.next/static
+COPY --from=builder --chown=convoy:convoy /app/public ./public
 
 USER convoy
 EXPOSE 3000

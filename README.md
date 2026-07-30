@@ -35,15 +35,16 @@ for running agents with real permissions — is in
 [`docs/deployment.md`](docs/deployment.md). The next-phase design lives in
 [`docs/architecture-v2.md`](docs/architecture-v2.md).
 
-## The 6-minute demo path
+## The 8-minute guided demo path
 
-1. **Cold open** — `/` fleet dashboard: 47 leads researched, 6 deals papered, 12 doc drafts, 31 records cleaned overnight.
-2. **The frame** — `/environments`: per-environment connectors, credentials, and the readable policy rule list.
-3. **Hire an agent** — `/agents` → start from the Closed-Won Paperwork template → save v1 → bound to Sandbox (binding validates every tool grant).
-4. **Test in Sandbox** — `/systems` → mark the *Latch Robotics* sandbox deal Closed-Won → watch the live trace stream → then run the **8-scenario suite** from the agent page; every assertion checks actual sandbox system state.
-5. **Promote** — the pre-flight diff modal: credential swap, policy delta (`email.send → requires approval`), test status on this exact version. Promotion is blocked unless the suite is green.
-6. **Production pauses** — `/systems` (Production) → close the *Northwind Systems* deal (22% discount, external contact). The run pauses twice: once **agent-flagged** (discount over threshold), once **policy-gated** (external email). Approve from `/approvals`; reject to see the clean termination path.
-7. **Audit & kill switch** — `/audit`: any action to its full causal chain in two clicks; fleet-wide pause per agent from the dashboard.
+1. **Understand the mechanism** — `/` defines company agents and lets you compare one seeded tool call under Sandbox and Production policy without changing state.
+2. **Enter the workspace** — `/start` explains what is implemented versus simulated, then opens the fictional Meridian Labs fleet at `/dashboard`.
+3. **Compare environments** — `/environments`: per-environment connectors, credentials, and the readable policy rule list.
+4. **Inspect an agent** — `/agents/agent_closed_won_paperwork`: trigger, grants, parameters, deployments, and the eight-scenario suite.
+5. **Test in Sandbox** — `/systems?env=env_sandbox&tab=crm` → mark the *Latch Robotics* deal Closed-Won → watch the live trace stream → then run the scenario suite; every assertion checks actual sandbox system state.
+6. **Promote** — the pre-flight diff modal: credential swap, policy delta (`email.send → requires approval`), and test status on this exact version. Promotion is blocked unless the suite is green.
+7. **See two Production pauses** — `/systems?env=env_production&tab=crm` → mark the *Northwind Systems* deal Closed-Won. The run pauses once agent-flagged (discount over threshold) and once policy-gated (external email).
+8. **Close the loop** — `/audit`: follow any action through its recorded causal trace, then inspect the fleet-wide kill switch on `/dashboard`.
 
 ## Architecture
 

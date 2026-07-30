@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge, EnvBadge, Monogram, StateChip, timeAgo } from "@/components/bits";
+import { ModalDialog } from "@/components/ModalDialog";
 import type { Agent, AgentVersion, Deployment, Environment, PromotionDiff, Run, TestRun, TestScenario } from "@/server/types";
 
 interface Detail {
@@ -168,7 +169,7 @@ export default function AgentDetail({ params }: { params: Promise<{ id: string }
         </div>
       </div>
 
-      <div className="section">
+      <div className="section" id="scenario-suite">
         <div className="section-head">
           <div className="section-title flex" style={{ gap: 10 }}>
             Scenario suite
@@ -258,9 +259,8 @@ export default function AgentDetail({ params }: { params: Promise<{ id: string }
       </div>
 
       {preflight && (
-        <div className="modal-backdrop" onClick={() => setPreflight(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Promote to Production — pre-flight review</h2>
+        <ModalDialog labelledBy="promotion-title" onClose={() => setPreflight(null)}>
+            <h2 id="promotion-title">Promote to Production — pre-flight review</h2>
             <p className="muted small" style={{ marginTop: 4 }}>
               Same agent, same version. Different environment, different credentials, different rules.
             </p>
@@ -304,8 +304,7 @@ export default function AgentDetail({ params }: { params: Promise<{ id: string }
               <button className="btn" onClick={() => setPreflight(null)}>Cancel</button>
               <span className="faint small">Sign-off is recorded in the audit log.</span>
             </div>
-          </div>
-        </div>
+        </ModalDialog>
       )}
     </div>
   );
