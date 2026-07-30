@@ -131,6 +131,10 @@ export interface CloudMissionAgent {
   depth: number;
   status: "RUNNING" | "COMPLETED";
   computeProvider?: string;
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  thesis?: string;
   artifactKey?: string;
   artifact?: string;
   completedAt?: string;

@@ -13,7 +13,7 @@ import type { AgentVersion, Run } from "../types";
 // Off by default so the demo runs with zero credentials; enable with
 // ANTHROPIC_API_KEY set and CONVOY_LIVE_MODEL=1.
 
-const MODEL = process.env.CONVOY_MODEL ?? "claude-opus-5";
+const MODEL = process.env.CONVOY_MODEL ?? "claude-sonnet-5";
 
 export function isLiveModelEnabled(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY) && process.env.CONVOY_LIVE_MODEL === "1";

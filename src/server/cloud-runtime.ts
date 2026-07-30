@@ -158,6 +158,12 @@ export async function readCloudMission(
       depth: Number(item.depth),
       status: item.status === "COMPLETED" ? "COMPLETED" as const : "RUNNING" as const,
       computeProvider: item.taskArn ? "AWS Fargate" : item.computeProvider,
+      model: item.model ? String(item.model) : undefined,
+      inputTokens:
+        item.inputTokens === undefined ? undefined : Number(item.inputTokens),
+      outputTokens:
+        item.outputTokens === undefined ? undefined : Number(item.outputTokens),
+      thesis: item.thesis ? String(item.thesis) : undefined,
       artifactKey: item.artifactKey,
       artifact: item.artifact,
       completedAt: item.completedAt,
