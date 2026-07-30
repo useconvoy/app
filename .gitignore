@@ -1,6 +1,8 @@
 node_modules/
 .next/
 .data/
+.convoy/
+/worlds/.runtime/
 .env
 .env.local
 *.tsbuildinfo

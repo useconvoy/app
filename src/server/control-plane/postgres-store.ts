@@ -19,11 +19,18 @@ function pool(): Pool {
     throw new Error("DATABASE_URL is not configured.");
   }
   if (!globalDatabase.__convoyPgPool) {
+    const connectionUrl = new URL(connectionString);
     const local =
-      connectionString.includes("localhost") ||
-      connectionString.includes("127.0.0.1");
+      connectionUrl.hostname === "localhost" ||
+      connectionUrl.hostname === "127.0.0.1";
+    if (!local) {
+      // pg's connection-string parser lets sslmode override the explicit TLS
+      // options below. DigitalOcean uses a private CA, so keep TLS enabled but
+      // let the platform-provided certificate chain authenticate the service.
+      connectionUrl.searchParams.delete("sslmode");
+    }
     globalDatabase.__convoyPgPool = new Pool({
-      connectionString,
+      connectionString: connectionUrl.toString(),
       max: 4,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 10_000,

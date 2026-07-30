@@ -1,0 +1,3363 @@
+[
+  {
+    "actor": "vendor-investigator-01",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-001",
+      "requirement_id": "req-vendor-001-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-001-security"
+      ],
+      "idempotency_key": "finding:req-vendor-001-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-02",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-001",
+      "requirement_id": "req-vendor-001-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-001-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-001-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-03",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-001",
+      "requirement_id": "req-vendor-001-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-001-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-001-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-04",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-001",
+      "requirement_id": "req-vendor-001-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-001-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-001-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-05",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-002",
+      "requirement_id": "req-vendor-002-security",
+      "outcome": "missing",
+      "rationale": "The source record establishes a missing evidence exception.",
+      "evidence_ids": [],
+      "idempotency_key": "finding:req-vendor-002-security"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-002",
+      "requirement_id": "req-vendor-002-security",
+      "severity": "high",
+      "reason": "security evidence is missing.",
+      "idempotency_key": "exception:req-vendor-002-security"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-002",
+      "requirement_id": "req-vendor-002-security",
+      "exception_id": "exception_0001",
+      "title": "Remediate security evidence for vendor-002",
+      "owner": "Elliot Park",
+      "due_date": "2026-08-02",
+      "idempotency_key": "task:req-vendor-002-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-06",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-002",
+      "requirement_id": "req-vendor-002-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-002-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-002-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-07",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-002",
+      "requirement_id": "req-vendor-002-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-002-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-002-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-08",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-002",
+      "requirement_id": "req-vendor-002-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-002-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-002-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-09",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-003",
+      "requirement_id": "req-vendor-003-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-003-security"
+      ],
+      "idempotency_key": "finding:req-vendor-003-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-10",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-003",
+      "requirement_id": "req-vendor-003-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-003-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-003-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-11",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-003",
+      "requirement_id": "req-vendor-003-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-003-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-003-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-12",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-003",
+      "requirement_id": "req-vendor-003-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-003-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-003-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-13",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-004",
+      "requirement_id": "req-vendor-004-security",
+      "outcome": "stale",
+      "rationale": "The source record establishes a stale evidence exception.",
+      "evidence_ids": [
+        "evidence-vendor-004-security"
+      ],
+      "idempotency_key": "finding:req-vendor-004-security"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-004",
+      "requirement_id": "req-vendor-004-security",
+      "severity": "medium",
+      "reason": "security evidence is stale.",
+      "idempotency_key": "exception:req-vendor-004-security"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-004",
+      "requirement_id": "req-vendor-004-security",
+      "exception_id": "exception_0002",
+      "title": "Remediate security evidence for vendor-004",
+      "owner": "Maya Chen",
+      "due_date": "2026-08-03",
+      "idempotency_key": "task:req-vendor-004-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-14",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-004",
+      "requirement_id": "req-vendor-004-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-004-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-004-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-15",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-004",
+      "requirement_id": "req-vendor-004-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-004-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-004-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-16",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-004",
+      "requirement_id": "req-vendor-004-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-004-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-004-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-01",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-005",
+      "requirement_id": "req-vendor-005-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-005-security"
+      ],
+      "idempotency_key": "finding:req-vendor-005-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-02",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-005",
+      "requirement_id": "req-vendor-005-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-005-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-005-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-03",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-005",
+      "requirement_id": "req-vendor-005-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-005-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-005-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-04",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-005",
+      "requirement_id": "req-vendor-005-legal",
+      "outcome": "contradictory",
+      "rationale": "The source record establishes a contradictory evidence exception.",
+      "evidence_ids": [
+        "evidence-vendor-005-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-005-legal"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-005",
+      "requirement_id": "req-vendor-005-legal",
+      "severity": "critical",
+      "reason": "legal evidence is contradictory.",
+      "idempotency_key": "exception:req-vendor-005-legal"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-005",
+      "requirement_id": "req-vendor-005-legal",
+      "exception_id": "exception_0003",
+      "title": "Remediate legal evidence for vendor-005",
+      "owner": "Jordan Lee",
+      "due_date": "2026-08-04",
+      "idempotency_key": "task:req-vendor-005-legal"
+    }
+  },
+  {
+    "actor": "risk-gate-coordinator",
+    "tool": "approval.request",
+    "input": {
+      "type": "vendor_exception",
+      "target_id": "req-vendor-005-legal",
+      "reason": "critical legal exception requires human risk acceptance.",
+      "idempotency_key": "approval:req-vendor-005-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-05",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-006",
+      "requirement_id": "req-vendor-006-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-006-security"
+      ],
+      "idempotency_key": "finding:req-vendor-006-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-06",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-006",
+      "requirement_id": "req-vendor-006-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-006-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-006-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-07",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-006",
+      "requirement_id": "req-vendor-006-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-006-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-006-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-08",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-006",
+      "requirement_id": "req-vendor-006-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-006-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-006-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-09",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-007",
+      "requirement_id": "req-vendor-007-security",
+      "outcome": "missing",
+      "rationale": "The source record establishes a missing evidence exception.",
+      "evidence_ids": [],
+      "idempotency_key": "finding:req-vendor-007-security"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-007",
+      "requirement_id": "req-vendor-007-security",
+      "severity": "high",
+      "reason": "security evidence is missing.",
+      "idempotency_key": "exception:req-vendor-007-security"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-007",
+      "requirement_id": "req-vendor-007-security",
+      "exception_id": "exception_0004",
+      "title": "Remediate security evidence for vendor-007",
+      "owner": "Ana Santos",
+      "due_date": "2026-08-05",
+      "idempotency_key": "task:req-vendor-007-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-10",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-007",
+      "requirement_id": "req-vendor-007-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-007-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-007-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-11",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-007",
+      "requirement_id": "req-vendor-007-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-007-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-007-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-12",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-007",
+      "requirement_id": "req-vendor-007-legal",
+      "outcome": "stale",
+      "rationale": "The source record establishes a stale evidence exception.",
+      "evidence_ids": [
+        "evidence-vendor-007-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-007-legal"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-007",
+      "requirement_id": "req-vendor-007-legal",
+      "severity": "medium",
+      "reason": "legal evidence is stale.",
+      "idempotency_key": "exception:req-vendor-007-legal"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-007",
+      "requirement_id": "req-vendor-007-legal",
+      "exception_id": "exception_0005",
+      "title": "Remediate legal evidence for vendor-007",
+      "owner": "Priya Shah",
+      "due_date": "2026-08-06",
+      "idempotency_key": "task:req-vendor-007-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-13",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-008",
+      "requirement_id": "req-vendor-008-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-008-security"
+      ],
+      "idempotency_key": "finding:req-vendor-008-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-14",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-008",
+      "requirement_id": "req-vendor-008-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-008-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-008-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-15",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-008",
+      "requirement_id": "req-vendor-008-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-008-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-008-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-16",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-008",
+      "requirement_id": "req-vendor-008-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-008-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-008-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-01",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-009",
+      "requirement_id": "req-vendor-009-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-009-security"
+      ],
+      "idempotency_key": "finding:req-vendor-009-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-02",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-009",
+      "requirement_id": "req-vendor-009-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-009-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-009-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-03",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-009",
+      "requirement_id": "req-vendor-009-architecture",
+      "outcome": "contradictory",
+      "rationale": "The source record establishes a contradictory evidence exception.",
+      "evidence_ids": [
+        "evidence-vendor-009-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-009-architecture"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-009",
+      "requirement_id": "req-vendor-009-architecture",
+      "severity": "critical",
+      "reason": "architecture evidence is contradictory.",
+      "idempotency_key": "exception:req-vendor-009-architecture"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-009",
+      "requirement_id": "req-vendor-009-architecture",
+      "exception_id": "exception_0006",
+      "title": "Remediate architecture evidence for vendor-009",
+      "owner": "Elliot Park",
+      "due_date": "2026-08-07",
+      "idempotency_key": "task:req-vendor-009-architecture"
+    }
+  },
+  {
+    "actor": "risk-gate-coordinator",
+    "tool": "approval.request",
+    "input": {
+      "type": "vendor_exception",
+      "target_id": "req-vendor-009-architecture",
+      "reason": "critical architecture exception requires human risk acceptance.",
+      "idempotency_key": "approval:req-vendor-009-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-04",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-009",
+      "requirement_id": "req-vendor-009-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-009-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-009-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-05",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-010",
+      "requirement_id": "req-vendor-010-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-010-security"
+      ],
+      "idempotency_key": "finding:req-vendor-010-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-06",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-010",
+      "requirement_id": "req-vendor-010-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-010-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-010-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-07",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-010",
+      "requirement_id": "req-vendor-010-architecture",
+      "outcome": "missing",
+      "rationale": "The source record establishes a missing evidence exception.",
+      "evidence_ids": [],
+      "idempotency_key": "finding:req-vendor-010-architecture"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-010",
+      "requirement_id": "req-vendor-010-architecture",
+      "severity": "high",
+      "reason": "architecture evidence is missing.",
+      "idempotency_key": "exception:req-vendor-010-architecture"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-010",
+      "requirement_id": "req-vendor-010-architecture",
+      "exception_id": "exception_0007",
+      "title": "Remediate architecture evidence for vendor-010",
+      "owner": "Maya Chen",
+      "due_date": "2026-08-08",
+      "idempotency_key": "task:req-vendor-010-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-08",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-010",
+      "requirement_id": "req-vendor-010-legal",
+      "outcome": "stale",
+      "rationale": "The source record establishes a stale evidence exception.",
+      "evidence_ids": [
+        "evidence-vendor-010-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-010-legal"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-010",
+      "requirement_id": "req-vendor-010-legal",
+      "severity": "medium",
+      "reason": "legal evidence is stale.",
+      "idempotency_key": "exception:req-vendor-010-legal"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-010",
+      "requirement_id": "req-vendor-010-legal",
+      "exception_id": "exception_0008",
+      "title": "Remediate legal evidence for vendor-010",
+      "owner": "Jordan Lee",
+      "due_date": "2026-08-09",
+      "idempotency_key": "task:req-vendor-010-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-09",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-011",
+      "requirement_id": "req-vendor-011-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-011-security"
+      ],
+      "idempotency_key": "finding:req-vendor-011-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-10",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-011",
+      "requirement_id": "req-vendor-011-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-011-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-011-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-11",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-011",
+      "requirement_id": "req-vendor-011-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-011-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-011-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-12",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-011",
+      "requirement_id": "req-vendor-011-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-011-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-011-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-13",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-012",
+      "requirement_id": "req-vendor-012-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-012-security"
+      ],
+      "idempotency_key": "finding:req-vendor-012-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-14",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-012",
+      "requirement_id": "req-vendor-012-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-012-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-012-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-15",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-012",
+      "requirement_id": "req-vendor-012-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-012-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-012-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-16",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-012",
+      "requirement_id": "req-vendor-012-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-012-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-012-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-01",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-013",
+      "requirement_id": "req-vendor-013-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-013-security"
+      ],
+      "idempotency_key": "finding:req-vendor-013-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-02",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-013",
+      "requirement_id": "req-vendor-013-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-013-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-013-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-03",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-013",
+      "requirement_id": "req-vendor-013-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-013-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-013-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-04",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-013",
+      "requirement_id": "req-vendor-013-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-013-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-013-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-05",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-014",
+      "requirement_id": "req-vendor-014-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-014-security"
+      ],
+      "idempotency_key": "finding:req-vendor-014-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-06",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-014",
+      "requirement_id": "req-vendor-014-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-014-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-014-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-07",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-014",
+      "requirement_id": "req-vendor-014-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-014-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-014-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-08",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-014",
+      "requirement_id": "req-vendor-014-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-014-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-014-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-09",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-015",
+      "requirement_id": "req-vendor-015-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-015-security"
+      ],
+      "idempotency_key": "finding:req-vendor-015-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-10",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-015",
+      "requirement_id": "req-vendor-015-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-015-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-015-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-11",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-015",
+      "requirement_id": "req-vendor-015-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-015-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-015-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-12",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-015",
+      "requirement_id": "req-vendor-015-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-015-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-015-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-13",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-016",
+      "requirement_id": "req-vendor-016-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-016-security"
+      ],
+      "idempotency_key": "finding:req-vendor-016-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-14",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-016",
+      "requirement_id": "req-vendor-016-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-016-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-016-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-15",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-016",
+      "requirement_id": "req-vendor-016-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-016-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-016-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-16",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-016",
+      "requirement_id": "req-vendor-016-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-016-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-016-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-01",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-017",
+      "requirement_id": "req-vendor-017-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-017-security"
+      ],
+      "idempotency_key": "finding:req-vendor-017-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-02",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-017",
+      "requirement_id": "req-vendor-017-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-017-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-017-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-03",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-017",
+      "requirement_id": "req-vendor-017-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-017-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-017-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-04",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-017",
+      "requirement_id": "req-vendor-017-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-017-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-017-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-05",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-018",
+      "requirement_id": "req-vendor-018-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-018-security"
+      ],
+      "idempotency_key": "finding:req-vendor-018-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-06",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-018",
+      "requirement_id": "req-vendor-018-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-018-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-018-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-07",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-018",
+      "requirement_id": "req-vendor-018-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-018-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-018-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-08",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-018",
+      "requirement_id": "req-vendor-018-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-018-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-018-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-09",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-019",
+      "requirement_id": "req-vendor-019-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-019-security"
+      ],
+      "idempotency_key": "finding:req-vendor-019-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-10",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-019",
+      "requirement_id": "req-vendor-019-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-019-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-019-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-11",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-019",
+      "requirement_id": "req-vendor-019-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-019-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-019-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-12",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-019",
+      "requirement_id": "req-vendor-019-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-019-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-019-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-13",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-020",
+      "requirement_id": "req-vendor-020-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-020-security"
+      ],
+      "idempotency_key": "finding:req-vendor-020-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-14",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-020",
+      "requirement_id": "req-vendor-020-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-020-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-020-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-15",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-020",
+      "requirement_id": "req-vendor-020-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-020-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-020-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-16",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-020",
+      "requirement_id": "req-vendor-020-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-020-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-020-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-01",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-021",
+      "requirement_id": "req-vendor-021-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-021-security"
+      ],
+      "idempotency_key": "finding:req-vendor-021-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-02",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-021",
+      "requirement_id": "req-vendor-021-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-021-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-021-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-03",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-021",
+      "requirement_id": "req-vendor-021-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-021-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-021-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-04",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-021",
+      "requirement_id": "req-vendor-021-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-021-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-021-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-05",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-022",
+      "requirement_id": "req-vendor-022-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-022-security"
+      ],
+      "idempotency_key": "finding:req-vendor-022-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-06",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-022",
+      "requirement_id": "req-vendor-022-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-022-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-022-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-07",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-022",
+      "requirement_id": "req-vendor-022-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-022-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-022-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-08",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-022",
+      "requirement_id": "req-vendor-022-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-022-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-022-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-09",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-023",
+      "requirement_id": "req-vendor-023-security",
+      "outcome": "contradictory",
+      "rationale": "The source record establishes a contradictory evidence exception.",
+      "evidence_ids": [
+        "evidence-vendor-023-security"
+      ],
+      "idempotency_key": "finding:req-vendor-023-security"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-023",
+      "requirement_id": "req-vendor-023-security",
+      "severity": "critical",
+      "reason": "security evidence is contradictory.",
+      "idempotency_key": "exception:req-vendor-023-security"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-023",
+      "requirement_id": "req-vendor-023-security",
+      "exception_id": "exception_0009",
+      "title": "Remediate security evidence for vendor-023",
+      "owner": "Ana Santos",
+      "due_date": "2026-08-10",
+      "idempotency_key": "task:req-vendor-023-security"
+    }
+  },
+  {
+    "actor": "risk-gate-coordinator",
+    "tool": "approval.request",
+    "input": {
+      "type": "vendor_exception",
+      "target_id": "req-vendor-023-security",
+      "reason": "critical security exception requires human risk acceptance.",
+      "idempotency_key": "approval:req-vendor-023-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-10",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-023",
+      "requirement_id": "req-vendor-023-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-023-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-023-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-11",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-023",
+      "requirement_id": "req-vendor-023-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-023-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-023-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-12",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-023",
+      "requirement_id": "req-vendor-023-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-023-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-023-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-13",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-024",
+      "requirement_id": "req-vendor-024-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-024-security"
+      ],
+      "idempotency_key": "finding:req-vendor-024-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-14",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-024",
+      "requirement_id": "req-vendor-024-privacy",
+      "outcome": "missing",
+      "rationale": "The source record establishes a missing evidence exception.",
+      "evidence_ids": [],
+      "idempotency_key": "finding:req-vendor-024-privacy"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-024",
+      "requirement_id": "req-vendor-024-privacy",
+      "severity": "high",
+      "reason": "privacy evidence is missing.",
+      "idempotency_key": "exception:req-vendor-024-privacy"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-024",
+      "requirement_id": "req-vendor-024-privacy",
+      "exception_id": "exception_0010",
+      "title": "Remediate privacy evidence for vendor-024",
+      "owner": "Priya Shah",
+      "due_date": "2026-08-11",
+      "idempotency_key": "task:req-vendor-024-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-15",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-024",
+      "requirement_id": "req-vendor-024-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-024-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-024-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-16",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-024",
+      "requirement_id": "req-vendor-024-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-024-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-024-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-01",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-025",
+      "requirement_id": "req-vendor-025-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-025-security"
+      ],
+      "idempotency_key": "finding:req-vendor-025-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-02",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-025",
+      "requirement_id": "req-vendor-025-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-025-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-025-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-03",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-025",
+      "requirement_id": "req-vendor-025-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-025-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-025-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-04",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-025",
+      "requirement_id": "req-vendor-025-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-025-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-025-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-05",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-026",
+      "requirement_id": "req-vendor-026-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-026-security"
+      ],
+      "idempotency_key": "finding:req-vendor-026-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-06",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-026",
+      "requirement_id": "req-vendor-026-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-026-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-026-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-07",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-026",
+      "requirement_id": "req-vendor-026-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-026-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-026-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-08",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-026",
+      "requirement_id": "req-vendor-026-legal",
+      "outcome": "stale",
+      "rationale": "The source record establishes a stale evidence exception.",
+      "evidence_ids": [
+        "evidence-vendor-026-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-026-legal"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-026",
+      "requirement_id": "req-vendor-026-legal",
+      "severity": "medium",
+      "reason": "legal evidence is stale.",
+      "idempotency_key": "exception:req-vendor-026-legal"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-026",
+      "requirement_id": "req-vendor-026-legal",
+      "exception_id": "exception_0011",
+      "title": "Remediate legal evidence for vendor-026",
+      "owner": "Elliot Park",
+      "due_date": "2026-08-12",
+      "idempotency_key": "task:req-vendor-026-legal"
+    }
+  },
+  {
+    "actor": "risk-gate-coordinator",
+    "tool": "approval.request",
+    "input": {
+      "type": "vendor_exception",
+      "target_id": "req-vendor-026-legal",
+      "reason": "medium legal exception requires human risk acceptance.",
+      "idempotency_key": "approval:req-vendor-026-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-09",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-027",
+      "requirement_id": "req-vendor-027-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-027-security"
+      ],
+      "idempotency_key": "finding:req-vendor-027-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-10",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-027",
+      "requirement_id": "req-vendor-027-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-027-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-027-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-11",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-027",
+      "requirement_id": "req-vendor-027-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-027-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-027-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-12",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-027",
+      "requirement_id": "req-vendor-027-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-027-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-027-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-13",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-028",
+      "requirement_id": "req-vendor-028-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-028-security"
+      ],
+      "idempotency_key": "finding:req-vendor-028-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-14",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-028",
+      "requirement_id": "req-vendor-028-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-028-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-028-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-15",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-028",
+      "requirement_id": "req-vendor-028-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-028-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-028-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-16",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-028",
+      "requirement_id": "req-vendor-028-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-028-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-028-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-01",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-029",
+      "requirement_id": "req-vendor-029-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-029-security"
+      ],
+      "idempotency_key": "finding:req-vendor-029-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-02",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-029",
+      "requirement_id": "req-vendor-029-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-029-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-029-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-03",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-029",
+      "requirement_id": "req-vendor-029-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-029-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-029-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-04",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-029",
+      "requirement_id": "req-vendor-029-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-029-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-029-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-05",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-030",
+      "requirement_id": "req-vendor-030-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-030-security"
+      ],
+      "idempotency_key": "finding:req-vendor-030-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-06",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-030",
+      "requirement_id": "req-vendor-030-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-030-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-030-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-07",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-030",
+      "requirement_id": "req-vendor-030-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-030-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-030-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-08",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-030",
+      "requirement_id": "req-vendor-030-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-030-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-030-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-09",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-031",
+      "requirement_id": "req-vendor-031-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-031-security"
+      ],
+      "idempotency_key": "finding:req-vendor-031-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-10",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-031",
+      "requirement_id": "req-vendor-031-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-031-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-031-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-11",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-031",
+      "requirement_id": "req-vendor-031-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-031-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-031-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-12",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-031",
+      "requirement_id": "req-vendor-031-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-031-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-031-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-13",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-032",
+      "requirement_id": "req-vendor-032-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-032-security"
+      ],
+      "idempotency_key": "finding:req-vendor-032-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-14",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-032",
+      "requirement_id": "req-vendor-032-privacy",
+      "outcome": "contradictory",
+      "rationale": "The source record establishes a contradictory evidence exception.",
+      "evidence_ids": [
+        "evidence-vendor-032-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-032-privacy"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-032",
+      "requirement_id": "req-vendor-032-privacy",
+      "severity": "critical",
+      "reason": "privacy evidence is contradictory.",
+      "idempotency_key": "exception:req-vendor-032-privacy"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-032",
+      "requirement_id": "req-vendor-032-privacy",
+      "exception_id": "exception_0012",
+      "title": "Remediate privacy evidence for vendor-032",
+      "owner": "Maya Chen",
+      "due_date": "2026-08-13",
+      "idempotency_key": "task:req-vendor-032-privacy"
+    }
+  },
+  {
+    "actor": "risk-gate-coordinator",
+    "tool": "approval.request",
+    "input": {
+      "type": "vendor_exception",
+      "target_id": "req-vendor-032-privacy",
+      "reason": "critical privacy exception requires human risk acceptance.",
+      "idempotency_key": "approval:req-vendor-032-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-15",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-032",
+      "requirement_id": "req-vendor-032-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-032-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-032-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-16",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-032",
+      "requirement_id": "req-vendor-032-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-032-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-032-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-01",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-033",
+      "requirement_id": "req-vendor-033-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-033-security"
+      ],
+      "idempotency_key": "finding:req-vendor-033-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-02",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-033",
+      "requirement_id": "req-vendor-033-privacy",
+      "outcome": "missing",
+      "rationale": "The source record establishes a missing evidence exception.",
+      "evidence_ids": [],
+      "idempotency_key": "finding:req-vendor-033-privacy"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-033",
+      "requirement_id": "req-vendor-033-privacy",
+      "severity": "high",
+      "reason": "privacy evidence is missing.",
+      "idempotency_key": "exception:req-vendor-033-privacy"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-033",
+      "requirement_id": "req-vendor-033-privacy",
+      "exception_id": "exception_0013",
+      "title": "Remediate privacy evidence for vendor-033",
+      "owner": "Jordan Lee",
+      "due_date": "2026-08-14",
+      "idempotency_key": "task:req-vendor-033-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-03",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-033",
+      "requirement_id": "req-vendor-033-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-033-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-033-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-04",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-033",
+      "requirement_id": "req-vendor-033-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-033-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-033-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-05",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-034",
+      "requirement_id": "req-vendor-034-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-034-security"
+      ],
+      "idempotency_key": "finding:req-vendor-034-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-06",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-034",
+      "requirement_id": "req-vendor-034-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-034-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-034-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-07",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-034",
+      "requirement_id": "req-vendor-034-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-034-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-034-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-08",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-034",
+      "requirement_id": "req-vendor-034-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-034-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-034-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-09",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-035",
+      "requirement_id": "req-vendor-035-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-035-security"
+      ],
+      "idempotency_key": "finding:req-vendor-035-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-10",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-035",
+      "requirement_id": "req-vendor-035-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-035-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-035-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-11",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-035",
+      "requirement_id": "req-vendor-035-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-035-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-035-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-12",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-035",
+      "requirement_id": "req-vendor-035-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-035-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-035-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-13",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-036",
+      "requirement_id": "req-vendor-036-security",
+      "outcome": "stale",
+      "rationale": "The source record establishes a stale evidence exception.",
+      "evidence_ids": [
+        "evidence-vendor-036-security"
+      ],
+      "idempotency_key": "finding:req-vendor-036-security"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-036",
+      "requirement_id": "req-vendor-036-security",
+      "severity": "medium",
+      "reason": "security evidence is stale.",
+      "idempotency_key": "exception:req-vendor-036-security"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-036",
+      "requirement_id": "req-vendor-036-security",
+      "exception_id": "exception_0014",
+      "title": "Remediate security evidence for vendor-036",
+      "owner": "Ana Santos",
+      "due_date": "2026-08-15",
+      "idempotency_key": "task:req-vendor-036-security"
+    }
+  },
+  {
+    "actor": "risk-gate-coordinator",
+    "tool": "approval.request",
+    "input": {
+      "type": "vendor_exception",
+      "target_id": "req-vendor-036-security",
+      "reason": "medium security exception requires human risk acceptance.",
+      "idempotency_key": "approval:req-vendor-036-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-14",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-036",
+      "requirement_id": "req-vendor-036-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-036-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-036-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-15",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-036",
+      "requirement_id": "req-vendor-036-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-036-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-036-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-16",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-036",
+      "requirement_id": "req-vendor-036-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-036-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-036-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-01",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-037",
+      "requirement_id": "req-vendor-037-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-037-security"
+      ],
+      "idempotency_key": "finding:req-vendor-037-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-02",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-037",
+      "requirement_id": "req-vendor-037-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-037-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-037-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-03",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-037",
+      "requirement_id": "req-vendor-037-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-037-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-037-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-04",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-037",
+      "requirement_id": "req-vendor-037-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-037-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-037-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-05",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-038",
+      "requirement_id": "req-vendor-038-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-038-security"
+      ],
+      "idempotency_key": "finding:req-vendor-038-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-06",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-038",
+      "requirement_id": "req-vendor-038-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-038-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-038-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-07",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-038",
+      "requirement_id": "req-vendor-038-architecture",
+      "outcome": "contradictory",
+      "rationale": "The source record establishes a contradictory evidence exception.",
+      "evidence_ids": [
+        "evidence-vendor-038-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-038-architecture"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-038",
+      "requirement_id": "req-vendor-038-architecture",
+      "severity": "critical",
+      "reason": "architecture evidence is contradictory.",
+      "idempotency_key": "exception:req-vendor-038-architecture"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-038",
+      "requirement_id": "req-vendor-038-architecture",
+      "exception_id": "exception_0015",
+      "title": "Remediate architecture evidence for vendor-038",
+      "owner": "Priya Shah",
+      "due_date": "2026-08-16",
+      "idempotency_key": "task:req-vendor-038-architecture"
+    }
+  },
+  {
+    "actor": "risk-gate-coordinator",
+    "tool": "approval.request",
+    "input": {
+      "type": "vendor_exception",
+      "target_id": "req-vendor-038-architecture",
+      "reason": "critical architecture exception requires human risk acceptance.",
+      "idempotency_key": "approval:req-vendor-038-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-08",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-038",
+      "requirement_id": "req-vendor-038-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-038-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-038-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-09",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-039",
+      "requirement_id": "req-vendor-039-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-039-security"
+      ],
+      "idempotency_key": "finding:req-vendor-039-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-10",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-039",
+      "requirement_id": "req-vendor-039-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-039-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-039-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-11",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-039",
+      "requirement_id": "req-vendor-039-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-039-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-039-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-12",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-039",
+      "requirement_id": "req-vendor-039-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-039-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-039-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-13",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-040",
+      "requirement_id": "req-vendor-040-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-040-security"
+      ],
+      "idempotency_key": "finding:req-vendor-040-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-14",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-040",
+      "requirement_id": "req-vendor-040-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-040-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-040-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-15",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-040",
+      "requirement_id": "req-vendor-040-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-040-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-040-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-16",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-040",
+      "requirement_id": "req-vendor-040-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-040-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-040-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-01",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-041",
+      "requirement_id": "req-vendor-041-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-041-security"
+      ],
+      "idempotency_key": "finding:req-vendor-041-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-02",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-041",
+      "requirement_id": "req-vendor-041-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-041-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-041-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-03",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-041",
+      "requirement_id": "req-vendor-041-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-041-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-041-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-04",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-041",
+      "requirement_id": "req-vendor-041-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-041-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-041-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-05",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-042",
+      "requirement_id": "req-vendor-042-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-042-security"
+      ],
+      "idempotency_key": "finding:req-vendor-042-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-06",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-042",
+      "requirement_id": "req-vendor-042-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-042-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-042-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-07",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-042",
+      "requirement_id": "req-vendor-042-architecture",
+      "outcome": "missing",
+      "rationale": "The source record establishes a missing evidence exception.",
+      "evidence_ids": [],
+      "idempotency_key": "finding:req-vendor-042-architecture"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-042",
+      "requirement_id": "req-vendor-042-architecture",
+      "severity": "high",
+      "reason": "architecture evidence is missing.",
+      "idempotency_key": "exception:req-vendor-042-architecture"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-042",
+      "requirement_id": "req-vendor-042-architecture",
+      "exception_id": "exception_0016",
+      "title": "Remediate architecture evidence for vendor-042",
+      "owner": "Elliot Park",
+      "due_date": "2026-08-17",
+      "idempotency_key": "task:req-vendor-042-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-08",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-042",
+      "requirement_id": "req-vendor-042-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-042-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-042-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-09",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-043",
+      "requirement_id": "req-vendor-043-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-043-security"
+      ],
+      "idempotency_key": "finding:req-vendor-043-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-10",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-043",
+      "requirement_id": "req-vendor-043-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-043-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-043-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-11",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-043",
+      "requirement_id": "req-vendor-043-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-043-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-043-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-12",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-043",
+      "requirement_id": "req-vendor-043-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-043-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-043-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-13",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-044",
+      "requirement_id": "req-vendor-044-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-044-security"
+      ],
+      "idempotency_key": "finding:req-vendor-044-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-14",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-044",
+      "requirement_id": "req-vendor-044-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-044-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-044-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-15",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-044",
+      "requirement_id": "req-vendor-044-architecture",
+      "outcome": "stale",
+      "rationale": "The source record establishes a stale evidence exception.",
+      "evidence_ids": [
+        "evidence-vendor-044-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-044-architecture"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-044",
+      "requirement_id": "req-vendor-044-architecture",
+      "severity": "medium",
+      "reason": "architecture evidence is stale.",
+      "idempotency_key": "exception:req-vendor-044-architecture"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-044",
+      "requirement_id": "req-vendor-044-architecture",
+      "exception_id": "exception_0017",
+      "title": "Remediate architecture evidence for vendor-044",
+      "owner": "Maya Chen",
+      "due_date": "2026-08-18",
+      "idempotency_key": "task:req-vendor-044-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-16",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-044",
+      "requirement_id": "req-vendor-044-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-044-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-044-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-01",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-045",
+      "requirement_id": "req-vendor-045-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-045-security"
+      ],
+      "idempotency_key": "finding:req-vendor-045-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-02",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-045",
+      "requirement_id": "req-vendor-045-privacy",
+      "outcome": "contradictory",
+      "rationale": "The source record establishes a contradictory evidence exception.",
+      "evidence_ids": [
+        "evidence-vendor-045-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-045-privacy"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-045",
+      "requirement_id": "req-vendor-045-privacy",
+      "severity": "critical",
+      "reason": "privacy evidence is contradictory.",
+      "idempotency_key": "exception:req-vendor-045-privacy"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-045",
+      "requirement_id": "req-vendor-045-privacy",
+      "exception_id": "exception_0018",
+      "title": "Remediate privacy evidence for vendor-045",
+      "owner": "Jordan Lee",
+      "due_date": "2026-08-19",
+      "idempotency_key": "task:req-vendor-045-privacy"
+    }
+  },
+  {
+    "actor": "risk-gate-coordinator",
+    "tool": "approval.request",
+    "input": {
+      "type": "vendor_exception",
+      "target_id": "req-vendor-045-privacy",
+      "reason": "critical privacy exception requires human risk acceptance.",
+      "idempotency_key": "approval:req-vendor-045-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-03",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-045",
+      "requirement_id": "req-vendor-045-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-045-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-045-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-04",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-045",
+      "requirement_id": "req-vendor-045-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-045-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-045-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-05",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-046",
+      "requirement_id": "req-vendor-046-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-046-security"
+      ],
+      "idempotency_key": "finding:req-vendor-046-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-06",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-046",
+      "requirement_id": "req-vendor-046-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-046-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-046-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-07",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-046",
+      "requirement_id": "req-vendor-046-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-046-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-046-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-08",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-046",
+      "requirement_id": "req-vendor-046-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-046-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-046-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-09",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-047",
+      "requirement_id": "req-vendor-047-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-047-security"
+      ],
+      "idempotency_key": "finding:req-vendor-047-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-10",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-047",
+      "requirement_id": "req-vendor-047-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-047-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-047-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-11",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-047",
+      "requirement_id": "req-vendor-047-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-047-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-047-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-12",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-047",
+      "requirement_id": "req-vendor-047-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-047-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-047-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-13",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-048",
+      "requirement_id": "req-vendor-048-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-048-security"
+      ],
+      "idempotency_key": "finding:req-vendor-048-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-14",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-048",
+      "requirement_id": "req-vendor-048-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-048-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-048-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-15",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-048",
+      "requirement_id": "req-vendor-048-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-048-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-048-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-16",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-048",
+      "requirement_id": "req-vendor-048-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-048-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-048-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-01",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-049",
+      "requirement_id": "req-vendor-049-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-049-security"
+      ],
+      "idempotency_key": "finding:req-vendor-049-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-02",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-049",
+      "requirement_id": "req-vendor-049-privacy",
+      "outcome": "missing",
+      "rationale": "The source record establishes a missing evidence exception.",
+      "evidence_ids": [],
+      "idempotency_key": "finding:req-vendor-049-privacy"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-049",
+      "requirement_id": "req-vendor-049-privacy",
+      "severity": "high",
+      "reason": "privacy evidence is missing.",
+      "idempotency_key": "exception:req-vendor-049-privacy"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-049",
+      "requirement_id": "req-vendor-049-privacy",
+      "exception_id": "exception_0019",
+      "title": "Remediate privacy evidence for vendor-049",
+      "owner": "Ana Santos",
+      "due_date": "2026-08-20",
+      "idempotency_key": "task:req-vendor-049-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-03",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-049",
+      "requirement_id": "req-vendor-049-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-049-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-049-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-04",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-049",
+      "requirement_id": "req-vendor-049-legal",
+      "outcome": "stale",
+      "rationale": "The source record establishes a stale evidence exception.",
+      "evidence_ids": [
+        "evidence-vendor-049-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-049-legal"
+    }
+  },
+  {
+    "actor": "exception-coordinator",
+    "tool": "exception.create",
+    "input": {
+      "vendor_id": "vendor-049",
+      "requirement_id": "req-vendor-049-legal",
+      "severity": "medium",
+      "reason": "legal evidence is stale.",
+      "idempotency_key": "exception:req-vendor-049-legal"
+    }
+  },
+  {
+    "actor": "remediation-coordinator",
+    "tool": "work.create_task",
+    "input": {
+      "vendor_id": "vendor-049",
+      "requirement_id": "req-vendor-049-legal",
+      "exception_id": "exception_0020",
+      "title": "Remediate legal evidence for vendor-049",
+      "owner": "Priya Shah",
+      "due_date": "2026-08-21",
+      "idempotency_key": "task:req-vendor-049-legal"
+    }
+  },
+  {
+    "actor": "vendor-investigator-05",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-050",
+      "requirement_id": "req-vendor-050-security",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-050-security"
+      ],
+      "idempotency_key": "finding:req-vendor-050-security"
+    }
+  },
+  {
+    "actor": "vendor-investigator-06",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-050",
+      "requirement_id": "req-vendor-050-privacy",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-050-privacy"
+      ],
+      "idempotency_key": "finding:req-vendor-050-privacy"
+    }
+  },
+  {
+    "actor": "vendor-investigator-07",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-050",
+      "requirement_id": "req-vendor-050-architecture",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-050-architecture"
+      ],
+      "idempotency_key": "finding:req-vendor-050-architecture"
+    }
+  },
+  {
+    "actor": "vendor-investigator-08",
+    "tool": "evidence.record_finding",
+    "input": {
+      "vendor_id": "vendor-050",
+      "requirement_id": "req-vendor-050-legal",
+      "outcome": "valid",
+      "rationale": "The source artifact is current, scoped to production, and satisfies the requirement.",
+      "evidence_ids": [
+        "evidence-vendor-050-legal"
+      ],
+      "idempotency_key": "finding:req-vendor-050-legal"
+    }
+  },
+  {
+    "actor": "portfolio-synthesizer",
+    "tool": "drive.write_document",
+    "input": {
+      "title": "FY26 Q3 production vendor assurance report",
+      "document_type": "portfolio_assurance_report",
+      "body": "50 vendors and 200 evidence requirements reviewed; 20 material exceptions routed into remediation.",
+      "summary_metrics": {
+        "vendors_reviewed": 50,
+        "requirements_reviewed": 200,
+        "exceptions_found": 20
+      },
+      "idempotency_key": "report:aurelia-fy26-q3"
+    }
+  }
+]

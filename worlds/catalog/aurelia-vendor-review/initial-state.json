@@ -1,0 +1,78 @@
+{
+  "company": {
+    "name": "Aurelia Cloud",
+    "current_date": "2026-07-29"
+  },
+  "people": [
+    {
+      "id": "person-priya",
+      "name": "Priya Shah",
+      "role": "Chief Information Security Officer"
+    },
+    {
+      "id": "person-elliot",
+      "name": "Elliot Park",
+      "role": "VP Legal"
+    },
+    {
+      "id": "person-maya",
+      "name": "Maya Chen",
+      "role": "VP Revenue Operations"
+    },
+    {
+      "id": "person-vinayaka",
+      "name": "Vinayaka",
+      "role": "Executive sponsor"
+    }
+  ],
+  "vendors": [
+    {
+      "id": "vendor-helix",
+      "name": "Helix AI",
+      "category": "Customer intelligence",
+      "annual_cost_usd": 240000,
+      "risk": "high",
+      "data_access": "Customer support transcripts and CRM activity",
+      "production_deadline": "2026-08-12",
+      "signal": "Security review is incomplete and the launch date is approaching."
+    }
+  ],
+  "channels": [
+    {
+      "id": "ch-vendor-assurance",
+      "name": "vendor-assurance",
+      "kind": "internal"
+    },
+    {
+      "id": "ch-ai-governance",
+      "name": "ai-governance",
+      "kind": "internal"
+    },
+    {
+      "id": "ext-helix",
+      "name": "Helix AI shared channel",
+      "kind": "external"
+    }
+  ],
+  "messages": [
+    {
+      "id": "msg_0001",
+      "channel_id": "ch-vendor-assurance",
+      "author": "priya",
+      "text": "We need a defensible Helix AI production decision before the August launch.",
+      "created_at": "2026-07-29T09:00:00-07:00"
+    }
+  ],
+  "accounts": [],
+  "tasks": [],
+  "documents": [],
+  "evidence": [],
+  "approvals": [],
+  "decisions": [],
+  "audit_log": [],
+  "runtime": {
+    "reset_at": null,
+    "action_count": 0,
+    "denied_action_count": 0
+  }
+}

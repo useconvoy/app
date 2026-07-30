@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://useconvoy.dev/contracts/run-event.v1alpha1.schema.json",
+  "title": "Convoy RunEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "run_id", "sequence", "timestamp", "type", "source", "data"],
+  "properties": {
+    "apiVersion": {
+      "const": "convoy.ai/v1alpha1"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "type": {
+      "enum": [
+        "run.accepted",
+        "run.preparing",
+        "run.started",
+        "run.heartbeat",
+        "agent.stdout",
+        "agent.stderr",
+        "world.action",
+        "world.gate",
+        "world.evaluated",
+        "artifact.created",
+        "run.succeeded",
+        "run.failed",
+        "run.timed_out",
+        "run.cancelled"
+      ]
+    },
+    "source": {
+      "enum": ["control-plane", "executor", "supervisor", "agent", "world"]
+    },
+    "data": {
+      "type": "object"
+    }
+  }
+}

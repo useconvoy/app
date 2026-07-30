@@ -1,0 +1,98 @@
+{
+  "company": {
+    "name": "Aurelia Cloud",
+    "quarter": "FY26 Q3",
+    "current_date": "2026-07-29"
+  },
+  "people": [
+    {
+      "id": "person-maya",
+      "name": "Maya Chen",
+      "role": "VP Revenue Operations"
+    },
+    {
+      "id": "person-jordan",
+      "name": "Jordan Lee",
+      "role": "VP Customer Success"
+    },
+    {
+      "id": "person-ana",
+      "name": "Ana Santos",
+      "role": "Enterprise Account Director"
+    },
+    {
+      "id": "person-vinayaka",
+      "name": "Vinayaka",
+      "role": "Executive sponsor"
+    }
+  ],
+  "accounts": [
+    {
+      "id": "acct-mercury",
+      "name": "Mercury Bank",
+      "arr_usd": 420000,
+      "renewal_date": "2026-08-28",
+      "risk": "high",
+      "health_score": 41,
+      "forecast_category": "commit",
+      "signal": "Security review stalled and executive sponsor changed."
+    },
+    {
+      "id": "acct-northstar",
+      "name": "Northstar Health",
+      "arr_usd": 315000,
+      "renewal_date": "2026-09-04",
+      "risk": "high",
+      "health_score": 48,
+      "forecast_category": "best_case",
+      "signal": "Adoption dropped 22% after a reorganization."
+    },
+    {
+      "id": "acct-veridian",
+      "name": "Veridian Energy",
+      "arr_usd": 180000,
+      "renewal_date": "2026-09-11",
+      "risk": "medium",
+      "health_score": 67,
+      "forecast_category": "commit",
+      "signal": "Procurement requested updated insurance documentation."
+    }
+  ],
+  "channels": [
+    {
+      "id": "ch-revops-risk",
+      "name": "revops-risk",
+      "kind": "internal"
+    },
+    {
+      "id": "ch-exec-renewals",
+      "name": "exec-renewals",
+      "kind": "internal"
+    },
+    {
+      "id": "ext-mercury",
+      "name": "Mercury Bank shared channel",
+      "kind": "external"
+    }
+  ],
+  "messages": [
+    {
+      "id": "msg_0001",
+      "channel_id": "ch-revops-risk",
+      "author": "maya",
+      "text": "Turn this week's enterprise risk review into an accountable recovery motion.",
+      "created_at": "2026-07-29T08:30:00-07:00"
+    }
+  ],
+  "tasks": [],
+  "documents": [],
+  "evidence": [],
+  "approvals": [],
+  "decisions": [],
+  "audit_log": [],
+  "runtime": {
+    "reset_at": null,
+    "action_count": 0,
+    "denied_action_count": 0
+  }
+}
