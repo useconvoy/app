@@ -1,0 +1,2 @@
+# Keeps public/ present for the Dockerfile COPY step. The icon and Open Graph
+# image are generated at build time by Next, so nothing static lives here yet.

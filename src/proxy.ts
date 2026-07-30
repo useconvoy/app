@@ -54,7 +54,9 @@ function isPublicPath(pathname: string): boolean {
       "/robots.txt",
       "/sitemap.xml",
       "/icon",
-      "/og.png",
+      // Generated at build time by `src/app/opengraph-image.tsx`; social
+      // crawlers must be able to reach it without a credential.
+      "/opengraph-image",
       "/api/health",
       "/api/auth/login",
       "/api/auth/register",

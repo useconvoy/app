@@ -51,16 +51,32 @@ for running agents with real permissions — is in
 [`docs/deployment.md`](docs/deployment.md). The next-phase design lives in
 [`docs/architecture-v2.md`](docs/architecture-v2.md).
 
-## The 8-minute guided demo path
+## The guided demo path — 7 steps, about 8 minutes
 
-1. **Understand the mechanism** — `/` defines company agents and lets you compare one seeded tool call under Sandbox and Production policy without changing state.
-2. **Enter the workspace** — `/start` explains what is implemented versus simulated, then opens the fictional Meridian Labs fleet at `/dashboard`.
-3. **Compare environments** — `/environments`: per-environment connectors, credentials, and the readable policy rule list.
-4. **Inspect an agent** — `/agents/agent_closed_won_paperwork`: trigger, grants, parameters, deployments, and the eight-scenario suite.
-5. **Test in Sandbox** — `/systems?env=env_sandbox&tab=crm` → mark the *Latch Robotics* deal Closed-Won → watch the live trace stream → then run the scenario suite; every assertion checks actual sandbox system state.
-6. **Promote** — the pre-flight diff modal: credential swap, policy delta (`email.send → requires approval`), and test status on this exact version. Promotion is blocked unless the suite is green.
-7. **See two Production pauses** — `/systems?env=env_production&tab=crm` → mark the *Northwind Systems* deal Closed-Won. The run pauses once agent-flagged (discount over threshold) and once policy-gated (external email).
-8. **Close the loop** — `/audit`: follow any action through its recorded causal trace, then inspect the fleet-wide kill switch on `/dashboard`.
+The public landing page at `/` defines company agents and evaluates one seeded tool call under
+Sandbox and Production policy side by side, without touching the demo store. `/start` then walks
+the workspace in seven steps — the canonical list lives in `src/components/StartGuide.tsx`, and
+these are the same seven:
+
+1. **Read the fleet** — `/dashboard`: four company agents and the seeded overnight history.
+2. **Compare the rules of the road** — `/environments`: per-environment connectors, credential
+   handles, and the readable policy rule list. External email is refused in Sandbox and held for
+   an approver in Production.
+3. **Inspect an agent** — `/agents/agent_closed_won_paperwork`: trigger, tool grants, parameters,
+   deployments, and the eight-scenario suite.
+4. **Run it in Sandbox** — `/systems?env=env_sandbox&tab=crm` → mark the *Latch Robotics* deal
+   Closed-Won → watch the live trace stream. *Changes sample state.*
+5. **Earn the promotion** — run the suite, then open Promotion: the pre-flight diff shows the
+   credential swap, the policy delta (`email.send → requires approval`), and test status for
+   this exact version. Blocked unless green. *Changes sample state.*
+6. **See two independent stops** — `/systems?env=env_production&tab=crm` → mark the *Northwind
+   Systems* deal Closed-Won. The run pauses once agent-flagged (22% discount against a 15%
+   standard) and once policy-gated (external invoice email). *Changes sample state.*
+7. **Close the loop** — `/audit`: follow any action through its causal chain, then inspect the
+   fleet-wide kill switch on `/dashboard`.
+
+Steps 4–6 write to the shared sample workspace. If a deal is already Closed-Won, `/start` links
+a completed run instead; `npm run reset` reseeds everything.
 
 ## Architecture
 

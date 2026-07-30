@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { AppShell } from "@/components/AppShell";
 import "./globals.css";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://shark-app-dj8b4.ondigitalocean.app";
@@ -11,27 +10,28 @@ export const metadata: Metadata = {
     template: "%s · Convoy Labs",
   },
   description:
-    "Create, permission, test, promote, and supervise company-owned agents for routine work—without handing away human judgment.",
+    "Create, permission, test, promote and supervise company-owned agents for routine work — without handing away human judgment.",
   applicationName: "Convoy Labs",
   authors: [{ name: "Convoy Labs" }],
   creator: "Convoy Labs",
   publisher: "Convoy Labs",
   formatDetection: { email: false, address: false, telephone: false },
+  // Social card images come from `opengraph-image.tsx`, which Next generates at
+  // build time from the same tokens as the site.
   openGraph: {
     type: "website",
     siteName: "Convoy Labs",
+    locale: "en_US",
     title: "Convoy Labs — The control plane for company agents",
     description:
-      "Create, permission, test, promote, and supervise company-owned agents from Sandbox to Production.",
+      "Agents that belong to the company, not to a login. The environment decides what an agent may touch; consequential actions stop for a human.",
     url: "/",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Convoy Labs policy gateway preview" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Convoy Labs — The control plane for company agents",
     description:
-      "Create, permission, test, promote, and supervise company-owned agents from Sandbox to Production.",
-    images: ["/og.png"],
+      "Agents that belong to the company, not to a login. The environment decides what an agent may touch; consequential actions stop for a human.",
   },
   robots: {
     index: true,
@@ -44,12 +44,13 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+// The root layout stays a Server Component with no client boundary, so public
+// pages ship no application JavaScript. The workspace shell lives in
+// `(workspace)/layout.tsx`.
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>
-        <AppShell>{children}</AppShell>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

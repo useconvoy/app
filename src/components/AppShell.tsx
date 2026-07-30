@@ -54,21 +54,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const menuRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const wasOpen = useRef(false);
-  const isMarketing =
-    pathname === "/" ||
-    pathname === "/start" ||
-    pathname === "/login" ||
-    pathname === "/register";
 
   useEffect(() => {
-    if (isMarketing) return;
     fetch("/api/auth/me")
       .then((response) => (response.ok ? response.json() : null))
       .then((result) => {
         if (result?.account) setAccountContext(result);
       })
       .catch(() => {});
-  }, [isMarketing]);
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 900px)");
@@ -125,8 +119,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       menuRef.current?.focus();
     }
   }, [isMobile, open]);
-
-  if (isMarketing) return <>{children}</>;
 
   return (
     <div className="shell">

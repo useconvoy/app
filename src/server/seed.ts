@@ -18,6 +18,7 @@ import type {
 } from "./types";
 import { TEMPLATES } from "./templates";
 import { CLOSED_WON_SCENARIOS } from "./scenarios";
+import { PRODUCTION_ID, SANDBOX_ID, SEED_POLICIES } from "./policies";
 import { id } from "./ids";
 
 // Seeds Meridian Labs' workspace: two environments, four connectors each,
@@ -25,8 +26,7 @@ import { id } from "./ids";
 // history from the cold open (47 leads researched, 6 deals papered, 12 doc
 // drafts, 31 records cleaned). One-command reseed: `npm run reset`.
 
-export const SANDBOX_ID = "env_sandbox";
-export const PRODUCTION_ID = "env_production";
+export { PRODUCTION_ID, SANDBOX_ID };
 export const APPROVER = "Maya Torres (RevOps Lead)";
 export const DEMO_SANDBOX_DEAL_ID = "deal_sbx_latch";
 export const DEMO_PROD_DEAL_ID = "deal_prod_northwind";
@@ -53,77 +53,7 @@ export function seedDatabase(): Database {
     { id: "ci_prod_slack", environmentId: PRODUCTION_ID, connectorId: "slack", label: "Slack — #revops", credentialRef: "vault://production/slack", health: "green", config: { channel: "#revops" } },
   ];
 
-  const policies: PolicyRule[] = [
-    // ---- Sandbox: everything auto-allowed, email restricted to the sandbox domain ----
-    { id: "pol_sbx_default", environmentId: SANDBOX_ID, connectorId: "hubspot", tool: "*", effect: "allow", note: "Sandbox default: auto-allow, everything logged" },
-    { id: "pol_sbx_docs", environmentId: SANDBOX_ID, connectorId: "google_docs", tool: "*", effect: "allow", note: "Sandbox default: auto-allow" },
-    { id: "pol_sbx_slack", environmentId: SANDBOX_ID, connectorId: "slack", tool: "*", effect: "allow", note: "Sandbox default: auto-allow" },
-    {
-      id: "pol_sbx_email",
-      environmentId: SANDBOX_ID,
-      connectorId: "google_email",
-      tool: "email.send",
-      effect: "deny",
-      conditions: { recipient_domain_not_in: ["sandbox.meridianlabs.dev", "meridianlabs.dev"] },
-      note: "Email sends restricted to the sandbox domain — anything external is refused",
-    },
-    { id: "pol_sbx_email_read", environmentId: SANDBOX_ID, connectorId: "google_email", tool: "email.search", effect: "allow" },
-    // ---- Production: strict ----
-    { id: "pol_prod_crm_read", environmentId: PRODUCTION_ID, connectorId: "hubspot", tool: "crm.read_deal", effect: "allow" },
-    { id: "pol_prod_crm_search", environmentId: PRODUCTION_ID, connectorId: "hubspot", tool: "crm.search_deals", effect: "allow" },
-    { id: "pol_prod_crm_write", environmentId: PRODUCTION_ID, connectorId: "hubspot", tool: "crm.update_deal", effect: "allow", note: "Allowed, logged" },
-    { id: "pol_prod_lead_read", environmentId: PRODUCTION_ID, connectorId: "hubspot", tool: "crm.read_lead", effect: "allow" },
-    { id: "pol_prod_lead_write", environmentId: PRODUCTION_ID, connectorId: "hubspot", tool: "crm.update_lead", effect: "allow", note: "Allowed, logged" },
-    {
-      id: "pol_prod_lead_qualify",
-      environmentId: PRODUCTION_ID,
-      connectorId: "hubspot",
-      tool: "crm.mark_lead_qualified",
-      effect: "require_approval",
-      approvers: ["revops_lead"],
-      timeoutHours: 4,
-      onTimeout: "reject",
-      note: "Qualification gates pipeline spend — human sign-off",
-    },
-    {
-      id: "pol_prod_merge",
-      environmentId: PRODUCTION_ID,
-      connectorId: "hubspot",
-      tool: "crm.merge_records",
-      effect: "require_approval",
-      approvers: ["revops_lead"],
-      timeoutHours: 8,
-      onTimeout: "reject",
-      note: "Merges are destructive",
-    },
-    {
-      id: "pol_prod_email",
-      environmentId: PRODUCTION_ID,
-      connectorId: "google_email",
-      tool: "email.send",
-      effect: "require_approval",
-      conditions: { recipient_domain_not_in: ["meridianlabs.dev"] },
-      approvers: ["revops_lead"],
-      timeoutHours: 4,
-      onTimeout: "reject",
-      note: "External email always gates on a human, no matter how confident the model is",
-    },
-    { id: "pol_prod_email_read", environmentId: PRODUCTION_ID, connectorId: "google_email", tool: "email.search", effect: "allow" },
-    { id: "pol_prod_docs_read", environmentId: PRODUCTION_ID, connectorId: "google_docs", tool: "docs.get", effect: "allow" },
-    { id: "pol_prod_docs_create", environmentId: PRODUCTION_ID, connectorId: "google_docs", tool: "docs.create", effect: "allow", note: "Drafts allowed, logged" },
-    {
-      id: "pol_prod_docs_publish",
-      environmentId: PRODUCTION_ID,
-      connectorId: "google_docs",
-      tool: "docs.publish",
-      effect: "require_approval",
-      approvers: ["revops_lead"],
-      timeoutHours: 24,
-      onTimeout: "reject",
-      note: "Published docs are customer-visible",
-    },
-    { id: "pol_prod_slack", environmentId: PRODUCTION_ID, connectorId: "slack", tool: "chat.post", effect: "allow", note: "Internal notifications allowed, logged" },
-  ];
+  const policies: PolicyRule[] = SEED_POLICIES.map((rule) => ({ ...rule }));
 
   // ---- Agents: the Meridian convoy, v1 of each, deployed to both environments ----
   const agents: Agent[] = [];

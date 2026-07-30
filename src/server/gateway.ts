@@ -2,9 +2,11 @@ import { db, persist } from "./db";
 import { emit } from "./events";
 import { id, now } from "./ids";
 import { connectorForTool } from "./connectors";
+import { evaluateRules, type PolicyDecision } from "./policies";
 import type {
   Approval,
   ApprovalKind,
+  ConnectorId,
   ConnectorInstance,
   PolicyRule,
   Run,
@@ -85,31 +87,11 @@ export function evaluatePolicy(
   connectorId: string,
   tool: string,
   args: Record<string, unknown>
-): { effect: "allow" | "deny" | "require_approval"; rule?: PolicyRule; note?: string } {
+): PolicyDecision {
   const d = db();
-  const rules = d.policies.filter((p) => p.environmentId === environmentId && p.connectorId === connectorId);
-  const rule = rules.find((p) => p.tool === tool) ?? rules.find((p) => p.tool === "*");
+  const rules = d.policies.filter((p) => p.environmentId === environmentId);
   const env = d.environments.find((e) => e.id === environmentId)!;
-  if (!rule) {
-    // Safe defaults: sandbox is permissive, production gates anything unstated.
-    return env.kind === "sandbox"
-      ? { effect: "allow", note: "No rule — sandbox default allow" }
-      : { effect: "require_approval", note: "No rule — production default requires approval" };
-  }
-  if (rule.conditions?.recipient_domain_not_in) {
-    const to = String(args.to ?? "");
-    const domain = to.split("@")[1]?.toLowerCase() ?? "";
-    const allowlist = rule.conditions.recipient_domain_not_in.map((x) => x.toLowerCase());
-    if (domain && allowlist.includes(domain)) {
-      return { effect: "allow", rule, note: `Recipient domain ${domain} is allowlisted` };
-    }
-    return {
-      effect: rule.effect,
-      rule,
-      note: rule.note ?? `Recipient domain ${domain || "(none)"} is outside the allowlist`,
-    };
-  }
-  return { effect: rule.effect, rule, note: rule.note };
+  return evaluateRules(rules, env.kind, connectorId as ConnectorId, tool, args);
 }
 
 function createApprovalGate(

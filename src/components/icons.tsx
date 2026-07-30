@@ -12,6 +12,7 @@ function I({ children, size = 16 }: { children: React.ReactNode; size?: number }
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
+      focusable="false"
     >
       {children}
     </svg>

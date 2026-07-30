@@ -1,94 +1,171 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { MarketingFooter, MarketingHeader } from "@/components/MarketingChrome";
+import { SiteFooter, SiteHeader } from "@/components/SiteChrome";
 import { StartGuide } from "@/components/StartGuide";
-import { IconArrowUpRight, IconCheck, IconShieldCheck } from "@/components/icons";
+import { IconArrowUpRight, IconCheck, IconHand } from "@/components/icons";
+import "../marketing.css";
 
 export const metadata: Metadata = {
-  title: "Start Here — Guided Convoy Labs demo",
+  title: "Start here — the guided Convoy Labs walkthrough",
   description:
-    "Follow a company agent through environments, testing, promotion, human approvals, and audit in the Meridian Labs sample workspace.",
+    "Seven steps, about eight minutes. Follow one company agent through environments, testing, promotion, two human approvals and the audit trail in the Meridian Labs sample workspace.",
   alternates: { canonical: "/start" },
+  openGraph: {
+    type: "website",
+    url: "/start",
+    title: "Start here — the guided Convoy Labs walkthrough",
+    description:
+      "Follow one agent from Sandbox to Production and watch the gateway stop it twice. No account, no key, no install.",
+  },
 };
 
 export default function StartPage() {
   return (
-    <div className="marketing-site start-site">
-      <a className="skip-link" href="#start-main">Skip to content</a>
-      <MarketingHeader />
-      <main id="start-main">
-        <section className="start-hero">
-          <div className="marketing-container start-hero-grid">
+    <div className="site">
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
+      <SiteHeader />
+
+      {/* tabIndex -1 so the skip link actually moves focus, not just the scroll
+          position (WCAG 2.4.1). */}
+      <main id="main" tabIndex={-1}>
+        <section className="start-hero" aria-labelledby="start-title">
+          <div className="wrap start-hero-grid">
             <div>
-              <div className="hero-kicker">
-                <span className="hero-kicker-line" aria-hidden="true" />
-                Guided product walkthrough
-              </div>
-              <h1>Start with one agent. Follow every consequential decision.</h1>
-              <p>
-                You&apos;re entering Meridian Labs, a fictional RevOps workspace preloaded with two environments, four
-                company agents, and sample overnight history. The complete path takes about eight minutes.
+              <p className="eyebrow">
+                <span className="eyebrow-rule" aria-hidden="true" />
+                Guided walkthrough · about eight minutes
+              </p>
+              <h1 className="display" id="start-title">
+                Start with one agent. Follow every consequential decision it makes.
+              </h1>
+              <p className="lede">
+                You are about to enter Meridian Labs — a fictional revenue-operations workspace with
+                two environments, four company agents, and a night of seeded history behind it. Seven
+                steps, in order, each one telling you what to do and what to watch for.
               </p>
               <div className="hero-actions">
-                <a className="btn btn-primary marketing-hero-button" href="#walkthrough">
-                  Begin the walkthrough <IconArrowUpRight size={16} />
+                <a className="btn btn-primary" href="#walkthrough">
+                  Begin at step one <IconArrowUpRight size={16} />
                 </a>
-                <Link className="btn marketing-hero-button" href="/dashboard">Open workspace</Link>
+                <Link className="btn" href="/dashboard">
+                  Skip to the workspace
+                </Link>
               </div>
             </div>
-            <aside className="start-brief-card">
-              <span className="preview-eyebrow">Before you enter</span>
-              <h2>Know what is real.</h2>
-              <ul>
-                <li><IconCheck size={15} /><span><b>Working:</b> gateway, policies, tests, promotion, approvals, traces, audit, kill switch.</span></li>
-                <li><IconShieldCheck size={15} /><span><b>Simulated:</b> external systems, connector credentials, and all Meridian activity.</span></li>
-              </ul>
-              <p>No login, API key, or setup is required. Hands-on steps can change the shared sample state.</p>
+
+            <aside className="start-brief">
+              <p className="eyebrow">
+                <span className="eyebrow-rule" aria-hidden="true" />
+                Before you go in
+              </p>
+              <h2>Know which half is real.</h2>
+              <dl>
+                <div>
+                  <dt className="is-real">
+                    <IconCheck size={12} /> Implemented
+                  </dt>
+                  <dd>
+                    The policy gateway, environments and their rules, the scenario suite, the
+                    promotion gate, approvals, run traces, the audit log and the kill switch. All of
+                    it runs.
+                  </dd>
+                </div>
+                <div>
+                  <dt className="is-sim">
+                    <IconHand size={12} /> Simulated
+                  </dt>
+                  <dd>
+                    The systems on the other side of the gateway, the credentials it injects, and
+                    every person, company and deal in Meridian Labs.
+                  </dd>
+                </div>
+              </dl>
+              <p>
+                No login, API key or setup. Steps 4 to 6 change the shared sample workspace, and each
+                one says so before you click.
+              </p>
             </aside>
           </div>
         </section>
 
-        <section className="start-section" id="walkthrough" aria-labelledby="walkthrough-title">
-          <div className="marketing-container start-layout">
-            <div className="start-intro">
-              <span className="marketing-section-label">The eight-minute path</span>
-              <h2 id="walkthrough-title">From fleet overview to causal audit.</h2>
-              <p>
-                Each step tells you what to do, what to notice, and whether it changes the sample workspace. Your
-                progress stays on this device only.
+        <section className="band" id="walkthrough" aria-labelledby="walkthrough-title">
+          <div className="wrap-narrow">
+            <div className="band-head" style={{ marginBottom: 34 }}>
+              <p className="eyebrow">
+                <span className="eyebrow-rule" aria-hidden="true" />
+                The path
+              </p>
+              <h2 className="h2" id="walkthrough-title">
+                From fleet overview to causal audit.
+              </h2>
+              <p className="lede">
+                Each step says what it changes before you click it. Three of the seven write to the
+                shared sample workspace; the rest only read. Your progress is kept on this device and
+                nowhere else.
               </p>
             </div>
             <StartGuide />
           </div>
         </section>
 
-        <section className="start-next">
-          <div className="marketing-container start-next-grid">
-            <div>
-              <span className="marketing-section-label">Choose your next question</span>
-              <h2>Go deeper without losing the thread.</h2>
+        <section className="band band-paper" aria-labelledby="next-title">
+          <div className="wrap">
+            <div className="band-head">
+              <p className="eyebrow">
+                <span className="eyebrow-rule" aria-hidden="true" />
+                After the walkthrough
+              </p>
+              <h2 className="h2" id="next-title">
+                Pick the thread you want to pull.
+              </h2>
             </div>
-            <div className="start-next-links">
-              <Link href="/environments">
-                <span>Admin / security</span>
-                <strong>Inspect credentials and policies</strong>
-                <IconArrowUpRight size={16} />
-              </Link>
-              <Link href="/agents/agent_closed_won_paperwork">
-                <span>Operator</span>
-                <strong>Inspect the featured agent</strong>
-                <IconArrowUpRight size={16} />
-              </Link>
-              <Link href="/runs/run_hist_1">
-                <span>Technical evaluator</span>
-                <strong>Read a complete tool-call trace</strong>
-                <IconArrowUpRight size={16} />
-              </Link>
+
+            <div className="band-body">
+              <div className="lanes">
+                <Link className="lane" href="/environments">
+                  <span className="lane-role">IT &amp; security</span>
+                  <h3>Credentials and permission rules</h3>
+                  <p>
+                    Which handle each environment binds, and every rule with its effect, conditions,
+                    approvers and timeout.
+                  </p>
+                  <span className="lane-go">
+                    Open environments <IconArrowUpRight size={15} />
+                  </span>
+                </Link>
+
+                <Link className="lane" href="/approvals">
+                  <span className="lane-role">Operations</span>
+                  <h3>The approval queue</h3>
+                  <p>
+                    Both kinds of pause in one place: what the agent wanted to do, why it stopped,
+                    and the payload you are signing off on.
+                  </p>
+                  <span className="lane-go">
+                    Open approvals <IconArrowUpRight size={15} />
+                  </span>
+                </Link>
+
+                <Link className="lane" href="/audit">
+                  <span className="lane-role">Technical evaluation</span>
+                  <h3>The audit trail</h3>
+                  <p>
+                    Append-only, with causal references from an event back to its run, tool call,
+                    approval and decision.
+                  </p>
+                  <span className="lane-go">
+                    Open the audit log <IconArrowUpRight size={15} />
+                  </span>
+                </Link>
+              </div>
             </div>
           </div>
         </section>
       </main>
-      <MarketingFooter />
+
+      <SiteFooter />
     </div>
   );
 }
