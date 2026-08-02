@@ -14,8 +14,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           git init .
-          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
-          git config http.https://github.com/.extraheader "AUTHORIZATION: bearer ${GH_TOKEN}"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git fetch --depth=1 origin main
           git checkout -B main FETCH_HEAD
           git rm -rf .
