@@ -9,7 +9,7 @@
   "thresholds": {
     "slopeMin": -0.005,
     "aucMin": 0.85,
-    "itemFloor": 0.5
+    "itemFloor": 0.95
   },
   "defaultTrials": {
     "single": {

@@ -110,6 +110,12 @@ export interface ToolCallCtx {
   missionId: MissionId;
   itemRef?: string;
   stepId?: string;
+  /**
+   * Caller-minted idempotency key. Two invokes with the SAME key dedupe (crash
+   * replay never re-fires a side effect); omitting it mints a fresh key, so an
+   * intentional retry (re-requesting a corrected document) re-executes.
+   */
+  idempotencyKey?: string;
 }
 
 /**

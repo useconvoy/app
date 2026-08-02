@@ -771,7 +771,7 @@
             "tool": "portal.check_status"
           },
           "op": "lte",
-          "n": 96
+          "n": 24
         }
       ]
     },

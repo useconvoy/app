@@ -297,7 +297,7 @@
             "tool": "portal.check_status"
           },
           "op": "lte",
-          "n": 24
+          "n": 6
         }
       ]
     },
