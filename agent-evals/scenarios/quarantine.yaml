@@ -1,0 +1,10 @@
+# Convoy eval-corpus flake quarantine.
+# Policy: quarantine is a holding cell, not a retirement home. Every entry MUST
+# carry an owner (responsible for fix-or-delete) and a hard expiry date; on
+# expiry the scenario is either fixed (entry removed) or deleted from the set.
+# Entry shape:
+#   - id: <scenario id>
+#     owner: <person responsible for fix-or-delete>
+#     reason: <one line>
+#     expires: <ISO date — hard deadline>
+quarantined: []

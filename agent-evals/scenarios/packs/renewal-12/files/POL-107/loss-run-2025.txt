@@ -1,0 +1,7 @@
+LOSS RUN REPORT — Blue Heron Casualty
+policy_number: POL-107
+expected_year: 2025
+year: 2025
+losses:
+- 2025-04-03  auto glass  paid $17,812
+- 2025-12-09  slip and fall  paid $2,457

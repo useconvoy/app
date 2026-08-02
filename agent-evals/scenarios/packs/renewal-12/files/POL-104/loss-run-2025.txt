@@ -1,0 +1,8 @@
+LOSS RUN REPORT — Harborline Underwriters
+policy_number: POL-104
+expected_year: 2025
+year: 2025
+losses:
+- 2025-02-28  water damage  paid $13,995
+- 2025-02-12  slip and fall  paid $19,693
+- 2025-11-21  water damage  paid $23,775

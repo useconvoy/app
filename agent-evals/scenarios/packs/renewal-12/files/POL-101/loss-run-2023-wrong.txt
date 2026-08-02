@@ -1,0 +1,8 @@
+LOSS RUN REPORT — Blue Heron Casualty
+policy_number: POL-101
+expected_year: 2025
+year: 2023
+losses:
+- 2023-03-05  minor collision  paid $7,621
+- 2023-07-22  minor collision  paid $21,989
+- 2023-07-18  auto glass  paid $23,215

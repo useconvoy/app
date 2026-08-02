@@ -1,0 +1,7 @@
+LOSS RUN REPORT — Granite Peak Insurance
+policy_number: POL-103
+expected_year: 2025
+year: 2025
+losses:
+- 2025-04-21  water damage  paid $18,350
+- 2025-12-16  auto glass  paid $10,833

@@ -10,7 +10,8 @@
   "scripts": {
     "test": "node --test --experimental-strip-types 'tests/*.test.ts'",
     "typecheck": "tsc --noEmit",
-    "evals": "node --experimental-strip-types src/cli/index.ts"
+    "evals": "node --experimental-strip-types src/cli/index.ts",
+    "corpus": "node --experimental-strip-types src/corpus/generate.ts"
   },
   "dependencies": {
     "zod": "^4.4.3"

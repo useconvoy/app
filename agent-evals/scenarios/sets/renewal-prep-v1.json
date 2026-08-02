@@ -1,0 +1,31 @@
+{
+  "name": "renewal-prep",
+  "version": "0.1.0",
+  "scenarios": [
+    "renewal-golden-3",
+    "renewal-gauntlet-12",
+    "renewal-silent-carrier"
+  ],
+  "thresholds": {
+    "slopeMin": -0.005,
+    "aucMin": 0.85,
+    "itemFloor": 0.5
+  },
+  "defaultTrials": {
+    "single": {
+      "n": 1,
+      "passRule": {
+        "kind": "at_least",
+        "k": 1
+      }
+    },
+    "gauntlet": {
+      "n": 1,
+      "passRule": {
+        "kind": "aggregate",
+        "thresholdsRef": "eval-set"
+      }
+    }
+  },
+  "costRegressionGuardPct": 25
+}

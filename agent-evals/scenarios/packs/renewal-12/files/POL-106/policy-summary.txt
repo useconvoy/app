@@ -1,0 +1,9 @@
+AMS POLICY SUMMARY
+policy_number: POL-106
+insured_name: Crescent Distributing Inc
+contact: Aisha Marsh <aisha.marsh@crescentdistributinginc.example>
+carrier: Atlas Mutual
+premium: 75554
+expiring_date: {{t0+30d}}
+prior_carrier_contact: Trent Ops <trent@blueheroncasualty.example>
+renewal_status: pending

@@ -1,0 +1,9 @@
+AMS POLICY SUMMARY
+policy_number: POL-108
+insured_name: Beacon Landscaping Inc
+contact: Trent Trask <trent.trask@beaconlandscapinginc.example>
+carrier: Keystone National
+premium: 49986
+expiring_date: {{t0+34d}}
+prior_carrier_contact: Owen Ops <owen@blueheroncasualty.example>
+renewal_status: pending
