@@ -1,0 +1,25 @@
+{
+  "name": "@convoy/agent-evals",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Eval harness: simulation sandbox, scenario format, graders, suite runner, reports.",
+  "bin": {
+    "convoy-evals": "./src/cli/index.ts"
+  },
+  "scripts": {
+    "test": "node --test --experimental-strip-types 'tests/*.test.ts'",
+    "typecheck": "tsc --noEmit",
+    "evals": "node --experimental-strip-types src/cli/index.ts"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/node": "^24.10.1"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}
