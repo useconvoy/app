@@ -1,0 +1,25 @@
+name: Wipe repository
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  wipe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove every tracked file from main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git config http.https://github.com/.extraheader "AUTHORIZATION: bearer ${GH_TOKEN}"
+          git fetch --depth=1 origin main
+          git checkout -B main FETCH_HEAD
+          git rm -rf .
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Wipe repository"
+          git push origin main
