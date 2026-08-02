@@ -39,3 +39,17 @@ tests/        CI suite (Tier 0: replay + grader-of-graders, $0, deterministic)
 DESIGN.md is the full design: why simulation needs time/people/approvals rather than mock tools, the determinism rules behind the decay chart, the module walkthrough, the fidelity spectrum (L0 synthetic → L3 shadow), CI tiers, and certification.
 
 **Runtime seam, in one line:** everything agent-evals asks of agent-runtime is `ClockPort`, a library-mode `drain()` returning a `DrainReport`, `environment_id` routing, programmatic `startMission`, and `resolveGate` with attribution — defined in `src/runtime/ports.ts`; everything else the harness gets by reading the event log.
+
+## Python implementation (branch `agent-evals-python`)
+
+The harness is also implemented in Python + FastAPI (`convoy_evals/`), sharing the
+same language-neutral corpus under `scenarios/` and the same event-log wire format
+(camelCase JSON) — Python graders replay TS-recorded runs unchanged, and both
+implementations produce identical suite results on the committed corpus.
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
+.venv/bin/pytest                      # 132 tests
+.venv/bin/python -m convoy_evals.cli run --set scenarios/sets/renewal-prep-v1.json --subject scripted:golden
+.venv/bin/uvicorn convoy_evals.api.app:app   # REST API: /scenarios /sets /suite-runs /replay
+```

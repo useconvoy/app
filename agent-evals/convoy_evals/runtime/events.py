@@ -69,7 +69,8 @@ class PlanVersion(_EventBase):
     plan: Any = None
     diff: Any = None
     author: Literal["agent", "human"]
-    causeEventId: Optional[str]
+    # Default None so exclude_none serialization round-trips (absent == null).
+    causeEventId: Optional[str] = None
 
 
 class StepStarted(_EventBase):
@@ -144,7 +145,8 @@ class GateRaised(_EventBase):
     gateId: str
     kind: GateKind
     payload: Any = None
-    deadlineAt: Optional[str]
+    # Default None so exclude_none serialization round-trips (absent == null).
+    deadlineAt: Optional[str] = None
     stepTag: Optional[str] = None
 
 
