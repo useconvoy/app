@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Convoy eval harness: simulation sandbox, scenario format, graders, suite runner, reports, API."
 requires-python = ">=3.9"
 dependencies = [
+  # convoy-core is a path dependency: `pip install -e ../core -e .`
   "pydantic>=2.5",
   "fastapi>=0.110",
   "uvicorn>=0.27",
