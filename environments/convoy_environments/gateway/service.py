@@ -125,7 +125,8 @@ class GatewayService:
             self._log.append({**base, "type": "gate_raised", "gateId": new_gate,
                               "kind": "action-approval",
                               "payload": {"tool": tool, "args": args, "idempotencyKey": key,
-                                          "runId": claims.run_id}},
+                                          "runId": claims.run_id,
+                                          "environmentId": claims.environment_id}},
                              workspace_id=claims.workspace_id)
             raise Parked(new_gate, key)
         if resolution.effect_class == "gated":
