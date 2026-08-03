@@ -1,0 +1,33 @@
+[project]
+name = "convoy-environments"
+version = "0.1.0"
+description = "Convoy environments layer: connections, governed tool gateway, secrets, RBAC, and devbox components — the bridge between agent runtimes and the real world."
+requires-python = ">=3.9"
+dependencies = [
+  # convoy-core is a path dependency: `pip install -e ../core -e .`
+  "pydantic>=2.5",
+  "fastapi>=0.110",
+  "uvicorn>=0.27",
+  "sqlalchemy>=2.0",
+  "alembic>=1.13",
+  "httpx>=0.27",
+  "PyJWT>=2.8",
+  "cryptography>=42",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+convoy-environments = "convoy_environments.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["convoy_environments*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
