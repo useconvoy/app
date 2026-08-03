@@ -158,6 +158,45 @@ class GatewayService:
         self._debit(base, claims)
         return result
 
+    def browser_credential_lease(self, claims: RunClaims, domain: str) -> Dict[str, Any]:
+        """Resolve a browser_identity credential for `domain`. Requires: the
+        environment's browser policy allowlists the domain, AND a
+        browser_identity connection in this environment covers it. The secret
+        value is a JSON object ({"username", "password"}) handed to the fill
+        sidecar; the lease itself is logged as a collapsed tool_call with the
+        credential elided."""
+        import json as _json
+
+        snapshot = self._policy.load_environment(claims.environment_id, claims.environment_version)
+        browser = (snapshot.row.browser_policy or {})
+        allowed = browser.get("allowedDomains") or []
+        base = self._base(claims, None)
+        if domain not in allowed:
+            reason = "domain %s is not in the environment browser allowlist" % domain
+            self._log.append({**base, "type": "tool_denied", "tool": "browser.request_login",
+                              "args": {"domain": domain}, "reason": reason},
+                             workspace_id=claims.workspace_id)
+            raise PolicyDenied(reason)
+        for ec, conn in snapshot.connections:
+            if conn.kind != "browser_identity" or conn.status != "active":
+                continue
+            if conn.manifest_hash != ec.manifest_hash:
+                continue  # drifted identities contribute nothing
+            domains = (conn.manifest or {}).get("domains") or []
+            if domain in domains and conn.secret_ref:
+                value = _json.loads(self._secrets.reveal(conn.secret_ref))
+                self._log.append({**base, "type": "tool_call", "tool": "browser.request_login",
+                                  "args": {"domain": domain, "connectionId": conn.id},
+                                  "result": {"leased": True}}, workspace_id=claims.workspace_id)
+                return {"domain": domain, "connectionId": conn.id,
+                        "username": value.get("username", ""),
+                        "password": value.get("password", "")}
+        reason = "no browser identity covers %s in this environment" % domain
+        self._log.append({**base, "type": "tool_denied", "tool": "browser.request_login",
+                          "args": {"domain": domain}, "reason": reason},
+                         workspace_id=claims.workspace_id)
+        raise PolicyDenied(reason)
+
     def _debit(self, base: Dict[str, Any], claims: RunClaims) -> None:
         self._log.append({**base, "type": "budget_debit", "usd": FLAT_TOOL_DEBIT_USD,
                           "resource": "tool"}, workspace_id=claims.workspace_id)

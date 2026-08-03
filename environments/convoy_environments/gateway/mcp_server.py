@@ -46,6 +46,10 @@ def _tool_text_result(payload: Any, is_error: bool = False, structured: Optional
     return out
 
 
+class LeaseRequest(BaseModel):
+    domain: str
+
+
 class MintRequest(BaseModel):
     runId: str
     missionId: str
@@ -113,6 +117,17 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
             except ConnectorError as err:
                 return _rpc_result(rpc_id, _tool_text_result({"error": str(err)}, is_error=True))
         return _rpc_error(rpc_id, -32601, "method not found: %s" % method)
+
+    @app.post("/browser/credential-lease")
+    async def credential_lease(req: LeaseRequest, claims: RunClaims = Depends(claims_dep)):
+        """Fill-sidecar only. Returns the browser_identity credential for an
+        allowlisted domain — values go to the sidecar's CDP fill, never into
+        model context. The lease is recorded in the event log."""
+        try:
+            lease = service.browser_credential_lease(claims, req.domain)
+        except PolicyDenied as denial:
+            raise HTTPException(403, denial.reason)
+        return lease
 
     @app.post("/internal/run-tokens")
     async def mint(req: MintRequest, x_convoy_internal: str = Header(default="")):
