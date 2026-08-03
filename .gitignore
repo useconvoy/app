@@ -1,0 +1,7 @@
+node_modules/
+.next/
+.data/
+.venv/
+__pycache__/
+results/
+*.egg-info/
