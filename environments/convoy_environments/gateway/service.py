@@ -1,0 +1,162 @@
+"""GatewayService — the enforcement point every tool call passes through.
+
+read   → invoke, one collapsed tool_call event
+effectful → tool_intent → invoke → tool_executed → tool_result
+gated  → tool_intent → gate_raised (parked; the agent lands state and dies).
+         On retry with the same idempotency key after console approval:
+         tool_approved → invoke → tool_executed → tool_result. Rejection →
+         tool_denied.
+
+Idempotency: a retry whose key already has a recorded tool_result returns the
+recorded result without re-invoking (crash-replay safety — the same contract
+the sim gateway in agent-evals enforces). Every executed call appends a
+budget_debit; envelope *enforcement* is the runtime's job, metering is ours.
+"""
+
+from __future__ import annotations
+
+import uuid
+from typing import Any, Dict, Optional
+
+import httpx
+
+from ..connectors import ConnectorError, get_connector
+from ..db import SqlEventLog
+from ..secrets import SecretsService
+from .policy import PolicyDenied, PolicyEngine, ToolResolution
+from .tokens import RunClaims
+
+FLAT_TOOL_DEBIT_USD = 0.001
+
+
+class Parked(Exception):
+    """Raised to the transport layer when a call is waiting on a gate."""
+
+    def __init__(self, gate_id: str, idempotency_key: str) -> None:
+        super().__init__("parked on gate %s" % gate_id)
+        self.gate_id = gate_id
+        self.idempotency_key = idempotency_key
+
+
+class GatewayService:
+    def __init__(self, session_factory, secrets: SecretsService,
+                 event_log: Optional[SqlEventLog] = None,
+                 transport: Optional[httpx.AsyncBaseTransport] = None) -> None:
+        self._policy = PolicyEngine(session_factory)
+        self._secrets = secrets
+        self._log = event_log or SqlEventLog(session_factory)
+        self._transport = transport  # test seam for connectors
+
+    # -- helpers -----------------------------------------------------------
+
+    def _base(self, claims: RunClaims, step_id: Optional[str]) -> Dict[str, Any]:
+        return {"missionId": claims.mission_id, "stepId": step_id}
+
+    def _mission_events(self, claims: RunClaims):
+        return self._log.for_mission(claims.mission_id)
+
+    def _recorded_result(self, claims: RunClaims, key: str):
+        """Successful result recorded for this key, if any. Errored results
+        never dedupe — a retry with the same key re-runs the call."""
+        for e in self._mission_events(claims):
+            if e.type == "tool_result" and e.idempotencyKey == key and e.error is None:
+                return e
+        return None
+
+    def _gate_state(self, claims: RunClaims, key: str):
+        """(gate_id, resolution|None) for the gate guarding idempotency key,
+        or (None, None) if no gate was raised for it."""
+        gate_id = None
+        resolution = None
+        for e in self._mission_events(claims):
+            if e.type == "gate_raised" and (getattr(e, "payload", None) or {}).get("idempotencyKey") == key:
+                gate_id = e.gateId
+            elif e.type == "gate_resolved" and gate_id and e.gateId == gate_id:
+                resolution = e.resolution
+        return gate_id, resolution
+
+    async def _invoke(self, resolution: ToolResolution, tool: str, args: Dict[str, Any]) -> Any:
+        conn = resolution.connection
+        credential = self._secrets.reveal(conn.secret_ref) if conn.secret_ref else ""
+        connector = get_connector(conn.provider, config=conn.config, transport=self._transport)
+        return await connector.invoke(tool, args, credential)
+
+    # -- API ---------------------------------------------------------------
+
+    def list_tools(self, claims: RunClaims):
+        snapshot = self._policy.load_environment(claims.environment_id, claims.environment_version)
+        return self._policy.allowed_tools(snapshot)
+
+    async def call_tool(self, claims: RunClaims, tool: str, args: Dict[str, Any],
+                        step_id: Optional[str] = None,
+                        idempotency_key: Optional[str] = None) -> Any:
+        base = self._base(claims, step_id)
+        snapshot = self._policy.load_environment(claims.environment_id, claims.environment_version)
+        try:
+            resolution = self._policy.resolve(snapshot, tool)
+        except PolicyDenied as denial:
+            self._log.append({**base, "type": "tool_denied", "tool": tool, "args": args,
+                              "reason": denial.reason}, workspace_id=claims.workspace_id)
+            raise
+
+        if resolution.effect_class == "read":
+            try:
+                result = await self._invoke(resolution, tool, args)
+                self._log.append({**base, "type": "tool_call", "tool": tool, "args": args,
+                                  "result": result}, workspace_id=claims.workspace_id)
+            except ConnectorError as err:
+                self._log.append({**base, "type": "tool_call", "tool": tool, "args": args,
+                                  "error": str(err)}, workspace_id=claims.workspace_id)
+                raise
+            self._debit(base, claims)
+            return result
+
+        key = idempotency_key or "%s:%s:%s" % (claims.run_id, tool, uuid.uuid4().hex[:12])
+
+        recorded = self._recorded_result(claims, key)
+        if recorded is not None:
+            return recorded.result
+
+        gate_id, gate_resolution = self._gate_state(claims, key)
+        if resolution.effect_class == "gated" and gate_id is None:
+            self._log.append({**base, "type": "tool_intent", "tool": tool, "args": args,
+                              "idempotencyKey": key}, workspace_id=claims.workspace_id)
+            new_gate = "gate_" + uuid.uuid4().hex[:16]
+            self._log.append({**base, "type": "gate_raised", "gateId": new_gate,
+                              "kind": "action-approval",
+                              "payload": {"tool": tool, "args": args, "idempotencyKey": key,
+                                          "runId": claims.run_id}},
+                             workspace_id=claims.workspace_id)
+            raise Parked(new_gate, key)
+        if resolution.effect_class == "gated":
+            if gate_resolution is None:
+                raise Parked(gate_id, key)
+            if gate_resolution not in ("approve", "edit_then_approve"):
+                self._log.append({**base, "type": "tool_denied", "tool": tool, "args": args,
+                                  "reason": "gate %s resolved: %s" % (gate_id, gate_resolution)},
+                                 workspace_id=claims.workspace_id)
+                raise PolicyDenied("gate %s resolved: %s" % (gate_id, gate_resolution))
+            self._log.append({**base, "type": "tool_approved", "tool": tool,
+                              "idempotencyKey": key, "gateId": gate_id},
+                             workspace_id=claims.workspace_id)
+        else:
+            self._log.append({**base, "type": "tool_intent", "tool": tool, "args": args,
+                              "idempotencyKey": key}, workspace_id=claims.workspace_id)
+
+        self._log.append({**base, "type": "tool_executed", "tool": tool, "args": args,
+                          "idempotencyKey": key}, workspace_id=claims.workspace_id)
+        try:
+            result = await self._invoke(resolution, tool, args)
+        except ConnectorError as err:
+            # Errored results are logged but never dedupe: retries re-run.
+            self._log.append({**base, "type": "tool_result", "tool": tool, "idempotencyKey": key,
+                              "error": str(err)}, workspace_id=claims.workspace_id)
+            raise
+        self._log.append({**base, "type": "tool_result", "tool": tool, "idempotencyKey": key,
+                          "result": result}, workspace_id=claims.workspace_id)
+        self._debit(base, claims)
+        return result
+
+    def _debit(self, base: Dict[str, Any], claims: RunClaims) -> None:
+        self._log.append({**base, "type": "budget_debit", "usd": FLAT_TOOL_DEBIT_USD,
+                          "resource": "tool"}, workspace_id=claims.workspace_id)
