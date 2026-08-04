@@ -5,11 +5,11 @@ from .models import (  # noqa: F401
     ConnectionKind,
     ConnectionManifest,
     ConnectionStatus,
-    EffectClass,
     Environment,
     EnvironmentBacking,
     EnvironmentConnection,
     EnvironmentRole,
+    ToolExecution,
     ToolSpec,
     WorkspaceRole,
 )

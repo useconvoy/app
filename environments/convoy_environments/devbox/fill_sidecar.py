@@ -1,11 +1,14 @@
-"""Credential fill sidecar.
+"""Credential fill service — TRUSTED SIDE, never inside the sandbox.
 
-The agent (via a devbox-local MCP tool or direct HTTP) asks this sidecar to
-log into the page currently open in the devbox browser. The sidecar leases
-the credential from the gateway (per-run token; the gateway enforces the
-domain allowlist and logs the lease) and fills the fields over CDP —
-credential values exist only in this process and the browser, never in model
-context. The response is only {"status": "filled"}.
+Sandboxes hold no credentials and no run tokens (runtime DESIGN §12). This
+service runs beside the gateway in the trusted stack, holds the run token,
+and drives the sandbox browser's CDP endpoint FROM OUTSIDE (the sandbox
+exposes CDP inward to the stack; `cdp_url` points at it). Flow: a promoted
+browser-login tool call reaches this service → it leases the credential from
+the gateway (domain allowlist enforced, lease logged with values elided) →
+fills the login fields over CDP. Credential values exist in this trusted
+process and the page's DOM — never in the sandbox filesystem/env, never in
+model context. The response is only {"status": "filled"}.
 
 v1 fills and stops: the agent clicks submit itself via computer use, so the
 model observes the outcome without observing the values. Screenshot masking

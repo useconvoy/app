@@ -55,12 +55,12 @@ async def test_read_call_returns_result(client):
         assert result["isError"] is False and '"ok": true' in result["content"][0]["text"]
 
 
-async def test_gated_call_parks_with_structured_content_then_denied_tool_is_error(client):
+async def test_promoted_call_executes_with_runtime_key_and_denied_tool_is_error(client):
     async with client as c:
         resp = await c.post("/mcp", json=_rpc("tools/call", {
-            "name": "slack.post_message", "arguments": {"channel": "#ops", "text": "hi"}}))
-        structured = resp.json()["result"]["structuredContent"]
-        assert structured["status"] == "parked" and structured["gateId"] and structured["idempotencyKey"]
+            "name": "slack.post_message", "arguments": {"channel": "#ops", "text": "hi"},
+            "_meta": {"idempotencyKey": "rt-key-1", "stepId": "s1"}}))
+        assert resp.json()["result"]["isError"] is False
 
         resp = await c.post("/mcp", json=_rpc("tools/call", {"name": "slack.list_channels", "arguments": {}}))
         assert resp.json()["result"]["isError"] is True

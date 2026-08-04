@@ -108,7 +108,6 @@ class Environment(Base):
     name: Mapped[str] = mapped_column(String(255))
     backing_type: Mapped[str] = mapped_column(String(16), default="live")  # live | hermetic
     browser_policy: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
-    budget_defaults: Mapped[dict] = mapped_column(PortableJSON, default=dict)
     sandbox_template: Mapped[str] = mapped_column(String(128), default="")
     data_namespace: Mapped[str] = mapped_column(String(255), default="")
     policy_hash: Mapped[str] = mapped_column(String(64), index=True)
@@ -125,7 +124,7 @@ class EnvironmentConnection(Base):
     connection_id: Mapped[str] = mapped_column(ForeignKey("connections.id"), primary_key=True)
     manifest_hash: Mapped[str] = mapped_column(String(64))  # pinned at env-version creation
     tool_allowlist: Mapped[list] = mapped_column(PortableJSON, default=list)
-    gate_overrides: Mapped[dict] = mapped_column(PortableJSON, default=dict)
+    promote_overrides: Mapped[list] = mapped_column(PortableJSON, default=list)
 
 
 class EnvironmentGrant(Base):

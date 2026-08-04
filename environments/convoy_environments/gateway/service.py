@@ -1,16 +1,27 @@
-"""GatewayService — the enforcement point every tool call passes through.
+"""GatewayService — the data-plane enforcement point.
 
-read   → invoke, one collapsed tool_call event
-effectful → tool_intent → invoke → tool_executed → tool_result
-gated  → tool_intent → gate_raised (parked; the agent lands state and dies).
-         On retry with the same idempotency key after console approval:
-         tool_approved → invoke → tool_executed → tool_result. Rejection →
-         tool_denied.
+Callers are TRUSTED RUNTIME WORKERS (run_turn / promoted-tool activities),
+never sandboxed agent code — sandboxes hold no credentials and no run tokens
+(DESIGN §12). Per-run tokens are minted to the runtime at run start and
+identify the run for policy resolution and audit attribution.
 
-Idempotency: a retry whose key already has a recorded tool_result returns the
-recorded result without re-invoking (crash-replay safety — the same contract
-the sim gateway in agent-evals enforces). Every executed call appends a
-budget_debit; envelope *enforcement* is the runtime's job, metering is ours.
+Dispatch by the manifest's flags (the trust obligation — we flag, the
+runtime believes):
+
+inline (read-only idempotent)  invoke → one collapsed tool_call event
+promoted / side-effecting      tool_intent → invoke → tool_executed →
+                               tool_result, deduped on the idempotency key
+
+Idempotency: the runtime keys every promoted call hash(run_id, step_id,
+turn, call_index) and passes it via _meta.idempotencyKey. A retry whose key
+has a recorded successful tool_result returns it WITHOUT re-invoking — this
+is what makes runtime activity retries safe against double-firing real-world
+actions. Errored results never dedupe.
+
+Deliberately absent (runtime-owned by DESIGN v1): budget accounting (dollar
+caps live in workflow BudgetState + LiteLLM virtual keys), human gates
+(plan-step HumanGate via human_response signals), approvals. This layer's
+whole approval story is honest flags + idempotent execution.
 """
 
 from __future__ import annotations
@@ -25,17 +36,6 @@ from ..db import SqlEventLog
 from ..secrets import SecretsService
 from .policy import PolicyDenied, PolicyEngine, ToolResolution
 from .tokens import RunClaims
-
-FLAT_TOOL_DEBIT_USD = 0.001
-
-
-class Parked(Exception):
-    """Raised to the transport layer when a call is waiting on a gate."""
-
-    def __init__(self, gate_id: str, idempotency_key: str) -> None:
-        super().__init__("parked on gate %s" % gate_id)
-        self.gate_id = gate_id
-        self.idempotency_key = idempotency_key
 
 
 class GatewayService:
@@ -52,28 +52,13 @@ class GatewayService:
     def _base(self, claims: RunClaims, step_id: Optional[str]) -> Dict[str, Any]:
         return {"missionId": claims.mission_id, "stepId": step_id}
 
-    def _mission_events(self, claims: RunClaims):
-        return self._log.for_mission(claims.mission_id)
-
     def _recorded_result(self, claims: RunClaims, key: str):
         """Successful result recorded for this key, if any. Errored results
         never dedupe — a retry with the same key re-runs the call."""
-        for e in self._mission_events(claims):
+        for e in self._log.for_mission(claims.mission_id):
             if e.type == "tool_result" and e.idempotencyKey == key and e.error is None:
                 return e
         return None
-
-    def _gate_state(self, claims: RunClaims, key: str):
-        """(gate_id, resolution|None) for the gate guarding idempotency key,
-        or (None, None) if no gate was raised for it."""
-        gate_id = None
-        resolution = None
-        for e in self._mission_events(claims):
-            if e.type == "gate_raised" and (getattr(e, "payload", None) or {}).get("idempotencyKey") == key:
-                gate_id = e.gateId
-            elif e.type == "gate_resolved" and gate_id and e.gateId == gate_id:
-                resolution = e.resolution
-        return gate_id, resolution
 
     async def _invoke(self, resolution: ToolResolution, tool: str, args: Dict[str, Any]) -> Any:
         conn = resolution.connection
@@ -100,7 +85,7 @@ class GatewayService:
                               "reason": denial.reason}, workspace_id=claims.workspace_id)
             raise
 
-        if resolution.effect_class == "read":
+        if resolution.execution == "inline":
             try:
                 result = await self._invoke(resolution, tool, args)
                 self._log.append({**base, "type": "tool_call", "tool": tool, "args": args,
@@ -109,42 +94,16 @@ class GatewayService:
                 self._log.append({**base, "type": "tool_call", "tool": tool, "args": args,
                                   "error": str(err)}, workspace_id=claims.workspace_id)
                 raise
-            self._debit(base, claims)
             return result
 
+        # promoted (side-effecting or long): keyed two-phase envelope.
         key = idempotency_key or "%s:%s:%s" % (claims.run_id, tool, uuid.uuid4().hex[:12])
-
         recorded = self._recorded_result(claims, key)
         if recorded is not None:
             return recorded.result
 
-        gate_id, gate_resolution = self._gate_state(claims, key)
-        if resolution.effect_class == "gated" and gate_id is None:
-            self._log.append({**base, "type": "tool_intent", "tool": tool, "args": args,
-                              "idempotencyKey": key}, workspace_id=claims.workspace_id)
-            new_gate = "gate_" + uuid.uuid4().hex[:16]
-            self._log.append({**base, "type": "gate_raised", "gateId": new_gate,
-                              "kind": "action-approval",
-                              "payload": {"tool": tool, "args": args, "idempotencyKey": key,
-                                          "runId": claims.run_id,
-                                          "environmentId": claims.environment_id}},
-                             workspace_id=claims.workspace_id)
-            raise Parked(new_gate, key)
-        if resolution.effect_class == "gated":
-            if gate_resolution is None:
-                raise Parked(gate_id, key)
-            if gate_resolution not in ("approve", "edit_then_approve"):
-                self._log.append({**base, "type": "tool_denied", "tool": tool, "args": args,
-                                  "reason": "gate %s resolved: %s" % (gate_id, gate_resolution)},
-                                 workspace_id=claims.workspace_id)
-                raise PolicyDenied("gate %s resolved: %s" % (gate_id, gate_resolution))
-            self._log.append({**base, "type": "tool_approved", "tool": tool,
-                              "idempotencyKey": key, "gateId": gate_id},
-                             workspace_id=claims.workspace_id)
-        else:
-            self._log.append({**base, "type": "tool_intent", "tool": tool, "args": args,
-                              "idempotencyKey": key}, workspace_id=claims.workspace_id)
-
+        self._log.append({**base, "type": "tool_intent", "tool": tool, "args": args,
+                          "idempotencyKey": key}, workspace_id=claims.workspace_id)
         self._log.append({**base, "type": "tool_executed", "tool": tool, "args": args,
                           "idempotencyKey": key}, workspace_id=claims.workspace_id)
         try:
@@ -156,23 +115,28 @@ class GatewayService:
             raise
         self._log.append({**base, "type": "tool_result", "tool": tool, "idempotencyKey": key,
                           "result": result}, workspace_id=claims.workspace_id)
-        self._debit(base, claims)
         return result
 
+    # -- binding registry --------------------------------------------------
+
     def environment_binding(self, environment_id: str, version: Optional[int] = None,
-                            base_url: str = "") -> Any:
+                            kind: str = "production", base_url: str = "") -> Any:
         """Registry fulfillment of the frozen runtime seam (convoy_core.binding).
 
-        Resolves environment@version (latest when unpinned) into an immutable
-        EnvironmentBinding snapshot. Every connector endpoint is a gateway
-        door — /mcp/{connection_id} on this server — per the fulfillment
-        clause; browser identities carry no MCP endpoint (they surface
-        through the fill sidecar instead)."""
-        from convoy_core.binding import EnvironmentBinding, ToolGrant
+        One environment definition compiles into two immutable bindings
+        (SERVICE-CONTRACTS §2): `production` (real connectors, real clock) and
+        `sandbox` (mocks, virtual-capable clock). Sandbox compilation is
+        validated: every side-effecting tool must resolve to a mock — until
+        the mock registry exists, a sandbox request with side-effecting tools
+        fails closed listing the unmocked tools rather than silently handing
+        production connectors to a rehearsal."""
+        from convoy_core.binding import ClockConfig, EnvironmentBinding, PermissionScope, ToolGrant
         from sqlalchemy import select
 
         from ..db.tables import Environment as EnvironmentRow
 
+        if kind not in ("production", "sandbox"):
+            raise PolicyDenied("unknown binding kind %s" % kind)
         if version is None:
             with self._policy._sf() as session:
                 version = session.execute(
@@ -184,32 +148,46 @@ class GatewayService:
         snapshot = self._policy.load_environment(environment_id, version)
         env = snapshot.row
         grants = self._policy.allowed_tools(snapshot)
-        endpoints = {
-            r.connection.id: "%s/mcp/%s" % (base_url.rstrip("/"), r.connection.id)
-            for r in grants
-        }
+
+        if kind == "sandbox":
+            unmocked = sorted(r.spec.name for r in grants if r.side_effecting)
+            if unmocked:
+                raise PolicyDenied(
+                    "sandbox binding requires mocks for side-effecting tools; unmocked: %s"
+                    % ", ".join(unmocked))
+            clock = ClockConfig(mode="virtual", advance="manual")
+        else:
+            clock = ClockConfig(mode="real")
+
         return EnvironmentBinding(
-            id="%s@%d" % (environment_id, version),
+            id="%s@%d/%s" % (environment_id, version, kind),
             tenant_id=env.workspace_id,
-            kind="production" if env.backing_type == "live" else "sandbox",
+            kind=kind,
             tool_registry=[
-                ToolGrant(tool=r.spec.name, connection_id=r.connection.id,
-                          effect_class=r.effect_class, description=r.spec.description,
-                          input_schema=r.spec.inputSchema or {})
+                ToolGrant(tool_id=r.spec.name,
+                          scope=PermissionScope(connection_id=r.connection.id),
+                          execution=r.execution, side_effecting=r.side_effecting)
                 for r in grants
             ],
-            connector_endpoints=endpoints,
+            connector_endpoints={
+                r.connection.id: "%s/mcp/%s" % (base_url.rstrip("/"), r.connection.id)
+                for r in grants
+            },
             credential_scope="convoy-gateway:run-jwt:%s@%d" % (environment_id, version),
             data_namespace=env.data_namespace or "%s/%s" % (env.workspace_id, environment_id),
             sandbox_template=env.sandbox_template or "",
+            clock=clock,
         )
 
+    # -- browser credential lease (trusted fill service only) --------------
+
     def browser_credential_lease(self, claims: RunClaims, domain: str) -> Dict[str, Any]:
-        """Resolve a browser_identity credential for `domain`. Requires: the
-        environment's browser policy allowlists the domain, AND a
-        browser_identity connection in this environment covers it. The secret
-        value is a JSON object ({"username", "password"}) handed to the fill
-        sidecar; the lease itself is logged as a collapsed tool_call with the
+        """Resolve a browser_identity credential for `domain`. The caller is
+        the TRUSTED fill service (runs beside the gateway, drives the sandbox
+        browser over CDP from outside) — never a process inside the sandbox,
+        per the sandboxes-never-hold-credentials rule. Requires: the
+        environment's browser policy allowlists the domain AND a
+        browser_identity connection covers it. The lease is logged with the
         credential elided."""
         import json as _json
 
@@ -242,7 +220,3 @@ class GatewayService:
                           "args": {"domain": domain}, "reason": reason},
                          workspace_id=claims.workspace_id)
         raise PolicyDenied(reason)
-
-    def _debit(self, base: Dict[str, Any], claims: RunClaims) -> None:
-        self._log.append({**base, "type": "budget_debit", "usd": FLAT_TOOL_DEBIT_USD,
-                          "resource": "tool"}, workspace_id=claims.workspace_id)

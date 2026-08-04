@@ -1,10 +1,14 @@
-"""Walking skeleton for the environments layer: the whole white-glove loop
-through public HTTP surfaces only — console sets up the world, the runtime
-mints a run token, the agent speaks MCP to the gateway, a gated call parks,
-the console approves, the retry executes — and the resulting event log parses
-cleanly through convoy_core (what agent-evals graders consume)."""
+"""Walking skeleton for the environments layer under runtime DESIGN v1:
+console provisions the world → the runtime resolves a binding and mints a
+run token → a trusted runtime activity discovers tools over MCP → an inline
+read flows through → a promoted side-effecting call executes under a
+runtime idempotency key and survives an activity retry without double-firing
+— and the audit log parses cleanly through convoy_core with no secret in it."""
+
+import hashlib
 
 import httpx
+from convoy_core.binding import EnvironmentBinding
 
 from convoy_environments.console_api import build_console_app
 from convoy_environments.db import SqlEventLog
@@ -14,6 +18,7 @@ from convoy_environments.secrets import BuiltinBackend, MasterKey, SecretsServic
 
 GW_SECRET = "integration-gateway-secret-0123456789ab"
 INTERNAL = "integration-internal-token"
+BASE = "http://gw"
 
 
 def _slack_ok(request):
@@ -25,11 +30,11 @@ async def test_full_loop(session_factory):
     mk = MasterKey(MasterKey.generate().encode())
     secrets = SecretsService(session_factory, {"builtin": BuiltinBackend(mk)})
     log = SqlEventLog(session_factory)
-    console = build_console_app(session_factory, secrets, event_log=log)
+    console = build_console_app(session_factory, secrets)
     gateway = build_gateway_app(
         GatewayService(session_factory, secrets, event_log=log,
                        transport=httpx.MockTransport(_slack_ok)),
-        gateway_secret=GW_SECRET, internal_token=INTERNAL,
+        gateway_secret=GW_SECRET, internal_token=INTERNAL, public_url=BASE,
     )
     console_c = httpx.AsyncClient(transport=httpx.ASGITransport(app=console), base_url="http://console")
     gateway_c = httpx.AsyncClient(transport=httpx.ASGITransport(app=gateway), base_url="http://gw")
@@ -49,64 +54,55 @@ async def test_full_loop(session_factory):
                                   json={"name": "renewal-prep",
                                         "connections": [{
                                             "connectionId": conn["connectionId"],
-                                            "toolAllowlist": ["slack.read_messages", "slack.post_message"],
-                                            "gateOverrides": {"slack.post_message": "gated"}}]})).json()
+                                            "toolAllowlist": ["slack.read_messages",
+                                                              "slack.post_message"]}]})).json()
 
-        # 2. runtime mints a per-run token
+        # 2. runtime: resolve + pin the production binding, mint a run token
+        binding = EnvironmentBinding.model_validate(
+            (await gw.get("/internal/environments/%s/binding" % env["environmentId"],
+                          headers={"X-Convoy-Internal": INTERNAL})).json())
+        assert binding.id == "%s@1/production" % env["environmentId"]
+        grants = {g.tool_id: g for g in binding.tool_registry}
+        assert grants["slack.post_message"].execution == "promoted"
+
         token = (await gw.post("/internal/run-tokens",
                                headers={"X-Convoy-Internal": INTERNAL},
                                json={"runId": "run1", "missionId": "m1", "workspaceId": ws,
                                      "environmentId": env["environmentId"],
                                      "environmentVersion": env["version"]})).json()["token"]
-        agent = {"Authorization": "Bearer %s" % token}
+        runtime = {"Authorization": "Bearer %s" % token}
+        door = "/mcp/%s" % conn["connectionId"]
 
-        # 3. agent: discovers exactly the allowlisted tools
-        tools = (await gw.post("/mcp", headers=agent,
+        # 3. run_turn: discovers exactly the allowlisted tools through the binding's door
+        tools = (await gw.post(door, headers=runtime,
                                json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})).json()
         assert {t["name"] for t in tools["result"]["tools"]} == {"slack.read_messages",
                                                                  "slack.post_message"}
 
-        # 4. read flows straight through
-        read = (await gw.post("/mcp", headers=agent,
+        # 4. inline read flows straight through
+        read = (await gw.post(door, headers=runtime,
                               json={"jsonrpc": "2.0", "id": 2, "method": "tools/call",
                                     "params": {"name": "slack.read_messages",
                                                "arguments": {"channel": "#renewals"}}})).json()
         assert read["result"]["isError"] is False
 
-        # 5. gated write parks
-        parked = (await gw.post("/mcp", headers=agent,
-                                json={"jsonrpc": "2.0", "id": 3, "method": "tools/call",
-                                      "params": {"name": "slack.post_message",
-                                                 "arguments": {"channel": "#renewals",
-                                                               "text": "packet ready"}}})).json()
-        structured = parked["result"]["structuredContent"]
-        assert structured["status"] == "parked"
+        # 5. promoted side-effecting call with the runtime's idempotency key
+        key = hashlib.sha256(b"run1|s1|0|0").hexdigest()
+        call = {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                "params": {"name": "slack.post_message",
+                           "arguments": {"channel": "#renewals", "text": "packet ready"},
+                           "_meta": {"idempotencyKey": key, "stepId": "s1"}}}
+        first = (await gw.post(door, headers=runtime, json=call)).json()
+        assert first["result"]["isError"] is False
 
-        # 6. console: the gate is visible to the admin and gets approved
-        gates = (await console.get("/workspaces/%s/gates" % ws,
-                                   headers={"X-Convoy-User": admin})).json()
-        assert [g["gateId"] for g in gates] == [structured["gateId"]]
-        resolved = await console.post("/workspaces/%s/gates/%s/resolve" % (ws, structured["gateId"]),
-                                      headers={"X-Convoy-User": admin},
-                                      json={"resolution": "approve", "reason": "packet verified"})
-        assert resolved.status_code == 200
+        # 6. activity retry with the same key: same result, no double-fire
+        retry = (await gw.post(door, headers=runtime, json=call)).json()
+        assert retry["result"]["content"] == first["result"]["content"]
 
-        # 7. agent retries with the same idempotency key → executes
-        done = (await gw.post("/mcp", headers=agent,
-                              json={"jsonrpc": "2.0", "id": 4, "method": "tools/call",
-                                    "params": {"name": "slack.post_message",
-                                               "arguments": {"channel": "#renewals",
-                                                             "text": "packet ready"},
-                                               "_meta": {"idempotencyKey": structured["idempotencyKey"]}}})).json()
-        assert done["result"]["isError"] is False and '"ok": true' in done["result"]["content"][0]["text"]
-
-    # 8. the log tells the whole story in co-signed vocabulary
+    # 7. the audit log tells the story — no gates, no budget debits (runtime-owned)
     types = [e.type for e in log.for_mission("m1")]
-    assert types == ["tool_call", "budget_debit",                      # read
-                     "tool_intent", "gate_raised",                     # parked
-                     "gate_resolved", "human_intervention",            # console
-                     "tool_approved", "tool_executed", "tool_result",  # execution
-                     "budget_debit"]
+    assert types == ["tool_call",                                   # inline read
+                     "tool_intent", "tool_executed", "tool_result"]  # promoted, once
     # and no secret ever landed in it
     import json as _json
     dump = _json.dumps([e.model_dump(exclude_none=True) for e in log.for_mission("m1")], default=str)

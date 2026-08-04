@@ -5,11 +5,13 @@ outward to the customer's server (JSON-RPC 2.0 over HTTP POST — the
 streamable-HTTP transport's plain-JSON response mode; SSE-streamed responses
 are not supported in v1).
 
-Effect classes: MCP tool annotations carry readOnlyHint; absent hints default
-to `effectful` — never `read` — so an unannotated tool gets the two-phase
-envelope rather than silently skipping it. Registering the connection snap-
-shots the manifest (hash-pinned); a server that later changes its tool list
-no longer matches its manifest_hash and fails closed at the gateway.
+Flagging (trust obligation): MCP tool annotations carry readOnlyHint; only an
+explicit readOnlyHint=true earns inline/non-side-effecting. Absent or false →
+promoted + side_effecting=True — a misflagged tool can double-fire real-world
+actions under runtime activity retries, so unknown means conservative.
+Registering the connection snapshots the manifest (hash-pinned); a server
+that later changes its tool list no longer matches its manifest_hash and
+fails closed at the gateway.
 """
 
 from __future__ import annotations
@@ -60,7 +62,8 @@ class McpCustomConnector(Connector):
                     name=t["name"],
                     description=t.get("description", ""),
                     inputSchema=t.get("inputSchema", {}),
-                    effectClass="read" if read_only else "effectful",
+                    execution="inline" if read_only else "promoted",
+                    sideEffecting=not read_only,
                 )
             )
         return ConnectionManifest(tools=tools)

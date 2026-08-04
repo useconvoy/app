@@ -18,7 +18,6 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from ..connectors import ConnectorError, get_connector
-from ..db import SqlEventLog
 from ..db.tables import (
     AuditLog,
     Connection as ConnectionRow,
@@ -56,7 +55,7 @@ class CreateConnection(BaseModel):
 class EnvConnectionInput(BaseModel):
     connectionId: str
     toolAllowlist: List[str] = Field(default_factory=list)
-    gateOverrides: Dict[str, Literal["gated"]] = Field(default_factory=dict)
+    promoteOverrides: List[str] = Field(default_factory=list)  # escalate-only
 
 
 class CreateEnvironment(BaseModel):
@@ -65,9 +64,9 @@ class CreateEnvironment(BaseModel):
     backingType: Literal["live", "hermetic"] = "live"
     connections: List[EnvConnectionInput] = Field(default_factory=list)
     browserPolicy: Optional[Dict[str, Any]] = None
-    budgetDefaults: Dict[str, Any] = Field(default_factory=dict)
-    sandboxTemplate: str = ""  # E2B template id for the devbox image
+    sandboxTemplate: str = ""  # sandbox template ref for the runtime's SandboxProvider
     dataNamespace: str = ""  # empty → derived ws_<id>/env_<id>
+    # budgets are runtime-owned (RunPolicy / BudgetState) — no budget fields here
 
 
 class CreateGrant(BaseModel):
@@ -75,16 +74,8 @@ class CreateGrant(BaseModel):
     role: Literal["viewer", "operator", "env_admin"]
 
 
-class ResolveGate(BaseModel):
-    resolution: Literal["approve", "reject", "edit_then_approve"]
-    reason: Optional[str] = None
-    patch: Any = None
-
-
-def build_console_app(session_factory, secrets: SecretsService,
-                      event_log: Optional[SqlEventLog] = None) -> FastAPI:
+def build_console_app(session_factory, secrets: SecretsService) -> FastAPI:
     app = FastAPI(title="convoy-console-api")
-    log = event_log or SqlEventLog(session_factory)
 
     def user_dep(x_convoy_user: str = Header(default="")) -> str:
         if not x_convoy_user:
@@ -170,13 +161,13 @@ def build_console_app(session_factory, secrets: SecretsService,
             conn_rows.append(
                 EnvConnRow(environment_id=env_id, environment_version=version,
                            connection_id=conn.id, manifest_hash=conn.manifest_hash,
-                           tool_allowlist=ec.toolAllowlist, gate_overrides=ec.gateOverrides)
+                           tool_allowlist=ec.toolAllowlist, promote_overrides=ec.promoteOverrides)
             )
         namespace = req.dataNamespace or "%s/%s" % (workspace_id, env_id)
         phash = policy_hash(
             req.backingType,
             [{"connectionId": r.connection_id, "manifestHash": r.manifest_hash,
-              "toolAllowlist": r.tool_allowlist, "gateOverrides": r.gate_overrides}
+              "toolAllowlist": r.tool_allowlist, "promoteOverrides": r.promote_overrides}
              for r in conn_rows],
             req.browserPolicy,
             sandbox_template=req.sandboxTemplate,
@@ -184,7 +175,7 @@ def build_console_app(session_factory, secrets: SecretsService,
         )
         env = EnvironmentRow(id=env_id, version=version, workspace_id=workspace_id,
                              name=req.name, backing_type=req.backingType,
-                             browser_policy=req.browserPolicy, budget_defaults=req.budgetDefaults,
+                             browser_policy=req.browserPolicy,
                              sandbox_template=req.sandboxTemplate, data_namespace=namespace,
                              policy_hash=phash, description=req.description, created_by=user)
         return env, conn_rows
@@ -252,55 +243,10 @@ def build_console_app(session_factory, secrets: SecretsService,
             s.commit()
             return {"environmentId": environment_id, "userId": req.userId, "role": req.role}
 
-    # -- gates (console-first) --------------------------------------------
-
-    @app.get("/workspaces/{workspace_id}/gates")
-    async def list_gates(workspace_id: str, user: str = Depends(user_dep)):
-        with session_factory() as s:
-            require_workspace_role(s, workspace_id, user, "member")
-        open_gates = log.open_gates(workspace_id=workspace_id)
-        out = []
-        with session_factory() as s:
-            for g in open_gates:
-                env_id = (g.get("payload") or {}).get("environmentId")
-                try:
-                    if env_id:
-                        require_env_role(s, workspace_id, env_id, user, "viewer")
-                    else:
-                        require_workspace_role(s, workspace_id, user, "admin")
-                except HTTPException:
-                    continue
-                out.append(g)
-        return out
-
-    @app.post("/workspaces/{workspace_id}/gates/{gate_id}/resolve")
-    async def resolve_gate(workspace_id: str, gate_id: str, req: ResolveGate,
-                           user: str = Depends(user_dep)):
-        target = None
-        for g in log.open_gates(workspace_id=workspace_id):
-            if g["gateId"] == gate_id:
-                target = g
-                break
-        if target is None:
-            raise HTTPException(404, "gate %s is not open" % gate_id)
-        env_id = (target.get("payload") or {}).get("environmentId")
-        with session_factory() as s:
-            if env_id:
-                require_env_role(s, workspace_id, env_id, user, "operator")
-            else:
-                require_workspace_role(s, workspace_id, user, "admin")
-        event = {"missionId": target["missionId"], "type": "gate_resolved", "gateId": gate_id,
-                 "resolution": req.resolution, "resolvedBy": "user:%s" % user}
-        if req.reason:
-            event["reason"] = req.reason
-        if req.patch is not None:
-            event["patch"] = req.patch
-        log.append(event, workspace_id=workspace_id)
-        # Typed intervention rider — learning's label factory, live from day one.
-        log.append({"missionId": target["missionId"], "type": "human_intervention",
-                    "kind": "gate_resolution", "reason": req.reason,
-                    "after": {"gateId": gate_id, "resolution": req.resolution}},
-                   workspace_id=workspace_id)
-        return {"gateId": gate_id, "resolution": req.resolution}
+    # Gates deliberately absent: human gates are plan-step-level and
+    # runtime-owned (HumanGate + human_response signal, DESIGN §6/§7); gate
+    # UX and notifications belong to website/ off gate_opened RunEvents.
+    # This console covers only what environments/ owns: connections,
+    # environments, grants.
 
     return app

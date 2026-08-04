@@ -1,5 +1,6 @@
 """Console API: white-glove flow end-to-end — workspace → connection →
-environment → grants → gates — with RBAC enforced at every step."""
+environment → grants — with RBAC enforced at every step. (Gates are
+runtime-owned per DESIGN v1; this console has no gate surface.)"""
 
 import httpx
 import pytest
@@ -15,7 +16,7 @@ def ctx(session_factory):
     mk = MasterKey(MasterKey.generate().encode())
     secrets = SecretsService(session_factory, {"builtin": BuiltinBackend(mk)})
     log = SqlEventLog(session_factory)
-    app = build_console_app(session_factory, secrets, event_log=log)
+    app = build_console_app(session_factory, secrets)
     client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://console")
     return client, session_factory, log
 
@@ -50,7 +51,7 @@ async def test_full_white_glove_flow(ctx):
                                   "connections": [{"connectionId": conn["connectionId"],
                                                    "toolAllowlist": ["slack.read_messages",
                                                                      "slack.post_message"],
-                                                   "gateOverrides": {"slack.post_message": "gated"}}]})
+                                                   "promoteOverrides": ["slack.read_messages"]}]})
         assert resp.status_code == 200
         env = resp.json()
         assert env["version"] == 1 and env["policyHash"]
@@ -119,48 +120,3 @@ async def test_environment_visibility_requires_grant(ctx):
                      json={"userId": "usr_member", "role": "viewer"})
         resp = await c.get("/workspaces/%s/environments" % ws, headers=_as("usr_member"))
         assert len(resp.json()) == 1
-
-
-async def test_gate_list_and_resolve_with_operator_grant(ctx):
-    client, sf, log = ctx
-    async with client as c:
-        ws, admin = await _bootstrap(c)
-        # a gate raised by the gateway for some environment
-        log.append({"missionId": "m1", "type": "gate_raised", "gateId": "g1",
-                    "kind": "action-approval",
-                    "payload": {"tool": "slack.post_message", "idempotencyKey": "k",
-                                "environmentId": "env_x"}}, workspace_id=ws)
-        with sf() as s:
-            s.add(User(id="usr_op", email="op@acme.com"))
-            s.add(Membership(workspace_id=ws, user_id="usr_op", role="member"))
-            s.add(User(id="usr_view", email="v@acme.com"))
-            s.add(Membership(workspace_id=ws, user_id="usr_view", role="member"))
-            s.commit()
-        from convoy_environments.db.tables import EnvironmentGrant
-        with sf() as s:
-            s.add(EnvironmentGrant(environment_id="env_x", user_id="usr_op", role="operator"))
-            s.add(EnvironmentGrant(environment_id="env_x", user_id="usr_view", role="viewer"))
-            s.commit()
-
-        # viewer sees the gate but cannot resolve it
-        resp = await c.get("/workspaces/%s/gates" % ws, headers=_as("usr_view"))
-        assert [g["gateId"] for g in resp.json()] == ["g1"]
-        resp = await c.post("/workspaces/%s/gates/g1/resolve" % ws, headers=_as("usr_view"),
-                            json={"resolution": "approve"})
-        assert resp.status_code == 403
-
-        # operator resolves with a reason; events land with attribution
-        resp = await c.post("/workspaces/%s/gates/g1/resolve" % ws, headers=_as("usr_op"),
-                            json={"resolution": "approve", "reason": "looks right"})
-        assert resp.status_code == 200
-        events = log.for_mission("m1")
-        assert [e.type for e in events] == ["gate_raised", "gate_resolved", "human_intervention"]
-        assert events[1].resolvedBy == "user:usr_op" and events[1].reason == "looks right"
-        assert events[2].kind == "gate_resolution"
-
-        # resolved gates disappear; double-resolve 404s
-        resp = await c.get("/workspaces/%s/gates" % ws, headers=_as("usr_op"))
-        assert resp.json() == []
-        resp = await c.post("/workspaces/%s/gates/g1/resolve" % ws, headers=_as("usr_op"),
-                            json={"resolution": "approve"})
-        assert resp.status_code == 404

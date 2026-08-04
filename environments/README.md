@@ -2,16 +2,16 @@
 
 The bridge between agent runtimes and the real world. Aneesh's runtime (devbox on E2B) reaches outside through exactly two doors, both owned here:
 
-1. **The governed tool gateway** — terminates MCP. The agent speaks JSON-RPC MCP to `/mcp` with a per-run JWT; the gateway resolves the run's environment@version, enforces per-tool allowlists and effect classes, injects credentials at the edge (agents never hold secrets), records the two-phase event envelope into the shared Postgres event log, and parks gated calls until console approval.
-2. **The browser egress proxy** — the devbox browser's only network path, enforcing the environment's domain allowlist. Login credentials are filled by a sidecar over CDP via gateway-issued leases; values never enter model context.
+1. **The governed tool gateway** — terminates MCP. Trusted runtime activities (run_turn / promoted-tool activities — never sandboxed agent code) speak JSON-RPC MCP to the binding's per-connection doors with a per-run JWT; the gateway resolves the run's environment@version, enforces per-tool allowlists and the manifest's execution/side-effecting flags, injects credentials at the edge (sandboxes hold no credentials, the runtime never reads tokens), and records the audit envelope into the shared Postgres event log with idempotency-key dedupe that makes runtime activity retries double-fire-safe.
+2. **The browser egress proxy** — the sandbox browser's only network path, enforcing the environment's domain allowlist. Login credentials are filled by a TRUSTED fill service driving the sandbox browser's CDP from outside, via gateway-issued leases; values never enter the sandbox filesystem or model context.
 
 Spec: `convoy-environments-spec.md` (Desktop, v0.1 + settled decisions). Contracts: the event taxonomy in `core/convoy_core` — co-signed, changes need both founders.
 
 ## Concepts
 
-- **Connection** (admin-owned, workspace-level): an authenticated link to one external system — Slack/Notion/GitHub token, a remote MCP server, a browser login. Carries a tool **manifest** with per-tool `effectClass` (`read` | `effectful` | `gated`), hashed as `manifest_hash`.
-- **Environment** (builder-owned, versioned-immutable): a policy bundle subsetting connections — explicit tool allowlists, gate escalations, browser domain allowlist, budget defaults. `policy_hash` feeds the certified tuple; edits create a new version, so certification is voided explicitly, never silently. Missions pin `(environment_id, version)`.
-- **Effect classes**: `read` → one collapsed `tool_call` event; `effectful` → `tool_intent → tool_executed → tool_result` with idempotency-key dedupe (errored results never dedupe); `gated` → intent + `gate_raised`, parked; approval on the console leads to `tool_approved → tool_executed → tool_result` on retry with the same key.
+- **Connection** (admin-owned, workspace-level): an authenticated link to one external system — Slack/Notion/GitHub token, a remote MCP server, a browser login. Carries a tool **manifest** with per-tool `execution` (`inline` | `promoted`) and `sideEffecting` flags, hashed as `manifest_hash`.
+- **Environment** (builder-owned, versioned-immutable): a policy bundle subsetting connections — explicit tool allowlists, promote escalations, browser domain allowlist, sandbox template, data namespace. `policy_hash` feeds the certified tuple; edits create a new version, so certification is voided explicitly, never silently. Runs pin `(environment_id, version)` via the binding.
+- **Tool flags** (runtime DESIGN §5 vocabulary; the trust obligation is ours): `execution="inline"` + `sideEffecting=False` → one collapsed `tool_call` event, safe to re-run inside `run_turn`; `execution="promoted"` / side-effecting → `tool_intent → tool_executed → tool_result` deduped on the runtime's idempotency key `hash(run_id, step_id, turn, call_index)` (errored results never dedupe). `promoteOverrides` escalate per environment; nothing ever downgrades. Budgets and human gates are runtime-owned (workflow `BudgetState` + plan-step `HumanGate`) — this layer meters nothing and parks nothing.
 
 ## Layout
 
@@ -20,10 +20,10 @@ Spec: `convoy-environments-spec.md` (Desktop, v0.1 + settled decisions). Contrac
 | `schema/` | control-plane Pydantic models, canonical `manifest_hash` / `policy_hash` |
 | `db/` | SQLAlchemy tables (spec §3) + the shared `events` table (the DDL proposal) + `SqlEventLog` honoring the agent-evals EventLog contract |
 | `secrets/` | write-only secrets service; builtin envelope-encryption backend (1Password/KMS slots later) |
-| `connectors/` | slack, notion, github (token-based) + `mcp_custom` (BYO remote MCP; unannotated tools default to `effectful`) |
-| `gateway/` | per-run JWTs, policy engine (fail-closed on manifest drift), GatewayService, MCP termination, credential leases |
-| `console_api/` | workspaces, connections, versioned environments, grants (viewer/operator/env_admin), console-first gates |
-| `devbox/` | shipped components for the E2B image: `convoy-egress-proxy`, `convoy-fill-sidecar` |
+| `connectors/` | slack, notion, github (token-based) + `mcp_custom` (BYO remote MCP; unannotated tools default to promoted + side-effecting) |
+| `gateway/` | per-run JWTs, policy engine (fail-closed on manifest drift), GatewayService, MCP termination, binding registry, credential leases |
+| `console_api/` | workspaces, connections, versioned environments, grants (viewer/operator/env_admin) |
+| `devbox/` | `convoy-egress-proxy` (in-sandbox, secret-free) + `convoy-fill-sidecar` (trusted stack service) |
 
 ## Quickstart
 
@@ -42,12 +42,15 @@ export CONVOY_INTERNAL_TOKEN=$(openssl rand -hex 32)
 
 ## Runtime interface (for agent-runtime)
 
-- `GET /gateway/internal/environments/{id}/binding[?version=N]` (header `X-Convoy-Internal`) → the frozen `EnvironmentBinding` snapshot (`convoy_core.binding`). Unpinned resolves latest; pin the returned `id` (`env_x@3`) as `RunState.binding_ref`. Every URL in `connector_endpoints` is a gateway door (`/mcp/{connection_id}`), per the fulfillment clause — never a direct connector server.
-- `POST /gateway/internal/run-tokens` (header `X-Convoy-Internal`) → per-run JWT scoped to `(run, mission, workspace, environment@version)`; hand it to the devbox.
-- The devbox agent speaks MCP to the per-connection doors from the binding (`POST /gateway/mcp/{connection_id}`) or the aggregate `POST /gateway/mcp` (`Authorization: Bearer <run-jwt>`). Scoped doors filter both discovery and dispatch. A parked gate comes back as a successful tool result with `structuredContent: {status: "parked", gateId, idempotencyKey}` — land state and die; retry with the same `idempotencyKey` in `_meta` after resolution.
-- Gate resolutions appear in the event log (`gate_resolved`); the runtime's scheduler watches for them to resume missions.
-- Bake `convoy-egress-proxy` + `convoy-fill-sidecar` into the devbox image (env-var config: `CONVOY_GATEWAY_URL`, `CONVOY_RUN_TOKEN`, `CONVOY_ALLOWED_DOMAINS`, `CONVOY_CDP_URL`); launch Chromium with `--proxy-server=http://127.0.0.1:3128`.
+- `GET /gateway/internal/environments/{id}/binding[?version=N&kind=production|sandbox]` (header `X-Convoy-Internal`) → the frozen `EnvironmentBinding` snapshot (`convoy_core.binding`, DESIGN §5 verbatim incl. `ClockConfig`). One environment definition compiles into two bindings: `production` (real clock) and `sandbox` (virtual-capable clock, fails closed with 409 while side-effecting tools lack mocks). Unpinned resolves latest; pin the returned `id` (`env_x@3/production`) as `RunState.binding_ref`. Every URL in `connector_endpoints` is a gateway door (`/mcp/{connection_id}`), per the fulfillment clause — never a direct connector server.
+- `POST /gateway/internal/run-tokens` (header `X-Convoy-Internal`) → per-run JWT scoped to `(run, mission, workspace, environment@version)`. It stays with trusted runtime workers — sandboxes never receive tokens or credentials.
+- Runtime activities speak MCP to the per-connection doors from the binding (`POST /gateway/mcp/{connection_id}`) or the aggregate `POST /gateway/mcp` (`Authorization: Bearer <run-jwt>`). Scoped doors filter both discovery and dispatch. Promoted calls carry the runtime's idempotency key in `_meta.idempotencyKey`; a retried activity gets the recorded result, never a second side effect.
+- Bake `convoy-egress-proxy` into the sandbox image (holds no secrets; Chromium launches with `--proxy-server=http://127.0.0.1:3128`); run `convoy-fill-sidecar` in the trusted stack pointed at the sandbox's CDP endpoint (env-var config: `CONVOY_GATEWAY_URL`, `CONVOY_RUN_TOKEN`, `CONVOY_CDP_URL`).
 
-## Deliberately not here (v1)
+## Deliberately not here (runtime-owned per DESIGN v1)
 
-Runs/missions tables (runtime-owned) · OAuth connector wizard (white-glove CLI/API for the first partners) · Google OAuth connectors · 1Password/KMS backends (interface exists) · hermetic browser · Okta/SCIM agent identities · screenshot masking during fill (fill-then-agent-submits keeps values off-screen in the common path).
+Budgets (workflow `BudgetState` + LiteLLM caps) · human gates and approvals (plan-step `HumanGate`, `human_response` signals; gate UX is website/) · runs/missions state · sandbox lifecycle (`SandboxProvider` impls) · idempotency-key minting (we only honor them).
+
+## Deliberately not here (deferred)
+
+OAuth connector wizard (white-glove CLI/API for the first partners) · Google OAuth connectors · 1Password/KMS backends (interface exists) · mock registry for sandbox bindings (sandbox compilation fails closed until it lands) · Okta/SCIM agent identities · screenshot masking during fill.

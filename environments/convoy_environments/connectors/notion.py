@@ -9,17 +9,17 @@ from .base import Connector, ConnectorError, raise_for_status, register
 
 _TOOLS = [
     ToolSpec(
-        name="notion.search", effectClass="read",
+        name="notion.search", execution="inline", sideEffecting=False,
         description="Search pages and databases shared with the integration.",
         inputSchema={"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
     ),
     ToolSpec(
-        name="notion.get_page", effectClass="read",
+        name="notion.get_page", execution="inline", sideEffecting=False,
         description="Fetch a page's properties by id.",
         inputSchema={"type": "object", "properties": {"pageId": {"type": "string"}}, "required": ["pageId"]},
     ),
     ToolSpec(
-        name="notion.create_page", effectClass="effectful",
+        name="notion.create_page", execution="promoted", sideEffecting=True,
         description="Create a page under a parent page or database.",
         inputSchema={"type": "object",
                      "properties": {"parent": {"type": "object"}, "properties": {"type": "object"},

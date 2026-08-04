@@ -9,18 +9,18 @@ from .base import Connector, ConnectorError, raise_for_status, register
 
 _TOOLS = [
     ToolSpec(
-        name="slack.list_channels", effectClass="read",
+        name="slack.list_channels", execution="inline", sideEffecting=False,
         description="List public channels the bot can see.",
         inputSchema={"type": "object", "properties": {"limit": {"type": "integer"}}},
     ),
     ToolSpec(
-        name="slack.read_messages", effectClass="read",
+        name="slack.read_messages", execution="inline", sideEffecting=False,
         description="Read recent messages from a channel.",
         inputSchema={"type": "object", "properties": {"channel": {"type": "string"}, "limit": {"type": "integer"}},
                      "required": ["channel"]},
     ),
     ToolSpec(
-        name="slack.post_message", effectClass="effectful",
+        name="slack.post_message", execution="promoted", sideEffecting=True,
         description="Post a message to a channel.",
         inputSchema={"type": "object", "properties": {"channel": {"type": "string"}, "text": {"type": "string"}},
                      "required": ["channel", "text"]},

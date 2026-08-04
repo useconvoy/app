@@ -47,12 +47,12 @@ async def test_5xx_is_retryable():
 async def test_manifests_annotate_effect_classes():
     slack = get_connector("slack")
     manifest = await slack.manifest()
-    by_name = {t.name: t.effectClass for t in manifest.tools}
-    assert by_name["slack.read_messages"] == "read"
-    assert by_name["slack.post_message"] == "effectful"
+    flags = {t.name: (t.execution, t.sideEffecting) for t in manifest.tools}
+    assert flags["slack.read_messages"] == ("inline", False)
+    assert flags["slack.post_message"] == ("promoted", True)
 
 
-async def test_mcp_custom_manifest_defaults_unannotated_to_effectful():
+async def test_mcp_custom_manifest_defaults_unannotated_to_side_effecting():
     def handler(request):
         body = json.loads(request.content)
         assert body["method"] == "tools/list"
@@ -63,8 +63,8 @@ async def test_mcp_custom_manifest_defaults_unannotated_to_effectful():
 
     mcp = get_connector("mcp_custom", config={"url": "https://tools.acme.com/mcp"}, transport=transport_of(handler))
     manifest = await mcp.manifest()
-    by_name = {t.name: t.effectClass for t in manifest.tools}
-    assert by_name == {"crm.lookup": "read", "crm.update": "effectful"}
+    flags = {t.name: (t.execution, t.sideEffecting) for t in manifest.tools}
+    assert flags == {"crm.lookup": ("inline", False), "crm.update": ("promoted", True)}
 
 
 async def test_mcp_custom_call_forwards_and_unwraps_errors():

@@ -13,8 +13,8 @@ from convoy_environments.schema import (
 def _manifest():
     return ConnectionManifest(
         tools=[
-            ToolSpec(name="slack.post_message", effectClass="effectful"),
-            ToolSpec(name="slack.list_channels", effectClass="read"),
+            ToolSpec(name="slack.post_message", execution="promoted", sideEffecting=True),
+            ToolSpec(name="slack.list_channels", execution="inline", sideEffecting=False),
         ]
     )
 
@@ -27,7 +27,7 @@ def test_manifest_hash_changes_on_any_tool_change():
     m1 = _manifest()
     m2 = _manifest()
     assert m1.hash == m2.hash
-    m2.tools[1].effectClass = "effectful"
+    m2.tools[1].sideEffecting = True
     assert m1.hash != m2.hash
 
 

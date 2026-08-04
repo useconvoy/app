@@ -26,11 +26,13 @@ ConnectionKind = Literal["mcp_managed", "mcp_custom", "aws_role", "browser_ident
 ConnectionStatus = Literal["active", "needs_reauth", "revoked"]
 EnvironmentBacking = Literal["live", "hermetic"]
 
-# Per-tool annotation in the connection manifest (settled decision #4).
-#   read      → single collapsed tool_call event
-#   effectful → two-phase envelope (intent → executed → result)
-#   gated     → two-phase envelope with a mandatory action-approval gate
-EffectClass = Literal["read", "effectful", "gated"]
+# Per-tool annotations in the connection manifest, in the runtime's frozen
+# vocabulary (DESIGN §5 ToolGrant; SERVICE-CONTRACTS §2 trust obligation):
+#   execution="inline"   → runs inside run_turn; MUST be read-only idempotent
+#   execution="promoted" → own activity, runtime idempotency key, retry-safe
+#   side_effecting=True  → requires promoted; we flag conservatively — a
+#                          misflagged tool can double-fire real-world actions.
+ToolExecution = Literal["inline", "promoted"]
 
 
 class _Model(BaseModel):
@@ -39,12 +41,20 @@ class _Model(BaseModel):
 
 class ToolSpec(_Model):
     """One tool in a connection manifest. Hash-relevant: any change to any
-    field (including the schema) changes manifest_hash and voids certification."""
+    field (including the schema) changes manifest_hash and voids certification.
+
+    Defaults are the conservative corner (promoted + side-effecting): a tool
+    must *earn* inline by being declared read-only idempotent."""
 
     name: str
     description: str = ""
     inputSchema: Dict[str, Any] = Field(default_factory=dict)
-    effectClass: EffectClass = "read"
+    execution: ToolExecution = "promoted"
+    sideEffecting: bool = True
+
+    @property
+    def is_read(self) -> bool:
+        return self.execution == "inline" and not self.sideEffecting
 
 
 class ConnectionManifest(_Model):
@@ -87,13 +97,14 @@ class Connection(_Model):
 
 class EnvironmentConnection(_Model):
     """One connection's grant inside an environment. The allowlist is explicit
-    — no wildcard-by-default. gateOverrides escalates specific tools to
-    `gated` beyond their manifest annotation (never downgrades)."""
+    — no wildcard-by-default. promoteOverrides escalates specific tools to
+    promoted + side-effecting beyond their manifest annotation (escalate only,
+    never downgrade — an env admin can distrust a manifest, not relax it)."""
 
     connectionId: str
     manifestHash: str
     toolAllowlist: List[str] = Field(default_factory=list)
-    gateOverrides: Dict[str, Literal["gated"]] = Field(default_factory=dict)
+    promoteOverrides: List[str] = Field(default_factory=list)
 
 
 class BrowserPolicy(_Model):
@@ -113,9 +124,10 @@ class Environment(_Model):
     backingType: EnvironmentBacking = "live"
     connections: List[EnvironmentConnection] = Field(default_factory=list)
     browserPolicy: Optional[BrowserPolicy] = None
-    budgetDefaults: Dict[str, Any] = Field(default_factory=dict)
-    sandboxTemplate: str = ""  # E2B template id the runtime instantiates
+    sandboxTemplate: str = ""  # sandbox image/template ref the runtime's SandboxProvider instantiates
     dataNamespace: str = ""  # defaults to ws_<id>/env_<id> when unset
+    # Budgets deliberately absent: dollar caps live in the runtime
+    # (RunPolicy/BudgetState + LiteLLM virtual keys), not the environment.
     description: str = ""
 
     @property

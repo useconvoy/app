@@ -51,7 +51,7 @@ def policy_hash(
                 "connectionId": cp["connectionId"],
                 "manifestHash": cp["manifestHash"],
                 "toolAllowlist": sorted(cp.get("toolAllowlist") or []),
-                "gateOverrides": cp.get("gateOverrides") or {},
+                "promoteOverrides": sorted(cp.get("promoteOverrides") or []),
             }
         )
     rows.sort(key=lambda r: r["connectionId"])

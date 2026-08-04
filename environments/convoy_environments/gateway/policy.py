@@ -18,7 +18,7 @@ from sqlalchemy import select
 from ..db.tables import Connection as ConnectionRow
 from ..db.tables import Environment as EnvironmentRow
 from ..db.tables import EnvironmentConnection as EnvConnRow
-from ..schema import ConnectionManifest, EffectClass, ToolSpec
+from ..schema import ConnectionManifest, ToolSpec
 
 
 class PolicyDenied(Exception):
@@ -31,7 +31,8 @@ class PolicyDenied(Exception):
 class ToolResolution:
     connection: ConnectionRow
     spec: ToolSpec
-    effect_class: EffectClass  # after gate_overrides escalation
+    execution: str  # inline | promoted, after promote_overrides escalation
+    side_effecting: bool
 
 
 @dataclass
@@ -72,8 +73,7 @@ class PolicyEngine:
             for name in ec.tool_allowlist or []:
                 spec = manifest.tool(name)
                 if spec is not None:
-                    out.append(ToolResolution(connection=conn, spec=spec,
-                                              effect_class=self._effective(ec, spec)))
+                    out.append(self._resolution(ec, conn, spec))
         return out
 
     def resolve(self, snapshot: EnvironmentSnapshot, tool: str,
@@ -93,12 +93,16 @@ class PolicyEngine:
             spec = manifest.tool(tool)
             if spec is None:
                 raise PolicyDenied("tool %s is allowlisted but absent from manifest" % tool)
-            return ToolResolution(connection=conn, spec=spec, effect_class=self._effective(ec, spec))
+            return self._resolution(ec, conn, spec)
         raise PolicyDenied("tool %s is not allowlisted in this environment" % tool)
 
     @staticmethod
-    def _effective(ec: EnvConnRow, spec: ToolSpec) -> EffectClass:
-        override: Optional[str] = (ec.gate_overrides or {}).get(spec.name)
-        if override == "gated":
-            return "gated"  # escalate only — overrides never downgrade
-        return spec.effectClass
+    def _resolution(ec: EnvConnRow, conn: ConnectionRow, spec: ToolSpec) -> ToolResolution:
+        """promote_overrides escalate to promoted + side-effecting; overrides
+        never relax a manifest annotation."""
+        promoted = spec.name in (ec.promote_overrides or [])
+        return ToolResolution(
+            connection=conn, spec=spec,
+            execution="promoted" if promoted else spec.execution,
+            side_effecting=True if promoted else spec.sideEffecting,
+        )

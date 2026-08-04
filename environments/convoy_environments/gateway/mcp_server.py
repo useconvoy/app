@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from ..connectors import ConnectorError
 from ..mcp_protocol import MCP_PROTOCOL_VERSION as PROTOCOL_VERSION
 from .policy import PolicyDenied
-from .service import GatewayService, Parked
+from .service import GatewayService
 from .tokens import RunClaims, TokenError, mint_run_token, verify_run_token
 
 
@@ -109,7 +109,7 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
             tools = [
                 {"name": r.spec.name, "description": r.spec.description,
                  "inputSchema": r.spec.inputSchema or {"type": "object"},
-                 "annotations": {"readOnlyHint": r.effect_class == "read"}}
+                 "annotations": {"readOnlyHint": not r.side_effecting}}
                 for r in service.list_tools(claims, connection_id=connection_id)
             ]
             return _rpc_result(rpc_id, {"tools": tools})
@@ -125,12 +125,6 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
                     connection_id=connection_id,
                 )
                 return _rpc_result(rpc_id, _tool_text_result(result))
-            except Parked as parked:
-                return _rpc_result(rpc_id, _tool_text_result(
-                    {"status": "parked", "gateId": parked.gate_id},
-                    structured={"status": "parked", "gateId": parked.gate_id,
-                                "idempotencyKey": parked.idempotency_key},
-                ))
             except PolicyDenied as denial:
                 return _rpc_result(rpc_id, _tool_text_result({"denied": denial.reason}, is_error=True))
             except ConnectorError as err:
@@ -150,15 +144,18 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
 
     @app.get("/internal/environments/{environment_id}/binding")
     async def binding(environment_id: str, version: Optional[int] = None,
-                      _: None = Depends(internal_dep)):
-        """Registry endpoint for the runtime: environment_id → frozen
-        EnvironmentBinding snapshot (convoy_core.binding). Unpinned resolves
-        latest; the runtime pins the returned id as RunState.binding_ref."""
+                      kind: str = "production", _: None = Depends(internal_dep)):
+        """Registry endpoint for the runtime: one environment definition
+        compiles into two immutable bindings — ?kind=production (default) or
+        ?kind=sandbox (mock-validated, virtual-capable clock). Unpinned
+        version resolves latest; the runtime pins the returned id as
+        RunState.binding_ref."""
         try:
             result = service.environment_binding(environment_id, version=version,
-                                                 base_url=base_url)
+                                                 kind=kind, base_url=base_url)
         except PolicyDenied as denial:
-            raise HTTPException(404, denial.reason)
+            status = 409 if "unmocked" in denial.reason else 404
+            raise HTTPException(status, denial.reason)
         return result.model_dump(mode="json")
 
     @app.post("/internal/run-tokens")

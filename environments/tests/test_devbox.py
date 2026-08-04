@@ -93,9 +93,9 @@ def browser_world(session_factory):
         s.add(EnvironmentRow(id="env1", version=1, workspace_id="w1", name="dmv",
                              backing_type="live",
                              browser_policy={"allowedDomains": ["dmv.ca.gov"], "persistProfile": True},
-                             policy_hash=policy_hash("live", []), budget_defaults={}))
+                             policy_hash=policy_hash("live", [])))
         s.add(EnvConnRow(environment_id="env1", environment_version=1, connection_id="cb",
-                         manifest_hash=mhash, tool_allowlist=[], gate_overrides={}))
+                         manifest_hash=mhash, tool_allowlist=[], promote_overrides=[]))
         s.commit()
     return session_factory, secrets
 

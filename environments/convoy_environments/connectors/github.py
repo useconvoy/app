@@ -9,20 +9,20 @@ from .base import Connector, ConnectorError, raise_for_status, register
 
 _TOOLS = [
     ToolSpec(
-        name="github.list_issues", effectClass="read",
+        name="github.list_issues", execution="inline", sideEffecting=False,
         description="List issues in a repository.",
         inputSchema={"type": "object", "properties": {"repo": {"type": "string"}, "state": {"type": "string"}},
                      "required": ["repo"]},
     ),
     ToolSpec(
-        name="github.get_file", effectClass="read",
+        name="github.get_file", execution="inline", sideEffecting=False,
         description="Read a file's content from a repository.",
         inputSchema={"type": "object", "properties": {"repo": {"type": "string"}, "path": {"type": "string"},
                                                       "ref": {"type": "string"}},
                      "required": ["repo", "path"]},
     ),
     ToolSpec(
-        name="github.create_issue", effectClass="effectful",
+        name="github.create_issue", execution="promoted", sideEffecting=True,
         description="Open an issue in a repository.",
         inputSchema={"type": "object", "properties": {"repo": {"type": "string"}, "title": {"type": "string"},
                                                       "body": {"type": "string"}},
