@@ -1,8 +1,8 @@
-"""M0 auth stub: static bearer token + actor/tenant headers.
+"""Auth stub: static bearer token + actor/tenant headers.
 
-Every call carries actor identity which flows into RunEvents (DESIGN.md
-section 7). TODO(milestone-5): WorkOS OIDC at the edge; tenant derived from
-the verified identity instead of a header.
+Every call carries actor identity which flows into RunEvents. TODO: WorkOS
+OIDC at the edge; tenant derived from the verified identity instead of a
+header.
 """
 
 from dataclasses import dataclass

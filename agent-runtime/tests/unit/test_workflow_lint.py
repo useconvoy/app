@@ -1,4 +1,4 @@
-"""AST lint test enforcing CLAUDE.md rule 13 / TESTING.md section 4.4.
+"""AST lint test enforcing workflow determinism.
 
 Inside `src/convoy_runtime/workflows/`: no `workflow.now()`, no
 `datetime.now()`, no raw timers (`workflow.sleep` / `asyncio.sleep`), no

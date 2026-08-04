@@ -1,9 +1,9 @@
 """Connection handling for projection reads/writes.
 
 RLS context is set on every connection use — a query without tenant context is
-a bug even in a dedicated stack (CLAUDE.md rule 10). `tenant_connection` is the
-only sanctioned way to get a connection: it opens a transaction and sets
-`app.tenant_id` locally to it, so the setting can never leak across pool users.
+a bug even in a dedicated stack. `tenant_connection` is the only sanctioned
+way to get a connection: it opens a transaction and sets `app.tenant_id`
+locally to it, so the setting can never leak across pool users.
 """
 
 from collections.abc import AsyncGenerator

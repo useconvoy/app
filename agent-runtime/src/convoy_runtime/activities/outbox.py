@@ -1,9 +1,8 @@
 """RunEvent outbox activity.
 
 Every state change emits a `RunEvent` through this activity into the Postgres
-projection tables — if it didn't emit, it didn't happen (CLAUDE.md rule 5).
-Inserts are idempotent on (run_id, seq), so activity retries cannot duplicate
-events.
+projection tables — if it didn't emit, it didn't happen. Inserts are
+idempotent on (run_id, seq), so activity retries cannot duplicate events.
 """
 
 from temporalio import activity

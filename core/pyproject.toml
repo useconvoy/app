@@ -1,7 +1,7 @@
 [project]
 name = "convoy-core"
 version = "0.1.0"
-description = "Convoy shared datatypes (DESIGN.md section 5) - owned by no service"
+description = "Convoy shared datatypes - owned by no service"
 requires-python = ">=3.12"
 dependencies = ["pydantic>=2.11"]
 

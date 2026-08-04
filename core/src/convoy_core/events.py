@@ -1,9 +1,9 @@
-"""RunEvent — the audited event log (DESIGN.md section 14 catalog).
+"""RunEvent — the audited event log.
 
-Every state change emits a `RunEvent` through the outbox activity
-(CLAUDE.md rule 5). Every event carries actor identity, dual timestamps
-(`ts` real; `virtual_ts` under virtual clocks), and a `sandbox` flag so
-rehearsal trajectories are never mistaken for production.
+Every state change emits a `RunEvent` through the outbox activity — if it
+didn't emit, it didn't happen. Every event carries actor identity, dual
+timestamps (`ts` real; `virtual_ts` under virtual clocks), and a `sandbox`
+flag so rehearsal trajectories are never mistaken for production.
 """
 
 from datetime import datetime

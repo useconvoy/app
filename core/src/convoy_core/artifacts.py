@@ -1,7 +1,7 @@
 """Claim-check and summary reference types.
 
-`ArtifactRef` is always an S3 pointer — blobs never ride through Temporal
-(DESIGN.md section 5, CLAUDE.md rule 2).
+`ArtifactRef` is always an object-store pointer — blobs never ride through
+Temporal payloads or histories.
 """
 
 from pydantic import BaseModel, Field
@@ -25,7 +25,7 @@ class TokenCounts(BaseModel):
 
 
 class Finding(BaseModel):
-    """A typed key finding surfaced by a step or subagent (DESIGN.md section 10)."""
+    """A typed key finding surfaced by a step or subagent."""
 
     key: str
     value: str
@@ -36,8 +36,8 @@ class Finding(BaseModel):
 class StepSummaryRef(BaseModel):
     """Structured summary of a completed step (~1 KB) plus its lossless archive ref.
 
-    Lossy for context, lossless for the record (DESIGN.md section 9): the raw
-    transcript archive is never deleted.
+    Lossy for context, lossless for the record: the summary is what later turns
+    see; the raw transcript archive it points at is never deleted.
     """
 
     step_id: str

@@ -1,4 +1,4 @@
-"""Postgres projections: the only user-facing read path (CLAUDE.md rule 11)."""
+"""Postgres projections: the only user-facing read path — reads never touch Temporal."""
 
 from convoy_runtime.projections.db import ProjectionsDB
 from convoy_runtime.projections.store import ProjectionStore, RunProjection

@@ -1,4 +1,4 @@
-"""Plan, step, and revision types (transcribed verbatim from DESIGN.md section 5)."""
+"""Plan, step, and revision types. Revisions are immutable, constrained-op audit records."""
 
 from datetime import timedelta
 from decimal import Decimal
@@ -48,7 +48,7 @@ class PlanPatchOp(BaseModel):  # constrained ops, not arbitrary JSON patch
     step: PlanStep | None = None
     step_id: str | None = None
     after: str | None = None
-    changes: dict | None = None  # pyright: ignore[reportMissingTypeArgument]  # verbatim from DESIGN §5
+    changes: dict | None = None  # pyright: ignore[reportMissingTypeArgument]  # open-ended edit payload; validated by the revision validator
     reason: str
 
 

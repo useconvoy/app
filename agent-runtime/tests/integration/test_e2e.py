@@ -1,4 +1,4 @@
-"""M0 e2e gate (TESTING §5-M0): POST /runs -> SSE events -> land, with
+"""End-to-end skeleton flow: POST /runs -> SSE events -> land, with
 GET /runs/{id} served from Postgres projections only, against the compose
 stack (Temporal dev, Postgres+RLS, MinIO, mock-model, stub-env)."""
 
@@ -174,7 +174,7 @@ def test_land_signal_wraps_up_gracefully(api: httpx.Client) -> None:
     run = api.get(f"/runs/{run_id}", headers=auth_headers()).json()
     report = run["land_report"]
     assert report is not None
-    # Landing early is a valid completion; partial results allowed (DESIGN §6.2).
+    # Landing early is a valid completion; partial results are allowed.
     assert report["status"] in {"completed", "landed_partial"}
 
     events = _collect_sse(api, run_id, terminal={"run_completed"}, timeout=30)

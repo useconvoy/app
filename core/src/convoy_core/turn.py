@@ -1,4 +1,4 @@
-"""Turn input/result types (transcribed verbatim from DESIGN.md section 5)."""
+"""Turn input/result types — the contract between the workflow and one LLM turn."""
 
 from datetime import datetime
 from decimal import Decimal

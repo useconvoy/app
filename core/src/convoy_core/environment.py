@@ -1,8 +1,8 @@
-"""Environment binding — the environments/ seam.
+"""Environment binding — the seam between the runtime and environments/.
 
-`ClockConfig` and `EnvironmentBinding` are transcribed verbatim from DESIGN.md
-section 5. The runtime pins the resolved binding as an immutable snapshot for
-the run's lifetime (`RunState.binding_ref`).
+The runtime pins the resolved binding as an immutable snapshot for the run's
+lifetime (`RunState.binding_ref`): a run's environment cannot drift mid-flight,
+which replay determinism and the audit trail both require.
 """
 
 from typing import Literal
@@ -12,7 +12,7 @@ from pydantic import AnyUrl, BaseModel
 from convoy_core.tools import ToolGrant
 
 
-class ClockConfig(BaseModel):  # virtual time — see DESIGN §8.4
+class ClockConfig(BaseModel):  # how a run experiences time (real or virtual)
     mode: Literal["real", "virtual"] = "real"  # virtual allowed only on sandbox-kind bindings
     advance: Literal["manual", "on_idle", "ratio"] = "manual"
     ratio: float | None = None  # virtual seconds per real second

@@ -1,5 +1,5 @@
-"""Happy-path workflow test (TESTING §5-M0): fixture plan -> 2 scripted turns
--> land, with the full expected RunEvent sequence, in the time-skipping env."""
+"""Happy-path workflow test: fixture plan -> 2 scripted turns -> land, with
+the full expected RunEvent sequence, in the time-skipping env."""
 
 from decimal import Decimal
 
@@ -54,7 +54,7 @@ async def test_happy_path_full_event_sequence() -> None:
     assert len(report.deliverables) == 2
     assert report.cost_usd == Decimal("0.0002")  # two scripted turns
 
-    # Full expected RunEvent sequence, in order (TESTING §5-M0).
+    # Full expected RunEvent sequence, in order.
     assert fake.event_types == EXPECTED_EVENT_SEQUENCE
 
     # Deterministic identity + per-run monotonic seq.

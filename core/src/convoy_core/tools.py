@@ -1,4 +1,4 @@
-"""Tool capability types (DESIGN.md section 5) and promoted-call requests."""
+"""Tool capability types and promoted-call requests."""
 
 from typing import Literal
 
@@ -24,7 +24,8 @@ class ToolGrant(BaseModel):
 class ToolCallRequest(BaseModel):
     """A promoted tool call the workflow schedules as its own activity.
 
-    `idempotency_key` = hash(run_id, step_id, turn, call_index) — CLAUDE.md rule 4.
+    `idempotency_key` = hash(run_id, step_id, turn, call_index), so an
+    activity retry can never double-fire the side effect.
     """
 
     tool_id: str

@@ -1,8 +1,9 @@
 """Deployment profile types.
 
-`DeploymentProfile` and `ModelGatewayConfig` are transcribed verbatim from
-DESIGN.md section 3. Every external touchpoint resolves through
-`DeploymentProfile` or `EnvironmentBinding` — no component assumes shared infra.
+Every external touchpoint (Temporal, database, object store, identity,
+sandbox substrate, model gateway) resolves through `DeploymentProfile` or
+`EnvironmentBinding` — no component assumes shared infra, which is what lets
+dedicated-stack and customer-VPC deployments share one codebase.
 """
 
 from typing import Literal

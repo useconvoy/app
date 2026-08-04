@@ -1,4 +1,4 @@
-"""Subagent result — the compaction contract (transcribed verbatim from DESIGN.md section 10).
+"""Subagent result — the compaction contract between parent and child runs.
 
 The parent never ingests child transcripts; this schema is all it sees.
 """

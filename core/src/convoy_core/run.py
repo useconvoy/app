@@ -1,4 +1,4 @@
-"""Run-level types (transcribed verbatim from DESIGN.md section 5) plus RunResult."""
+"""Run-level types: policy, steering, budget, and the durable RunState."""
 
 from datetime import datetime
 from decimal import Decimal
@@ -35,8 +35,8 @@ class SteerMessage(BaseModel):
 
 class BudgetState(BaseModel):
     cap_usd: Decimal
-    spent_usd: Decimal = 0  # pyright: ignore[reportAssignmentType]  # verbatim from DESIGN §5; pydantic coerces
-    reserved_usd: Decimal = 0  # pyright: ignore[reportAssignmentType]  # verbatim from DESIGN §5; pydantic coerces
+    spent_usd: Decimal = 0  # pyright: ignore[reportAssignmentType]  # pydantic coerces int -> Decimal
+    reserved_usd: Decimal = 0  # pyright: ignore[reportAssignmentType]  # pydantic coerces int -> Decimal
 
 
 class RunState(BaseModel):  # everything that survives continue_as_new

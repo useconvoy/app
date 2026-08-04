@@ -1,8 +1,8 @@
 """ArtifactRef claim-check library over S3-compatible object stores.
 
-No blob crosses a Temporal boundary — `ArtifactRef` only (CLAUDE.md rule 2).
-Works against MinIO in compose and AWS S3 in stacks. Sync boto3 calls are
-pushed to worker threads so activities stay non-blocking.
+No blob crosses a Temporal boundary — `ArtifactRef` only. Works against MinIO
+in compose and AWS S3 in stacks. Sync boto3 calls are pushed to worker
+threads so activities stay non-blocking.
 """
 
 import hashlib

@@ -1,9 +1,8 @@
-"""Stub environments/ implementation for tests (TESTING.md section 3).
+"""Stub environments/ implementation for tests.
 
-M0 scope: the binding fixture used by test layers, mirroring what the compose
-stub-env container serves (agent-runtime/docker/stub-env/server.py).
-TODO(milestone-1): stub tool registry entries for grant-intersection tests.
-TODO(milestone-4): side-effect journal backing the chaos suite.
+The binding fixture used by test layers, mirroring what the compose stub-env
+container serves (agent-runtime/docker/stub-env/server.py).
+TODO: side-effect journal backing the chaos suite.
 """
 
 from convoy_core import EnvironmentBinding

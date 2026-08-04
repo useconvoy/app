@@ -1,4 +1,5 @@
-"""Land report — the auditable output of `land_run` (DESIGN.md WS-10)."""
+"""Land report — the auditable output of `land_run`: deliverables vs success
+criteria, cost breakdown, and audit pointers."""
 
 from decimal import Decimal
 from typing import Literal

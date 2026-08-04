@@ -1,9 +1,8 @@
 """convoy_core — shared datatypes for all Convoy services.
 
-Schemas transcribed verbatim from agent-runtime/docs/DESIGN.md section 5
-(plus the supporting types they reference). Owned by no service; services
-import these types and never redefine, fork, or privately extend them
-(DESIGN.md decision 24).
+Owned by no service; services import these types and never redefine, fork,
+or privately extend them, so there is exactly one source of truth for every
+cross-service schema.
 """
 
 from convoy_core.agent import AgentSpec

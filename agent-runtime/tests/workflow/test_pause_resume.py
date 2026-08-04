@@ -1,5 +1,5 @@
-"""Pause/resume workflow test (TESTING §5-M0): pause mid-run never cancels the
-in-flight activity (CLAUDE.md rule 7); resume continues to completion."""
+"""Pause/resume workflow test: pause mid-run never cancels the in-flight
+activity; resume continues to completion."""
 
 import asyncio
 from collections.abc import Callable

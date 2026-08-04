@@ -1,5 +1,5 @@
-"""Fixture plan validity (TESTING §5-M0): the M0 create_plan stub must produce
-a well-formed linear 2-step plan with a coherent initial revision."""
+"""Fixture plan validity: the create_plan stub must produce a well-formed
+linear 2-step plan with a coherent initial revision."""
 
 from _support.common import fixture_ref
 

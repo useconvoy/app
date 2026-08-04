@@ -1,4 +1,4 @@
-"""Agent specification (transcribed verbatim from DESIGN.md section 5)."""
+"""Agent specification: identity, layer, capabilities, and model for one agent."""
 
 from pydantic import BaseModel, Field
 

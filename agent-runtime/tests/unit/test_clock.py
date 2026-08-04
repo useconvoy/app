@@ -1,4 +1,4 @@
-"""RunClock passthrough unit tests (TESTING §5-M0)."""
+"""RunClock passthrough unit tests."""
 
 from datetime import UTC, datetime, timedelta
 

@@ -1,8 +1,8 @@
-"""Sandbox substrate pure types (DESIGN.md section 13).
+"""Sandbox substrate pure types.
 
 The `SandboxProvider` Protocol lives in the runtime (`convoy_runtime.providers`);
-these are the data types it exchanges. TODO(milestone-4): first provider
-implementation (`LocalSandboxProvider`), workspace snapshot/rehydrate.
+these are the data types it exchanges. TODO: first provider implementation
+(`LocalSandboxProvider`) with workspace snapshot/rehydrate.
 """
 
 from datetime import timedelta
@@ -19,7 +19,8 @@ class SandboxHandle(BaseModel):
 
 
 class SandboxJob(BaseModel):
-    idempotency_key: str  # hash(run_id, step_id, turn, call_index) — CLAUDE.md rule 4
+    # hash(run_id, step_id, turn, call_index); retries must not double side effects
+    idempotency_key: str
     command: list[str]
     env: dict[str, str] = {}
     inputs: list[ArtifactRef] = []

@@ -1,5 +1,5 @@
 """Replay every checked-in history against current workflow code — merge
-blocking (CLAUDE.md rule 8, TESTING §4.2/§5-M0)."""
+blocking: a change that breaks replay would also break live runs mid-flight."""
 
 from pathlib import Path
 

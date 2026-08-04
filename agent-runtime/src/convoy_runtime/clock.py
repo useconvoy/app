@@ -1,13 +1,13 @@
-"""RunClock — the single seam all workflow time flows through (CLAUDE.md rule 13).
+"""RunClock — the single seam all workflow time flows through.
 
 Workflow code never calls `workflow.now()`, `datetime.now()`, or raw timers
 directly; it calls `RunClock.now()` / `RunClock.timer()`. Production is a
-passthrough to Temporal's deterministic primitives. Virtual mode is workflow
-state + signals per DESIGN.md section 8.4 — TODO(milestone-4).
+passthrough to Temporal's deterministic primitives. TODO: virtual mode —
+time as workflow state advanced by signals/policy, for sandbox rehearsals.
 
-This module deliberately lives outside `workflows/` so the AST lint test
-(TESTING.md section 4.4) can ban the raw primitives inside `workflows/` while
-this implementation remains the one sanctioned caller.
+This module deliberately lives outside `workflows/` so the AST lint test can
+ban the raw primitives inside `workflows/` while this implementation remains
+the one sanctioned caller.
 """
 
 import asyncio
@@ -42,6 +42,6 @@ class PassthroughClock:
             await asyncio.sleep(remaining.total_seconds())
 
 
-# TODO(milestone-4): VirtualClock — `now` derived from RunState.virtual_now; timers
-# register deadlines in workflow state and wait on conditions; advancement via the
-# `advance_time` signal / on_idle / ratio policies (DESIGN.md section 8.4).
+# TODO: VirtualClock — `now` derived from RunState.virtual_now; timers register
+# deadlines in workflow state and wait on conditions; advancement via the
+# `advance_time` signal, on-idle auto-advance, or a wall-clock ratio.

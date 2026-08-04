@@ -1,4 +1,4 @@
-"""Codec unit tests: round-trip and payloads-are-ciphertext (TESTING §5-M0)."""
+"""Codec unit tests: round-trip and payloads-are-ciphertext."""
 
 import pytest
 from _support.common import TEST_CODEC_KEY, build_data_converter, fixture_run_state
