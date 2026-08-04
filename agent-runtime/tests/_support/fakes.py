@@ -2,8 +2,9 @@
 
 Same names and signatures as the real activities; providers are faked so the
 time-skipping lane needs no network or containers. Turn behavior is scripted
-per call (cost, outcome, model), which is how budget and fallback workflow
-behavior is driven deterministically.
+per call (cost, outcome, model, gate requests, proposed revisions), which is
+how budget, approval, gate, and steer workflow behavior is driven
+deterministically. The fixture plan can carry human gates on named steps.
 """
 
 import asyncio
@@ -17,8 +18,10 @@ from temporalio.exceptions import ApplicationError
 
 from convoy_core import (
     ArtifactRef,
+    HumanGate,
     LandReport,
     Plan,
+    PlanPatchOp,
     RunEvent,
     RunState,
     TokenCounts,
@@ -37,24 +40,31 @@ FakeActivity = Callable[..., Coroutine[Any, Any, Any]]
 @dataclass(frozen=True)
 class ScriptedTurn:
     """One scripted run_turn response; outcome "fail" raises a non-retryable
-    activity error instead of returning a result."""
+    activity error instead of returning a result. A "needs_human" turn may
+    carry the gate it requests; a "propose_revision" turn carries its ops."""
 
     cost_usd: Decimal = Decimal("0.0001")
-    outcome: Literal["continue", "step_done", "fail"] = "step_done"
+    outcome: Literal["continue", "step_done", "fail", "needs_human", "propose_revision"] = (
+        "step_done"
+    )
     model_used: str = SCRIPTED_MODEL
     input_tokens: int = 12
     output_tokens: int = 7
+    gate: HumanGate | None = None
+    ops: tuple[PlanPatchOp, ...] = ()
 
 
 class FakeRuntime:
     """In-memory activity set: records emitted events, scripts turn results,
-    can gate the first turn to catch a run mid-flight."""
+    can gate the first turn to catch a run mid-flight, and can attach human
+    gates to the fixture plan's steps."""
 
     def __init__(
         self,
         *,
         gate_first_turn: bool = False,
         turns: list[ScriptedTurn] | None = None,
+        plan_gates: dict[str, HumanGate] | None = None,
     ) -> None:
         self.events: list[RunEvent] = []
         self.turn_calls = 0
@@ -63,16 +73,27 @@ class FakeRuntime:
         self.turn_cancelled = False
         self.gate_first_turn = gate_first_turn
         self.turns = turns
+        self.plan_gates = plan_gates or {}
         self.provision_calls: list[tuple[str, Decimal]] = []
         self.assemble_calls = 0
+        self.snapshots: list[Plan] = []
+        self.sent_steer_ids: list[str] = []
         self.first_turn_started = asyncio.Event()
         self.release_first_turn = asyncio.Event()
 
     @activity.defn(name=names.CREATE_PLAN)
     async def create_plan(self, state: RunState) -> Plan:
         return build_fixture_plan(
-            "test goal", ["it lands"], support_ref(f"runs/{state.run_id}/plans/v1.json")
+            "test goal",
+            ["it lands"],
+            support_ref(f"runs/{state.run_id}/plans/v1.json"),
+            self.plan_gates,
         )
+
+    @activity.defn(name=names.ARCHIVE_PLAN_SNAPSHOT)
+    async def archive_plan_snapshot(self, run_id: str, plan: Plan) -> ArtifactRef:
+        self.snapshots.append(plan)
+        return support_ref(f"runs/{run_id}/plans/v{plan.version}.json")
 
     @activity.defn(name=names.PROVISION_MODEL_KEY)
     async def provision_model_key(self, run_id: str, cap_usd: Decimal) -> None:
@@ -116,6 +137,8 @@ class FakeRuntime:
                 if script.outcome == "step_done"
                 else []
             ),
+            proposed_revision=list(script.ops) if script.ops else None,
+            gate_request=script.gate,
         )
 
     @activity.defn(name=names.LAND_RUN)
@@ -145,6 +168,7 @@ class FakeRuntime:
     def activities(self) -> list[FakeActivity]:
         return [
             self.create_plan,
+            self.archive_plan_snapshot,
             self.provision_model_key,
             self.assemble_pinned_header,
             self.run_turn,
@@ -155,3 +179,6 @@ class FakeRuntime:
     @property
     def event_types(self) -> list[str]:
         return [e.type for e in self.events]
+
+    def events_of(self, event_type: str) -> list[RunEvent]:
+        return [e for e in self.events if e.type == event_type]

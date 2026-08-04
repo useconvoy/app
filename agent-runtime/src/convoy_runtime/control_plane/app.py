@@ -1,13 +1,14 @@
 """FastAPI control plane.
 
-External endpoints: POST /runs, POST /runs/{id}/pause|resume|land,
+External endpoints: POST /runs, POST /runs/{id}/pause|resume|land|steer,
+POST /runs/{id}/plan/approve, POST /runs/{id}/steps/{sid}/respond,
 GET /runs/{id}, GET /runs/{id}/events (SSE). Workflow ID = run ID so client
-retries are idempotent. Reads are served from Postgres projections and never
-touch Temporal. The SSE stream is resumable: events carry their per-run seq
-as the SSE id, and both the Last-Event-ID header and the `after` query
-parameter continue from a cursor.
+retries are idempotent. Every mutation signals the workflow with the verified
+actor identity, which flows into the run's events. Reads are served from
+Postgres projections and never touch Temporal. The SSE stream is resumable:
+events carry their per-run seq as the SSE id, and both the Last-Event-ID
+header and the `after` query parameter continue from a cursor.
 
-TODO: steer, plan approval, and gate response endpoints.
 TODO: clock advance endpoint (sandbox bindings with virtual clocks only).
 """
 
@@ -32,23 +33,29 @@ from convoy_core import (
     EnvironmentBinding,
     RunPolicy,
     RunState,
+    SteerMessage,
 )
 from convoy_runtime.codec import runtime_data_converter
 from convoy_runtime.config import RuntimeConfig
 from convoy_runtime.control_plane.auth import Actor, require_actor
 from convoy_runtime.control_plane.models import (
+    ApprovePlanRequest,
     BudgetView,
     CreateRunRequest,
     CreateRunResponse,
+    GateRespondRequest,
     RunView,
     SignalResponse,
+    SteerRequest,
+    SteerResponse,
     StepView,
 )
 from convoy_runtime.projections.db import ProjectionsDB
-from convoy_runtime.projections.store import ProjectionStore
+from convoy_runtime.projections.store import ProjectionStore, RunProjection
 from convoy_runtime.providers.artifact_store import ArtifactStore
 from convoy_runtime.providers.grants import GrantValidationError, resolve_requested_tools
 from convoy_runtime.providers.model_gateway import ModelGateway, ModelGatewayError
+from convoy_runtime.signals import GateResponse, PlanApprovalDecision
 from convoy_runtime.workflows.agent_run import AgentRunWorkflow
 
 _SSE_POLL_INTERVAL = 0.25
@@ -151,18 +158,30 @@ async def create_run(
     binding_ref = await store.put_json(
         f"runs/{run_id}/binding.json", binding.model_dump(mode="json")
     )
-    pinned_ref = await store.put_json(
-        f"runs/{run_id}/pinned.json",
-        {"goal": body.goal, "success_criteria": body.success_criteria},
-    )
+    pinned_payload: dict[str, object] = {
+        "goal": body.goal,
+        "success_criteria": body.success_criteria,
+    }
+    if body.fixture_gates:
+        pinned_payload["fixture_gates"] = {
+            step_id: gate.model_dump(mode="json") for step_id, gate in body.fixture_gates.items()
+        }
+    pinned_ref = await store.put_json(f"runs/{run_id}/pinned.json", pinned_payload)
     prompt_ref = await store.put_json(
         f"runs/{run_id}/prompts/root.json",
         {"prompt": "Convoy run agent - execute the plan step by step."},
     )
 
-    # TODO: honor require_plan_approval once the approval flow exists; until
-    # then it is forced off regardless of the requested policy.
-    policy = (body.policy or RunPolicy()).model_copy(update={"require_plan_approval": False})
+    # Plan approval defaults off for sandbox-kind environments and on for
+    # production ones; a policy that sets the field explicitly is honored as
+    # given, while partial policies pick up the environment default.
+    default_approval = binding.kind != "sandbox"
+    if body.policy is None:
+        policy = RunPolicy(require_plan_approval=default_approval)
+    elif "require_plan_approval" in body.policy.model_fields_set:
+        policy = body.policy
+    else:
+        policy = body.policy.model_copy(update={"require_plan_approval": default_approval})
 
     state = RunState(
         run_id=run_id,
@@ -203,18 +222,26 @@ async def create_run(
     return CreateRunResponse(run_id=run_id, status="planning")
 
 
-async def _signal_run(request: Request, run_id: str, actor: Actor, signal: str) -> SignalResponse:
-    projections = _projections(request)
-    run = await projections.get_run(actor.tenant_id, run_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail=f"run {run_id!r} not found")
+async def _send_signal(request: Request, run_id: str, signal: str, arg: object) -> None:
     handle = _temporal(request).get_workflow_handle(run_id)
     try:
-        await handle.signal(signal, actor.actor_id)
+        await handle.signal(signal, arg)
     except RPCError as err:
         if err.status == RPCStatusCode.NOT_FOUND:
             raise HTTPException(status_code=409, detail="run is not active") from err
         raise
+
+
+async def _require_run(request: Request, run_id: str, actor: Actor) -> RunProjection:
+    run = await _projections(request).get_run(actor.tenant_id, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"run {run_id!r} not found")
+    return run
+
+
+async def _signal_run(request: Request, run_id: str, actor: Actor, signal: str) -> SignalResponse:
+    await _require_run(request, run_id, actor)
+    await _send_signal(request, run_id, signal, actor.actor_id)
     return SignalResponse(run_id=run_id, signal=signal)
 
 
@@ -231,6 +258,75 @@ async def resume_run(request: Request, run_id: str, actor: ActorDep) -> SignalRe
 @app.post("/runs/{run_id}/land", response_model=SignalResponse, status_code=202)
 async def land_run(request: Request, run_id: str, actor: ActorDep) -> SignalResponse:
     return await _signal_run(request, run_id, actor, "land")
+
+
+@app.post("/runs/{run_id}/steer", response_model=SteerResponse, status_code=202)
+async def steer_run(
+    request: Request, run_id: str, body: SteerRequest, actor: ActorDep
+) -> SteerResponse:
+    """Append one steer to the run's mailbox; the workflow loop drains it
+    into the next turn."""
+    await _require_run(request, run_id, actor)
+    message = SteerMessage(
+        id=f"steer-{uuid.uuid4().hex[:12]}",
+        author="human",
+        author_id=actor.actor_id,
+        mode=body.mode,
+        body=body.body,
+    )
+    await _send_signal(request, run_id, "steer", message)
+    return SteerResponse(run_id=run_id, steer_id=message.id, mode=body.mode)
+
+
+@app.post("/runs/{run_id}/plan/approve", response_model=SignalResponse, status_code=202)
+async def approve_plan(
+    request: Request, run_id: str, body: ApprovePlanRequest, actor: ActorDep
+) -> SignalResponse:
+    """Approve or reject the plan version awaiting approval. The supplied
+    version must match the live plan so decisions can never target a plan
+    the human did not review; the workflow re-checks and drops mismatches."""
+    run = await _require_run(request, run_id, actor)
+    if not body.approve and not (body.reason and body.reason.strip()):
+        raise HTTPException(status_code=422, detail="a rejection requires a reason")
+    current_version = run.plan.get("version") if run.plan else None
+    if current_version != body.plan_version:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"plan version {body.plan_version} does not match the "
+                f"current plan version {current_version}"
+            ),
+        )
+    decision = PlanApprovalDecision(
+        plan_version=body.plan_version,
+        approve=body.approve,
+        reason=body.reason,
+        actor=actor.actor_id,
+    )
+    await _send_signal(request, run_id, "approve_plan", decision)
+    return SignalResponse(run_id=run_id, signal="approve_plan")
+
+
+@app.post("/runs/{run_id}/steps/{step_id}/respond", response_model=SignalResponse, status_code=202)
+async def respond_to_gate(
+    request: Request, run_id: str, step_id: str, body: GateRespondRequest, actor: ActorDep
+) -> SignalResponse:
+    """Answer exactly one step's open human gate. Responding to a step that
+    is not blocked on a human is a clean conflict; the workflow re-checks and
+    drops stale answers."""
+    await _require_run(request, run_id, actor)
+    steps = await _projections(request).get_steps(actor.tenant_id, run_id)
+    step = next((s for s in steps if s.step_id == step_id), None)
+    if step is None:
+        raise HTTPException(status_code=404, detail=f"step {step_id!r} not found")
+    if step.status != "blocked_on_human":
+        raise HTTPException(
+            status_code=409,
+            detail=f"step {step_id!r} is not awaiting a human response (status {step.status!r})",
+        )
+    response = GateResponse(step_id=step_id, response=body.response, actor=actor.actor_id)
+    await _send_signal(request, run_id, "human_response", response)
+    return SignalResponse(run_id=run_id, signal="human_response")
 
 
 @app.get("/runs/{run_id}", response_model=RunView)

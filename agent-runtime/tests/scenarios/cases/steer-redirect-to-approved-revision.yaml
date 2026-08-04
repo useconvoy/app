@@ -1,0 +1,47 @@
+# A redirect steer forces the next turn to assess the plan; the assessment
+# proposes a revision that adds a step, which is validated, applied as plan
+# v2 with the steer ID linked, and blocks on approval (major revision under
+# the default scope) before execution continues into the new step.
+name: steer-redirect-to-approved-revision
+run:
+  budget_cap_usd: "10"
+  policy:
+    require_plan_approval: true
+    approval_scope: major_revisions
+turns:
+  - outcome: propose_revision
+    ops:
+      - op: add_step
+        after: step-2
+        reason: "redirect steer needs work the plan does not cover"
+        step:
+          id: step-3
+          description: "Address the redirect: cover the churn cohort analysis"
+          depends_on: [step-2]
+  - {outcome: step_done}
+actions:
+  - {after_event: plan_created, signal: steer, mode: redirect,
+     body: "Also cover the churn cohort analysis"}
+  - {after_event: steer_received, signal: approve, plan_version: 1}
+  - {after_event: revision_applied, signal: approve, plan_version: 2}
+expect:
+  final_status: completed
+  land_status: completed
+  events:
+    - run_started
+    - plan_created
+    - steer_received
+    - revision_approved
+    - step_started
+    - revision_applied
+    - revision_approved
+    - step_done
+    - step_started
+    - step_done
+    - step_started
+    - step_done
+    - landing_started
+    - run_completed
+  turn_calls: 4
+  plan_version: 2
+  revision_steer_linked: true

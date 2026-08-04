@@ -176,6 +176,18 @@ class ProjectionStore:
                     "cost_usd": payload.get("cost_usd"),
                 },
             )
+        if event.type in ("gate_opened", "gate_answered"):
+            # An open gate blocks its step on a human; the answer puts the
+            # step back to work. Timeout consequences arrive as their own
+            # step events (or a pause), so gate_timed_out folds nothing.
+            await self._upsert_step(
+                conn,
+                event,
+                {
+                    "id": payload.get("step_id"),
+                    "status": "blocked_on_human" if event.type == "gate_opened" else "running",
+                },
+            )
 
     @staticmethod
     async def _upsert_step(

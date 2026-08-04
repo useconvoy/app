@@ -86,6 +86,7 @@ async def run_worker(config: RuntimeConfig) -> None:
         workflows=[AgentRunWorkflow],
         activities=[
             plan_activities.create_plan,
+            plan_activities.archive_plan_snapshot,
             turn_activities.run_turn,
             land_activities.land_run,
             outbox_activities.emit_run_events,

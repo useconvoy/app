@@ -3,11 +3,11 @@ generated from this later)."""
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from convoy_core import RunPolicy
+from convoy_core import HumanGate, RunPolicy
 
 
 class CreateRunRequest(BaseModel):
@@ -22,14 +22,51 @@ class CreateRunRequest(BaseModel):
     # Tool ids requested for the agent, resolved against the environment's
     # registry at creation; unknown or invalid requests are rejected.
     tools: list[str] = []
-    # Run policy overrides (budget action, etc.). Plan approval cannot be
-    # enabled yet: the approval flow is not built, so it is forced off.
+    # Run policy overrides (approval, budget action, etc.). Plan approval
+    # follows the environment kind (off for sandbox, on for production)
+    # unless the policy sets require_plan_approval explicitly.
     policy: RunPolicy | None = None
+    # Human gates to attach to named fixture-plan steps, honored by the stub
+    # planner so gate flows can be exercised end to end without a real model
+    # planner producing gated plans.
+    fixture_gates: dict[str, HumanGate] = {}
 
 
 class CreateRunResponse(BaseModel):
     run_id: str
     status: str
+
+
+class SteerRequest(BaseModel):
+    """A steer for the run's mailbox: a note rides into the next turn's
+    context; a redirect additionally forces the agent to assess the plan
+    against it."""
+
+    mode: Literal["note", "redirect"]
+    body: str = Field(min_length=1)
+
+
+class SteerResponse(BaseModel):
+    run_id: str
+    steer_id: str
+    mode: Literal["note", "redirect"]
+    accepted: bool = True
+
+
+class ApprovePlanRequest(BaseModel):
+    """Approve or reject the plan version awaiting approval. The version pin
+    guarantees the decision targets the plan the human actually reviewed;
+    rejections must say why."""
+
+    plan_version: int = Field(ge=1)
+    approve: bool = True
+    reason: str | None = None
+
+
+class GateRespondRequest(BaseModel):
+    """Answer one step's open human gate."""
+
+    response: str = Field(min_length=1)
 
 
 class SignalResponse(BaseModel):

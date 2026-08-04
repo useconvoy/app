@@ -5,6 +5,7 @@ activity implementations (which pull in I/O clients). Pure constants only.
 """
 
 CREATE_PLAN = "create_plan"
+ARCHIVE_PLAN_SNAPSHOT = "archive_plan_snapshot"
 RUN_TURN = "run_turn"
 LAND_RUN = "land_run"
 EMIT_RUN_EVENTS = "emit_run_events"

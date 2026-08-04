@@ -8,15 +8,28 @@ to real (or mock) models through the LiteLLM proxy.
 
 from collections.abc import Callable
 from decimal import Decimal
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 import anyio
 from pydantic import BaseModel
 
-from convoy_core import AgentSpec, ArtifactRef, TokenCounts, TurnInput, TurnResult
+from convoy_core import (
+    AgentSpec,
+    ArtifactRef,
+    PlanPatchOp,
+    PlanStep,
+    SteerMessage,
+    TokenCounts,
+    TurnInput,
+    TurnResult,
+)
 from convoy_runtime.providers.artifact_store import ArtifactStore
 
 SCRIPTED_MODEL = "scripted-echo-1"
+
+# A redirect steer whose body contains this marker scripts the "plan already
+# covers it" assessment; any other redirect scripts a proposed revision.
+PLAN_COVERS_MARKER = "[covered]"
 
 # Progress callback for long turns; called per inline tool execution with
 # {"turn": n, "tool_index": i} so the activity can heartbeat.
@@ -49,6 +62,12 @@ class ScriptedTurnExecutor:
     Writes the turn transcript to the artifact store (full fidelity, never a
     blob through Temporal) and reports fixed token/cost numbers so budget and
     projection plumbing can be exercised without a model.
+
+    Redirect steers script the plan-assessment contract: a redirect turn
+    performs the assessment instead of step work, returning a proposed
+    revision that appends a step addressing the redirect — or, when the
+    redirect body carries the covered marker, no proposal, which the workflow
+    records as "the plan already covers it".
     """
 
     def __init__(
@@ -70,7 +89,9 @@ class ScriptedTurnExecutor:
     ) -> TurnResult:
         if self._turn_delay_seconds > 0:
             await anyio.sleep(self._turn_delay_seconds)
-        transcript = {
+        redirects = [steer for steer in turn.steers if steer.mode == "redirect"]
+        assessment = await self._assess_redirects(turn, redirects) if redirects else None
+        transcript: dict[str, Any] = {
             "run_id": turn.run_id,
             "step_id": turn.step_id,
             "turn": ctx.turn,
@@ -82,9 +103,22 @@ class ScriptedTurnExecutor:
                 {"role": "assistant", "content": f"echo: step {turn.step_id} done"},
             ],
         }
+        if assessment is not None:
+            transcript["assessment"] = assessment["record"]
         transcript_ref = await self._store.put_json(
             f"runs/{turn.run_id}/transcripts/{turn.step_id}/turn-{ctx.turn}.json", transcript
         )
+        if assessment is not None:
+            # An assessment turn does no step work; the step continues on the
+            # next turn (with the plan possibly revised in between).
+            return TurnResult(
+                transcript_ref=transcript_ref,
+                tokens=TokenCounts(input_tokens=12, output_tokens=7),
+                cost_usd=Decimal("0.0001"),
+                model_used=self._model,
+                outcome=("propose_revision" if assessment["ops"] else "continue"),
+                proposed_revision=assessment["ops"] or None,
+            )
         output_ref = await self._store.put_json(
             f"runs/{turn.run_id}/outputs/{turn.step_id}.json",
             {"step_id": turn.step_id, "result": f"echo output for {turn.step_id}"},
@@ -97,3 +131,57 @@ class ScriptedTurnExecutor:
             outcome="step_done",
             step_outputs=[output_ref],
         )
+
+    async def _last_plan_step_id(self, turn: TurnInput) -> str:
+        """The final step of the plan as rendered into the pinned header —
+        the anchor a proposed step is appended after, keeping the chain
+        shape intact."""
+        header: dict[str, Any] = await self._store.get_json(turn.pinned_ref)
+        raw_steps = header.get("plan")
+        last = turn.step_id
+        if isinstance(raw_steps, list):
+            for raw in cast("list[Any]", raw_steps):
+                if not isinstance(raw, dict):
+                    continue
+                entry = cast("dict[str, Any]", raw)
+                if isinstance(entry.get("id"), str):
+                    last = cast("str", entry["id"])
+        return last
+
+    async def _assess_redirects(
+        self, turn: TurnInput, redirects: list[SteerMessage]
+    ) -> dict[str, Any]:
+        """Deterministic redirect assessment: covered-marker redirects change
+        nothing; anything else proposes appending a step that addresses the
+        redirect to the end of the plan."""
+        covered = [s for s in redirects if PLAN_COVERS_MARKER in s.body]
+        if covered:
+            return {
+                "record": {
+                    "steer_ids": [s.id for s in redirects],
+                    "conclusion": "plan_already_covers",
+                    "reason": "the current plan already addresses this redirect",
+                },
+                "ops": [],
+            }
+        primary = redirects[0]
+        anchor = await self._last_plan_step_id(turn)
+        new_step = PlanStep(
+            id=f"step-for-{primary.id}",
+            description=f"Address redirect steer: {primary.body}"[:200],
+            depends_on=[anchor],
+        )
+        op = PlanPatchOp(
+            op="add_step",
+            step=new_step,
+            after=anchor,
+            reason=f"redirect steer {primary.id} needs work the plan does not cover",
+        )
+        return {
+            "record": {
+                "steer_ids": [s.id for s in redirects],
+                "conclusion": "proposed_revision",
+                "added_step": new_step.id,
+            },
+            "ops": [op],
+        }

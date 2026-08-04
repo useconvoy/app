@@ -5,12 +5,20 @@ no randomness. Activities are scheduled by name so the workflow sandbox never
 imports I/O clients, and every activity call declares an explicit retry
 policy and timeouts.
 
-The loop owns everything the run must never get wrong: plan mutation, budget
-accounting and threshold actions, pause/land precedence, and the audited
-event stream. Turn intelligence lives behind the run_turn activity.
+The loop owns everything the run must never get wrong: plan mutation (turns
+return proposals; the loop validates and applies), plan approval and human
+gates, budget accounting and threshold actions, pause/land precedence, and
+the audited event stream. Turn intelligence lives behind the run_turn
+activity.
+
+Signals never do work here: they validate their payload and enqueue it; the
+loop drains every mailbox at its boundaries, so external actions land between
+turns and never interrupt one.
 """
 
-from datetime import timedelta
+import asyncio
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal, cast
 
@@ -21,13 +29,17 @@ from temporalio.exceptions import ActivityError, ApplicationError
 with workflow.unsafe.imports_passed_through():
     from convoy_core import (
         ArtifactRef,
+        HumanGate,
         LandReport,
         Plan,
+        PlanPatchOp,
+        PlanRevision,
         PlanStep,
         RunEvent,
         RunEventType,
         RunResult,
         RunState,
+        SteerMessage,
         TokenCounts,
         TurnInput,
         TurnResult,
@@ -35,6 +47,8 @@ with workflow.unsafe.imports_passed_through():
     from convoy_runtime.activities import names
     from convoy_runtime.clock import PassthroughClock, RunClock
     from convoy_runtime.providers.turn_executor import TurnContext
+    from convoy_runtime.signals import GateResponse, PlanApprovalDecision
+    from convoy_runtime.workflows.plan_engine import requires_approval, validate_revision
 
 # Fraction of the budget cap that triggers the one-time warning event.
 BUDGET_WARNING_THRESHOLD = Decimal("0.8")
@@ -48,6 +62,14 @@ _CREATE_PLAN_RETRY = RetryPolicy(
     maximum_attempts=5,
 )
 _CREATE_PLAN_TIMEOUT = timedelta(seconds=60)
+
+_ARCHIVE_SNAPSHOT_RETRY = RetryPolicy(
+    initial_interval=timedelta(seconds=1),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(seconds=30),
+    maximum_attempts=5,
+)
+_ARCHIVE_SNAPSHOT_TIMEOUT = timedelta(seconds=30)
 
 _PROVISION_KEY_RETRY = RetryPolicy(
     initial_interval=timedelta(seconds=1),
@@ -90,6 +112,30 @@ _OUTBOX_RETRY = RetryPolicy(
 )
 _OUTBOX_TIMEOUT = timedelta(seconds=30)
 
+_ActorType = Literal["human", "agent", "system"]
+
+
+@dataclass
+class _OpenGate:
+    """One step's open human gate: its definition, and the armed durable
+    timer when the gate carries a timeout. A fired timer acts exactly once;
+    after an on-timeout pause the gate stays open, unarmed, until answered."""
+
+    step_id: str
+    gate: HumanGate
+    deadline: datetime | None = None
+    timer: asyncio.Task[None] | None = None
+
+    @property
+    def timer_fired(self) -> bool:
+        return self.timer is not None and self.timer.done() and not self.timer.cancelled()
+
+    def disarm(self) -> None:
+        if self.timer is not None and not self.timer.done():
+            self.timer.cancel()
+        self.timer = None
+        self.deadline = None
+
 
 def _recompute_ready(plan: Plan) -> None:
     """pending -> ready once every dependency is done or skipped."""
@@ -125,17 +171,29 @@ class AgentRunWorkflow:
         self._paused = False
         self._landing = False
         self._pause_actor = "system"
-        self._pause_actor_type: Literal["human", "agent", "system"] = "system"
+        self._pause_actor_type: _ActorType = "system"
         self._resume_actor = "system"
-        self._resume_actor_type: Literal["human", "agent", "system"] = "system"
+        self._resume_actor_type: _ActorType = "system"
         self._land_actor = "system"
-        self._land_actor_type: Literal["human", "agent", "system"] = "system"
+        self._land_actor_type: _ActorType = "system"
         self._event_seq = 0
         # Budget threshold edges are one-shot per run segment.
-        # TODO: carry these flags (and token totals) across continue_as_new.
+        # TODO: carry these flags (and token totals, gate/approval state)
+        # across continue_as_new.
         self._budget_warned = False
         self._budget_exhausted_emitted = False
         self._tokens = TokenCounts()
+        # Signal mailboxes: signals validate + enqueue, the loop drains.
+        self._steer_inbox: list[SteerMessage] = []
+        self._approval_inbox: list[PlanApprovalDecision] = []
+        self._gate_response_inbox: list[GateResponse] = []
+        # The plan version currently blocked on human approval, if any.
+        self._awaiting_approval_version: int | None = None
+        # Open human gates by step id, and gates already satisfied so a
+        # step's attached gate opens at most once.
+        self._open_gates: dict[str, _OpenGate] = {}
+        self._resolved_step_gates: set[str] = set()
+        self._gate_feed_seq = 0
 
     # ------------------------------------------------------------------ run
 
@@ -170,20 +228,26 @@ class AgentRunWorkflow:
                     retry_policy=_CREATE_PLAN_RETRY,
                 ),
             )
+            if state.policy.require_plan_approval:
+                # The initial plan blocks until a human approves this exact
+                # version, whatever the approval scope narrows later on.
+                self._awaiting_approval_version = state.plan.version
+                state.status = "awaiting_approval"
+            else:
+                state.status = "running"
             await self._emit(
                 "plan_created",
                 payload={
                     "plan": state.plan.model_dump(mode="json"),
                     "plan_version": state.plan.version,
-                    "run_status": "running",
+                    "run_status": state.status,
                 },
             )
-            # TODO: plan approval gate — awaiting_approval status, the
-            # approve_plan signal, and approval scope on revisions.
-
-        state.status = "running"
+        else:
+            state.status = "running"
 
         while not _plan_complete(state.plan):
+            await self._drain_steer_mailbox()
             if await self._enforce_budget() == "abort":
                 state.status = "failed"
                 await self._emit(
@@ -204,17 +268,27 @@ class AgentRunWorkflow:
                 # budget enforcement again before any turn is scheduled.
                 continue
 
+            if await self._approval_boundary():
+                # An approval wait (or decision) consumed this boundary; the
+                # loop re-runs pause/budget checks before scheduling work.
+                continue
+
             _recompute_ready(state.plan)
             step = _next_step(state.plan)
             if step is None:
-                # No ready or running step and the plan is incomplete: with
-                # the linear fixture plan this is unreachable; fail loudly.
-                state.status = "failed"
-                await self._emit(
-                    "run_failed",
-                    payload={"run_status": "failed", "reason": "plan deadlock"},
-                )
-                return RunResult(run_id=state.run_id, status="failed", error="plan deadlock")
+                gate_outcome = await self._gate_boundary()
+                if isinstance(gate_outcome, RunResult):
+                    return gate_outcome
+                if gate_outcome == "deadlock":
+                    # No ready, running, or human-blocked step and the plan
+                    # is incomplete: fail loudly.
+                    state.status = "failed"
+                    await self._emit(
+                        "run_failed",
+                        payload={"run_status": "failed", "reason": "plan deadlock"},
+                    )
+                    return RunResult(run_id=state.run_id, status="failed", error="plan deadlock")
+                continue
 
             if step.status != "running":
                 step.status = "running"
@@ -222,6 +296,16 @@ class AgentRunWorkflow:
                 await self._emit(
                     "step_started", payload={"step_id": step.id, "attempt": step.attempt}
                 )
+
+            # A step that carries a human gate blocks before its first turn:
+            # the gate's answer becomes context for the work itself.
+            if (
+                step.human_gate is not None
+                and step.id not in self._resolved_step_gates
+                and step.id not in self._open_gates
+            ):
+                await self._open_gate(step, step.human_gate, actor="system", actor_type="system")
+                continue
 
             # TODO: subagent fan-out for executor == "subagent" steps.
 
@@ -239,12 +323,14 @@ class AgentRunWorkflow:
             )
             state.pinned_ref = header_ref
 
+            turn_input = self._turn_input(state, step)
+            redirect_ids = [s.id for s in turn_input.steers if s.mode == "redirect"]
             try:
                 result = cast(
                     TurnResult,
                     await workflow.execute_activity(
                         names.RUN_TURN,
-                        args=[self._turn_input(state, step), self._turn_context(state)],
+                        args=[turn_input, self._turn_context(state)],
                         result_type=TurnResult,
                         start_to_close_timeout=_RUN_TURN_TIMEOUT,
                         heartbeat_timeout=_RUN_TURN_HEARTBEAT,
@@ -267,6 +353,29 @@ class AgentRunWorkflow:
             # runs as its own activity with an idempotency key, then the turn
             # resumes with the result).
             self._apply_turn(state, step, result)
+
+            proposed = list(result.proposed_revision or [])
+            if proposed:
+                await self._process_proposal(proposed, redirect_ids)
+                # Applying a revision replaces the plan object; re-resolve
+                # the in-flight step so later transitions hit the live copy.
+                step = next((s for s in state.plan.steps if s.id == step.id), step)
+            elif redirect_ids:
+                # A redirect was delivered and the turn proposed no change:
+                # record the assessment so the steer never forks silently.
+                await self._emit(
+                    "revision_rejected",
+                    actor=state.agent.id,
+                    actor_type="agent",
+                    payload={
+                        "kind": "steer_assessment",
+                        "reason": "plan_already_covers",
+                        "steer_ids": redirect_ids,
+                        "plan_version": state.plan.version,
+                        "transcript_ref": result.transcript_ref.model_dump(mode="json"),
+                    },
+                )
+
             if result.outcome == "step_done":
                 await self._emit(
                     "step_done",
@@ -280,9 +389,18 @@ class AgentRunWorkflow:
                         "budget": self._budget_snapshot(),
                     },
                 )
+            elif result.outcome == "needs_human":
+                gate = result.gate_request or HumanGate(
+                    kind="input", prompt=f"Agent requested human input for step {step.id}"
+                )
+                await self._open_gate(step, gate, actor=state.agent.id, actor_type="agent")
 
             # TODO: continue_as_new at the turn limit with full RunState carry.
 
+        # Landing never races gate timers: every armed timer is cancelled
+        # before wrap-up so no timeout action can fire while landing.
+        for record in self._open_gates.values():
+            record.disarm()
         state.status = "landing"
         await self._emit(
             "landing_started",
@@ -335,28 +453,73 @@ class AgentRunWorkflow:
         self._land_actor = actor
         self._land_actor_type = "human"
 
-    # TODO: steer, approve_plan, human_response signals.
+    @workflow.signal
+    def steer(self, message: SteerMessage) -> None:
+        if not message.id or not message.body:
+            return  # malformed steer — dropped without state change
+        self._steer_inbox.append(message)
+
+    @workflow.signal
+    def approve_plan(self, decision: PlanApprovalDecision) -> None:
+        self._approval_inbox.append(decision)
+
+    @workflow.signal
+    def human_response(self, response: GateResponse) -> None:
+        if not response.step_id:
+            return  # malformed response — dropped without state change
+        self._gate_response_inbox.append(response)
 
     # -------------------------------------------------------------- queries
 
     @workflow.query
     def get_status(self) -> str:
-        # Precedence: landing > paused > derived from steps.
+        # Precedence: landing > paused > derived from plan/approval state.
         if self._state is None:
             return "planning"
-        if self._state.status in ("completed", "failed"):
+        if self._state.status in ("completed", "failed", "landing"):
             return self._state.status
         if self._landing:
             return "landing"
         if self._paused:
             return "paused"
-        return self._state.status
+        if self._state.plan is None:
+            return "planning"
+        return self._base_status()
 
     @workflow.query
     def get_plan(self) -> Plan | None:
         return self._state.plan if self._state else None
 
-    # -------------------------------------------------------------- helpers
+    # -------------------------------------------------- boundaries & waits
+
+    def _base_status(self) -> Literal["running", "awaiting_approval", "blocked_on_human"]:
+        """Run status with the pause/landing overlays stripped: approval
+        waits win, then blocked-on-human derives from the steps (at least
+        one blocked step and nothing ready or running)."""
+        assert self._state is not None
+        if self._awaiting_approval_version is not None:
+            return "awaiting_approval"
+        plan = self._state.plan
+        if plan is not None:
+            active = any(s.status in ("ready", "running") for s in plan.steps)
+            blocked = any(s.status == "blocked_on_human" for s in plan.steps)
+            if blocked and not active:
+                return "blocked_on_human"
+        return "running"
+
+    async def _drain_steer_mailbox(self) -> None:
+        """Move newly signalled steers into the run's pending mailbox and
+        emit their audit events; they ride into the next turn's context."""
+        assert self._state is not None
+        while self._steer_inbox:
+            message = self._steer_inbox.pop(0)
+            self._state.pending_steers.append(message)
+            await self._emit(
+                "steer_received",
+                actor=message.author_id,
+                actor_type=message.author,
+                payload={"steer_id": message.id, "mode": message.mode, "body": message.body},
+            )
 
     async def _enforce_budget(self) -> Literal["continue", "abort"]:
         """Threshold checks at the loop boundary, before the next turn is
@@ -414,16 +577,308 @@ class AgentRunWorkflow:
             actor_type=self._pause_actor_type,
             payload={"run_status": "paused"},
         )
-        await workflow.wait_condition(lambda: not self._paused or self._landing)
+        while self._paused and not self._landing:
+            await workflow.wait_condition(
+                lambda: not self._paused or self._landing or bool(self._steer_inbox)
+            )
+            await self._drain_steer_mailbox()
         if not self._landing:
-            self._state.status = "running"
+            self._state.status = self._base_status()
             await self._emit(
                 "resumed",
                 actor=self._resume_actor,
                 actor_type=self._resume_actor_type,
-                payload={"run_status": "running"},
+                payload={"run_status": self._state.status},
             )
         return True
+
+    async def _approval_boundary(self) -> bool:
+        """Block while the current plan version requires human approval.
+
+        Decisions are drained from the mailbox; only one matching the
+        awaited version counts — stale or wrong-version decisions are
+        dropped without changing state. Approval records the approver on the
+        revision and resumes execution; rejection records the reason and
+        pauses the run for human follow-up, with the approval still owed, so
+        a plain resume re-enters this wait rather than executing an
+        unapproved plan.
+        """
+        assert self._state is not None
+        state = self._state
+        if self._awaiting_approval_version is None:
+            # Nothing is awaiting approval: any queued decision is stale.
+            self._approval_inbox.clear()
+            return False
+        version = self._awaiting_approval_version
+        state.status = "awaiting_approval"
+        if not self._approval_inbox:
+            await workflow.wait_condition(
+                lambda: (
+                    bool(self._approval_inbox)
+                    or self._paused
+                    or self._landing
+                    or bool(self._steer_inbox)
+                )
+            )
+            await self._drain_steer_mailbox()
+        if self._paused or self._landing:
+            return True
+        while self._approval_inbox:
+            decision = self._approval_inbox.pop(0)
+            if decision.plan_version != version:
+                continue  # wrong plan version — dropped, still awaiting
+            assert state.plan is not None
+            if decision.approve:
+                for revision in state.plan.revisions:
+                    if revision.version == version:
+                        revision.approved_by = decision.actor
+                self._awaiting_approval_version = None
+                state.status = "running"
+                await self._emit(
+                    "revision_approved",
+                    actor=decision.actor,
+                    actor_type="human",
+                    payload={"plan_version": version, "run_status": "running"},
+                )
+            else:
+                await self._emit(
+                    "revision_rejected",
+                    actor=decision.actor,
+                    actor_type="human",
+                    payload={
+                        "kind": "human_rejection",
+                        "plan_version": version,
+                        "reason": decision.reason,
+                    },
+                )
+                # The rejection parks the run for follow-up; approval is
+                # still owed for this version.
+                self._paused = True
+                self._pause_actor = decision.actor
+                self._pause_actor_type = "human"
+            break
+        return True
+
+    async def _open_gate(
+        self, step: PlanStep, gate: HumanGate, *, actor: str, actor_type: _ActorType
+    ) -> None:
+        """Block a step on its human gate, arming the durable timeout timer
+        through the RunClock when the gate carries one."""
+        assert self._state is not None
+        step.status = "blocked_on_human"
+        record = _OpenGate(step_id=step.id, gate=gate)
+        if gate.timeout is not None:
+            record.deadline = self._clock.now() + gate.timeout
+            record.timer = asyncio.ensure_future(self._clock.timer(record.deadline))
+        self._open_gates[step.id] = record
+        self._state.status = self._base_status()
+        await self._emit(
+            "gate_opened",
+            actor=actor,
+            actor_type=actor_type,
+            payload={
+                "step_id": step.id,
+                "kind": gate.kind,
+                "prompt": gate.prompt,
+                "timeout_seconds": (
+                    gate.timeout.total_seconds() if gate.timeout is not None else None
+                ),
+                "on_timeout": gate.on_timeout,
+                "run_status": self._state.status,
+            },
+        )
+
+    def _any_gate_timer_fired(self) -> bool:
+        return any(record.timer_fired for record in self._open_gates.values())
+
+    async def _gate_boundary(self) -> RunResult | Literal["waited", "deadlock"]:
+        """Wait while every actionable step is blocked on a human.
+
+        Wakes on a gate response, a gate timeout, a steer to record, or a
+        pause/land request. Responses unblock exactly the step they name —
+        answers for steps that are not blocked are dropped without state
+        change. Timeout actions never fire while paused or landing; a fired
+        timer is processed at the first boundary where the run is active.
+        """
+        assert self._state is not None
+        state = self._state
+        plan = state.plan
+        assert plan is not None
+        if not any(s.status == "blocked_on_human" for s in plan.steps):
+            return "deadlock"
+        state.status = self._base_status()
+        await workflow.wait_condition(
+            lambda: (
+                bool(self._gate_response_inbox)
+                or self._any_gate_timer_fired()
+                or self._paused
+                or self._landing
+                or bool(self._steer_inbox)
+            )
+        )
+        await self._drain_steer_mailbox()
+        if self._paused or self._landing:
+            return "waited"
+
+        while self._gate_response_inbox:
+            response = self._gate_response_inbox.pop(0)
+            step = next((s for s in plan.steps if s.id == response.step_id), None)
+            record = self._open_gates.get(response.step_id)
+            if step is None or step.status != "blocked_on_human" or record is None:
+                continue  # response to a step that is not gated — dropped
+            record.disarm()
+            del self._open_gates[step.id]
+            self._resolved_step_gates.add(step.id)
+            step.status = "running"
+            state.status = self._base_status()
+            # The answer feeds the next turn's context through the steer
+            # mailbox, so the agent sees it in the pinned header and input.
+            self._gate_feed_seq += 1
+            state.pending_steers.append(
+                SteerMessage(
+                    id=f"gate-answer-{step.id}-{self._gate_feed_seq}",
+                    author="human",
+                    author_id=response.actor,
+                    mode="note",
+                    body=response.response,
+                )
+            )
+            await self._emit(
+                "gate_answered",
+                actor=response.actor,
+                actor_type="human",
+                payload={
+                    "step_id": step.id,
+                    "kind": record.gate.kind,
+                    "response": response.response,
+                    "run_status": state.status,
+                },
+            )
+
+        for record in list(self._open_gates.values()):
+            if not record.timer_fired:
+                continue
+            step = next((s for s in plan.steps if s.id == record.step_id), None)
+            record.disarm()
+            if step is None or step.status != "blocked_on_human":
+                continue
+            action = record.gate.on_timeout
+            await self._emit(
+                "gate_timed_out",
+                payload={
+                    "step_id": step.id,
+                    "kind": record.gate.kind,
+                    "on_timeout": action,
+                    "run_status": state.status,
+                },
+            )
+            if action == "pause":
+                # The gate stays open (and unarmed): the run parks until a
+                # human answers, lands, or resumes into the still-open gate.
+                self._paused = True
+                self._pause_actor = "system"
+                self._pause_actor_type = "system"
+            elif action == "skip":
+                del self._open_gates[step.id]
+                self._resolved_step_gates.add(step.id)
+                step.status = "skipped"
+                state.status = self._base_status()
+                await self._emit("step_skipped", payload={"step_id": step.id})
+            else:  # fail
+                del self._open_gates[step.id]
+                self._resolved_step_gates.add(step.id)
+                step.status = "failed"
+                state.status = "failed"
+                await self._emit("step_failed", payload={"step_id": step.id})
+                await self._emit(
+                    "run_failed",
+                    payload={"run_status": "failed", "reason": "gate timed out"},
+                )
+                # TODO: audited retry_step path instead of run failure.
+                return RunResult(
+                    run_id=state.run_id,
+                    status="failed",
+                    error=f"step {step.id} gate timed out",
+                )
+        return "waited"
+
+    async def _process_proposal(self, ops: list[PlanPatchOp], steer_ids: list[str]) -> None:
+        """Validate an agent-proposed revision and, when valid, apply it as
+        the next plan version: snapshot archived, author and reason recorded,
+        and approval required per policy scope before execution continues.
+        Invalid proposals are recorded and dropped — the plan is unchanged.
+        """
+        assert self._state is not None
+        state = self._state
+        plan = state.plan
+        assert plan is not None
+        reason: Literal["steer", "replan"] = "steer" if steer_ids else "replan"
+        remaining = state.budget.cap_usd - state.budget.spent_usd - state.budget.reserved_usd
+        validation = validate_revision(
+            plan,
+            ops,
+            policy=state.policy,
+            budget_remaining=remaining,
+            max_children=state.agent.max_children,
+        )
+        ops_payload = [op.model_dump(mode="json") for op in ops]
+        if not validation.ok or validation.candidate is None:
+            await self._emit(
+                "revision_rejected",
+                actor=state.agent.id,
+                actor_type="agent",
+                payload={
+                    "kind": "validation",
+                    "plan_version": plan.version,
+                    "reasons": validation.errors,
+                    "ops": ops_payload,
+                    "steer_ids": steer_ids,
+                },
+            )
+            return
+
+        candidate = validation.candidate
+        snapshot_ref = cast(
+            ArtifactRef,
+            await workflow.execute_activity(
+                names.ARCHIVE_PLAN_SNAPSHOT,
+                args=[state.run_id, candidate],
+                result_type=ArtifactRef,
+                start_to_close_timeout=_ARCHIVE_SNAPSHOT_TIMEOUT,
+                retry_policy=_ARCHIVE_SNAPSHOT_RETRY,
+            ),
+        )
+        revision = PlanRevision(
+            version=candidate.version,
+            author="agent",
+            author_id=state.agent.id,
+            reason=reason,
+            ops=ops,
+            snapshot_ref=snapshot_ref,
+        )
+        state.plan = candidate.model_copy(update={"revisions": [*candidate.revisions, revision]})
+        needs_approval = requires_approval(ops, state.policy)
+        if needs_approval:
+            self._awaiting_approval_version = state.plan.version
+            state.status = "awaiting_approval"
+        await self._emit(
+            "revision_applied",
+            actor=state.agent.id,
+            actor_type="agent",
+            payload={
+                "plan_version": state.plan.version,
+                "author": "agent",
+                "author_id": state.agent.id,
+                "reason": reason,
+                "ops": ops_payload,
+                "steer_ids": steer_ids,
+                "requires_approval": needs_approval,
+                "plan": state.plan.model_dump(mode="json"),
+                "run_status": state.status,
+            },
+        )
+
+    # -------------------------------------------------------------- helpers
 
     def _budget_snapshot(self) -> dict[str, str]:
         assert self._state is not None
@@ -472,11 +927,13 @@ class AgentRunWorkflow:
             step.outputs = list(result.step_outputs)
             # The working transcript is per step; a fresh step starts clean.
             state.working_transcript_ref = None
-        elif result.outcome == "continue":
+        elif result.outcome in ("continue", "needs_human", "propose_revision"):
+            # The step stays in flight; its transcript head advances so the
+            # next turn (after any gate answer or revision) resumes it.
             state.working_transcript_ref = result.transcript_ref
         else:
-            # needs_human / propose_revision / spawn_group / promote arrive
-            # with later capabilities; the executors cannot produce them yet.
+            # spawn_group / promote arrive with later capabilities; the
+            # executors cannot produce them yet.
             raise ApplicationError(
                 f"turn outcome {result.outcome!r} is not supported yet",
                 non_retryable=True,
@@ -488,7 +945,7 @@ class AgentRunWorkflow:
         *,
         payload: dict[str, Any] | None = None,
         actor: str = "system",
-        actor_type: Literal["human", "agent", "system"] = "system",
+        actor_type: _ActorType = "system",
     ) -> None:
         """Every state change emits a RunEvent through the outbox activity.
         Event identity is deterministic: {run_id}:{seq}."""
