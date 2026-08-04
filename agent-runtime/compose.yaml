@@ -77,6 +77,13 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       CONVOY_LIVE_ANTHROPIC_MODEL: ${CONVOY_LIVE_ANTHROPIC_MODEL:-anthropic/claude-sonnet-5}
       CONVOY_LIVE_OPENAI_MODEL: ${CONVOY_LIVE_OPENAI_MODEL:-openai/gpt-4o}
+      # Environments whose egress goes through a TLS-intercepting proxy can
+      # point CONVOY_PROXY_CA_CERT at the proxy's CA bundle on the host; it is
+      # mounted read-only and trusted for the proxy's outbound model calls.
+      # Unset, this resolves to an empty SSL_CERT_FILE, which Python ignores.
+      SSL_CERT_FILE: ${CONVOY_PROXY_CA_CERT:+/etc/convoy/proxy-ca.crt}
+    volumes:
+      - ${CONVOY_PROXY_CA_CERT:-/dev/null}:/etc/convoy/proxy-ca.crt:ro
     ports:
       - "4000:4000"
     depends_on:
