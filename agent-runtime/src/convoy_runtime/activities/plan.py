@@ -2,20 +2,49 @@
 
 Both return *proposals or refs*; only the workflow applies plan state. The
 fixture planner builds a 2-step linear plan from the pinned goal; it can
-attach human gates to named steps when the run's pinned payload asks for
-them, which is how end-to-end suites exercise gate flows without a real
-model planner.
+attach human gates to named steps, and it can hang a fan-out group between
+the two steps (subagent members plus step-2 as the join), when the run's
+pinned payload asks for them — which is how end-to-end suites exercise gate
+and fan-out flows without a real model planner.
 
 TODO: model-driven planning through the gateway.
 """
 
+from decimal import Decimal
 from typing import Any, cast
 
+from pydantic import BaseModel, Field
 from temporalio import activity
 
-from convoy_core import ArtifactRef, HumanGate, Plan, PlanPatchOp, PlanRevision, PlanStep, RunState
+from convoy_core import (
+    AgentSpec,
+    ArtifactRef,
+    HumanGate,
+    Plan,
+    PlanPatchOp,
+    PlanRevision,
+    PlanStep,
+    RunState,
+)
 from convoy_runtime.activities import names
 from convoy_runtime.providers.artifact_store import ArtifactStore
+
+
+class FanoutFixture(BaseModel):
+    """Fixture-plan fan-out request: a group of `size` subagent members
+    between the investigate step and the summarize step (which becomes the
+    join). Members carry `budget_slice` as their reservation and are marked
+    optional so a tolerated member failure still lands as a valid partial
+    completion; the join stays required. `child_layer` exists so tests can
+    craft depth-guard violations."""
+
+    size: int = Field(ge=1, le=10)
+    budget_slice: Decimal | None = None
+    child_layer: int = 1
+
+
+def fanout_member_ids(size: int) -> list[str]:
+    return [f"fan-{index}" for index in range(1, size + 1)]
 
 
 def build_fixture_plan(
@@ -23,8 +52,13 @@ def build_fixture_plan(
     success_criteria: list[str],
     snapshot_ref: ArtifactRef,
     gates: dict[str, HumanGate] | None = None,
+    fanout: FanoutFixture | None = None,
+    *,
+    agent: AgentSpec | None = None,
 ) -> Plan:
-    """Fixture plan: two linear self-executed steps, optionally gated."""
+    """Fixture plan: two linear self-executed steps, optionally gated, with
+    an optional fan-out group (member subagent specs derived from the run's
+    root agent) hanging between them."""
     gates = gates or {}
     steps = [
         PlanStep(
@@ -32,14 +66,44 @@ def build_fixture_plan(
             description=f"Investigate: {goal}",
             status="ready",
             human_gate=gates.get("step-1"),
-        ),
+        )
+    ]
+    join_depends = ["step-1"]
+    if fanout is not None:
+        if agent is None:
+            raise ValueError("a fan-out fixture needs the root agent to derive member specs")
+        member_ids = fanout_member_ids(fanout.size)
+        for index, member_id in enumerate(member_ids, start=1):
+            steps.append(
+                PlanStep(
+                    id=member_id,
+                    description=f"Fan-out part {index} of: {goal}",
+                    depends_on=["step-1"],
+                    group_id="fanout-1",
+                    executor="subagent",
+                    subagent=AgentSpec(
+                        id=f"{agent.id}-fan-{index}",
+                        layer=fanout.child_layer,
+                        parent_id=agent.id,
+                        max_children=0,
+                        model=agent.model,
+                        tools=list(agent.tools),
+                        prompt_ref=agent.prompt_ref,
+                    ),
+                    budget_slice=fanout.budget_slice,
+                    required=False,
+                    human_gate=gates.get(member_id),
+                )
+            )
+        join_depends = member_ids
+    steps.append(
         PlanStep(
             id="step-2",
             description=f"Summarize findings for: {goal}",
-            depends_on=["step-1"],
+            depends_on=join_depends,
             human_gate=gates.get("step-2"),
-        ),
-    ]
+        )
+    )
     revision = PlanRevision(
         version=1,
         author="system",
@@ -66,6 +130,13 @@ def _parse_fixture_gates(pinned: dict[str, Any]) -> dict[str, HumanGate]:
     }
 
 
+def _parse_fixture_fanout(pinned: dict[str, Any]) -> FanoutFixture | None:
+    raw = pinned.get("fixture_fanout")
+    if not isinstance(raw, dict):
+        return None
+    return FanoutFixture.model_validate(raw)
+
+
 class PlanActivities:
     def __init__(self, store: ArtifactStore) -> None:
         self._store = store
@@ -77,6 +148,7 @@ class PlanActivities:
         raw_criteria = cast(list[Any], pinned.get("success_criteria", []))
         success_criteria = [str(c) for c in raw_criteria]
         gates = _parse_fixture_gates(pinned)
+        fanout = _parse_fixture_fanout(pinned)
 
         # Archive the full plan snapshot first (claim-check discipline): the
         # revision references it; only the ref rides through Temporal.
@@ -86,9 +158,13 @@ class PlanActivities:
             success_criteria,
             ArtifactRef(bucket=self._store.bucket, key=snapshot_key, size_bytes=0, sha256=""),
             gates,
+            fanout,
+            agent=state.agent,
         )
         snapshot_ref = await self._store.put_json(snapshot_key, provisional.model_dump(mode="json"))
-        plan = build_fixture_plan(goal, success_criteria, snapshot_ref, gates)
+        plan = build_fixture_plan(
+            goal, success_criteria, snapshot_ref, gates, fanout, agent=state.agent
+        )
         return plan
 
     @activity.defn(name=names.ARCHIVE_PLAN_SNAPSHOT)

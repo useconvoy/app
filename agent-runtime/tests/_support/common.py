@@ -41,6 +41,7 @@ def fixture_run_state(
     budget_cap_usd: Decimal = Decimal("10"),
     policy: RunPolicy | None = None,
     model: str = "scripted-echo-1",
+    max_children: int = 0,
 ) -> RunState:
     return RunState(
         run_id=run_id,
@@ -51,7 +52,7 @@ def fixture_run_state(
         agent=AgentSpec(
             id=f"{run_id}-root",
             layer=0,
-            max_children=0,
+            max_children=max_children,
             model=model,
             tools=[],
             prompt_ref=fixture_ref(f"runs/{run_id}/prompts/root.json"),

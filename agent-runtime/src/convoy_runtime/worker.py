@@ -17,6 +17,7 @@ from convoy_runtime.activities.land import LandActivities
 from convoy_runtime.activities.model_key import ModelKeyActivities
 from convoy_runtime.activities.outbox import OutboxActivities
 from convoy_runtime.activities.plan import PlanActivities
+from convoy_runtime.activities.subagent import SubagentActivities
 from convoy_runtime.activities.turn import TurnActivities
 from convoy_runtime.codec import runtime_data_converter
 from convoy_runtime.config import RuntimeConfig
@@ -28,6 +29,7 @@ from convoy_runtime.providers.model_keys import LiteLLMKeyProvider
 from convoy_runtime.providers.pydantic_ai_turn import PydanticAITurnExecutor
 from convoy_runtime.providers.turn_executor import ScriptedTurnExecutor, TurnExecutor
 from convoy_runtime.workflows.agent_run import AgentRunWorkflow
+from convoy_runtime.workflows.subagent import SubagentWorkflow
 
 
 def build_turn_executor(
@@ -79,11 +81,12 @@ async def run_worker(config: RuntimeConfig) -> None:
     outbox_activities = OutboxActivities(projections)
     context_activities = ContextActivities(store)
     model_key_activities = ModelKeyActivities(key_provider)
+    subagent_activities = SubagentActivities(store)
 
     worker = Worker(
         client,
         task_queue=config.task_queue,
-        workflows=[AgentRunWorkflow],
+        workflows=[AgentRunWorkflow, SubagentWorkflow],
         activities=[
             plan_activities.create_plan,
             plan_activities.archive_plan_snapshot,
@@ -92,6 +95,9 @@ async def run_worker(config: RuntimeConfig) -> None:
             outbox_activities.emit_run_events,
             context_activities.assemble_pinned_header,
             model_key_activities.provision_model_key,
+            subagent_activities.assemble_subagent_header,
+            subagent_activities.wrap_subagent_result,
+            subagent_activities.archive_subagent_result,
         ],
     )
     logging.getLogger(__name__).info("worker started on task queue %s", config.task_queue)

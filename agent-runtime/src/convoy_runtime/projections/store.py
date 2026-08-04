@@ -52,10 +52,12 @@ class StepProjection(BaseModel):
 
 
 class RunProjection(BaseModel):
-    """User-facing view of a run, served exclusively from Postgres."""
+    """User-facing view of a run, served exclusively from Postgres. A
+    subagent child run is a row of its own, linked by `parent_run_id`."""
 
     run_id: str
     tenant_id: str
+    parent_run_id: str | None = None
     status: str
     goal: str
     plan: dict[str, Any] | None = None
@@ -123,6 +125,30 @@ class ProjectionStore:
         """Fold one event into the console rollups. Every branch is an
         idempotent upsert, so replays and outbox retries are harmless."""
         payload = event.payload
+        if event.type == "child_spawned":
+            # A spawned child gets its own run row, linked to the parent, so
+            # child progress is visible through the same console read path.
+            # The parent emits this before starting the child, so the row
+            # exists by the time child events fold into it.
+            child_run_id = payload.get("child_run_id")
+            if isinstance(child_run_id, str):
+                await conn.execute(
+                    """
+                    INSERT INTO runs
+                        (tenant_id, run_id, parent_run_id, status, goal, budget_cap_usd)
+                    VALUES (%s, %s, %s, 'running', %s, %s)
+                    ON CONFLICT (run_id) DO UPDATE SET
+                        parent_run_id = EXCLUDED.parent_run_id,
+                        updated_at = now()
+                    """,
+                    (
+                        event.tenant_id,
+                        child_run_id,
+                        event.run_id,
+                        str(payload.get("goal") or ""),
+                        _decimal_or_none(payload.get("budget_reserved")),
+                    ),
+                )
         run_status = payload.get("run_status")
         if isinstance(run_status, str):
             await conn.execute(
@@ -228,9 +254,9 @@ class ProjectionStore:
         async with self._db.tenant_connection(tenant_id) as conn:
             cursor = await conn.execute(
                 """
-                SELECT tenant_id, run_id, status, goal, plan, land_report,
-                       budget_cap_usd, budget_spent_usd, budget_reserved_usd,
-                       created_at, updated_at
+                SELECT tenant_id, run_id, parent_run_id, status, goal, plan,
+                       land_report, budget_cap_usd, budget_spent_usd,
+                       budget_reserved_usd, created_at, updated_at
                 FROM runs WHERE run_id = %s
                 """,
                 (run_id,),

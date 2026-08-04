@@ -1,5 +1,6 @@
 """Grant validation and intersection: inline tools must be read-only, unknown
-requests fail fast, and effective tools are the two-sided intersection."""
+requests fail fast, effective tools are the two-sided intersection, and
+delegation to a subagent can only ever narrow what the parent holds."""
 
 import pytest
 
@@ -7,6 +8,7 @@ from convoy_core import PermissionScope, ToolGrant
 from convoy_runtime.providers.grants import (
     GrantValidationError,
     effective_inline_tools,
+    intersect_grants,
     resolve_requested_tools,
     validate_grants,
 )
@@ -85,3 +87,33 @@ def test_effective_inline_tools_respects_agent_side_declaration() -> None:
     # The agent's own grant marks the tool promoted; it must not run inline.
     agent_tools = [grant("kb_lookup", execution="promoted")]
     assert effective_inline_tools(agent_tools, REGISTRY) == []
+
+
+def test_intersect_grants_drops_tools_the_parent_lacks() -> None:
+    parent = [grant("kb_lookup"), grant("kb_search")]
+    requested = [grant("kb_search"), grant("kb_delete"), grant("payments_send")]
+    delegated = intersect_grants(requested, parent)
+    assert [g.tool_id for g in delegated] == ["kb_search"]
+
+
+def test_intersect_grants_parent_entry_is_authoritative() -> None:
+    # The child re-describes a tool as a harmless inline read; the parent's
+    # promoted side-effecting grant is what gets delegated — a child can
+    # never widen (or re-classify) a capability by asking differently.
+    parent = [grant("kb_delete", execution="promoted", side_effecting=True, resource="kb:archive")]
+    requested = [grant("kb_delete", execution="inline", side_effecting=False, resource="kb:*")]
+    delegated = intersect_grants(requested, parent)
+    assert len(delegated) == 1
+    assert delegated[0].execution == "promoted"
+    assert delegated[0].side_effecting is True
+    assert delegated[0].scope.resource == "kb:archive"
+
+
+def test_intersect_grants_dedupes_repeated_requests() -> None:
+    parent = [grant("kb_lookup")]
+    requested = [grant("kb_lookup"), grant("kb_lookup")]
+    assert [g.tool_id for g in intersect_grants(requested, parent)] == ["kb_lookup"]
+
+
+def test_intersect_grants_empty_parent_delegates_nothing() -> None:
+    assert intersect_grants([grant("kb_lookup")], []) == []

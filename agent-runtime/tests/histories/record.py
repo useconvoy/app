@@ -3,11 +3,13 @@
 Run via `make record-history`. Re-record only with a rationale in the commit
 message; prefer `workflow.patched` versioning for live-run compatibility.
 
-Three representative histories are recorded: the linear happy path; a
+Four representative histories are recorded: the linear happy path; a
 budget-exhausted run under the land policy (warning + exhaustion + landing);
-and a human-in-the-loop run exercising plan approval, a redirect steer whose
-assessed revision is approved mid-run, and an answered human gate — so replay
-coverage includes the budget, approval, steer, and gate surfaces.
+a human-in-the-loop run exercising plan approval, a redirect steer whose
+assessed revision is approved mid-run, and an answered human gate; and a
+fan-out run whose two children spawn concurrently with one member failing
+under join_with_partials — so replay coverage includes the budget, approval,
+steer, gate, and spawn/gather/reservation surfaces.
 """
 
 import asyncio
@@ -36,8 +38,10 @@ from convoy_core import (  # noqa: E402
     RunState,
     SteerMessage,
 )
+from convoy_runtime.activities.plan import FanoutFixture  # noqa: E402
 from convoy_runtime.signals import GateResponse, PlanApprovalDecision  # noqa: E402
 from convoy_runtime.workflows.agent_run import AgentRunWorkflow  # noqa: E402
+from convoy_runtime.workflows.subagent import SubagentWorkflow  # noqa: E402
 
 HISTORIES_DIR = Path(__file__).resolve().parent
 RECORDER = "recorder@convoy.test"
@@ -56,7 +60,7 @@ async def _record(name: str, fake: FakeRuntime, state: RunState) -> Path:
         Worker(
             env.client,
             task_queue=TEST_TASK_QUEUE,
-            workflows=[AgentRunWorkflow],
+            workflows=[AgentRunWorkflow, SubagentWorkflow],
             activities=fake.activities,
         ),
     ):
@@ -109,7 +113,7 @@ async def _record_human_in_the_loop(name: str) -> Path:
         Worker(
             env.client,
             task_queue=TEST_TASK_QUEUE,
-            workflows=[AgentRunWorkflow],
+            workflows=[AgentRunWorkflow, SubagentWorkflow],
             activities=fake.activities,
         ),
     ):
@@ -153,6 +157,59 @@ async def _record_human_in_the_loop(name: str) -> Path:
     return out
 
 
+async def _record_fanout(name: str) -> list[Path]:
+    """Fan-out choreography: two children spawned concurrently, reservations
+    carved and refunded, one member failing into join_with_partials, the join
+    proceeding over the gap. The parent's history and both children's own
+    histories are recorded, so the spawn/gather surface and the child
+    workflow (clean and failing wrap-ups) are all replay-guarded."""
+    fake = FakeRuntime(
+        plan_fanout=FanoutFixture(size=2, budget_slice=Decimal("1.00")),
+        child_turns={
+            "fan-1": [ScriptedTurn(cost_usd=Decimal("0.25"))],
+            "fan-2": [ScriptedTurn(outcome="fail")],
+        },
+    )
+    state = fixture_run_state(
+        run_id="run-history-fanout",
+        max_children=2,
+        policy=RunPolicy(require_plan_approval=False, max_parallel=2),
+    )
+    env = await start_time_skipping_env()
+    histories: dict[str, str] = {}
+    async with (
+        env,
+        Worker(
+            env.client,
+            task_queue=TEST_TASK_QUEUE,
+            workflows=[AgentRunWorkflow, SubagentWorkflow],
+            activities=fake.activities,
+        ),
+    ):
+        handle = await env.client.start_workflow(
+            AgentRunWorkflow.run,
+            args=[state, RECORDER],
+            id=state.run_id,
+            task_queue=TEST_TASK_QUEUE,
+        )
+        await handle.result()
+        parent_history = await handle.fetch_history()
+        histories[name] = json.dumps(parent_history.to_json_dict(), indent=2, sort_keys=True)
+        for member, suffix in (("fan-1", "child_done"), ("fan-2", "child_failed")):
+            child_handle = env.client.get_workflow_handle(f"{state.run_id}--{member}-a1")
+            child_history = await child_handle.fetch_history()
+            histories[f"{name}_{suffix}"] = json.dumps(
+                child_history.to_json_dict(), indent=2, sort_keys=True
+            )
+
+    paths: list[Path] = []
+    for history_name, payload in histories.items():
+        out = HISTORIES_DIR / f"{history_name}.json"
+        out.write_text(payload + "\n")
+        paths.append(out)
+    return paths
+
+
 async def record_all() -> list[Path]:
     return [
         await _record(
@@ -173,6 +230,7 @@ async def record_all() -> list[Path]:
             ),
         ),
         await _record_human_in_the_loop("human_in_the_loop"),
+        *await _record_fanout("fanout_partial_join"),
     ]
 
 

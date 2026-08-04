@@ -44,6 +44,24 @@ def resolve_requested_tools(
     return grants
 
 
+def intersect_grants(requested: list[ToolGrant], held: list[ToolGrant]) -> list[ToolGrant]:
+    """Delegation intersection: a subagent may hold only tools its parent
+    effectively holds. For every tool the child requests that the parent has,
+    the parent's grant is the one delegated — the parent entry is
+    authoritative for scope, execution mode, and side-effect classification,
+    so a child can never widen a capability by re-describing it."""
+    by_id = {grant.tool_id: grant for grant in held}
+    delegated: list[ToolGrant] = []
+    seen: set[str] = set()
+    for request in requested:
+        grant = by_id.get(request.tool_id)
+        if grant is None or request.tool_id in seen:
+            continue
+        seen.add(request.tool_id)
+        delegated.append(grant)
+    return delegated
+
+
 def effective_inline_tools(
     agent_tools: list[ToolGrant], registry: list[ToolGrant]
 ) -> list[ToolGrant]:

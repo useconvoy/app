@@ -154,6 +154,17 @@ async def create_run(
         except ModelGatewayError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
 
+    # A fixture fan-out group must fit under the agent's child cap — reject
+    # at the API instead of a deterministic spawn failure mid-run.
+    if body.fixture_fanout is not None and body.fixture_fanout.size > body.max_children:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"fixture_fanout.size {body.fixture_fanout.size} exceeds "
+                f"max_children {body.max_children}"
+            ),
+        )
+
     # Pin the resolved binding as an immutable snapshot for the run's lifetime.
     binding_ref = await store.put_json(
         f"runs/{run_id}/binding.json", binding.model_dump(mode="json")
@@ -166,6 +177,8 @@ async def create_run(
         pinned_payload["fixture_gates"] = {
             step_id: gate.model_dump(mode="json") for step_id, gate in body.fixture_gates.items()
         }
+    if body.fixture_fanout is not None:
+        pinned_payload["fixture_fanout"] = body.fixture_fanout.model_dump(mode="json")
     pinned_ref = await store.put_json(f"runs/{run_id}/pinned.json", pinned_payload)
     prompt_ref = await store.put_json(
         f"runs/{run_id}/prompts/root.json",
@@ -192,7 +205,7 @@ async def create_run(
         agent=AgentSpec(
             id=f"{run_id}-root",
             layer=0,
-            max_children=0,
+            max_children=body.max_children,
             model=model,
             tools=grants,
             prompt_ref=prompt_ref,
@@ -347,6 +360,7 @@ async def get_run(request: Request, run_id: str, actor: ActorDep) -> RunView:
     return RunView(
         run_id=run.run_id,
         tenant_id=run.tenant_id,
+        parent_run_id=run.parent_run_id,
         status=run.status,
         goal=run.goal,
         plan=run.plan,

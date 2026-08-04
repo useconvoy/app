@@ -5,6 +5,7 @@
 CREATE TABLE IF NOT EXISTS runs (
     tenant_id           text        NOT NULL,
     run_id              text        PRIMARY KEY,
+    parent_run_id       text,
     status              text        NOT NULL,
     goal                text        NOT NULL DEFAULT '',
     plan                jsonb,
@@ -16,10 +17,14 @@ CREATE TABLE IF NOT EXISTS runs (
     updated_at          timestamptz NOT NULL DEFAULT now()
 );
 
--- Reused volumes predating the budget columns pick them up here.
+-- Reused volumes predating newer columns pick them up here.
 ALTER TABLE runs ADD COLUMN IF NOT EXISTS budget_cap_usd      numeric;
 ALTER TABLE runs ADD COLUMN IF NOT EXISTS budget_spent_usd    numeric;
 ALTER TABLE runs ADD COLUMN IF NOT EXISTS budget_reserved_usd numeric;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS parent_run_id       text;
+
+-- Child runs of a parent, in one indexed lookup.
+CREATE INDEX IF NOT EXISTS runs_parent_idx ON runs (tenant_id, parent_run_id);
 
 CREATE TABLE IF NOT EXISTS run_events (
     tenant_id  text        NOT NULL,

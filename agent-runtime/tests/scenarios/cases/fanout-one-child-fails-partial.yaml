@@ -1,0 +1,54 @@
+# One member of a fan-out group fails under the default partial-failure
+# policy (join_with_partials): its child run wraps up as failed, the parent
+# refunds its whole slice, the join step still proceeds over the surviving
+# result with the gap flagged on its start event and fed into its context.
+name: fanout-one-child-fails-partial
+run:
+  budget_cap_usd: "10"
+  max_children: 2
+  fanout:
+    size: 2
+    budget_slice: "1.00"
+  policy:
+    max_parallel: 1
+    on_group_partial_failure: join_with_partials
+child_turns:
+  fan-1:
+    - {cost_usd: "0.25", outcome: step_done}
+  fan-2:
+    - {outcome: fail}
+expect:
+  final_status: completed
+  land_status: completed   # members are optional; the required join ran
+  events:
+    - run_started
+    - plan_created
+    - step_started        # step-1 (self)
+    - step_done
+    - step_started        # fan-1
+    - child_spawned
+    - run_started
+    - step_started
+    - step_done
+    - run_completed
+    - child_landed
+    - step_done
+    - step_started        # fan-2
+    - child_spawned
+    - run_started         # child fan-2's stream: its turn fails
+    - step_started
+    - step_failed
+    - run_failed
+    - child_landed        # a failed child still lands a typed result
+    - step_failed         # the member step fails into the group policy
+    - step_started        # the join proceeds anyway, gap flagged
+    - step_done
+    - landing_started
+    - run_completed
+  turn_calls: 4
+  budget_spent: "0.2502"
+  budget_reserved: "0"
+  join_gap: [fan-2]
+  child_refunds:
+    fan-1: "0.75"
+    fan-2: "1.00"         # nothing spent before the failure — full refund

@@ -2,13 +2,17 @@
 
 Scenario files under cases/ describe one end-to-end behavior each: the run's
 budget and policy, the scripted turn results (including gate requests and
-proposed revisions), human gates attached to fixture-plan steps, external
-signals keyed to observed events (pause/resume/land, steers, plan approval
-decisions, gate responses), and the expected outcome (final status, exact
-event sequence, budget totals, turn count, final plan version). The runner
-executes them against the real workflow in the time-skipping environment with
-the scripted fakes; a "skip_time" action advances the environment clock so
-durable timers (gate timeouts) fire deterministically.
+proposed revisions), human gates attached to fixture-plan steps, a fan-out
+group with per-child scripted turns, external signals keyed to observed
+events (pause/resume/land, steers, plan approval decisions, gate responses),
+and the expected outcome (final status, exact event sequence — parent and
+child events interleaved, budget totals, turn count, final plan version). The
+runner executes them against the real workflows in the time-skipping
+environment with the scripted fakes; a "skip_time" action advances the
+environment clock so durable timers (gate timeouts) fire deterministically.
+The reservation invariant — spent + reserved never over the cap without a
+declared budget exhaustion — is asserted at every budget snapshot of every
+scenario.
 """
 
 import asyncio
@@ -26,8 +30,10 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from convoy_core import HumanGate, PlanPatchOp, RunPolicy, RunResult, SteerMessage
+from convoy_runtime.activities.plan import FanoutFixture
 from convoy_runtime.signals import GateResponse, PlanApprovalDecision
 from convoy_runtime.workflows.agent_run import AgentRunWorkflow
+from convoy_runtime.workflows.subagent import SubagentWorkflow
 
 CASES_DIR = Path(__file__).parent / "cases"
 
@@ -65,20 +71,28 @@ class ScenarioExpect:
     final_status: Literal["completed", "failed"]
     events: list[str] = field(default_factory=lambda: cast(list[str], []))
     budget_spent: Decimal | None = None
+    budget_reserved: Decimal | None = None
     turn_calls: int | None = None
     land_status: str | None = None
     error_contains: str | None = None
     plan_version: int | None = None
     revision_steer_linked: bool = False
+    # Failed member ids the join step must flag on its start event.
+    join_gap: list[str] = field(default_factory=lambda: cast(list[str], []))
+    # (step_id, refund) pairs asserted against child_landed events.
+    child_refunds: dict[str, Decimal] = field(default_factory=lambda: cast(dict[str, Decimal], {}))
 
 
 @dataclass(frozen=True)
 class Scenario:
     name: str
     budget_cap_usd: Decimal
+    max_children: int
     policy: RunPolicy
     gates: dict[str, HumanGate]
+    fanout: FanoutFixture | None
     turns: list[ScriptedTurn]
+    child_turns: dict[str, list[ScriptedTurn]]
     actions: list[ScenarioAction]
     expect: ScenarioExpect
 
@@ -112,7 +126,14 @@ def load_scenario(path: Path) -> Scenario:
         str(step_id): _parse_gate(cast("dict[str, Any]", gate))
         for step_id, gate in cast("dict[Any, Any]", run.get("gates", {})).items()
     }
+    fanout = (
+        FanoutFixture.model_validate(run["fanout"]) if isinstance(run.get("fanout"), dict) else None
+    )
     turns = [_parse_turn(cast("dict[str, Any]", turn)) for turn in raw.get("turns", [])]
+    child_turns = {
+        str(step_id): [_parse_turn(cast("dict[str, Any]", turn)) for turn in scripts]
+        for step_id, scripts in cast("dict[Any, list[Any]]", raw.get("child_turns", {})).items()
+    }
     actions = [
         ScenarioAction(
             after_event=action["after_event"],
@@ -136,18 +157,31 @@ def load_scenario(path: Path) -> Scenario:
         budget_spent=(
             Decimal(str(expect_raw["budget_spent"])) if "budget_spent" in expect_raw else None
         ),
+        budget_reserved=(
+            Decimal(str(expect_raw["budget_reserved"])) if "budget_reserved" in expect_raw else None
+        ),
         turn_calls=expect_raw.get("turn_calls"),
         land_status=expect_raw.get("land_status"),
         error_contains=expect_raw.get("error_contains"),
         plan_version=expect_raw.get("plan_version"),
         revision_steer_linked=expect_raw.get("revision_steer_linked", False),
+        join_gap=list(expect_raw.get("join_gap", [])),
+        child_refunds={
+            str(step_id): Decimal(str(refund))
+            for step_id, refund in cast(
+                "dict[Any, Any]", expect_raw.get("child_refunds", {})
+            ).items()
+        },
     )
     return Scenario(
         name=raw["name"],
         budget_cap_usd=Decimal(str(run.get("budget_cap_usd", "10"))),
+        max_children=int(run.get("max_children", 0)),
         policy=policy,
         gates=gates,
+        fanout=fanout,
         turns=turns,
+        child_turns=child_turns,
         actions=actions,
         expect=expect,
     )
@@ -206,11 +240,17 @@ async def _send_action(
 
 
 async def run_scenario(scenario: Scenario) -> tuple[RunResult, FakeRuntime]:
-    fake = FakeRuntime(turns=scenario.turns, plan_gates=scenario.gates)
+    fake = FakeRuntime(
+        turns=scenario.turns,
+        plan_gates=scenario.gates,
+        plan_fanout=scenario.fanout,
+        child_turns=scenario.child_turns,
+    )
     state = fixture_run_state(
         run_id=f"run-scenario-{scenario.name}",
         budget_cap_usd=scenario.budget_cap_usd,
         policy=scenario.policy,
+        max_children=scenario.max_children,
     )
     env = await start_time_skipping_env()
     async with (
@@ -218,7 +258,7 @@ async def run_scenario(scenario: Scenario) -> tuple[RunResult, FakeRuntime]:
         Worker(
             env.client,
             task_queue=TEST_TASK_QUEUE,
-            workflows=[AgentRunWorkflow],
+            workflows=[AgentRunWorkflow, SubagentWorkflow],
             activities=fake.activities,
         ),
     ):
@@ -235,6 +275,16 @@ async def run_scenario(scenario: Scenario) -> tuple[RunResult, FakeRuntime]:
     return result, fake
 
 
+def _parent_budget_snapshots(fake: FakeRuntime) -> list[tuple[str, dict[str, Any]]]:
+    """(event type, budget snapshot) pairs from the parent's own events —
+    children carry their own budget payloads against their own caps."""
+    return [
+        (e.type, cast("dict[str, Any]", e.payload["budget"]))
+        for e in fake.events
+        if e.run_id == fake.root_run_id and isinstance(e.payload.get("budget"), dict)
+    ]
+
+
 def assert_scenario(scenario: Scenario, result: RunResult, fake: FakeRuntime) -> None:
     expect = scenario.expect
     assert result.status == expect.final_status, (
@@ -248,18 +298,40 @@ def assert_scenario(scenario: Scenario, result: RunResult, fake: FakeRuntime) ->
         assert fake.turn_calls == expect.turn_calls, (
             f"{scenario.name}: turn_calls {fake.turn_calls} != {expect.turn_calls}"
         )
+
+    # Reservation invariant, every scenario, every snapshot: committed spend
+    # (spent + reserved) never exceeds the cap silently — an overshoot is
+    # only legal in a run that declared budget exhaustion.
+    snapshots = _parent_budget_snapshots(fake)
+    declared = any(
+        e.type == "budget_exhausted" and e.run_id == fake.root_run_id for e in fake.events
+    )
+    for event_type, budget in snapshots:
+        committed = Decimal(str(budget["spent_usd"])) + Decimal(str(budget["reserved_usd"]))
+        assert committed <= scenario.budget_cap_usd or declared, (
+            f"{scenario.name}: spent+reserved {committed} exceeds cap "
+            f"{scenario.budget_cap_usd} at {event_type} without budget_exhausted"
+        )
+
     if expect.budget_spent is not None:
-        snapshots = [
-            e.payload["budget"] for e in fake.events if isinstance(e.payload.get("budget"), dict)
-        ]
         assert snapshots, f"{scenario.name}: no budget snapshots in events"
-        assert Decimal(str(snapshots[-1]["spent_usd"])) == expect.budget_spent
-        # Committed spend never exceeds the cap silently: the moment it does,
-        # the run must have emitted budget_exhausted.
-        final = snapshots[-1]
-        committed = Decimal(str(final["spent_usd"])) + Decimal(str(final["reserved_usd"]))
-        if committed >= scenario.budget_cap_usd:
-            assert "budget_exhausted" in fake.event_types
+        assert Decimal(str(snapshots[-1][1]["spent_usd"])) == expect.budget_spent
+    if expect.budget_reserved is not None:
+        assert snapshots, f"{scenario.name}: no budget snapshots in events"
+        assert Decimal(str(snapshots[-1][1]["reserved_usd"])) == expect.budget_reserved
+    if expect.join_gap:
+        flagged = [
+            e
+            for e in fake.events_of("step_started")
+            if e.run_id == fake.root_run_id and "joined_with_failures" in e.payload
+        ]
+        assert flagged, f"{scenario.name}: no join start flagged a group gap"
+        assert flagged[-1].payload["joined_with_failures"] == expect.join_gap
+    for step_id, refund in expect.child_refunds.items():
+        landed = [e for e in fake.events_of("child_landed") if e.payload["step_id"] == step_id]
+        assert landed, f"{scenario.name}: no child_landed event for {step_id}"
+        actual = Decimal(str(landed[-1].payload["refund_usd"]))
+        assert actual == refund, f"{scenario.name}: child {step_id} refund {actual} != {refund}"
     if expect.land_status is not None:
         assert result.land_report is not None
         assert result.land_report.status == expect.land_status

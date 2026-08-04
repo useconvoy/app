@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from convoy_core import HumanGate, RunPolicy
+from convoy_runtime.activities.plan import FanoutFixture
 
 
 class CreateRunRequest(BaseModel):
@@ -22,6 +23,9 @@ class CreateRunRequest(BaseModel):
     # Tool ids requested for the agent, resolved against the environment's
     # registry at creation; unknown or invalid requests are rejected.
     tools: list[str] = []
+    # How many subagent children the root agent may hold at once; fan-out
+    # groups larger than this are rejected.
+    max_children: int = Field(default=5, ge=0, le=10)
     # Run policy overrides (approval, budget action, etc.). Plan approval
     # follows the environment kind (off for sandbox, on for production)
     # unless the policy sets require_plan_approval explicitly.
@@ -30,6 +34,9 @@ class CreateRunRequest(BaseModel):
     # planner so gate flows can be exercised end to end without a real model
     # planner producing gated plans.
     fixture_gates: dict[str, HumanGate] = {}
+    # Fan-out group to hang into the fixture plan, honored by the stub
+    # planner so subagent flows can be exercised end to end.
+    fixture_fanout: FanoutFixture | None = None
 
 
 class CreateRunResponse(BaseModel):
@@ -92,10 +99,12 @@ class StepView(BaseModel):
 
 
 class RunView(BaseModel):
-    """Served from Postgres projections only — never from Temporal."""
+    """Served from Postgres projections only — never from Temporal. Subagent
+    child runs are rows of their own, linked back by `parent_run_id`."""
 
     run_id: str
     tenant_id: str
+    parent_run_id: str | None = None
     status: str
     goal: str
     plan: dict[str, Any] | None = None
