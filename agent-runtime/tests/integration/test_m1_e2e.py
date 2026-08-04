@@ -357,12 +357,13 @@ def test_every_emitted_event_type_lands_in_postgres_and_streams_in_order(
     _wait_status(api, abort_run_id, {"failed"})
     seen.update(_assert_sse_matches_postgres(api, abort_run_id))
 
-    # The complete event surface the runtime emits today.
+    # The complete event surface these linear-run flows emit today.
     assert seen == {
         "run_started",
         "plan_created",
         "step_started",
         "step_done",
+        "compaction_applied",
         "paused",
         "resumed",
         "budget_warning",

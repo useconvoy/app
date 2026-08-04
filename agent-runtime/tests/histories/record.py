@@ -1,15 +1,21 @@
 """Re-record checked-in replay histories.
 
-Run via `make record-history`. Re-record only with a rationale in the commit
-message; prefer `workflow.patched` versioning for live-run compatibility.
+Run via `make record-history` (all of them) or with history names as
+arguments to re-record a subset. Re-record only with a rationale in the
+commit message; prefer `workflow.patched` versioning for live-run
+compatibility — the pre-compaction histories here stay checked in unchanged
+and replay through the step-compaction patch marker.
 
-Four representative histories are recorded: the linear happy path; a
-budget-exhausted run under the land policy (warning + exhaustion + landing);
-a human-in-the-loop run exercising plan approval, a redirect steer whose
-assessed revision is approved mid-run, and an answered human gate; and a
-fan-out run whose two children spawn concurrently with one member failing
-under join_with_partials — so replay coverage includes the budget, approval,
-steer, gate, and spawn/gather/reservation surfaces.
+Five representative recordings: the linear happy path; a budget-exhausted
+run under the land policy (warning + exhaustion + landing); a
+human-in-the-loop run exercising plan approval, a redirect steer whose
+assessed revision is approved mid-run, and an answered human gate; a fan-out
+run whose two children spawn concurrently with one member failing under
+join_with_partials; and a durability run whose first turn promotes a tool
+call, whose long step folds mid-step and distills at step end, and which
+hops via continue_as_new (both segments recorded) — so replay coverage
+includes the budget, approval, steer, gate, spawn/gather/reservation,
+promotion, compaction, and hop surfaces.
 """
 
 import asyncio
@@ -25,6 +31,7 @@ sys.path.insert(0, str(TESTS_DIR))
 
 from _support.common import (  # noqa: E402
     TEST_TASK_QUEUE,
+    fixture_carry,
     fixture_run_state,
     start_time_skipping_env,
 )
@@ -39,6 +46,7 @@ from convoy_core import (  # noqa: E402
     SteerMessage,
 )
 from convoy_runtime.activities.plan import FanoutFixture  # noqa: E402
+from convoy_runtime.carry import RunCarry  # noqa: E402
 from convoy_runtime.signals import GateResponse, PlanApprovalDecision  # noqa: E402
 from convoy_runtime.workflows.agent_run import AgentRunWorkflow  # noqa: E402
 from convoy_runtime.workflows.subagent import SubagentWorkflow  # noqa: E402
@@ -76,6 +84,52 @@ async def _record(name: str, fake: FakeRuntime, state: RunState) -> Path:
     out = HISTORIES_DIR / f"{name}.json"
     out.write_text(json.dumps(history.to_json_dict(), indent=2, sort_keys=True) + "\n")
     return out
+
+
+async def _record_durability(name: str) -> list[Path]:
+    """Promote + compaction + continue_as_new choreography: step-1's first
+    turn promotes a data-plane tool, its three-turn transcript folds
+    mid-step, its completion distills a summary, and the tight segment limit
+    hops the run before step-2. Both the hopping segment and the
+    continuation segment are recorded and replay-guarded."""
+    fake = FakeRuntime(
+        turns=[
+            ScriptedTurn(promote_tool="kb_delete", outcome="continue"),
+            ScriptedTurn(outcome="continue"),
+            ScriptedTurn(outcome="step_done"),
+            ScriptedTurn(),
+        ],
+    )
+    state = fixture_run_state(run_id="run-history-durability")
+    carry: RunCarry = fixture_carry(turn_limit=3, midstep_compaction_tokens=50)
+    env = await start_time_skipping_env()
+    async with (
+        env,
+        Worker(
+            env.client,
+            task_queue=TEST_TASK_QUEUE,
+            workflows=[AgentRunWorkflow, SubagentWorkflow],
+            activities=fake.activities,
+        ),
+    ):
+        handle = await env.client.start_workflow(
+            AgentRunWorkflow.run,
+            args=[state, RECORDER, carry],
+            id=state.run_id,
+            task_queue=TEST_TASK_QUEUE,
+        )
+        await handle.result()
+        first = await env.client.get_workflow_handle(
+            state.run_id, run_id=handle.first_execution_run_id
+        ).fetch_history()
+        latest = await env.client.get_workflow_handle(state.run_id).fetch_history()
+
+    paths: list[Path] = []
+    for suffix, history in (("", first), ("_hop2", latest)):
+        out = HISTORIES_DIR / f"{name}{suffix}.json"
+        out.write_text(json.dumps(history.to_json_dict(), indent=2, sort_keys=True) + "\n")
+        paths.append(out)
+    return paths
 
 
 async def _record_human_in_the_loop(name: str) -> Path:
@@ -210,32 +264,49 @@ async def _record_fanout(name: str) -> list[Path]:
     return paths
 
 
-async def record_all() -> list[Path]:
-    return [
-        await _record(
-            "happy_path", FakeRuntime(), fixture_run_state(run_id="run-history-happy-path")
-        ),
-        await _record(
-            "budget_exhausted_land",
-            FakeRuntime(
-                turns=[
-                    ScriptedTurn(cost_usd=Decimal("0.85")),
-                    ScriptedTurn(cost_usd=Decimal("0.20"), outcome="continue"),
-                ]
-            ),
-            fixture_run_state(
-                run_id="run-history-budget-land",
-                budget_cap_usd=Decimal("1.00"),
-                policy=RunPolicy(require_plan_approval=False, on_budget_exhausted="land"),
-            ),
-        ),
-        await _record_human_in_the_loop("human_in_the_loop"),
-        *await _record_fanout("fanout_partial_join"),
-    ]
+async def record_all(only: set[str] | None = None) -> list[Path]:
+    """Record every history, or just the named subset (so adding a new
+    recording never silently rewrites the existing ones)."""
+
+    def wanted(name: str) -> bool:
+        return only is None or name in only
+
+    paths: list[Path] = []
+    if wanted("happy_path"):
+        paths.append(
+            await _record(
+                "happy_path", FakeRuntime(), fixture_run_state(run_id="run-history-happy-path")
+            )
+        )
+    if wanted("budget_exhausted_land"):
+        paths.append(
+            await _record(
+                "budget_exhausted_land",
+                FakeRuntime(
+                    turns=[
+                        ScriptedTurn(cost_usd=Decimal("0.85")),
+                        ScriptedTurn(cost_usd=Decimal("0.20"), outcome="continue"),
+                    ]
+                ),
+                fixture_run_state(
+                    run_id="run-history-budget-land",
+                    budget_cap_usd=Decimal("1.00"),
+                    policy=RunPolicy(require_plan_approval=False, on_budget_exhausted="land"),
+                ),
+            )
+        )
+    if wanted("human_in_the_loop"):
+        paths.append(await _record_human_in_the_loop("human_in_the_loop"))
+    if wanted("fanout_partial_join"):
+        paths.extend(await _record_fanout("fanout_partial_join"))
+    if wanted("durability_promote_compact_can"):
+        paths.extend(await _record_durability("durability_promote_compact_can"))
+    return paths
 
 
 def main() -> None:
-    for path in asyncio.run(record_all()):
+    only = set(sys.argv[1:]) or None
+    for path in asyncio.run(record_all(only)):
         print(f"recorded {path}")
 
 

@@ -12,6 +12,10 @@ from dataclasses import dataclass
 from typing import Literal
 
 from convoy_core import ModelGatewayConfig
+from convoy_runtime.carry import (
+    DEFAULT_MIDSTEP_COMPACTION_TOKENS,
+    DEFAULT_TURN_LIMIT,
+)
 from convoy_runtime.codec import codec_key_from_env
 
 TASK_QUEUE = "agent-runtime"
@@ -60,6 +64,10 @@ class RuntimeConfig:
     litellm_base_url: str
     litellm_master_key: str
     model_gateway: ModelGatewayConfig
+    turn_limit: int
+    midstep_compaction_tokens: int
+    sandbox_dir: str
+    promoted_tool_delay_seconds: float
 
     @classmethod
     def from_env(cls) -> "RuntimeConfig":
@@ -102,4 +110,16 @@ class RuntimeConfig:
             litellm_base_url=_env("LITELLM_BASE_URL", ""),
             litellm_master_key=_env("LITELLM_MASTER_KEY", ""),
             model_gateway=ModelGatewayConfig.model_validate(gateway_raw),
+            # Durability tuning delivered to workflows as recorded input, so
+            # replay always sees the limits the run actually started with.
+            turn_limit=int(_env("CONVOY_TURN_LIMIT", str(DEFAULT_TURN_LIMIT))),
+            midstep_compaction_tokens=int(
+                _env("CONVOY_MIDSTEP_COMPACTION_TOKENS", str(DEFAULT_MIDSTEP_COMPACTION_TOKENS))
+            ),
+            # Workspace root for the local sandbox provider; workspaces are
+            # cache, snapshots in the artifact store are truth.
+            sandbox_dir=_env("CONVOY_SANDBOX_DIR", "/tmp/convoy-sandboxes"),
+            # Test knob widening the crash window after a promoted side
+            # effect lands (0 in production paths).
+            promoted_tool_delay_seconds=float(_env("CONVOY_PROMOTED_TOOL_DELAY", "0")),
         )

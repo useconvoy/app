@@ -24,6 +24,8 @@ Wrap-up rules:
 
 TODO: mid-run compaction and continue_as_new for long child runs.
 TODO: promoted tool calls and human gates inside child runs.
+TODO: propagate the parent's clock and rehearsal facts into the brief so
+child events dual-stamp virtual time and carry the sandbox flag.
 """
 
 from dataclasses import dataclass
@@ -385,8 +387,10 @@ class SubagentWorkflow:
             seq=self._event_seq,
             type=event_type,
             ts=self._clock.now(),
-            virtual_ts=None,  # TODO: dual stamps once virtual clocks exist
-            sandbox=False,  # TODO: flag rehearsal (sandbox-binding) runs
+            # TODO: dual virtual stamps and the rehearsal flag once the
+            # brief carries the parent's clock and binding facts.
+            virtual_ts=None,
+            sandbox=False,
             actor=actor,
             actor_type=actor_type,
             payload=payload or {},

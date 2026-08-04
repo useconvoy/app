@@ -9,7 +9,16 @@ from pathlib import Path
 from temporalio.converter import DataConverter
 from temporalio.testing import WorkflowEnvironment
 
-from convoy_core import AgentSpec, ArtifactRef, BudgetState, RunPolicy, RunState
+from convoy_core import (
+    AgentSpec,
+    ArtifactRef,
+    BudgetState,
+    ClockConfig,
+    RunPolicy,
+    RunState,
+    ToolGrant,
+)
+from convoy_runtime.carry import BindingFacts, RunCarry, RunTuning
 from convoy_runtime.codec import runtime_data_converter
 
 # Fixed test key: replay of checked-in (encrypted) histories requires a stable
@@ -42,6 +51,7 @@ def fixture_run_state(
     policy: RunPolicy | None = None,
     model: str = "scripted-echo-1",
     max_children: int = 0,
+    tools: list[ToolGrant] | None = None,
 ) -> RunState:
     return RunState(
         run_id=run_id,
@@ -54,13 +64,35 @@ def fixture_run_state(
             layer=0,
             max_children=max_children,
             model=model,
-            tools=[],
+            tools=tools or [],
             prompt_ref=fixture_ref(f"runs/{run_id}/prompts/root.json"),
         ),
         policy=policy or RunPolicy(require_plan_approval=False),
         plan=None,
         budget=BudgetState(cap_usd=budget_cap_usd),
         pinned_ref=fixture_ref(f"runs/{run_id}/pinned.json"),
+    )
+
+
+def fixture_carry(
+    *,
+    kind: str = "sandbox",
+    clock: ClockConfig | None = None,
+    turn_limit: int = 200,
+    midstep_compaction_tokens: int = 40_000,
+    sandbox_template: str = "stub",
+) -> RunCarry:
+    """The initial runtime carry a control plane would pass at run start."""
+    return RunCarry(
+        binding=BindingFacts(
+            kind="production" if kind == "production" else "sandbox",
+            clock=clock or ClockConfig(),
+            sandbox_template=sandbox_template,
+        ),
+        tuning=RunTuning(
+            turn_limit=turn_limit,
+            midstep_compaction_tokens=midstep_compaction_tokens,
+        ),
     )
 
 

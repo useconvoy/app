@@ -43,4 +43,5 @@ pythonpath = ["agent-runtime/tests"]
 addopts = "-ra"
 markers = [
     "e2e: tests that require the docker compose stack (excluded from the fast lane)",
+    "chaos: crash/durability tests that kill workers against the compose stack (own lane)",
 ]

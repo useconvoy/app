@@ -4,41 +4,56 @@ Scenario files under cases/ describe one end-to-end behavior each: the run's
 budget and policy, the scripted turn results (including gate requests and
 proposed revisions), human gates attached to fixture-plan steps, a fan-out
 group with per-child scripted turns, external signals keyed to observed
-events (pause/resume/land, steers, plan approval decisions, gate responses),
-and the expected outcome (final status, exact event sequence — parent and
-child events interleaved, budget totals, turn count, final plan version). The
-runner executes them against the real workflows in the time-skipping
-environment with the scripted fakes; a "skip_time" action advances the
-environment clock so durable timers (gate timeouts) fire deterministically.
-The reservation invariant — spent + reserved never over the cap without a
-declared budget exhaustion — is asserted at every budget snapshot of every
-scenario.
+events (pause/resume/land, steers, plan approval decisions, gate responses,
+virtual clock advances), and the expected outcome (final status, exact event
+sequence — parent and child events interleaved, budget totals, turn count,
+final plan version, virtual timestamps). The runner executes them against
+the real workflows in the time-skipping environment with the scripted fakes;
+a "skip_time" action advances the environment clock so durable timers (gate
+timeouts) fire deterministically, while "advance_clock" advances a run's
+virtual clock relative to its virtual epoch. The reservation invariant —
+spent + reserved never over the cap without a declared budget exhaustion —
+is asserted at every budget snapshot of every scenario.
 """
 
 import asyncio
+import itertools
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal, cast
 
 import yaml
-from _support.common import TEST_TASK_QUEUE, fixture_run_state, start_time_skipping_env
+from _support.common import (
+    TEST_TASK_QUEUE,
+    fixture_carry,
+    fixture_run_state,
+    start_time_skipping_env,
+)
 from _support.fakes import FakeRuntime, ScriptedTurn
 from temporalio.client import WorkflowHandle
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from convoy_core import HumanGate, PlanPatchOp, RunPolicy, RunResult, SteerMessage
+from convoy_core import ClockConfig, HumanGate, PlanPatchOp, RunPolicy, RunResult, SteerMessage
 from convoy_runtime.activities.plan import FanoutFixture
-from convoy_runtime.signals import GateResponse, PlanApprovalDecision
+from convoy_runtime.signals import ClockAdvance, GateResponse, PlanApprovalDecision
 from convoy_runtime.workflows.agent_run import AgentRunWorkflow
 from convoy_runtime.workflows.subagent import SubagentWorkflow
 
 CASES_DIR = Path(__file__).parent / "cases"
 
 SignalKind = Literal[
-    "pause", "resume", "land", "steer", "approve", "reject", "respond", "skip_time"
+    "pause",
+    "resume",
+    "land",
+    "steer",
+    "approve",
+    "reject",
+    "respond",
+    "skip_time",
+    "advance_clock",
 ]
 
 
@@ -47,7 +62,10 @@ class ScenarioAction:
     """One external action, sent once a given event type has been observed
     `occurrence` times (so a second pause can be awaited distinctly).
     "skip_time" is not a signal: it advances the time-skipping environment's
-    clock so durable timers (gate timeouts) fire deterministically."""
+    clock so durable timers (gate timeouts) fire deterministically.
+    "advance_clock" signals the run's virtual clock forward by `seconds`
+    from its virtual epoch; a "respond" with `at_virtual_seconds` schedules
+    a simulated human answer at that virtual instant."""
 
     after_event: str
     signal: SignalKind
@@ -62,7 +80,8 @@ class ScenarioAction:
     # gate response fields
     step_id: str = ""
     response: str = ""
-    # skip_time field
+    at_virtual_seconds: float | None = None
+    # skip_time / advance_clock field
     seconds: float = 0.0
 
 
@@ -81,6 +100,10 @@ class ScenarioExpect:
     join_gap: list[str] = field(default_factory=lambda: cast(list[str], []))
     # (step_id, refund) pairs asserted against child_landed events.
     child_refunds: dict[str, Decimal] = field(default_factory=lambda: cast(dict[str, Decimal], {}))
+    # Virtual-clock expectations: every parent event dual-stamped, and the
+    # gate_timed_out virtual stamp exactly this many seconds past the epoch.
+    dual_stamped: bool = False
+    gate_timeout_at_virtual_seconds: float | None = None
 
 
 @dataclass(frozen=True)
@@ -95,6 +118,8 @@ class Scenario:
     child_turns: dict[str, list[ScriptedTurn]]
     actions: list[ScenarioAction]
     expect: ScenarioExpect
+    environment_kind: str = "sandbox"
+    clock: ClockConfig | None = None
 
 
 def _parse_gate(raw: dict[str, Any]) -> HumanGate:
@@ -146,6 +171,9 @@ def load_scenario(path: Path) -> Scenario:
             reason=action.get("reason"),
             step_id=action.get("step_id", ""),
             response=action.get("response", ""),
+            at_virtual_seconds=(
+                float(action["at_virtual_seconds"]) if "at_virtual_seconds" in action else None
+            ),
             seconds=float(action.get("seconds", 0.0)),
         )
         for action in raw.get("actions", [])
@@ -172,7 +200,14 @@ def load_scenario(path: Path) -> Scenario:
                 "dict[Any, Any]", expect_raw.get("child_refunds", {})
             ).items()
         },
+        dual_stamped=bool(expect_raw.get("dual_stamped", False)),
+        gate_timeout_at_virtual_seconds=(
+            float(expect_raw["gate_timeout_at_virtual_seconds"])
+            if "gate_timeout_at_virtual_seconds" in expect_raw
+            else None
+        ),
     )
+    clock = ClockConfig.model_validate(run["clock"]) if isinstance(run.get("clock"), dict) else None
     return Scenario(
         name=raw["name"],
         budget_cap_usd=Decimal(str(run.get("budget_cap_usd", "10"))),
@@ -184,6 +219,8 @@ def load_scenario(path: Path) -> Scenario:
         child_turns=child_turns,
         actions=actions,
         expect=expect,
+        environment_kind=str(run.get("environment_kind", "sandbox")),
+        clock=clock,
     )
 
 
@@ -197,6 +234,14 @@ async def _wait_for_event(
             await asyncio.sleep(0.05)
 
 
+def _virtual_epoch(fake: FakeRuntime) -> datetime:
+    """The run's virtual epoch: the virtual stamp of its first event."""
+    for event in fake.events:
+        if event.run_id == fake.root_run_id and event.virtual_ts is not None:
+            return event.virtual_ts
+    raise AssertionError("no dual-stamped event to derive the virtual epoch from")
+
+
 async def _send_action(
     env: WorkflowEnvironment,
     handle: WorkflowHandle[AgentRunWorkflow, RunResult],
@@ -207,6 +252,14 @@ async def _send_action(
         # Advance the test server's clock so durable timers (gate timeouts)
         # fire without waiting in real time.
         await env.sleep(action.seconds)
+    elif action.signal == "advance_clock":
+        await handle.signal(
+            AgentRunWorkflow.advance_time,
+            ClockAdvance(
+                to=_virtual_epoch(fake) + timedelta(seconds=action.seconds),
+                actor=action.actor,
+            ),
+        )
     elif action.signal == "steer":
         steer_id = f"steer-{len(fake.sent_steer_ids) + 1}"
         fake.sent_steer_ids.append(steer_id)
@@ -231,9 +284,19 @@ async def _send_action(
             ),
         )
     elif action.signal == "respond":
+        at_virtual = (
+            _virtual_epoch(fake) + timedelta(seconds=action.at_virtual_seconds)
+            if action.at_virtual_seconds is not None
+            else None
+        )
         await handle.signal(
             AgentRunWorkflow.human_response,
-            GateResponse(step_id=action.step_id, response=action.response, actor=action.actor),
+            GateResponse(
+                step_id=action.step_id,
+                response=action.response,
+                actor=action.actor,
+                at_virtual=at_virtual,
+            ),
         )
     else:
         await handle.signal(action.signal, action.actor)
@@ -252,6 +315,7 @@ async def run_scenario(scenario: Scenario) -> tuple[RunResult, FakeRuntime]:
         policy=scenario.policy,
         max_children=scenario.max_children,
     )
+    carry = fixture_carry(kind=scenario.environment_kind, clock=scenario.clock)
     env = await start_time_skipping_env()
     async with (
         env,
@@ -264,7 +328,7 @@ async def run_scenario(scenario: Scenario) -> tuple[RunResult, FakeRuntime]:
     ):
         handle = await env.client.start_workflow(
             AgentRunWorkflow.run,
-            args=[state, "scenario@convoy.test"],
+            args=[state, "scenario@convoy.test", carry],
             id=state.run_id,
             task_queue=TEST_TASK_QUEUE,
         )
@@ -349,4 +413,23 @@ def assert_scenario(scenario: Scenario, result: RunResult, fake: FakeRuntime) ->
         linked = applied[-1].payload.get("steer_ids")
         assert linked == fake.sent_steer_ids, (
             f"{scenario.name}: revision steer_ids {linked} != sent {fake.sent_steer_ids}"
+        )
+    if expect.dual_stamped:
+        parent_events = [e for e in fake.events if e.run_id == fake.root_run_id]
+        assert parent_events, f"{scenario.name}: no parent events to check stamps on"
+        missing = [e.type for e in parent_events if e.virtual_ts is None]
+        assert not missing, f"{scenario.name}: events missing virtual stamps: {missing}"
+        stamps = [e.virtual_ts for e in parent_events if e.virtual_ts is not None]
+        assert all(a <= b for a, b in itertools.pairwise(stamps)), (
+            f"{scenario.name}: virtual time regressed across events"
+        )
+    if expect.gate_timeout_at_virtual_seconds is not None:
+        timed_out = fake.events_of("gate_timed_out")
+        assert timed_out, f"{scenario.name}: no gate_timed_out event"
+        stamp = timed_out[-1].virtual_ts
+        assert stamp is not None, f"{scenario.name}: gate_timed_out has no virtual stamp"
+        delta = (stamp - _virtual_epoch(fake)).total_seconds()
+        assert delta == expect.gate_timeout_at_virtual_seconds, (
+            f"{scenario.name}: gate timed out at virtual +{delta}s, "
+            f"expected +{expect.gate_timeout_at_virtual_seconds}s"
         )

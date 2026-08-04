@@ -1,0 +1,30 @@
+{
+  "run_id": "run-golden-1",
+  "step_id": "step-1",
+  "turn": 4,
+  "step_turns": 3,
+  "now": "2026-08-04T09:00:00+00:00",
+  "pinned_ref_key": "runs/run-golden-1/pinned/turn-4.json",
+  "steers_drained": ["steer-1"],
+  "turns": [
+    {"role": "user", "content": "execute step step-1 (turn 1)"},
+    {"role": "assistant", "content": "echo: step step-1 turn 1"},
+    {"role": "user", "content": "execute step step-1 (turn 2)"},
+    {"role": "assistant", "content": "echo: step step-1 turn 2"},
+    {"role": "user", "content": "execute step step-1 (turn 3)"},
+    {"role": "assistant", "content": "echo: step step-1 turn 3"}
+  ],
+  "assessment": {
+    "steer_ids": ["steer-1"],
+    "conclusion": "plan_already_covers",
+    "reason": "the current plan already addresses this redirect"
+  },
+  "promoted": [
+    {
+      "tool_id": "kb_delete",
+      "idempotency_key": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "result_ref_key": "runs/run-golden-1/promoted/0123456789abcdef.json"
+    }
+  ],
+  "open_questions": ["Is the Q3 restatement final?"]
+}

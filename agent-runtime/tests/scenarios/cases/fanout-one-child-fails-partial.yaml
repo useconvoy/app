@@ -25,6 +25,7 @@ expect:
     - plan_created
     - step_started        # step-1 (self)
     - step_done
+    - compaction_applied
     - step_started        # fan-1
     - child_spawned
     - run_started
@@ -43,6 +44,7 @@ expect:
     - step_failed         # the member step fails into the group policy
     - step_started        # the join proceeds anyway, gap flagged
     - step_done
+    - compaction_applied
     - landing_started
     - run_completed
   turn_calls: 4

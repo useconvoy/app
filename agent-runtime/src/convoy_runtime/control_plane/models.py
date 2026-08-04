@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 from convoy_core import HumanGate, RunPolicy
 from convoy_runtime.activities.plan import FanoutFixture
@@ -71,9 +71,19 @@ class ApprovePlanRequest(BaseModel):
 
 
 class GateRespondRequest(BaseModel):
-    """Answer one step's open human gate."""
+    """Answer one step's open human gate. `at_virtual` scripts a simulated
+    human on virtual-clock rehearsal runs: the answer is delivered when
+    virtual time reaches that instant (timezone-aware, or it is rejected)."""
 
     response: str = Field(min_length=1)
+    at_virtual: AwareDatetime | None = None
+
+
+class ClockAdvanceRequest(BaseModel):
+    """Move a virtual-clock rehearsal run's time forward to `to`
+    (timezone-aware, or it is rejected)."""
+
+    to: AwareDatetime
 
 
 class SignalResponse(BaseModel):

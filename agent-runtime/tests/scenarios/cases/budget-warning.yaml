@@ -14,9 +14,11 @@ expect:
     - plan_created
     - step_started
     - step_done
+    - compaction_applied
     - budget_warning
     - step_started
     - step_done
+    - compaction_applied
     - landing_started
     - run_completed
   budget_spent: "0.95"

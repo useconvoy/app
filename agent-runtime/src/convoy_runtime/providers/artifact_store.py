@@ -88,6 +88,21 @@ class ArtifactStore:
     async def get_json(self, ref: ArtifactRef) -> Any:
         return json.loads(await self.get_bytes(ref))
 
+    async def get_json_at(self, key: str) -> Any:
+        """Read a runtime-owned conventional key from this store's bucket.
+
+        Claim-checked data always travels as an `ArtifactRef` (with its
+        integrity hash); this path exists for the control plane re-reading
+        documents it wrote itself at deterministic keys, where no ref is in
+        hand.
+        """
+
+        def _get() -> bytes:
+            response = self._client.get_object(Bucket=self._bucket, Key=key)
+            return response["Body"].read()
+
+        return json.loads(await anyio.to_thread.run_sync(_get))
+
     async def ensure_bucket(self) -> None:
         """Create the bucket if missing (dev/compose convenience)."""
 

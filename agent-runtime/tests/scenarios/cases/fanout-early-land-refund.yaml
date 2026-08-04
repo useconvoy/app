@@ -25,6 +25,7 @@ expect:
     - plan_created
     - step_started        # step-1 (self)
     - step_done
+    - compaction_applied
     - step_started        # fan-1
     - child_spawned       # reserved 2.00 of 4.00
     - run_started
@@ -43,6 +44,7 @@ expect:
     - step_done
     - step_started        # join
     - step_done
+    - compaction_applied
     - landing_started
     - run_completed
   turn_calls: 4

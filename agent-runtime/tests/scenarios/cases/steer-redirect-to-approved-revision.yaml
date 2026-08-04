@@ -36,10 +36,13 @@ expect:
     - revision_applied
     - revision_approved
     - step_done
+    - compaction_applied
     - step_started
     - step_done
+    - compaction_applied
     - step_started
     - step_done
+    - compaction_applied
     - landing_started
     - run_completed
   turn_calls: 4

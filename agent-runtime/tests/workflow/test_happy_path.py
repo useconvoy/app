@@ -17,8 +17,10 @@ EXPECTED_EVENT_SEQUENCE = [
     "plan_created",
     "step_started",
     "step_done",
+    "compaction_applied",  # step-1 distilled into its summary
     "step_started",
     "step_done",
+    "compaction_applied",  # step-2 distilled into its summary
     "landing_started",
     "run_completed",
 ]

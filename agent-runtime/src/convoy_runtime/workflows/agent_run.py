@@ -13,9 +13,18 @@ activity. Fan-out groups spawn child workflows whose budget slices are
 reservations against this run's cap; the parent only ever sees each child's
 compacted result, never its transcript.
 
+Long runs survive by construction: promoted tool calls run as their own
+keyed activities so side effects never double-fire; completed steps distill
+into step summaries and long working transcripts fold mid-step, keeping
+context bounded while raw archives stay lossless; and when a history segment
+reaches its turn limit the workflow hops via continue_as_new, carrying the
+shared `RunState` plus the runtime-internal `RunCarry` so nothing —
+mailboxes, armed gate deadlines, budget edges, clock state — is lost.
+
 Signals never do work here: they validate their payload and enqueue it; the
 loop drains every mailbox at its boundaries, so external actions land between
-turns and never interrupt one.
+turns and never interrupt one. Temporal re-delivers signals buffered during
+a continue_as_new transition, so every drain is idempotent.
 """
 
 import asyncio
@@ -24,6 +33,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal, cast
 
+from pydantic import BaseModel
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError, ApplicationError, ChildWorkflowError
@@ -45,19 +55,38 @@ with workflow.unsafe.imports_passed_through():
         StepSummaryRef,
         SubagentResult,
         TokenCounts,
+        ToolCallRequest,
         TurnInput,
         TurnResult,
     )
     from convoy_runtime.activities import names
-    from convoy_runtime.clock import PassthroughClock, RunClock
+    from convoy_runtime.carry import CarriedGate, RunCarry
+    from convoy_runtime.clock import PassthroughClock, RatioClock, RunClock, VirtualClock
+    from convoy_runtime.providers.compaction import CompactRequest, CompactResult
     from convoy_runtime.providers.grants import intersect_grants
+    from convoy_runtime.providers.promoted import (
+        PROMOTED_ACTIVITIES,
+        SANDBOX_JOB_ACTIVITY,
+        PromotedResume,
+        PromotedToolOutcome,
+        PromotedToolRequest,
+        SandboxJobOutcome,
+        SandboxJobRequest,
+    )
     from convoy_runtime.providers.turn_executor import TurnContext
-    from convoy_runtime.signals import GateResponse, PlanApprovalDecision
+    from convoy_runtime.signals import ClockAdvance, GateResponse, PlanApprovalDecision
     from convoy_runtime.workflows.plan_engine import requires_approval, validate_revision
     from convoy_runtime.workflows.subagent import SubagentBrief, SubagentWorkflow
 
 # Fraction of the budget cap that triggers the one-time warning event.
 BUDGET_WARNING_THRESHOLD = Decimal("0.8")
+
+# A single turn may promote at most this many calls before the step is
+# treated as runaway and failed.
+MAX_PROMOTED_CALLS_PER_TURN = 8
+
+# Actor recorded when idle auto-advance moves a virtual clock.
+ON_IDLE_ACTOR = "clock:on_idle"
 
 # Explicit per-activity retry/timeout matrix (values tuned under load later —
 # the shape is fixed: no defaults-by-omission).
@@ -102,6 +131,34 @@ _RUN_TURN_RETRY = RetryPolicy(
 _RUN_TURN_TIMEOUT = timedelta(seconds=120)
 _RUN_TURN_HEARTBEAT = timedelta(seconds=60)
 
+_COMPACT_RETRY = RetryPolicy(
+    initial_interval=timedelta(seconds=1),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(seconds=30),
+    maximum_attempts=5,
+)
+_COMPACT_TIMEOUT = timedelta(seconds=60)
+
+# Promoted calls are keyed, so retries are safe; the effect system replays a
+# journaled key instead of acting twice.
+_PROMOTED_TOOL_RETRY = RetryPolicy(
+    initial_interval=timedelta(seconds=1),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(seconds=30),
+    maximum_attempts=5,
+)
+_PROMOTED_TOOL_TIMEOUT = timedelta(seconds=120)
+_PROMOTED_TOOL_HEARTBEAT = timedelta(seconds=60)
+
+_SANDBOX_JOB_RETRY = RetryPolicy(
+    initial_interval=timedelta(seconds=1),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(seconds=30),
+    maximum_attempts=5,
+)
+_SANDBOX_JOB_TIMEOUT = timedelta(seconds=300)
+_SANDBOX_JOB_HEARTBEAT = timedelta(seconds=120)
+
 _LAND_RUN_RETRY = RetryPolicy(
     initial_interval=timedelta(seconds=1),
     backoff_coefficient=2.0,
@@ -133,6 +190,14 @@ _CHILD_WORKFLOW_RETRY = RetryPolicy(maximum_attempts=1)
 _CHILD_EXECUTION_TIMEOUT = timedelta(hours=1)
 
 _ActorType = Literal["human", "agent", "system"]
+
+
+def _ensure_model[ModelT: BaseModel](value: Any, model: type[ModelT]) -> ModelT:
+    """Validate an argument into its model when the payload converter had no
+    type hints to apply (older two-argument start shapes)."""
+    if isinstance(value, model):
+        return value
+    return model.model_validate(value)
 
 
 @dataclass
@@ -276,10 +341,15 @@ def _dependency_outputs(plan: Plan, member: PlanStep) -> list[ArtifactRef]:
 @workflow.defn
 class AgentRunWorkflow:
     def __init__(self) -> None:
-        # All workflow time flows through the RunClock seam.
-        # TODO: virtual clock selection for sandbox bindings with virtual time.
-        self._clock: RunClock = PassthroughClock()
+        # All workflow time flows through the RunClock seam. The clock is
+        # re-selected from the carried binding facts at the top of run();
+        # events always stamp real time, plus virtual time when one exists.
+        self._real_clock = PassthroughClock()
+        self._clock: RunClock = self._real_clock
+        self._clock_kind: Literal["real", "virtual", "ratio"] = "real"
+        self._virtual_clock: VirtualClock | None = None
         self._state: RunState | None = None
+        self._carry = RunCarry()
         self._paused = False
         self._landing = False
         self._pause_actor = "system"
@@ -289,16 +359,27 @@ class AgentRunWorkflow:
         self._land_actor = "system"
         self._land_actor_type: _ActorType = "system"
         self._event_seq = 0
-        # Budget threshold edges are one-shot per run segment.
-        # TODO: carry these flags (and token totals, gate/approval state)
-        # across continue_as_new.
+        # Budget threshold edges are one-shot per run (carried across hops).
         self._budget_warned = False
         self._budget_exhausted_emitted = False
         self._tokens = TokenCounts()
+        # Tokens accumulated in the current step's working transcript since
+        # the last mid-step fold; drives the next fold decision.
+        self._step_tokens = 0
+        self._fold_seq = 0
         # Signal mailboxes: signals validate + enqueue, the loop drains.
+        # Temporal re-delivers signals buffered during a continue_as_new
+        # transition, so drains dedupe (steers by id; the other keys are
+        # idempotent by version/step matching).
         self._steer_inbox: list[SteerMessage] = []
+        self._seen_steer_ids: set[str] = set()
         self._approval_inbox: list[PlanApprovalDecision] = []
         self._gate_response_inbox: list[GateResponse] = []
+        self._advance_requests: list[ClockAdvance] = []
+        # Simulated humans: gate responses held until virtual time reaches
+        # their timestamp, so rehearsals can script "answered on day 3".
+        self._scheduled_responses: list[GateResponse] = []
+        self._last_advance_actor: str | None = None
         # The plan version currently blocked on human approval, if any.
         self._awaiting_approval_version: int | None = None
         # Open human gates by step id, and gates already satisfied so a
@@ -311,33 +392,50 @@ class AgentRunWorkflow:
         # policy released count as terminal for readiness and completion.
         # Join gaps ride the join step's start event; gates opened on a join
         # under block_on_human release their gaps when answered.
-        # TODO: carry released failures and join gaps across continue_as_new.
         self._child_landings: list[_ChildLanding] = []
         self._released_failures: set[str] = set()
         self._join_gaps: dict[str, list[str]] = {}
         self._pending_gap_release: dict[str, list[str]] = {}
         self._group_note_seq = 0
+        # Turn-limit segmentation and the sandbox workspace truth.
+        self._hops = 0
+        self._turns_at_segment_start = 0
+        self._sandbox_snapshot_ref: ArtifactRef | None = None
 
     # ------------------------------------------------------------------ run
 
     @workflow.run
-    async def run(self, state: RunState, requested_by: str) -> RunResult:
+    async def run(
+        self, state: RunState, requested_by: str, carry: RunCarry | None = None
+    ) -> RunResult:
+        # Starts recorded before the carry argument existed deliver two
+        # payloads; the SDK skips type hints on an arity mismatch, so the
+        # arguments arrive as plain data and are validated back into their
+        # models here. Deterministic: pure validation of recorded input.
+        state = _ensure_model(state, RunState)
+        carry = _ensure_model(carry, RunCarry) if carry is not None else None
         self._state = state
-        await self._emit(
-            "run_started",
-            actor=requested_by,
-            actor_type="human",
-            payload={"run_status": state.status, "environment_id": state.environment_id},
-        )
+        self._restore_carry(carry)
+        self._init_clock(state)
+        self._rearm_carried_gates()
 
-        # Per-run virtual model key with a hard dollar cap — the infra-side
-        # budget backstop exists before the first turn can spend anything.
-        await workflow.execute_activity(
-            names.PROVISION_MODEL_KEY,
-            args=[state.run_id, state.budget.cap_usd],
-            start_to_close_timeout=_PROVISION_KEY_TIMEOUT,
-            retry_policy=_PROVISION_KEY_RETRY,
-        )
+        if self._hops == 0:
+            await self._emit(
+                "run_started",
+                actor=requested_by,
+                actor_type="human",
+                payload={"run_status": state.status, "environment_id": state.environment_id},
+            )
+
+            # Per-run virtual model key with a hard dollar cap — the
+            # infra-side budget backstop exists before the first turn can
+            # spend anything.
+            await workflow.execute_activity(
+                names.PROVISION_MODEL_KEY,
+                args=[state.run_id, state.budget.cap_usd],
+                start_to_close_timeout=_PROVISION_KEY_TIMEOUT,
+                retry_policy=_PROVISION_KEY_RETRY,
+            )
 
         if state.plan is None:
             state.status = "planning"
@@ -366,11 +464,19 @@ class AgentRunWorkflow:
                     "run_status": state.status,
                 },
             )
-        else:
+        elif self._hops == 0:
             state.status = "running"
 
         while not _plan_complete(state.plan, self._released_failures):
+            if self._should_hop(state):
+                # Segment ceiling reached: hop with the shared state plus the
+                # runtime carry. No children are in flight here (fan-out
+                # groups settle before the loop re-checks), armed gate
+                # deadlines re-arm on the other side, and buffered signals
+                # are re-delivered by the server into idempotent drains.
+                workflow.continue_as_new(args=[state, requested_by, self._snapshot_carry(state)])
             await self._drain_steer_mailbox()
+            self._drain_clock_requests()
             if await self._enforce_budget() == "abort":
                 state.status = "failed"
                 await self._emit(
@@ -460,17 +566,7 @@ class AgentRunWorkflow:
             turn_input = self._turn_input(state, step)
             redirect_ids = [s.id for s in turn_input.steers if s.mode == "redirect"]
             try:
-                result = cast(
-                    TurnResult,
-                    await workflow.execute_activity(
-                        names.RUN_TURN,
-                        args=[turn_input, self._turn_context(state)],
-                        result_type=TurnResult,
-                        start_to_close_timeout=_RUN_TURN_TIMEOUT,
-                        heartbeat_timeout=_RUN_TURN_HEARTBEAT,
-                        retry_policy=_RUN_TURN_RETRY,
-                    ),
-                )
+                result = await self._execute_step_turn(state, step, turn_input)
             except ActivityError:
                 step.status = "failed"
                 state.status = "failed"
@@ -483,10 +579,9 @@ class AgentRunWorkflow:
                     run_id=state.run_id, status="failed", error=f"step {step.id} failed"
                 )
 
-            # TODO: promoted-tool loop while outcome == "promote" (the call
-            # runs as its own activity with an idempotency key, then the turn
-            # resumes with the result).
             self._apply_turn(state, step, result)
+            if result.outcome != "step_done":
+                await self._maybe_fold_midstep(state, step)
 
             proposed = list(result.proposed_revision or [])
             if proposed:
@@ -513,23 +608,14 @@ class AgentRunWorkflow:
             if result.outcome == "step_done":
                 await self._emit(
                     "step_done",
-                    payload={
-                        "step_id": step.id,
-                        "outcome": result.outcome,
-                        "model_used": result.model_used,
-                        "model_requested": state.agent.model,
-                        "model_fallback": result.model_used != state.agent.model,
-                        "cost_usd": str(result.cost_usd),
-                        "budget": self._budget_snapshot(),
-                    },
+                    payload=self._step_done_payload(state, step, result),
                 )
+                await self._compact_step_end(state, step, result)
             elif result.outcome == "needs_human":
                 gate = result.gate_request or HumanGate(
                     kind="input", prompt=f"Agent requested human input for step {step.id}"
                 )
                 await self._open_gate(step, gate, actor=state.agent.id, actor_type="agent")
-
-            # TODO: continue_as_new at the turn limit with full RunState carry.
 
         # Landing never races gate timers: every armed timer is cancelled
         # before wrap-up so no timeout action can fire while landing.
@@ -563,6 +649,144 @@ class AgentRunWorkflow:
         )
         return RunResult(run_id=state.run_id, status="completed", land_report=report)
 
+    # ------------------------------------------------- carry & clock set-up
+
+    def _restore_carry(self, carry: RunCarry | None) -> None:
+        """Rehydrate runtime-internal state after a hop. Mailboxes merge in
+        front of anything signals already enqueued for this execution, and
+        the fresh-start path (no carry, or a hopless initial carry) leaves
+        the defaults untouched."""
+        if carry is None:
+            return
+        self._carry = carry
+        self._hops = carry.hops
+        self._turns_at_segment_start = carry.turns_at_segment_start
+        self._event_seq = carry.event_seq
+        self._tokens = carry.tokens
+        self._step_tokens = carry.step_tokens
+        self._fold_seq = carry.fold_seq
+        self._budget_warned = carry.budget_warned
+        self._budget_exhausted_emitted = carry.budget_exhausted_emitted
+        self._awaiting_approval_version = carry.awaiting_approval_version
+        self._paused = carry.paused
+        self._pause_actor = carry.pause_actor
+        self._pause_actor_type = carry.pause_actor_type
+        self._landing = carry.landing
+        self._land_actor = carry.land_actor
+        self._land_actor_type = carry.land_actor_type
+        self._resolved_step_gates = set(carry.resolved_step_gates)
+        self._gate_feed_seq = carry.gate_feed_seq
+        self._group_note_seq = carry.group_note_seq
+        self._released_failures = set(carry.released_failures)
+        self._join_gaps = {k: list(v) for k, v in carry.join_gaps.items()}
+        self._pending_gap_release = {k: list(v) for k, v in carry.pending_gap_release.items()}
+        self._seen_steer_ids = set(carry.seen_steer_ids)
+        self._steer_inbox = [*carry.steer_inbox, *self._steer_inbox]
+        self._approval_inbox = [*carry.approval_inbox, *self._approval_inbox]
+        self._gate_response_inbox = [*carry.gate_response_inbox, *self._gate_response_inbox]
+        self._advance_requests = [*carry.advance_requests, *self._advance_requests]
+        self._scheduled_responses = [*carry.scheduled_responses, *self._scheduled_responses]
+        self._sandbox_snapshot_ref = carry.sandbox_snapshot_ref
+
+    def _snapshot_carry(self, state: RunState) -> RunCarry:
+        """Everything runtime-internal the next execution needs, captured at
+        the hop boundary. Armed gate deadlines are recorded as absolute
+        instants so they re-arm unchanged."""
+        open_gates = [
+            CarriedGate(step_id=record.step_id, gate=record.gate, deadline=record.deadline)
+            for record in self._open_gates.values()
+        ]
+        for record in self._open_gates.values():
+            record.disarm()
+        return self._carry.model_copy(
+            update={
+                "hops": self._hops + 1,
+                "turns_at_segment_start": state.turn_count,
+                "event_seq": self._event_seq,
+                "tokens": self._tokens,
+                "step_tokens": self._step_tokens,
+                "fold_seq": self._fold_seq,
+                "budget_warned": self._budget_warned,
+                "budget_exhausted_emitted": self._budget_exhausted_emitted,
+                "awaiting_approval_version": self._awaiting_approval_version,
+                "paused": self._paused,
+                "pause_actor": self._pause_actor,
+                "pause_actor_type": self._pause_actor_type,
+                "landing": self._landing,
+                "land_actor": self._land_actor,
+                "land_actor_type": self._land_actor_type,
+                "resolved_step_gates": sorted(self._resolved_step_gates),
+                "open_gates": open_gates,
+                "gate_feed_seq": self._gate_feed_seq,
+                "group_note_seq": self._group_note_seq,
+                "released_failures": sorted(self._released_failures),
+                "join_gaps": {k: list(v) for k, v in self._join_gaps.items()},
+                "pending_gap_release": {k: list(v) for k, v in self._pending_gap_release.items()},
+                "seen_steer_ids": sorted(self._seen_steer_ids),
+                "steer_inbox": list(self._steer_inbox),
+                "approval_inbox": list(self._approval_inbox),
+                "gate_response_inbox": list(self._gate_response_inbox),
+                "advance_requests": list(self._advance_requests),
+                "scheduled_responses": list(self._scheduled_responses),
+                "sandbox_snapshot_ref": self._sandbox_snapshot_ref,
+            }
+        )
+
+    def _should_hop(self, state: RunState) -> bool:
+        """The current history segment reached its turn ceiling. Landing
+        wins: a landing run wraps up instead of hopping."""
+        if self._landing:
+            return False
+        return state.turn_count - self._turns_at_segment_start >= self._carry.tuning.turn_limit
+
+    def _init_clock(self, state: RunState) -> None:
+        """Select the run's clock from the carried binding facts. Virtual
+        time is only legal on sandbox-kind bindings; everything else runs on
+        the passthrough clock."""
+        facts = self._carry.binding
+        if facts.kind != "sandbox" or facts.clock.mode != "virtual":
+            self._clock = self._real_clock
+            self._clock_kind = "real"
+            return
+        if facts.clock.advance == "ratio" and facts.clock.ratio is not None:
+            if self._carry.ratio_real_anchor is None or self._carry.ratio_virtual_anchor is None:
+                anchor = self._real_clock.now()
+                self._carry = self._carry.model_copy(
+                    update={"ratio_real_anchor": anchor, "ratio_virtual_anchor": anchor}
+                )
+            clock = RatioClock(
+                real_anchor=self._carry.ratio_real_anchor or self._real_clock.now(),
+                virtual_anchor=self._carry.ratio_virtual_anchor or self._real_clock.now(),
+                ratio=facts.clock.ratio,
+                base=self._real_clock,
+            )
+            self._clock = clock
+            self._clock_kind = "ratio"
+            state.virtual_now = clock.now()
+            return
+        if state.virtual_now is None:
+            state.virtual_now = self._real_clock.now()
+        virtual = VirtualClock(state.virtual_now)
+        self._virtual_clock = virtual
+        self._clock = virtual
+        self._clock_kind = "virtual"
+
+    def _rearm_carried_gates(self) -> None:
+        """Reopen gates that were open at the hop, re-arming their timers
+        against the same absolute deadlines."""
+        for carried in self._carry.open_gates:
+            record = _OpenGate(step_id=carried.step_id, gate=carried.gate)
+            if carried.deadline is not None:
+                record.deadline = carried.deadline
+                record.timer = asyncio.ensure_future(self._clock.timer(carried.deadline))
+            self._open_gates[carried.step_id] = record
+
+    def _virtual_now(self) -> datetime | None:
+        """The run's current virtual instant, when a virtual clock exists."""
+        if self._clock_kind == "real":
+            return None
+        return self._clock.now()
+
     # -------------------------------------------------------------- signals
     # Signals do no heavy work: validate, enqueue, return. The loop drains.
 
@@ -591,6 +815,8 @@ class AgentRunWorkflow:
     def steer(self, message: SteerMessage) -> None:
         if not message.id or not message.body:
             return  # malformed steer — dropped without state change
+        if message.id in self._seen_steer_ids or any(m.id == message.id for m in self._steer_inbox):
+            return  # already delivered (e.g. re-sent across a hop) — no-op
         self._steer_inbox.append(message)
 
     @workflow.signal
@@ -601,7 +827,22 @@ class AgentRunWorkflow:
     def human_response(self, response: GateResponse) -> None:
         if not response.step_id:
             return  # malformed response — dropped without state change
+        if response.at_virtual is not None:
+            if response.at_virtual.tzinfo is None:
+                return  # naive instants cannot compare against the clock
+            # A simulated human answering at a virtual instant: held until
+            # the clock reaches it (delivered immediately on real clocks).
+            self._scheduled_responses.append(response)
+            return
         self._gate_response_inbox.append(response)
+
+    @workflow.signal
+    def advance_time(self, request: ClockAdvance) -> None:
+        if request.to.tzinfo is None:
+            return  # naive instants cannot compare against the clock
+        # Guarded again at drain time: only sandbox-kind virtual clocks move,
+        # and never backward — so duplicates and stale requests are no-ops.
+        self._advance_requests.append(request)
 
     # -------------------------------------------------------------- queries
 
@@ -624,6 +865,22 @@ class AgentRunWorkflow:
     def get_plan(self) -> Plan | None:
         return self._state.plan if self._state else None
 
+    @workflow.query
+    def get_durability(self) -> dict[str, Any]:
+        """Runtime-internal durability facts for tests and diagnostics."""
+        virtual = self._virtual_now()
+        return {
+            "hops": self._hops,
+            "event_seq": self._event_seq,
+            "turn_count": self._state.turn_count if self._state else 0,
+            "segment_turns": (
+                self._state.turn_count - self._turns_at_segment_start if self._state else 0
+            ),
+            "clock_kind": self._clock_kind,
+            "virtual_now": virtual.isoformat() if virtual else None,
+            "step_summaries": len(self._state.step_summaries) if self._state else 0,
+        }
+
     # -------------------------------------------------- boundaries & waits
 
     def _base_status(self) -> Literal["running", "awaiting_approval", "blocked_on_human"]:
@@ -643,10 +900,14 @@ class AgentRunWorkflow:
 
     async def _drain_steer_mailbox(self) -> None:
         """Move newly signalled steers into the run's pending mailbox and
-        emit their audit events; they ride into the next turn's context."""
+        emit their audit events; they ride into the next turn's context.
+        Steer ids already seen (a hop re-delivered them) drop silently."""
         assert self._state is not None
         while self._steer_inbox:
             message = self._steer_inbox.pop(0)
+            if message.id in self._seen_steer_ids:
+                continue
+            self._seen_steer_ids.add(message.id)
             self._state.pending_steers.append(message)
             await self._emit(
                 "steer_received",
@@ -654,6 +915,90 @@ class AgentRunWorkflow:
                 actor_type=message.author,
                 payload={"steer_id": message.id, "mode": message.mode, "body": message.body},
             )
+
+    def _drain_clock_requests(self) -> None:
+        """Apply queued manual clock advances. Only sandbox-kind virtual
+        clocks move (ratio and real clocks drop requests), and time never
+        moves backward. The applying actor is remembered so timer-driven
+        events can attribute the advance.
+
+        TODO: a dedicated audited clock event once the shared RunEvent
+        catalog grows a type for it; today the advance is attributed on the
+        events its resolved timers emit.
+        """
+        while self._advance_requests:
+            request = self._advance_requests.pop(0)
+            if self._virtual_clock is None:
+                continue
+            if self._virtual_clock.advance_to(request.to):
+                assert self._state is not None
+                self._state.virtual_now = self._virtual_clock.now()
+                self._last_advance_actor = request.actor
+
+    def _deliver_due_responses(self) -> None:
+        """Hand scheduled (simulated-human) responses to the gate inbox once
+        their instant arrives. Under a real clock they deliver immediately;
+        under virtual clocks they wait for their step's gate to be open and
+        the clock to reach their timestamp."""
+        if not self._scheduled_responses:
+            return
+        if self._clock_kind == "real":
+            self._gate_response_inbox.extend(self._scheduled_responses)
+            self._scheduled_responses.clear()
+            return
+        now_v = self._virtual_now()
+        if now_v is None:
+            return
+        still: list[GateResponse] = []
+        for response in self._scheduled_responses:
+            due = response.at_virtual is not None and response.at_virtual <= now_v
+            if due and response.step_id in self._open_gates:
+                self._gate_response_inbox.append(response)
+            else:
+                still.append(response)
+        self._scheduled_responses = still
+
+    def _scheduled_due(self) -> bool:
+        now_v = self._virtual_now()
+        if now_v is None:
+            return bool(self._scheduled_responses)
+        return any(
+            r.at_virtual is not None and r.at_virtual <= now_v and r.step_id in self._open_gates
+            for r in self._scheduled_responses
+        )
+
+    def _idle_advance_target(self) -> datetime | None:
+        """Where idle auto-advance may move the virtual clock: the earliest
+        deadline that unblocks something, but only while every open gate is
+        auto-resolvable (an armed timeout timer or a scheduled simulated
+        response). A gate with neither is a rehearsal checkpoint — a real
+        human decision — and pauses auto-advance."""
+        if self._virtual_clock is None or self._carry.binding.clock.advance != "on_idle":
+            return None
+        if self._paused or self._landing or not self._open_gates:
+            return None
+        now_v = self._virtual_clock.now()
+        candidates: list[datetime] = []
+        for record in self._open_gates.values():
+            sources: list[datetime] = []
+            if record.deadline is not None and record.timer is not None:
+                sources.append(record.deadline)
+            sources.extend(
+                r.at_virtual
+                for r in self._scheduled_responses
+                if r.step_id == record.step_id and r.at_virtual is not None
+            )
+            future = [s for s in sources if s > now_v]
+            if not future:
+                return None  # a human checkpoint (or an already-due source)
+            candidates.extend(future)
+        return min(candidates) if candidates else None
+
+    def _apply_idle_advance(self, target: datetime) -> None:
+        if self._virtual_clock is not None and self._virtual_clock.advance_to(target):
+            assert self._state is not None
+            self._state.virtual_now = self._virtual_clock.now()
+            self._last_advance_actor = ON_IDLE_ACTOR
 
     async def _enforce_budget(self) -> Literal["continue", "abort"]:
         """Threshold checks at the loop boundary, before the next turn is
@@ -713,9 +1058,15 @@ class AgentRunWorkflow:
         )
         while self._paused and not self._landing:
             await workflow.wait_condition(
-                lambda: not self._paused or self._landing or bool(self._steer_inbox)
+                lambda: (
+                    not self._paused
+                    or self._landing
+                    or bool(self._steer_inbox)
+                    or bool(self._advance_requests)
+                )
             )
             await self._drain_steer_mailbox()
+            self._drain_clock_requests()
         if not self._landing:
             self._state.status = self._base_status()
             await self._emit(
@@ -752,9 +1103,11 @@ class AgentRunWorkflow:
                     or self._paused
                     or self._landing
                     or bool(self._steer_inbox)
+                    or bool(self._advance_requests)
                 )
             )
             await self._drain_steer_mailbox()
+            self._drain_clock_requests()
         if self._paused or self._landing:
             return True
         while self._approval_inbox:
@@ -797,7 +1150,8 @@ class AgentRunWorkflow:
         self, step: PlanStep, gate: HumanGate, *, actor: str, actor_type: _ActorType
     ) -> None:
         """Block a step on its human gate, arming the durable timeout timer
-        through the RunClock when the gate carries one."""
+        through the RunClock when the gate carries one. Under a virtual clock
+        the deadline is a virtual instant resolved by advancement."""
         assert self._state is not None
         step.status = "blocked_on_human"
         record = _OpenGate(step_id=step.id, gate=gate)
@@ -818,6 +1172,7 @@ class AgentRunWorkflow:
                     gate.timeout.total_seconds() if gate.timeout is not None else None
                 ),
                 "on_timeout": gate.on_timeout,
+                "deadline": record.deadline.isoformat() if record.deadline else None,
                 "run_status": self._state.status,
             },
         )
@@ -828,11 +1183,14 @@ class AgentRunWorkflow:
     async def _gate_boundary(self) -> RunResult | Literal["waited", "deadlock"]:
         """Wait while every actionable step is blocked on a human.
 
-        Wakes on a gate response, a gate timeout, a steer to record, or a
-        pause/land request. Responses unblock exactly the step they name —
-        answers for steps that are not blocked are dropped without state
-        change. Timeout actions never fire while paused or landing; a fired
-        timer is processed at the first boundary where the run is active.
+        Wakes on a gate response, a gate timeout, a steer to record, a clock
+        advance, or a pause/land request. Responses unblock exactly the step
+        they name — answers for steps that are not blocked are dropped
+        without state change. Timeout actions never fire while paused or
+        landing; a fired timer is processed at the first boundary where the
+        run is active. Under an idle-advancing virtual clock, a wait whose
+        every open gate is auto-resolvable advances time to the earliest
+        deadline instead of parking.
         """
         assert self._state is not None
         state = self._state
@@ -841,16 +1199,41 @@ class AgentRunWorkflow:
         if not any(s.status == "blocked_on_human" for s in plan.steps):
             return "deadlock"
         state.status = self._base_status()
-        await workflow.wait_condition(
-            lambda: (
-                bool(self._gate_response_inbox)
+
+        while True:
+            self._drain_clock_requests()
+            self._deliver_due_responses()
+            if (
+                self._gate_response_inbox
                 or self._any_gate_timer_fired()
                 or self._paused
                 or self._landing
-                or bool(self._steer_inbox)
+                or self._steer_inbox
+            ):
+                break
+            target = self._idle_advance_target()
+            if target is not None:
+                # Blocked only on virtual deadlines: compress the wait. Armed
+                # timers observe the new instant on the next scheduler pass,
+                # which the wait below yields to; delivered responses surface
+                # through the drain at the top of this loop.
+                self._apply_idle_advance(target)
+                continue
+            await workflow.wait_condition(
+                lambda: (
+                    bool(self._gate_response_inbox)
+                    or self._any_gate_timer_fired()
+                    or self._paused
+                    or self._landing
+                    or bool(self._steer_inbox)
+                    or bool(self._advance_requests)
+                    or self._scheduled_due()
+                    or self._idle_advance_target() is not None
+                )
             )
-        )
         await self._drain_steer_mailbox()
+        self._drain_clock_requests()
+        self._deliver_due_responses()
         if self._paused or self._landing:
             return "waited"
 
@@ -888,6 +1271,9 @@ class AgentRunWorkflow:
                     "step_id": step.id,
                     "kind": record.gate.kind,
                     "response": response.response,
+                    "simulated_at": (
+                        response.at_virtual.isoformat() if response.at_virtual else None
+                    ),
                     "run_status": state.status,
                 },
             )
@@ -896,6 +1282,7 @@ class AgentRunWorkflow:
             if not record.timer_fired:
                 continue
             step = next((s for s in plan.steps if s.id == record.step_id), None)
+            deadline = record.deadline
             record.disarm()
             if step is None or step.status != "blocked_on_human":
                 continue
@@ -906,6 +1293,10 @@ class AgentRunWorkflow:
                     "step_id": step.id,
                     "kind": record.gate.kind,
                     "on_timeout": action,
+                    "deadline": deadline.isoformat() if deadline else None,
+                    "advanced_by": (
+                        self._last_advance_actor if self._clock_kind == "virtual" else None
+                    ),
                     "run_status": state.status,
                 },
             )
@@ -1014,6 +1405,212 @@ class AgentRunWorkflow:
                 "run_status": state.status,
             },
         )
+
+    # ---------------------------------------------------- turns & promotion
+
+    async def _execute_step_turn(
+        self, state: RunState, step: PlanStep, turn_input: TurnInput
+    ) -> TurnResult:
+        """One logical turn: the run_turn activity plus, while it promotes,
+        the promoted calls as their own keyed activities — each result
+        claim-checked and fed back into a re-entry of the same turn. Costs
+        and tokens of every partial result are absorbed as they happen; the
+        final outcome is returned for the loop to apply."""
+        result = cast(
+            TurnResult,
+            await workflow.execute_activity(
+                names.RUN_TURN,
+                args=[turn_input, self._turn_context(state)],
+                result_type=TurnResult,
+                start_to_close_timeout=_RUN_TURN_TIMEOUT,
+                heartbeat_timeout=_RUN_TURN_HEARTBEAT,
+                retry_policy=_RUN_TURN_RETRY,
+            ),
+        )
+        call_index = 0
+        while result.outcome == "promote":
+            self._absorb_turn_accounting(state, result)
+            call = result.promoted_call
+            if call is None or call.activity not in PROMOTED_ACTIVITIES:
+                raise ApplicationError(
+                    f"turn promoted an unknown activity {call.activity if call else None!r}",
+                    non_retryable=True,
+                )
+            if call_index >= MAX_PROMOTED_CALLS_PER_TURN:
+                raise ApplicationError(
+                    f"turn exceeded {MAX_PROMOTED_CALLS_PER_TURN} promoted calls",
+                    non_retryable=True,
+                )
+            # The promoting turn's transcript is the head its re-entry
+            # resumes from.
+            state.working_transcript_ref = result.transcript_ref
+            result_ref = await self._run_promoted_call(state, call)
+            resume = PromotedResume(
+                tool_id=call.tool_id,
+                idempotency_key=call.idempotency_key,
+                call_index=call_index,
+                result_ref=result_ref,
+            )
+            call_index += 1
+            result = cast(
+                TurnResult,
+                await workflow.execute_activity(
+                    names.RUN_TURN,
+                    args=[
+                        self._turn_input(state, step),
+                        self._turn_context(state, resume=resume),
+                    ],
+                    result_type=TurnResult,
+                    start_to_close_timeout=_RUN_TURN_TIMEOUT,
+                    heartbeat_timeout=_RUN_TURN_HEARTBEAT,
+                    retry_policy=_RUN_TURN_RETRY,
+                ),
+            )
+        return result
+
+    async def _run_promoted_call(self, state: RunState, call: ToolCallRequest) -> ArtifactRef:
+        """Execute one promoted call as its own activity and hand back the
+        claim-checked result ref. Sandbox jobs ride the workspace-snapshot
+        chain: each job starts from the last snapshot (truth) and its new
+        snapshot is carried forward."""
+        if call.activity == SANDBOX_JOB_ACTIVITY:
+            outcome = cast(
+                SandboxJobOutcome,
+                await workflow.execute_activity(
+                    names.RUN_SANDBOX_JOB,
+                    SandboxJobRequest(
+                        run_id=state.run_id,
+                        call=call,
+                        template=self._carry.binding.sandbox_template,
+                        snapshot_ref=self._sandbox_snapshot_ref,
+                    ),
+                    result_type=SandboxJobOutcome,
+                    start_to_close_timeout=_SANDBOX_JOB_TIMEOUT,
+                    heartbeat_timeout=_SANDBOX_JOB_HEARTBEAT,
+                    retry_policy=_SANDBOX_JOB_RETRY,
+                ),
+            )
+            self._sandbox_snapshot_ref = outcome.snapshot_ref
+            return outcome.result_ref
+        tool_outcome = cast(
+            PromotedToolOutcome,
+            await workflow.execute_activity(
+                names.RUN_PROMOTED_TOOL,
+                PromotedToolRequest(run_id=state.run_id, call=call),
+                result_type=PromotedToolOutcome,
+                start_to_close_timeout=_PROMOTED_TOOL_TIMEOUT,
+                heartbeat_timeout=_PROMOTED_TOOL_HEARTBEAT,
+                retry_policy=_PROMOTED_TOOL_RETRY,
+            ),
+        )
+        return tool_outcome.result_ref
+
+    async def _compact_step_end(self, state: RunState, step: PlanStep, result: TurnResult) -> None:
+        """Distill the completed step's working transcript into its step
+        summary; the raw transcript archive is untouched and its ref rides
+        the summary. Guarded by a patch marker so histories recorded before
+        compaction existed still replay."""
+        if not workflow.patched("m4-step-compaction"):
+            return
+        compact = cast(
+            CompactResult,
+            await workflow.execute_activity(
+                names.COMPACT_STEP,
+                CompactRequest(
+                    boundary="step_end",
+                    run_id=state.run_id,
+                    step_id=step.id,
+                    transcript_ref=result.transcript_ref,
+                    step_description=step.description,
+                    outputs=list(result.step_outputs),
+                ),
+                result_type=CompactResult,
+                start_to_close_timeout=_COMPACT_TIMEOUT,
+                retry_policy=_COMPACT_RETRY,
+            ),
+        )
+        summary = compact.summary
+        if summary is not None:
+            state.step_summaries.append(
+                StepSummaryRef(
+                    step_id=summary.step_id,
+                    headline=summary.headline,
+                    summary_ref=summary.summary_ref,
+                    transcript_ref=summary.transcript_ref,
+                )
+            )
+        await self._emit(
+            "compaction_applied",
+            payload={
+                "boundary": "step_end",
+                "step_id": step.id,
+                "summary_ref": (summary.summary_ref.model_dump(mode="json") if summary else None),
+                "archived_ref": compact.archived_ref.model_dump(mode="json"),
+                "headline": summary.headline if summary else None,
+            },
+        )
+
+    async def _maybe_fold_midstep(self, state: RunState, step: PlanStep) -> None:
+        """Mid-step compaction: once the step's working transcript passes the
+        token threshold, fold older turns into the rolling progress note.
+        The pre-fold transcript stays archived; the folded head links back to
+        it. The trigger is computed from recorded token counts, so replay
+        makes the identical decision."""
+        if state.working_transcript_ref is None:
+            return
+        if self._step_tokens < self._carry.tuning.midstep_compaction_tokens:
+            return
+        self._fold_seq += 1
+        compact = cast(
+            CompactResult,
+            await workflow.execute_activity(
+                names.COMPACT_STEP,
+                CompactRequest(
+                    boundary="mid_step",
+                    run_id=state.run_id,
+                    step_id=step.id,
+                    transcript_ref=state.working_transcript_ref,
+                    keep_recent_turns=self._carry.tuning.keep_recent_turns,
+                    fold_index=self._fold_seq,
+                ),
+                result_type=CompactResult,
+                start_to_close_timeout=_COMPACT_TIMEOUT,
+                retry_policy=_COMPACT_RETRY,
+            ),
+        )
+        if compact.working_ref is not None:
+            state.working_transcript_ref = compact.working_ref
+        self._step_tokens = 0
+        await self._emit(
+            "compaction_applied",
+            payload={
+                "boundary": "mid_step",
+                "step_id": step.id,
+                "working_ref": (
+                    compact.working_ref.model_dump(mode="json") if compact.working_ref else None
+                ),
+                "archived_ref": compact.archived_ref.model_dump(mode="json"),
+                "fold_index": self._fold_seq,
+            },
+        )
+
+    def _step_done_payload(
+        self, state: RunState, step: PlanStep, result: TurnResult
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "step_id": step.id,
+            "outcome": result.outcome,
+            "model_used": result.model_used,
+            "model_requested": state.agent.model,
+            "model_fallback": result.model_used != state.agent.model,
+            "cost_usd": str(result.cost_usd),
+            "budget": self._budget_snapshot(),
+        }
+        if self._sandbox_snapshot_ref is not None:
+            # The workspace truth after this step's sandbox jobs, so the
+            # snapshot chain is externally observable.
+            payload["sandbox_snapshot_ref"] = self._sandbox_snapshot_ref.model_dump(mode="json")
+        return payload
 
     # -------------------------------------------------------------- fan-out
 
@@ -1481,11 +2078,12 @@ class AgentRunWorkflow:
             "reserved_usd": str(budget.reserved_usd),
         }
 
-    def _turn_context(self, state: RunState) -> TurnContext:
+    def _turn_context(self, state: RunState, resume: PromotedResume | None = None) -> TurnContext:
         return TurnContext(
             agent=state.agent,
             binding_ref=state.binding_ref,
             turn=state.turn_count + 1,
+            resume=resume,
         )
 
     def _turn_input(self, state: RunState, step: PlanStep) -> TurnInput:
@@ -1504,29 +2102,36 @@ class AgentRunWorkflow:
             now=self._clock.now(),
         )
 
-    def _apply_turn(self, state: RunState, step: PlanStep, result: TurnResult) -> None:
-        """Only the workflow mutates the plan; the activity returned a
-        proposal. Budget spend and token totals accumulate here, off the
-        turn's actual cost."""
-        state.turn_count += 1
+    def _absorb_turn_accounting(self, state: RunState, result: TurnResult) -> None:
+        """Book one turn result's cost and tokens — including the partial
+        results a promoting turn produces before its final outcome."""
         state.budget.spent_usd += result.cost_usd
         self._tokens = TokenCounts(
             input_tokens=self._tokens.input_tokens + result.tokens.input_tokens,
             output_tokens=self._tokens.output_tokens + result.tokens.output_tokens,
         )
+        self._step_tokens += result.tokens.input_tokens + result.tokens.output_tokens
+
+    def _apply_turn(self, state: RunState, step: PlanStep, result: TurnResult) -> None:
+        """Only the workflow mutates the plan; the activity returned a
+        proposal. The final result of a logical turn moves the step and the
+        transcript head; accounting was absorbed per partial result."""
+        self._absorb_turn_accounting(state, result)
+        state.turn_count += 1
         if result.outcome == "step_done":
             step.status = "done"
             step.outputs = list(result.step_outputs)
             # The working transcript is per step; a fresh step starts clean.
             state.working_transcript_ref = None
+            self._step_tokens = 0
         elif result.outcome in ("continue", "needs_human", "propose_revision"):
             # The step stays in flight; its transcript head advances so the
             # next turn (after any gate answer or revision) resumes it.
             state.working_transcript_ref = result.transcript_ref
         else:
             # Fan-out is plan-driven (steps with executor "subagent"), so a
-            # turn-level spawn_group outcome has no path; promote arrives
-            # with promoted tools. The executors cannot produce either yet.
+            # turn-level spawn_group outcome has no path; promote never
+            # reaches here — the promotion loop consumes it.
             raise ApplicationError(
                 f"turn outcome {result.outcome!r} is not supported yet",
                 non_retryable=True,
@@ -1541,18 +2146,26 @@ class AgentRunWorkflow:
         actor_type: _ActorType = "system",
     ) -> None:
         """Every state change emits a RunEvent through the outbox activity.
-        Event identity is deterministic: {run_id}:{seq}."""
+        Event identity is deterministic: {run_id}:{seq}, with the sequence
+        carried across hops so the outbox's (run_id, seq) idempotency holds
+        for the run's whole life. Events carry dual stamps — real time
+        always, virtual time whenever the run has a virtual clock — and the
+        sandbox flag so rehearsal trajectories are never mistaken for
+        production."""
         assert self._state is not None
         self._event_seq += 1
+        virtual = self._virtual_now()
+        if virtual is not None:
+            self._state.virtual_now = virtual
         event = RunEvent(
             id=f"{self._state.run_id}:{self._event_seq}",
             run_id=self._state.run_id,
             tenant_id=self._state.tenant_id,
             seq=self._event_seq,
             type=event_type,
-            ts=self._clock.now(),
-            virtual_ts=None,  # TODO: dual stamps once virtual clocks exist
-            sandbox=False,  # TODO: flag rehearsal (sandbox-binding) runs
+            ts=self._real_clock.now(),
+            virtual_ts=virtual,
+            sandbox=self._carry.binding.kind == "sandbox",
             actor=actor,
             actor_type=actor_type,
             payload=payload or {},

@@ -101,8 +101,10 @@ def test_happy_path_run_lands_with_events(api: httpx.Client) -> None:
         "plan_created",
         "step_started",
         "step_done",
+        "compaction_applied",
         "step_started",
         "step_done",
+        "compaction_applied",
         "landing_started",
         "run_completed",
     ]
@@ -110,7 +112,7 @@ def test_happy_path_run_lands_with_events(api: httpx.Client) -> None:
     # Actor identity flows into RunEvents through the auth stub.
     assert events[0]["actor"] == "e2e@convoy.test"
     assert all(e["tenant_id"] == "tenant-e2e" for e in events)
-    assert [e["seq"] for e in events] == list(range(1, 9))
+    assert [e["seq"] for e in events] == list(range(1, 11))
 
     # Read path: projections only.
     run = api.get(f"/runs/{run_id}", headers=auth_headers()).json()

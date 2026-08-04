@@ -2,14 +2,14 @@
 
 External endpoints: POST /runs, POST /runs/{id}/pause|resume|land|steer,
 POST /runs/{id}/plan/approve, POST /runs/{id}/steps/{sid}/respond,
-GET /runs/{id}, GET /runs/{id}/events (SSE). Workflow ID = run ID so client
-retries are idempotent. Every mutation signals the workflow with the verified
-actor identity, which flows into the run's events. Reads are served from
-Postgres projections and never touch Temporal. The SSE stream is resumable:
-events carry their per-run seq as the SSE id, and both the Last-Event-ID
-header and the `after` query parameter continue from a cursor.
-
-TODO: clock advance endpoint (sandbox bindings with virtual clocks only).
+POST /runs/{id}/clock/advance, GET /runs/{id}, GET /runs/{id}/events (SSE).
+Workflow ID = run ID so client retries are idempotent. Every mutation signals
+the workflow with the verified actor identity, which flows into the run's
+events. Reads are served from Postgres projections and never touch Temporal.
+The SSE stream is resumable: events carry their per-run seq as the SSE id,
+and both the Last-Event-ID header and the `after` query parameter continue
+from a cursor. Clock advances are guarded here and again in the workflow:
+only sandbox-kind bindings running a virtual clock accept them.
 """
 
 import asyncio
@@ -18,7 +18,7 @@ import json
 import uuid
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Annotated, cast
+from typing import Annotated, Any, cast
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -35,12 +35,14 @@ from convoy_core import (
     RunState,
     SteerMessage,
 )
+from convoy_runtime.carry import BindingFacts, RunCarry, RunTuning
 from convoy_runtime.codec import runtime_data_converter
 from convoy_runtime.config import RuntimeConfig
 from convoy_runtime.control_plane.auth import Actor, require_actor
 from convoy_runtime.control_plane.models import (
     ApprovePlanRequest,
     BudgetView,
+    ClockAdvanceRequest,
     CreateRunRequest,
     CreateRunResponse,
     GateRespondRequest,
@@ -55,7 +57,7 @@ from convoy_runtime.projections.store import ProjectionStore, RunProjection
 from convoy_runtime.providers.artifact_store import ArtifactStore
 from convoy_runtime.providers.grants import GrantValidationError, resolve_requested_tools
 from convoy_runtime.providers.model_gateway import ModelGateway, ModelGatewayError
-from convoy_runtime.signals import GateResponse, PlanApprovalDecision
+from convoy_runtime.signals import ClockAdvance, GateResponse, PlanApprovalDecision
 from convoy_runtime.workflows.agent_run import AgentRunWorkflow
 
 _SSE_POLL_INTERVAL = 0.25
@@ -216,6 +218,21 @@ async def create_run(
         pinned_ref=pinned_ref,
     )
 
+    # The initial runtime carry: the binding facts the workflow branches on
+    # (clock, kind, template) and the deployment's durability tuning, all
+    # recorded as workflow input so replay sees the same limits.
+    carry = RunCarry(
+        binding=BindingFacts(
+            kind=binding.kind,
+            clock=binding.clock,
+            sandbox_template=binding.sandbox_template,
+        ),
+        tuning=RunTuning(
+            turn_limit=config.turn_limit,
+            midstep_compaction_tokens=config.midstep_compaction_tokens,
+        ),
+    )
+
     await projections.create_run(
         tenant_id=actor.tenant_id,
         run_id=run_id,
@@ -228,7 +245,7 @@ async def create_run(
     with contextlib.suppress(WorkflowAlreadyStartedError):
         await client.start_workflow(
             AgentRunWorkflow.run,
-            args=[state, actor.actor_id],
+            args=[state, actor.actor_id, carry],
             id=run_id,  # workflow ID = run ID -> idempotent retries
             task_queue=config.task_queue,
         )
@@ -326,20 +343,58 @@ async def respond_to_gate(
 ) -> SignalResponse:
     """Answer exactly one step's open human gate. Responding to a step that
     is not blocked on a human is a clean conflict; the workflow re-checks and
-    drops stale answers."""
+    drops stale answers. A response carrying `at_virtual` is a scheduled
+    simulated answer, so it may target a gate that has not opened yet."""
     await _require_run(request, run_id, actor)
     steps = await _projections(request).get_steps(actor.tenant_id, run_id)
     step = next((s for s in steps if s.step_id == step_id), None)
     if step is None:
         raise HTTPException(status_code=404, detail=f"step {step_id!r} not found")
-    if step.status != "blocked_on_human":
+    if body.at_virtual is None and step.status != "blocked_on_human":
         raise HTTPException(
             status_code=409,
             detail=f"step {step_id!r} is not awaiting a human response (status {step.status!r})",
         )
-    response = GateResponse(step_id=step_id, response=body.response, actor=actor.actor_id)
+    response = GateResponse(
+        step_id=step_id, response=body.response, actor=actor.actor_id, at_virtual=body.at_virtual
+    )
     await _send_signal(request, run_id, "human_response", response)
     return SignalResponse(run_id=run_id, signal="human_response")
+
+
+@app.post("/runs/{run_id}/clock/advance", response_model=SignalResponse, status_code=202)
+async def advance_clock(
+    request: Request, run_id: str, body: ClockAdvanceRequest, actor: ActorDep
+) -> SignalResponse:
+    """Fast-forward a rehearsal run's virtual clock, resolving every virtual
+    timer with a deadline at or before the target. Guarded twice: only
+    sandbox-kind bindings running a virtual clock accept advances (the
+    workflow re-checks and drops anything else), and time never moves
+    backward. The advance is an audited external mutation — the signal
+    carries the verified actor, and the events its resolved timers emit
+    attribute it."""
+    await _require_run(request, run_id, actor)
+    store = cast(ArtifactStore, request.app.state.store)
+    # The binding snapshot pinned at run creation is the authority on kind
+    # and clock mode for the run's whole life; it lives at a key this control
+    # plane wrote when it created the run.
+    binding_raw: dict[str, Any] = await store.get_json_at(f"runs/{run_id}/binding.json")
+    binding = EnvironmentBinding.model_validate(binding_raw)
+    if binding.kind != "sandbox":
+        raise HTTPException(
+            status_code=409,
+            detail=f"run {run_id!r} is bound to a {binding.kind!r} environment; "
+            "clock advances are sandbox-only",
+        )
+    if binding.clock.mode != "virtual":
+        raise HTTPException(
+            status_code=409,
+            detail=f"run {run_id!r} runs a {binding.clock.mode!r} clock; "
+            "clock advances require virtual mode",
+        )
+    advance = ClockAdvance(to=body.to, actor=actor.actor_id)
+    await _send_signal(request, run_id, "advance_time", advance)
+    return SignalResponse(run_id=run_id, signal="advance_time")
 
 
 @app.get("/runs/{run_id}", response_model=RunView)

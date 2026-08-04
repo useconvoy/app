@@ -24,6 +24,7 @@ expect:
     - plan_created
     - step_started        # step-1 (self)
     - step_done
+    - compaction_applied
     - step_started        # fan-1 member goes running
     - child_spawned       # slice carved into reserved before the child runs
     - run_started         # child fan-1's own stream begins
@@ -42,6 +43,7 @@ expect:
     - step_done
     - step_started        # the join proceeds with both results
     - step_done
+    - compaction_applied
     - landing_started
     - run_completed
   turn_calls: 4           # two parent turns + one per child

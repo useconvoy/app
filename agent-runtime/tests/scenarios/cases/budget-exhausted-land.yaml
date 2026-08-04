@@ -16,6 +16,7 @@ expect:
     - plan_created
     - step_started
     - step_done
+    - compaction_applied
     - budget_warning
     - step_started
     - budget_exhausted

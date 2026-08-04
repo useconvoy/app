@@ -158,11 +158,18 @@ async def test_clean_fanout_join_within_concurrency_window() -> None:
     assert all(r.status == "done" for r in fake.archived_results)
     join_turn = fake.turn_inputs[-1]
     assert join_turn.step_id == "step-2"
-    assert sorted(s.step_id for s in join_turn.step_summaries) == ["fan-1", "fan-2", "fan-3"]
+    # step-1's own step-end summary rides along with the three child results.
+    assert sorted(s.step_id for s in join_turn.step_summaries) == [
+        "fan-1",
+        "fan-2",
+        "fan-3",
+        "step-1",
+    ]
     for summary in join_turn.step_summaries:
-        assert summary.headline.startswith("Completed:")
-        assert summary.summary_ref.key.endswith("/result.json")
         assert summary.transcript_ref.key  # full fidelity stays a ref
+        if summary.step_id.startswith("fan-"):
+            assert summary.headline.startswith("Completed:")
+            assert summary.summary_ref.key.endswith("/result.json")
 
     # The children were briefed with their dependency's outputs, one layer
     # down, against their own run ids.
@@ -328,9 +335,10 @@ async def test_dead_child_counts_its_whole_slice_as_spent() -> None:
     alive = landed["fan-2"].payload
     assert alive["status"] == "done"
     assert alive["cost_assumed"] is False
-    # Only the surviving child produced a summary for the join.
+    # Only the surviving child produced a child summary for the join (plus
+    # step-1's own step-end summary).
     join_turn = fake.turn_inputs[-1]
-    assert [s.step_id for s in join_turn.step_summaries] == ["fan-2"]
+    assert [s.step_id for s in join_turn.step_summaries] == ["step-1", "fan-2"]
     _parent_budget_walk(fake, "run-fan-dead-child", Decimal("10"))
     assert Decimal(str(_final_parent_budget(fake, "run-fan-dead-child")["reserved_usd"])) == 0
 
@@ -423,7 +431,7 @@ async def test_one_child_fails_join_with_partials() -> None:
     assert join_started.payload["joined_with_failures"] == ["fan-2"]
     join_turn = fake.turn_inputs[-1]
     assert join_turn.step_id == "step-2"
-    assert [s.step_id for s in join_turn.step_summaries] == ["fan-1", "fan-2"]
+    assert [s.step_id for s in join_turn.step_summaries] == ["step-1", "fan-1", "fan-2"]
     headlines = {s.step_id: s.headline for s in join_turn.step_summaries}
     assert headlines["fan-1"].startswith("Completed:")
     assert headlines["fan-2"].startswith("Failed:")

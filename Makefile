@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f agent-runtime/compose.yaml
 
-.PHONY: lint fmt typecheck test e2e e2e-up e2e-down litellm-prefetch record-history
+.PHONY: lint fmt typecheck test e2e e2e-up e2e-down chaos litellm-prefetch record-history
 
 lint:
 	uv run ruff format --check .
@@ -16,7 +16,7 @@ typecheck:
 # Fast lane: unit + workflow + activity + contracts + scenarios + replay +
 # lint tests. No containers, no network, no real model keys.
 test:
-	uv run pytest agent-runtime/tests -m "not e2e"
+	uv run pytest agent-runtime/tests -m "not e2e and not chaos"
 
 # The litellm image builds fully offline; its inputs (wheels, prisma engines)
 # are prefetched on the host first. Idempotent.
@@ -33,6 +33,14 @@ e2e-down:
 # SSE + projections, executor contract suite vs mock-model, RLS checks).
 e2e: e2e-up
 	uv run pytest agent-runtime/tests -m e2e; \
+	status=$$?; \
+	$(COMPOSE) down -v; \
+	exit $$status
+
+# Chaos lane: crash/durability suite (worker kills, sandbox loss) against
+# the same compose stack, kept out of e2e so that lane stays fast.
+chaos: e2e-up
+	uv run pytest agent-runtime/tests -m chaos; \
 	status=$$?; \
 	$(COMPOSE) down -v; \
 	exit $$status

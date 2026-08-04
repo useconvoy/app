@@ -23,6 +23,7 @@ expect:
     - plan_created
     - step_started
     - step_done
+    - compaction_applied
     - step_started
     - gate_opened
     - gate_timed_out

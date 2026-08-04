@@ -2,13 +2,18 @@
 
 Same names and signatures as the real activities; providers are faked so the
 time-skipping lane needs no network or containers. Turn behavior is scripted
-per call (cost, outcome, model, gate requests, proposed revisions), which is
-how budget, approval, gate, and steer workflow behavior is driven
-deterministically. The fixture plan can carry human gates on named steps and
-a fan-out group of subagent members. Child turns are scripted per member
-step (keyed by step id, indexed per child) so concurrent children stay
-deterministic regardless of interleaving, and a hold switch can pin child
-turns in flight to observe concurrency windows, pause, and land cascades.
+per logical turn (cost, outcome, model, gate requests, proposed revisions,
+promoted calls), which is how budget, approval, gate, steer, promotion, and
+compaction workflow behavior is driven deterministically. Scripts are
+indexed by the turn number the workflow passes, so activity retries and
+promoted-call re-entries replay the same script instead of advancing it.
+The fixture plan can carry human gates on named steps and a fan-out group of
+subagent members. Child turns are scripted per member step (keyed by step
+id, indexed per child) so concurrent children stay deterministic regardless
+of interleaving, and a hold switch can pin child turns in flight to observe
+concurrency windows, pause, and land cascades. Side-effecting fakes share
+one in-memory journal with the container semantics: a repeated idempotency
+key replays the recorded result instead of firing again.
 """
 
 import asyncio
@@ -17,6 +22,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Literal
 
+from stub_env import SideEffectJournal
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
@@ -28,14 +34,28 @@ from convoy_core import (
     PlanPatchOp,
     RunEvent,
     RunState,
+    SandboxJobResult,
+    StepSummaryRef,
     SubagentResult,
     TokenCounts,
+    ToolCallRequest,
     TurnInput,
     TurnResult,
 )
 from convoy_runtime.activities import names
 from convoy_runtime.activities.plan import FanoutFixture, build_fixture_plan
 from convoy_runtime.activities.subagent import build_subagent_result
+from convoy_runtime.providers.compaction import CompactRequest, CompactResult
+from convoy_runtime.providers.promoted import (
+    PROMOTED_TOOL_ACTIVITY,
+    SANDBOX_JOB_ACTIVITY,
+    SANDBOX_TOOL_PREFIX,
+    PromotedToolOutcome,
+    PromotedToolRequest,
+    SandboxJobOutcome,
+    SandboxJobRequest,
+    promoted_call_key,
+)
 from convoy_runtime.providers.turn_executor import SCRIPTED_MODEL, TurnContext
 from convoy_runtime.workflows.subagent import SubagentBrief, SubagentWrapUp
 
@@ -48,7 +68,10 @@ FakeActivity = Callable[..., Coroutine[Any, Any, Any]]
 class ScriptedTurn:
     """One scripted run_turn response; outcome "fail" raises a non-retryable
     activity error instead of returning a result. A "needs_human" turn may
-    carry the gate it requests; a "propose_revision" turn carries its ops."""
+    carry the gate it requests; a "propose_revision" turn carries its ops.
+    `promote_tool` scripts a promoted call: the turn's first execution
+    returns outcome "promote" for that tool and the re-entry (with the
+    claim-checked result in context) plays the scripted base outcome."""
 
     cost_usd: Decimal = Decimal("0.0001")
     outcome: Literal["continue", "step_done", "fail", "needs_human", "propose_revision"] = (
@@ -59,13 +82,14 @@ class ScriptedTurn:
     output_tokens: int = 7
     gate: HumanGate | None = None
     ops: tuple[PlanPatchOp, ...] = ()
+    promote_tool: str | None = None
 
 
 class FakeRuntime:
     """In-memory activity set: records emitted events, scripts turn results,
     can gate the first turn to catch a run mid-flight, can attach human
-    gates and a fan-out group to the fixture plan's steps, and can hold
-    child turns in flight until released."""
+    gates and a fan-out group to the fixture plan's steps, can hold child
+    turns in flight until released, and journals promoted side effects."""
 
     def __init__(
         self,
@@ -77,6 +101,7 @@ class FakeRuntime:
         child_turns: dict[str, list[ScriptedTurn]] | None = None,
         hold_child_turns: bool = False,
         fail_wrap_for: set[str] | None = None,
+        fail_promoted_attempts: int = 0,
     ) -> None:
         self.events: list[RunEvent] = []
         self.turn_calls = 0
@@ -113,6 +138,15 @@ class FakeRuntime:
         self.wrapups: list[SubagentWrapUp] = []
         self.archived_results: list[SubagentResult] = []
         self.fail_wrap_for = fail_wrap_for or set()
+        # Compaction and promoted-call records.
+        self.compact_requests: list[CompactRequest] = []
+        self.journal = SideEffectJournal()
+        self.promoted_requests: list[PromotedToolRequest] = []
+        self.sandbox_requests: list[SandboxJobRequest] = []
+        # Transient-failure injection: the first N promoted-tool executions
+        # crash after journaling, so the retry proves single-fire semantics.
+        self.fail_promoted_attempts = fail_promoted_attempts
+        self._promoted_failures = 0
 
     @activity.defn(name=names.CREATE_PLAN)
     async def create_plan(self, state: RunState) -> Plan:
@@ -157,8 +191,30 @@ class FakeRuntime:
                 raise
         script = ScriptedTurn()
         if self.turns:
-            index = min(self.parent_turn_calls - 1, len(self.turns) - 1)
+            # Scripts are indexed by the logical turn the workflow passes, so
+            # a promoted re-entry replays the same script instead of the next.
+            index = min(ctx.turn - 1, len(self.turns) - 1)
             script = self.turns[index]
+        if script.promote_tool is not None and ctx.resume is None:
+            key = promoted_call_key(turn.run_id, turn.step_id, ctx.turn, 0)
+            is_sandbox = script.promote_tool.startswith(SANDBOX_TOOL_PREFIX)
+            return TurnResult(
+                transcript_ref=support_ref(
+                    f"runs/{turn.run_id}/transcripts/{turn.step_id}/turn-{ctx.turn}.json"
+                ),
+                tokens=TokenCounts(
+                    input_tokens=script.input_tokens, output_tokens=script.output_tokens
+                ),
+                cost_usd=script.cost_usd,
+                model_used=script.model_used,
+                outcome="promote",
+                promoted_call=ToolCallRequest(
+                    tool_id=script.promote_tool,
+                    activity=SANDBOX_JOB_ACTIVITY if is_sandbox else PROMOTED_TOOL_ACTIVITY,
+                    args_ref=None,
+                    idempotency_key=key,
+                ),
+            )
         return self._turn_result(turn, ctx, script)
 
     async def _child_turn(self, turn: TurnInput, ctx: TurnContext) -> TurnResult:
@@ -202,6 +258,66 @@ class FakeRuntime:
             ),
             proposed_revision=list(script.ops) if script.ops else None,
             gate_request=script.gate,
+        )
+
+    @activity.defn(name=names.COMPACT_STEP)
+    async def compact_step(self, request: CompactRequest) -> CompactResult:
+        """Deterministic twin of the real compaction activity: same refs and
+        shapes, no artifact I/O."""
+        self.compact_requests.append(request)
+        if request.boundary == "step_end":
+            return CompactResult(
+                boundary="step_end",
+                archived_ref=request.transcript_ref,
+                summary=StepSummaryRef(
+                    step_id=request.step_id,
+                    headline=f"Completed {request.step_id}: {request.step_description}"[:120],
+                    summary_ref=support_ref(
+                        f"runs/{request.run_id}/summaries/{request.step_id}.json"
+                    ),
+                    transcript_ref=request.transcript_ref,
+                ),
+            )
+        return CompactResult(
+            boundary="mid_step",
+            archived_ref=request.transcript_ref,
+            working_ref=support_ref(
+                f"runs/{request.run_id}/transcripts/{request.step_id}"
+                f"/fold-{request.fold_index}.json"
+            ),
+        )
+
+    @activity.defn(name=names.RUN_PROMOTED_TOOL)
+    async def run_promoted_tool(self, request: PromotedToolRequest) -> PromotedToolOutcome:
+        self.promoted_requests.append(request)
+        call = request.call
+        _, replayed = self.journal.record(call.tool_id, call.idempotency_key, {})
+        if self._promoted_failures < self.fail_promoted_attempts:
+            # The side effect landed but the activity dies before completing:
+            # exactly the crash window the idempotency key exists for.
+            self._promoted_failures += 1
+            raise ApplicationError("injected promoted-tool crash", non_retryable=False)
+        return PromotedToolOutcome(
+            tool_id=call.tool_id,
+            idempotency_key=call.idempotency_key,
+            result_ref=support_ref(f"runs/{request.run_id}/promoted/{call.idempotency_key}.json"),
+            replayed=replayed,
+        )
+
+    @activity.defn(name=names.RUN_SANDBOX_JOB)
+    async def run_sandbox_job(self, request: SandboxJobRequest) -> SandboxJobOutcome:
+        self.sandbox_requests.append(request)
+        call = request.call
+        _, replayed = self.journal.record(call.tool_id, call.idempotency_key, {})
+        return SandboxJobOutcome(
+            tool_id=call.tool_id,
+            idempotency_key=call.idempotency_key,
+            result=SandboxJobResult(exit_code=0),
+            result_ref=support_ref(f"runs/{request.run_id}/promoted/{call.idempotency_key}.json"),
+            snapshot_ref=support_ref(
+                f"sandboxes/{request.run_id}/snapshot-{call.idempotency_key}.tar"
+            ),
+            replayed=replayed,
         )
 
     @activity.defn(name=names.ASSEMBLE_SUBAGENT_HEADER)
@@ -269,6 +385,9 @@ class FakeRuntime:
             self.provision_model_key,
             self.assemble_pinned_header,
             self.run_turn,
+            self.compact_step,
+            self.run_promoted_tool,
+            self.run_sandbox_job,
             self.assemble_subagent_header,
             self.wrap_subagent_result,
             self.archive_subagent_result,
