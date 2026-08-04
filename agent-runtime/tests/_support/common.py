@@ -13,7 +13,7 @@ from convoy_core import AgentSpec, ArtifactRef, BudgetState, RunPolicy, RunState
 from convoy_runtime.codec import runtime_data_converter
 
 # Fixed test key: replay of checked-in (encrypted) histories requires a stable
-# key. Test-only material - per-stack keys are provisioned in milestone-5.
+# key. Test-only material - real stacks provision per-stack keys as secrets.
 TEST_CODEC_KEY = b"convoy-test-key-0123456789abcdef"
 TEST_CODEC_KEY_B64 = base64.b64encode(TEST_CODEC_KEY).decode()
 TEST_TASK_QUEUE = "agent-runtime-test"
@@ -34,7 +34,14 @@ def fixture_ref(key: str = "fixtures/fixture.json") -> ArtifactRef:
     )
 
 
-def fixture_run_state(run_id: str = "run-test-1", tenant_id: str = "tenant-test") -> RunState:
+def fixture_run_state(
+    run_id: str = "run-test-1",
+    tenant_id: str = "tenant-test",
+    *,
+    budget_cap_usd: Decimal = Decimal("10"),
+    policy: RunPolicy | None = None,
+    model: str = "scripted-echo-1",
+) -> RunState:
     return RunState(
         run_id=run_id,
         tenant_id=tenant_id,
@@ -45,13 +52,13 @@ def fixture_run_state(run_id: str = "run-test-1", tenant_id: str = "tenant-test"
             id=f"{run_id}-root",
             layer=0,
             max_children=0,
-            model="scripted-echo-1",
+            model=model,
             tools=[],
             prompt_ref=fixture_ref(f"runs/{run_id}/prompts/root.json"),
         ),
-        policy=RunPolicy(require_plan_approval=False),
+        policy=policy or RunPolicy(require_plan_approval=False),
         plan=None,
-        budget=BudgetState(cap_usd=Decimal("10")),
+        budget=BudgetState(cap_usd=budget_cap_usd),
         pinned_ref=fixture_ref(f"runs/{run_id}/pinned.json"),
     )
 

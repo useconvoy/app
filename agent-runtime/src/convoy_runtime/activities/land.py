@@ -1,7 +1,8 @@
 """land_run activity — graceful wrap-up producing the auditable LandReport.
 
-Partial results are valid completion (DESIGN.md section 6.2). The full report
-is archived to the artifact store; the ref rides back through Temporal.
+Partial results are valid completion. The workflow passes its aggregated
+token totals alongside the final state; the full report is archived to the
+artifact store and the ref rides back through Temporal.
 """
 
 from typing import Literal
@@ -18,7 +19,7 @@ class LandActivities:
         self._store = store
 
     @activity.defn(name=names.LAND_RUN)
-    async def land_run(self, state: RunState) -> LandReport:
+    async def land_run(self, state: RunState, tokens: TokenCounts) -> LandReport:
         plan = state.plan
         steps = plan.steps if plan else []
         done = [s for s in steps if s.status == "done"]
@@ -44,7 +45,7 @@ class LandActivities:
             steps_skipped=len(skipped),
             steps_failed=len(failed),
             cost_usd=state.budget.spent_usd,
-            tokens=TokenCounts(),  # TODO(milestone-1): aggregate real per-turn token counts
+            tokens=tokens,
         )
         report_ref = await self._store.put_json(
             f"runs/{state.run_id}/reports/land.json", report.model_dump(mode="json")

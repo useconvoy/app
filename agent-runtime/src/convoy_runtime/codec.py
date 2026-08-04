@@ -1,10 +1,10 @@
 """Temporal payload codec — client-side encryption of every payload.
 
 All Temporal payloads are encrypted (per-stack keys) before leaving workers;
-combined with claim-checking, Temporal holds only ciphertext and refs
-(DESIGN.md section 3, decision 2). The codec must stay ON in every environment
-including compose (CLAUDE.md rule 9) — there is no plaintext fallback and no
-way to construct the runtime data converter without a key.
+combined with claim-checking, Temporal holds only ciphertext and refs. The
+codec must stay ON in every environment including compose — there is no
+plaintext fallback and no way to construct the runtime data converter without
+a key.
 """
 
 import base64
@@ -19,7 +19,10 @@ from temporalio.converter import DataConverter, PayloadCodec
 
 ENCODING = b"binary/encrypted"
 _NONCE_SIZE = 12
-CODEC_KEY_ENV = "CONVOY_CODEC_KEY"
+# The stack injects CONVOY_CODEC_KEY_B64 (from the per-stack secret); the
+# older CONVOY_CODEC_KEY spelling remains a fallback for local tooling.
+CODEC_KEY_ENV = "CONVOY_CODEC_KEY_B64"
+CODEC_KEY_ENV_LEGACY = "CONVOY_CODEC_KEY"
 
 
 class EncryptionCodec(PayloadCodec):
@@ -63,12 +66,12 @@ def runtime_data_converter(key: bytes, key_id: str = "convoy-stack-key") -> Data
 
 def codec_key_from_env() -> bytes:
     """Load the stack codec key (base64, 32 bytes). Fails hard if absent — the
-    codec is never optional (CLAUDE.md rule 9)."""
-    raw = os.environ.get(CODEC_KEY_ENV)
+    codec is never optional, in any environment including compose."""
+    raw = os.environ.get(CODEC_KEY_ENV) or os.environ.get(CODEC_KEY_ENV_LEGACY)
     if not raw:
         raise RuntimeError(
             f"{CODEC_KEY_ENV} is not set - the payload codec is mandatory in every "
-            "environment including compose (CLAUDE.md rule 9)"
+            "environment including compose"
         )
     key = base64.b64decode(raw)
     if len(key) != 32:

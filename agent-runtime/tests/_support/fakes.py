@@ -1,17 +1,22 @@
 """Fake activity implementations for workflow-layer tests.
 
 Same names and signatures as the real activities; providers are faked so the
-time-skipping lane needs no network or containers (TESTING.md section 1).
+time-skipping lane needs no network or containers. Turn behavior is scripted
+per call (cost, outcome, model), which is how budget and fallback workflow
+behavior is driven deterministically.
 """
 
 import asyncio
 from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 
 from convoy_core import (
+    ArtifactRef,
     LandReport,
     Plan,
     RunEvent,
@@ -22,20 +27,44 @@ from convoy_core import (
 )
 from convoy_runtime.activities import names
 from convoy_runtime.activities.plan import build_fixture_plan
+from convoy_runtime.providers.turn_executor import SCRIPTED_MODEL, TurnContext
 
 from .common import fixture_ref as support_ref
 
 FakeActivity = Callable[..., Coroutine[Any, Any, Any]]
 
 
-class FakeRuntime:
-    """In-memory activity set: records emitted events, can gate the first turn."""
+@dataclass(frozen=True)
+class ScriptedTurn:
+    """One scripted run_turn response; outcome "fail" raises a non-retryable
+    activity error instead of returning a result."""
 
-    def __init__(self, *, gate_first_turn: bool = False) -> None:
+    cost_usd: Decimal = Decimal("0.0001")
+    outcome: Literal["continue", "step_done", "fail"] = "step_done"
+    model_used: str = SCRIPTED_MODEL
+    input_tokens: int = 12
+    output_tokens: int = 7
+
+
+class FakeRuntime:
+    """In-memory activity set: records emitted events, scripts turn results,
+    can gate the first turn to catch a run mid-flight."""
+
+    def __init__(
+        self,
+        *,
+        gate_first_turn: bool = False,
+        turns: list[ScriptedTurn] | None = None,
+    ) -> None:
         self.events: list[RunEvent] = []
         self.turn_calls = 0
+        self.turn_inputs: list[TurnInput] = []
+        self.turn_contexts: list[TurnContext] = []
         self.turn_cancelled = False
         self.gate_first_turn = gate_first_turn
+        self.turns = turns
+        self.provision_calls: list[tuple[str, Decimal]] = []
+        self.assemble_calls = 0
         self.first_turn_started = asyncio.Event()
         self.release_first_turn = asyncio.Event()
 
@@ -45,9 +74,20 @@ class FakeRuntime:
             "test goal", ["it lands"], support_ref(f"runs/{state.run_id}/plans/v1.json")
         )
 
+    @activity.defn(name=names.PROVISION_MODEL_KEY)
+    async def provision_model_key(self, run_id: str, cap_usd: Decimal) -> None:
+        self.provision_calls.append((run_id, cap_usd))
+
+    @activity.defn(name=names.ASSEMBLE_PINNED_HEADER)
+    async def assemble_pinned_header(self, state: RunState) -> ArtifactRef:
+        self.assemble_calls += 1
+        return support_ref(f"runs/{state.run_id}/pinned/turn-{state.turn_count + 1}.json")
+
     @activity.defn(name=names.RUN_TURN)
-    async def run_turn(self, turn: TurnInput) -> TurnResult:
+    async def run_turn(self, turn: TurnInput, ctx: TurnContext) -> TurnResult:
         self.turn_calls += 1
+        self.turn_inputs.append(turn)
+        self.turn_contexts.append(ctx)
         if self.gate_first_turn and self.turn_calls == 1:
             self.first_turn_started.set()
             try:
@@ -55,17 +95,31 @@ class FakeRuntime:
             except asyncio.CancelledError:
                 self.turn_cancelled = True
                 raise
+        script = ScriptedTurn()
+        if self.turns is not None:
+            index = min(self.turn_calls - 1, len(self.turns) - 1)
+            script = self.turns[index]
+        if script.outcome == "fail":
+            raise ApplicationError("scripted turn failure", non_retryable=True)
         return TurnResult(
-            transcript_ref=support_ref(f"runs/{turn.run_id}/transcripts/{turn.step_id}.json"),
-            tokens=TokenCounts(input_tokens=12, output_tokens=7),
-            cost_usd=Decimal("0.0001"),
-            model_used="scripted-echo-1",
-            outcome="step_done",
-            step_outputs=[support_ref(f"runs/{turn.run_id}/outputs/{turn.step_id}.json")],
+            transcript_ref=support_ref(
+                f"runs/{turn.run_id}/transcripts/{turn.step_id}/turn-{ctx.turn}.json"
+            ),
+            tokens=TokenCounts(
+                input_tokens=script.input_tokens, output_tokens=script.output_tokens
+            ),
+            cost_usd=script.cost_usd,
+            model_used=script.model_used,
+            outcome=script.outcome,
+            step_outputs=(
+                [support_ref(f"runs/{turn.run_id}/outputs/{turn.step_id}.json")]
+                if script.outcome == "step_done"
+                else []
+            ),
         )
 
     @activity.defn(name=names.LAND_RUN)
-    async def land_run(self, state: RunState) -> LandReport:
+    async def land_run(self, state: RunState, tokens: TokenCounts) -> LandReport:
         plan = state.plan
         assert plan is not None
         done = [s for s in plan.steps if s.status == "done"]
@@ -79,7 +133,7 @@ class FakeRuntime:
             steps_skipped=len([s for s in plan.steps if s.status == "skipped"]),
             steps_failed=len([s for s in plan.steps if s.status == "failed"]),
             cost_usd=state.budget.spent_usd,
-            tokens=TokenCounts(),
+            tokens=tokens,
         )
 
     @activity.defn(name=names.EMIT_RUN_EVENTS)
@@ -89,7 +143,14 @@ class FakeRuntime:
 
     @property
     def activities(self) -> list[FakeActivity]:
-        return [self.create_plan, self.run_turn, self.land_run, self.emit_run_events]
+        return [
+            self.create_plan,
+            self.provision_model_key,
+            self.assemble_pinned_header,
+            self.run_turn,
+            self.land_run,
+            self.emit_run_events,
+        ]
 
     @property
     def event_types(self) -> list[str]:

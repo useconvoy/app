@@ -1,0 +1,23 @@
+# on_budget_exhausted: abort — hard stop: the run fails without landing.
+name: budget-exhausted-abort
+run:
+  budget_cap_usd: "1.00"
+  policy:
+    on_budget_exhausted: abort
+turns:
+  - {cost_usd: "0.85", outcome: step_done}
+  - {cost_usd: "0.20", outcome: continue}
+expect:
+  final_status: failed
+  error_contains: budget exhausted
+  events:
+    - run_started
+    - plan_created
+    - step_started
+    - step_done
+    - budget_warning
+    - step_started
+    - budget_exhausted
+    - run_failed
+  budget_spent: "1.05"
+  turn_calls: 2

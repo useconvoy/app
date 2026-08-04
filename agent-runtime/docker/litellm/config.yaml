@@ -1,0 +1,29 @@
+# LiteLLM proxy config for the local compose stack. Deterministic lanes route
+# every approved model to the mock-model container; per-token prices are fixed
+# so the proxy-computed response cost is exactly reproducible in tests.
+#
+# mock-primary maps to an upstream model name the mock always fails (HTTP 500),
+# which is how tests exercise the runtime's policy-constrained fallback chain.
+model_list:
+  - model_name: mock-primary
+    litellm_params:
+      model: openai/mock-failing-1
+      api_base: http://mock-model:8901/v1
+      api_key: mock-upstream-key
+    model_info:
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.000008
+  - model_name: mock-fallback
+    litellm_params:
+      model: openai/mock-model-1
+      api_base: http://mock-model:8901/v1
+      api_key: mock-upstream-key
+    model_info:
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000004
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+litellm_settings:
+  drop_params: true

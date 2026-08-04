@@ -1,12 +1,17 @@
-"""Re-record checked-in replay histories (TESTING.md section 4.2).
+"""Re-record checked-in replay histories.
 
 Run via `make record-history`. Re-record only with a rationale in the commit
-message; prefer `workflow.patched` for live-run compatibility (CLAUDE.md rule 8).
+message; prefer `workflow.patched` versioning for live-run compatibility.
+
+Two representative histories are recorded: the linear happy path, and a
+budget-exhausted run under the land policy (warning + exhaustion + landing),
+so replay coverage includes the budget event surface.
 """
 
 import asyncio
 import json
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 from temporalio.worker import Worker
@@ -19,16 +24,15 @@ from _support.common import (  # noqa: E402
     fixture_run_state,
     start_time_skipping_env,
 )
-from _support.fakes import FakeRuntime  # noqa: E402
+from _support.fakes import FakeRuntime, ScriptedTurn  # noqa: E402
 
+from convoy_core import RunPolicy, RunState  # noqa: E402
 from convoy_runtime.workflows.agent_run import AgentRunWorkflow  # noqa: E402
 
 HISTORIES_DIR = Path(__file__).resolve().parent
 
 
-async def record_happy_path() -> Path:
-    fake = FakeRuntime()
-    state = fixture_run_state(run_id="run-history-happy-path")
+async def _record(name: str, fake: FakeRuntime, state: RunState) -> Path:
     env = await start_time_skipping_env()
     async with (
         env,
@@ -48,14 +52,36 @@ async def record_happy_path() -> Path:
         await handle.result()
         history = await handle.fetch_history()
 
-    out = HISTORIES_DIR / "happy_path.json"
+    out = HISTORIES_DIR / f"{name}.json"
     out.write_text(json.dumps(history.to_json_dict(), indent=2, sort_keys=True) + "\n")
     return out
 
 
+async def record_all() -> list[Path]:
+    return [
+        await _record(
+            "happy_path", FakeRuntime(), fixture_run_state(run_id="run-history-happy-path")
+        ),
+        await _record(
+            "budget_exhausted_land",
+            FakeRuntime(
+                turns=[
+                    ScriptedTurn(cost_usd=Decimal("0.85")),
+                    ScriptedTurn(cost_usd=Decimal("0.20"), outcome="continue"),
+                ]
+            ),
+            fixture_run_state(
+                run_id="run-history-budget-land",
+                budget_cap_usd=Decimal("1.00"),
+                policy=RunPolicy(require_plan_approval=False, on_budget_exhausted="land"),
+            ),
+        ),
+    ]
+
+
 def main() -> None:
-    path = asyncio.run(record_happy_path())
-    print(f"recorded {path}")
+    for path in asyncio.run(record_all()):
+        print(f"recorded {path}")
 
 
 if __name__ == "__main__":

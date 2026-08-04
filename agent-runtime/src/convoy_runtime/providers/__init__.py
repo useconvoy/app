@@ -1,7 +1,8 @@
-"""Provider seams: artifact store, turn executor.
+"""Provider seams: artifact store, turn executors, model gateway, virtual
+keys, grants, and context assembly.
 
-TODO(milestone-1): Pydantic AI `TurnExecutor` (real model calls via LiteLLM).
-TODO(milestone-4): `SandboxProvider` implementations (Local, then ECS in milestone-5).
+TODO: `SandboxProvider` implementations (a local provider first, then ECS)
+for promoted tool execution.
 """
 
 from convoy_runtime.providers.artifact_store import ArtifactStore

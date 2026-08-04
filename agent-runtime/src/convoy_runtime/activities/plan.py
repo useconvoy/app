@@ -1,8 +1,9 @@
-"""create_plan activity — M0 stub returning a fixture 2-step linear plan.
+"""create_plan activity — fixture stub returning a 2-step linear plan.
 
-The activity returns a *proposal*; only the workflow applies it to `RunState`
-(CLAUDE.md rule 3). TODO(milestone-1): model-driven planning via the gateway.
-TODO(milestone-2): `validate_revision` + approval flow for revisions.
+The activity returns a *proposal*; only the workflow applies it to `RunState`.
+
+TODO: model-driven planning through the gateway, plus revision validation and
+the approval flow, arrive with the plan engine.
 """
 
 from typing import Any, cast
@@ -15,7 +16,7 @@ from convoy_runtime.providers.artifact_store import ArtifactStore
 
 
 def build_fixture_plan(goal: str, success_criteria: list[str], snapshot_ref: ArtifactRef) -> Plan:
-    """The M0 fixture: two linear self-executed steps."""
+    """Fixture plan: two linear self-executed steps."""
     steps = [
         PlanStep(id="step-1", description=f"Investigate: {goal}", status="ready"),
         PlanStep(

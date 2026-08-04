@@ -1,7 +1,9 @@
 """Temporal worker entrypoint: workflows + activities wired to real providers.
 
 The payload codec is constructed unconditionally — there is no way to run a
-worker without encryption (CLAUDE.md rule 9).
+worker without encryption. The turn executor is selected by configuration:
+the deterministic scripted executor by default, or the Pydantic AI executor
+speaking to real (or mock) models through the LiteLLM proxy.
 """
 
 import asyncio
@@ -10,7 +12,9 @@ import logging
 from temporalio.client import Client
 from temporalio.worker import Worker
 
+from convoy_runtime.activities.context import ContextActivities
 from convoy_runtime.activities.land import LandActivities
+from convoy_runtime.activities.model_key import ModelKeyActivities
 from convoy_runtime.activities.outbox import OutboxActivities
 from convoy_runtime.activities.plan import PlanActivities
 from convoy_runtime.activities.turn import TurnActivities
@@ -19,8 +23,31 @@ from convoy_runtime.config import RuntimeConfig
 from convoy_runtime.projections.db import ProjectionsDB
 from convoy_runtime.projections.store import ProjectionStore
 from convoy_runtime.providers.artifact_store import ArtifactStore
-from convoy_runtime.providers.turn_executor import ScriptedTurnExecutor
+from convoy_runtime.providers.model_gateway import ModelGateway
+from convoy_runtime.providers.model_keys import LiteLLMKeyProvider
+from convoy_runtime.providers.pydantic_ai_turn import PydanticAITurnExecutor
+from convoy_runtime.providers.turn_executor import ScriptedTurnExecutor, TurnExecutor
 from convoy_runtime.workflows.agent_run import AgentRunWorkflow
+
+
+def build_turn_executor(
+    config: RuntimeConfig,
+    store: ArtifactStore,
+    key_provider: LiteLLMKeyProvider | None,
+) -> TurnExecutor:
+    if config.turn_executor == "pydantic_ai":
+        if key_provider is None:
+            raise RuntimeError(
+                "turn executor 'pydantic_ai' requires LITELLM_BASE_URL and "
+                "LITELLM_MASTER_KEY so per-run virtual keys can be provisioned"
+            )
+        return PydanticAITurnExecutor(
+            store=store,
+            gateway=ModelGateway(config.model_gateway),
+            litellm_base_url=config.litellm_base_url,
+            key_provider=key_provider,
+        )
+    return ScriptedTurnExecutor(store, turn_delay_seconds=config.scripted_turn_delay_seconds)
 
 
 async def run_worker(config: RuntimeConfig) -> None:
@@ -40,14 +67,18 @@ async def run_worker(config: RuntimeConfig) -> None:
     await db.open()
     projections = ProjectionStore(db)
 
-    # M0: ScriptedTurnExecutor is the wired executor (CI default in every
-    # deterministic lane). TODO(milestone-1): Pydantic AI executor via LiteLLM.
+    key_provider = None
+    if config.litellm_base_url and config.litellm_master_key:
+        key_provider = LiteLLMKeyProvider(
+            base_url=config.litellm_base_url, master_key=config.litellm_master_key
+        )
+
     plan_activities = PlanActivities(store)
-    turn_activities = TurnActivities(
-        ScriptedTurnExecutor(store, turn_delay_seconds=config.scripted_turn_delay_seconds)
-    )
+    turn_activities = TurnActivities(build_turn_executor(config, store, key_provider))
     land_activities = LandActivities(store)
     outbox_activities = OutboxActivities(projections)
+    context_activities = ContextActivities(store)
+    model_key_activities = ModelKeyActivities(key_provider)
 
     worker = Worker(
         client,
@@ -58,6 +89,8 @@ async def run_worker(config: RuntimeConfig) -> None:
             turn_activities.run_turn,
             land_activities.land_run,
             outbox_activities.emit_run_events,
+            context_activities.assemble_pinned_header,
+            model_key_activities.provision_model_key,
         ],
     )
     logging.getLogger(__name__).info("worker started on task queue %s", config.task_queue)

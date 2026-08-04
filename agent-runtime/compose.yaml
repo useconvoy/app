@@ -22,8 +22,10 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      # Projection schema + RLS policies + app role, applied at first boot.
+      # Projection schema + RLS policies + app role, applied at first boot,
+      # then the LiteLLM proxy's dedicated key-store database.
       - ./src/convoy_runtime/projections/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+      - ./docker/postgres-init/20-litellm-db.sql:/docker-entrypoint-initdb.d/20-litellm-db.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U convoy_admin -d convoy"]
       interval: 2s
@@ -52,5 +54,26 @@ services:
 
   stub-env:
     build: docker/stub-env
+    environment:
+      # Data-plane URL advertised inside bindings, as reachable by the
+      # host-run worker (tool calls go to the mapped port).
+      DATA_PLANE_URL: http://localhost:8902
     ports:
       - "8902:8902"
+
+  litellm:
+    # Built fully offline from prefetched inputs; run
+    # docker/litellm/prefetch.sh once before `docker compose build`
+    # (`make e2e-up` does this automatically).
+    build: docker/litellm
+    environment:
+      LITELLM_MASTER_KEY: sk-convoy-e2e-master-key
+      DATABASE_URL: postgresql://litellm:litellm@postgres:5432/litellm
+      LITELLM_LOG: ERROR
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock-model:
+        condition: service_healthy

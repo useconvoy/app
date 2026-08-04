@@ -1,17 +1,25 @@
 -- Convoy agent-runtime projection tables.
--- tenant_id on every row + RLS active even in dedicated stacks (DESIGN.md section 16).
+-- tenant_id on every row + RLS active even in dedicated stacks.
 -- Applied idempotently: by compose initdb and by the e2e bootstrap.
 
 CREATE TABLE IF NOT EXISTS runs (
-    tenant_id   text        NOT NULL,
-    run_id      text        PRIMARY KEY,
-    status      text        NOT NULL,
-    goal        text        NOT NULL DEFAULT '',
-    plan        jsonb,
-    land_report jsonb,
-    created_at  timestamptz NOT NULL DEFAULT now(),
-    updated_at  timestamptz NOT NULL DEFAULT now()
+    tenant_id           text        NOT NULL,
+    run_id              text        PRIMARY KEY,
+    status              text        NOT NULL,
+    goal                text        NOT NULL DEFAULT '',
+    plan                jsonb,
+    land_report         jsonb,
+    budget_cap_usd      numeric,
+    budget_spent_usd    numeric,
+    budget_reserved_usd numeric,
+    created_at          timestamptz NOT NULL DEFAULT now(),
+    updated_at          timestamptz NOT NULL DEFAULT now()
 );
+
+-- Reused volumes predating the budget columns pick them up here.
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS budget_cap_usd      numeric;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS budget_spent_usd    numeric;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS budget_reserved_usd numeric;
 
 CREATE TABLE IF NOT EXISTS run_events (
     tenant_id  text        NOT NULL,
@@ -30,12 +38,30 @@ CREATE TABLE IF NOT EXISTS run_events (
 
 CREATE INDEX IF NOT EXISTS run_events_tenant_run_idx ON run_events (tenant_id, run_id, seq);
 
--- Row-level security: a query without tenant context sees nothing
--- (CLAUDE.md rule 10). FORCE so even the table owner is subject to policy.
+-- Per-step console view, folded from step lifecycle events.
+CREATE TABLE IF NOT EXISTS run_steps (
+    tenant_id   text        NOT NULL,
+    run_id      text        NOT NULL,
+    step_id     text        NOT NULL,
+    description text        NOT NULL DEFAULT '',
+    status      text        NOT NULL,
+    attempt     int         NOT NULL DEFAULT 0,
+    model_used  text,
+    cost_usd    numeric,
+    updated_at  timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (run_id, step_id)
+);
+
+CREATE INDEX IF NOT EXISTS run_steps_tenant_run_idx ON run_steps (tenant_id, run_id, step_id);
+
+-- Row-level security: a query without tenant context sees nothing.
+-- FORCE so even the table owner is subject to policy.
 ALTER TABLE runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE runs FORCE ROW LEVEL SECURITY;
 ALTER TABLE run_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE run_events FORCE ROW LEVEL SECURITY;
+ALTER TABLE run_steps ENABLE ROW LEVEL SECURITY;
+ALTER TABLE run_steps FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS runs_tenant_isolation ON runs;
 CREATE POLICY runs_tenant_isolation ON runs
@@ -44,6 +70,11 @@ CREATE POLICY runs_tenant_isolation ON runs
 
 DROP POLICY IF EXISTS run_events_tenant_isolation ON run_events;
 CREATE POLICY run_events_tenant_isolation ON run_events
+    USING (tenant_id = current_setting('app.tenant_id', true))
+    WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+
+DROP POLICY IF EXISTS run_steps_tenant_isolation ON run_steps;
+CREATE POLICY run_steps_tenant_isolation ON run_steps
     USING (tenant_id = current_setting('app.tenant_id', true))
     WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
 
@@ -56,4 +87,4 @@ EXCEPTION WHEN duplicate_object THEN
 END $$;
 
 GRANT USAGE ON SCHEMA public TO convoy_app;
-GRANT SELECT, INSERT, UPDATE ON runs, run_events TO convoy_app;
+GRANT SELECT, INSERT, UPDATE ON runs, run_events, run_steps TO convoy_app;

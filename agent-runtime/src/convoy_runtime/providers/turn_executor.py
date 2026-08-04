@@ -1,26 +1,46 @@
-"""TurnExecutor — the owned seam around one LLM turn (DESIGN.md decision 3).
+"""TurnExecutor — the owned seam around one LLM turn.
 
-The outer loop (plan/budget/pause/steer) is Convoy IP in the workflow; the
-inner turn runs behind this interface. `ScriptedTurnExecutor` is the CI
-default in every deterministic lane. TODO(milestone-1): Pydantic AI executor
-with real model calls through LiteLLM (mock-model in compose for CI).
+The outer loop (plan/budget/pause/steer) stays in the workflow; the inner turn
+runs behind this interface. `ScriptedTurnExecutor` is the default in every
+deterministic lane; the Pydantic AI executor is selected by config and talks
+to real (or mock) models through the LiteLLM proxy.
 """
 
+from collections.abc import Callable
 from decimal import Decimal
 from typing import Protocol
 
 import anyio
+from pydantic import BaseModel
 
-from convoy_core import TokenCounts, TurnInput, TurnResult
+from convoy_core import AgentSpec, ArtifactRef, TokenCounts, TurnInput, TurnResult
 from convoy_runtime.providers.artifact_store import ArtifactStore
 
 SCRIPTED_MODEL = "scripted-echo-1"
+
+# Progress callback for long turns; called per inline tool execution with
+# {"turn": n, "tool_index": i} so the activity can heartbeat.
+HeartbeatFn = Callable[[dict[str, int]], None]
+
+
+class TurnContext(BaseModel):
+    """Run-scoped context a turn needs beyond `TurnInput`: which agent is
+    executing, the pinned environment binding, and the 1-based turn number."""
+
+    agent: AgentSpec
+    binding_ref: ArtifactRef
+    turn: int
 
 
 class TurnExecutor(Protocol):
     """Executes exactly one turn: model call + inline tools, claim-checked."""
 
-    async def execute_turn(self, turn: TurnInput) -> TurnResult: ...
+    async def execute_turn(
+        self,
+        turn: TurnInput,
+        ctx: TurnContext,
+        heartbeat: HeartbeatFn | None = None,
+    ) -> TurnResult: ...
 
 
 class ScriptedTurnExecutor:
@@ -42,13 +62,20 @@ class ScriptedTurnExecutor:
         # Test knob: lets e2e scenarios deterministically catch a run mid-turn.
         self._turn_delay_seconds = turn_delay_seconds
 
-    async def execute_turn(self, turn: TurnInput) -> TurnResult:
+    async def execute_turn(
+        self,
+        turn: TurnInput,
+        ctx: TurnContext,
+        heartbeat: HeartbeatFn | None = None,
+    ) -> TurnResult:
         if self._turn_delay_seconds > 0:
             await anyio.sleep(self._turn_delay_seconds)
         transcript = {
             "run_id": turn.run_id,
             "step_id": turn.step_id,
+            "turn": ctx.turn,
             "now": turn.now.isoformat(),
+            "pinned_ref_key": turn.pinned_ref.key,
             "steers_drained": [steer.id for steer in turn.steers],
             "turns": [
                 {"role": "user", "content": f"execute step {turn.step_id}"},
@@ -56,7 +83,7 @@ class ScriptedTurnExecutor:
             ],
         }
         transcript_ref = await self._store.put_json(
-            f"runs/{turn.run_id}/transcripts/{turn.step_id}.json", transcript
+            f"runs/{turn.run_id}/transcripts/{turn.step_id}/turn-{ctx.turn}.json", transcript
         )
         output_ref = await self._store.put_json(
             f"runs/{turn.run_id}/outputs/{turn.step_id}.json",

@@ -15,6 +15,7 @@ dependencies = [
     "cryptography>=45",
     "httpx>=0.28",
     "anyio>=4.9",
+    "pydantic-ai-slim[openai]>=2.23.0",
 ]
 
 [tool.uv.sources]
