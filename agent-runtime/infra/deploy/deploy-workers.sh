@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# deploy-workers.sh — worker-versioned deploy (DESIGN §8.3).
+# deploy-workers.sh — build-id-versioned rollout for Temporal workers.
 #
 # Temporal runs are pinned to the worker build id that started them, so a
 # worker deploy must never replace running workers in place. Instead:

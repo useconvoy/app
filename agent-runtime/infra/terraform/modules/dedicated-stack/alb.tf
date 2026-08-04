@@ -52,7 +52,7 @@ resource "aws_lb_target_group" "control_plane" {
   target_type = "ip"
   vpc_id      = aws_vpc.this.id
 
-  # SSE streams (DESIGN §7 read path) need a generous idle drain.
+  # SSE streams are long-lived; give connections a generous idle drain.
   deregistration_delay = 60
 
   health_check {

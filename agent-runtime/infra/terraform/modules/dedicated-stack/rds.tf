@@ -1,7 +1,7 @@
 # RDS Postgres 16. Row-level security and the pgvector extension are applied
 # at the app layer (migrations run CREATE EXTENSION vector; every connection
-# sets tenant context — CLAUDE.md rule 10). This file only guarantees the
-# substrate: encrypted, private, TLS-required Postgres.
+# sets tenant context). This file only guarantees the substrate: encrypted,
+# private, TLS-required Postgres.
 
 resource "aws_db_subnet_group" "this" {
   name       = "${local.name_prefix}-db"

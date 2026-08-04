@@ -1,7 +1,7 @@
-# Per-stack artifact bucket. Object layout is {tenant}/{env}/... (DESIGN §3):
-# transcripts, workspace snapshots, plan snapshots, simulated_effects outboxes.
-# Raw artifacts are never hard-deleted (DESIGN §16.6) — no expiration rules;
-# versioning gives tombstone semantics.
+# Per-stack artifact bucket. Object layout is {tenant}/{env}/...: transcripts,
+# workspace snapshots, plan snapshots, simulated_effects outboxes. Raw
+# artifacts are never hard-deleted — no expiration rules; versioning gives
+# tombstone semantics.
 
 resource "aws_s3_bucket" "artifacts" {
   bucket = "${local.name_prefix}-artifacts-${local.account_id}"

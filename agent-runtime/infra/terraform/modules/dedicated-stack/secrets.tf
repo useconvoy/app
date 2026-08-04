@@ -3,7 +3,7 @@
 # in Terraform state — the stamping runbook requires an encrypted S3+KMS
 # backend for state (see infra/README.md).
 
-# --- Temporal payload-codec key (DESIGN §3: codec on from day one) ---------
+# --- Temporal payload-codec key --------------------------------------------
 
 resource "random_bytes" "codec_key" {
   length = 32
@@ -31,7 +31,7 @@ resource "random_password" "litellm_master_key" {
 
 resource "aws_secretsmanager_secret" "litellm_master_key" {
   name        = "${local.name_prefix}/litellm-master-key"
-  description = "LiteLLM proxy master key; the runtime uses it to mint per-run virtual keys with hard dollar caps (DESIGN §11)."
+  description = "LiteLLM proxy master key; the runtime uses it to mint per-run virtual keys with hard dollar caps."
   kms_key_id  = aws_kms_key.stack.arn
 
   tags = merge(local.tags, { Name = "${local.name_prefix}-litellm-master-key" })

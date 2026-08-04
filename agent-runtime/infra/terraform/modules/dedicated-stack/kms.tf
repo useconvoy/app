@@ -1,6 +1,6 @@
 # Per-stack KMS key: encrypts the artifact bucket, RDS storage, Secrets Manager
-# entries, and CloudWatch log groups. Per-stack keys are part of the isolation
-# story (DESIGN §3: payload codec + per-stack keys).
+# entries, and CloudWatch log groups. Per-stack keys keep each customer stack's
+# data isolated under its own key material.
 
 resource "aws_kms_key" "stack" {
   description             = "Convoy stack key for ${var.stack_name} (S3, RDS, secrets, logs)"

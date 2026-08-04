@@ -144,7 +144,7 @@ output "sandbox_security_group_id" {
 }
 
 output "sandbox_task_role_arn" {
-  description = "Sandbox task role — intentionally credential-free (DESIGN §16.3)."
+  description = "Sandbox task role — intentionally credential-free; sandboxes get data materialized in, never keys."
   value       = aws_iam_role.sandbox_task.arn
 }
 

@@ -151,7 +151,7 @@ locals {
     "ecr.dkr",        # image pulls (layers, via S3 gateway)
     "logs",           # awslogs driver from private subnets / sandbox
     "secretsmanager", # container secret injection without NAT dependency
-    "sts",            # per-run scoped credential minting (DESIGN §12)
+    "sts",            # per-run scoped credential minting by trusted workers
     "kms",            # SSE-KMS on artifacts + secrets decryption
   ]
 }

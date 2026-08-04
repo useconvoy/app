@@ -13,7 +13,7 @@ variable "stack_name" {
 }
 
 variable "tenant_id" {
-  description = "Tenant identifier for this stack. Every resource is tagged with it and the S3 prefix layout is {tenant}/{env}/... (DESIGN §3/§16 — isolation invariants stay on even in dedicated stacks)."
+  description = "Tenant identifier for this stack. Every resource is tagged with it and the S3 prefix layout is {tenant}/{env}/... — tenant isolation stays enforced even though the stack is single-customer."
   type        = string
 
   validation {
@@ -140,7 +140,7 @@ variable "deletion_protection" {
 }
 
 # ---------------------------------------------------------------------------
-# Temporal Cloud wiring (Convoy-operated; one namespace per stack — DESIGN §3)
+# Temporal Cloud wiring (Convoy-operated; one namespace per stack)
 # ---------------------------------------------------------------------------
 
 variable "temporal_address" {
@@ -262,7 +262,7 @@ variable "worker_memory" {
 }
 
 variable "worker_build_id" {
-  description = "Temporal worker build id baked into the bootstrap worker service (DESIGN §8.3 worker versioning). Subsequent build ids are rolled out by the deploy pipeline (infra/deploy/), not by Terraform."
+  description = "Temporal worker build id baked into the bootstrap worker service; runs pin to the build that started them. Subsequent build ids are rolled out by the deploy pipeline (infra/deploy/), not by Terraform."
   type        = string
   default     = "bootstrap"
 }
@@ -292,13 +292,13 @@ variable "litellm_port" {
 }
 
 variable "model_provider_secrets" {
-  description = "Model-provider API keys for the LiteLLM proxy (Convoy keys for MVP; BYO-LLM later is a profile edit — DESIGN §17 #21). Map of environment-variable name to Secrets Manager ARN, e.g. { ANTHROPIC_API_KEY = \"arn:aws:secretsmanager:...\" }. Injected into the LiteLLM container only."
+  description = "Model-provider API keys for the LiteLLM proxy; swapping in a customer's own keys is just a different map. Map of environment-variable name to Secrets Manager ARN, e.g. { ANTHROPIC_API_KEY = \"arn:aws:secretsmanager:...\" }. Injected into the LiteLLM container only."
   type        = map(string)
   default     = {}
 }
 
 # ---------------------------------------------------------------------------
-# Sandbox capacity (ECS SandboxProvider substrate — DESIGN §13)
+# Sandbox capacity (the ECS substrate sandbox tasks run on)
 # ---------------------------------------------------------------------------
 
 variable "sandbox_cpu" {
@@ -314,7 +314,7 @@ variable "sandbox_memory" {
 }
 
 variable "sandbox_ephemeral_storage_gib" {
-  description = "Ephemeral workspace storage (GiB) for sandbox tasks. Workspaces are cache — S3 snapshots are truth (DESIGN §13)."
+  description = "Ephemeral workspace storage (GiB) for sandbox tasks. Workspaces are disposable cache — S3 snapshots are the durable truth."
   type        = number
   default     = 50
 
@@ -335,13 +335,13 @@ variable "log_retention_days" {
 }
 
 variable "langfuse_secret_arn" {
-  description = "Optional Secrets Manager ARN with Langfuse project keys (ops-account, per-stack project — DESIGN §3). JSON: {\"LANGFUSE_PUBLIC_KEY\":...,\"LANGFUSE_SECRET_KEY\":...,\"LANGFUSE_HOST\":...}. Null disables injection."
+  description = "Optional Secrets Manager ARN with Langfuse project keys (ops-account Langfuse, one project per stack). JSON: {\"LANGFUSE_PUBLIC_KEY\":...,\"LANGFUSE_SECRET_KEY\":...,\"LANGFUSE_HOST\":...}. Null disables injection."
   type        = string
   default     = null
 }
 
 variable "workos_secret_arn" {
-  description = "Optional Secrets Manager ARN with WorkOS credentials for the control plane's auth edge (DESIGN §17 #18). JSON: {\"WORKOS_API_KEY\":...,\"WORKOS_CLIENT_ID\":...}. Null disables injection."
+  description = "Optional Secrets Manager ARN with WorkOS credentials for the control plane's auth edge. JSON: {\"WORKOS_API_KEY\":...,\"WORKOS_CLIENT_ID\":...}. Null disables injection."
   type        = string
   default     = null
 }

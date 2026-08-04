@@ -1,6 +1,6 @@
-# One customer stack = one instantiation of the dedicated-stack module
-# (DESIGN §3). To stamp a new customer: copy this directory to
-# stacks/<stack-name>/, set the backend key, fill a tfvars file, apply.
+# One customer stack = one instantiation of the dedicated-stack module.
+# To stamp a new customer: copy this directory to stacks/<stack-name>/,
+# set the backend key, fill a tfvars file, apply.
 
 module "stack" {
   source = "../../modules/dedicated-stack"

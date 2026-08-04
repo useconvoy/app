@@ -1,6 +1,6 @@
-# Fixture variables for CI lint-lane `terraform plan` (TESTING §5-M5) and as
-# a template for real stack tfvars. All ARNs are syntactically valid dummies —
-# do NOT apply with these values.
+# Fixture variables for CI lint-lane `terraform plan` and as a template for
+# real stack tfvars. All ARNs are syntactically valid dummies — do NOT apply
+# with these values.
 
 region      = "us-east-1"
 stack_name  = "example-dev"

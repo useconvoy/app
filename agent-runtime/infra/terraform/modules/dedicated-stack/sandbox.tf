@@ -1,4 +1,4 @@
-# ECS SandboxProvider prerequisites (DESIGN §13, §16.3).
+# ECS sandbox substrate prerequisites for the runtime's SandboxProvider.
 #
 # Sandboxes are per-run Fargate tasks that the worker's ECS SandboxProvider
 # launches on demand (RunTask) — there is no long-running sandbox service.

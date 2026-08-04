@@ -1,5 +1,5 @@
-# One log group per service (+ sandbox). KMS-encrypted with the stack key;
-# CLAUDE.md rule 9 (no secrets or transcript bodies in logs) is an app-layer
+# One log group per service (+ sandbox). KMS-encrypted with the stack key.
+# Keeping secrets and transcript bodies out of log lines is an app-layer
 # obligation, but retention and encryption are enforced here.
 
 resource "aws_cloudwatch_log_group" "service" {

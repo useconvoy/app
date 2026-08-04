@@ -1,4 +1,4 @@
-# IAM. Credential rules from DESIGN §12/§16:
+# IAM. Credential rules:
 #   - Trusted workers mint short-lived STS creds per tenant+run by assuming
 #     the data-access role WITH a session policy scoped to
 #     s3://<bucket>/{tenant}/{env}/... (template in templates/).
@@ -135,7 +135,7 @@ resource "aws_iam_role_policy" "data_access" {
 
   # Ceiling permissions; every actual session is further narrowed by the
   # session policy to s3://<bucket>/{tenant}/{env}/*. No s3:DeleteObject —
-  # artifacts are never hard-deleted (DESIGN §16.6).
+  # artifacts are never hard-deleted; removal is a tombstone, not a delete.
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -283,10 +283,11 @@ resource "aws_iam_role" "litellm_task" {
 }
 
 # ---------------------------------------------------------------------------
-# Sandbox roles. The task role is deliberately credential-free (DESIGN §16.3):
-# no policies granting anything, plus an explicit deny as a tripwire against
-# future drift. The execution role can only pull the sandbox image and write
-# the sandbox log group.
+# Sandbox roles. The task role is deliberately credential-free: no policies
+# granting anything, plus an explicit deny as a tripwire against future drift.
+# Sandboxes get data materialized in and artifacts pulled out — never keys.
+# The execution role can only pull the sandbox image and write the sandbox
+# log group.
 # ---------------------------------------------------------------------------
 
 resource "aws_iam_role" "sandbox_task" {

@@ -341,11 +341,12 @@ resource "aws_ecs_service" "control_plane" {
 
 # --- Temporal workers ------------------------------------------------------
 #
-# Worker deploys are BUILD-ID VERSIONED (DESIGN §8.3): each build id gets its
-# own ECS service so old workers keep draining pinned runs while new runs land
-# on the new build. Terraform owns only the bootstrap service and the task
-# family; infra/deploy/deploy-workers.sh creates per-build-id services and
-# infra/deploy/drain-old-workers.sh retires them.
+# Worker deploys are BUILD-ID VERSIONED: each build id gets its own ECS
+# service so old workers keep draining pinned runs while new runs land on the
+# new build — a deploy mid-run must never break replay. Terraform owns only
+# the bootstrap service and the task family; infra/deploy/deploy-workers.sh
+# creates per-build-id services and infra/deploy/drain-old-workers.sh retires
+# them.
 
 resource "aws_ecs_task_definition" "worker" {
   family                   = "${local.name_prefix}-temporal-worker"

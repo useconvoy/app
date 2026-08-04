@@ -1,13 +1,13 @@
-# Convoy Agent Runtime — Stack Infrastructure (WS-12)
+# Convoy Agent Runtime — Stack Infrastructure
 
 Operator documentation for stamping, verifying, and deploying **dedicated
-customer stacks** (DESIGN §3): one Terraform apply per customer, in Convoy's
-AWS account for MVP. Customer-VPC mode later reuses the same module against a
-customer account — nothing here assumes shared infra.
+customer stacks**: one Terraform apply per customer, in Convoy's AWS account.
+Customer-VPC mode reuses the same module against a customer account — nothing
+here assumes shared infra.
 
-This README is also the **M5 runbook**: the fresh-account stamp smoke and the
-worker-versioned deploy exercise (TESTING §5-M5) are the manual AWS gates and
-are specified at the end.
+This README is also the operational runbook: the fresh-account stamp smoke
+and the worker-versioned deploy exercise are manual AWS verification gates
+and are specified at the end.
 
 ---
 
@@ -39,7 +39,7 @@ One `module "stack"` instantiation creates, per customer:
 | Compute | ECS cluster + Fargate services: control plane (behind ALB), Temporal workers (bootstrap build), LiteLLM proxy (Cloud Map DNS `litellm.convoy-<stack>.internal`), registered **sandbox task definition** (no service — the ECS SandboxProvider `RunTask`s on demand) | |
 | Registry | Per-stack ECR repos: `convoy-<stack>/{control-plane,temporal-worker,litellm,sandbox}` | Shared cross-stack registry is a later optimization |
 | Secrets | Per-stack payload-codec key (generated), LiteLLM master key (generated), DB credentials — all in Secrets Manager under the per-stack KMS key | No secret value is ever written into code or tfvars |
-| IAM | Task roles per service; a **data-access role** workers/control-plane assume with an STS session policy scoped to `s3://<bucket>/{tenant}/{env}/...` (`templates/sts-session-policy.json.tpl`); **sandbox task role with zero data-store access plus an explicit deny** | DESIGN §12 / §16 |
+| IAM | Task roles per service; a **data-access role** workers/control-plane assume with an STS session policy scoped to `s3://<bucket>/{tenant}/{env}/...` (`templates/sts-session-policy.json.tpl`); **sandbox task role with zero data-store access plus an explicit deny** | Every data credential is short-lived and prefix-scoped |
 | Observability | KMS-encrypted CloudWatch log groups `/convoy/<stack>/<service>`, Container Insights | Langfuse keys injected when `langfuse_secret_arn` is set |
 
 Convoy-operated, **not** stamped by this module: the Temporal Cloud namespace
@@ -107,13 +107,13 @@ exist in the ops account.
    ```
 5. **Initialize the database**: run the runtime's migrations against
    `db_endpoint` using the `db_credentials` secret (they `CREATE EXTENSION
-   vector`, create schemas, and **enable RLS on every table** — CLAUDE.md
-   rule 10). The DB is private: run migrations from a one-off ECS task or
-   via a bastion pattern, never by exposing the DB.
+   vector`, create schemas, and **enable RLS on every table** — every
+   connection must set tenant context). The DB is private: run migrations
+   from a one-off ECS task or via a bastion pattern, never by exposing the
+   DB.
 6. **DNS**: point the customer hostname (the one on the ACM cert) at
    `control_plane_alb_dns_name`.
-7. **Verification smoke — one linear run lands** (this is the M5 stamp
-   smoke): against the stack API,
+7. **Verification smoke — one linear run lands**: against the stack API,
    `POST /runs` with a small linear goal → watch SSE events → confirm the
    run reaches `completed`, the `LandReport` artifact exists under
    `s3://<artifact_bucket>/<tenant>/<env>/...`, and `GET /runs/{id}` serves
@@ -124,10 +124,10 @@ exist in the ops account.
 After the smoke run, fetch the run's history via the Temporal CLI and assert
 payloads are ciphertext (no plaintext markers — goal text, tenant id):
 `temporal workflow show --workflow-id <run-id> --output json | grep -c '<marker>'`
-must be 0. The runtime repo's history-is-ciphertext test automates this
-(TESTING §5-M5); run it pointed at the live namespace.
+must be 0. The runtime repo's history-is-ciphertext test automates this; run
+it pointed at the live namespace.
 
-## Worker-versioned deploy procedure (DESIGN §8.3)
+## Worker-versioned deploy procedure
 
 Runs are pinned to the worker **build id** that started them; a deploy on day
 3 of a 5-day run must not break replay. Therefore workers are never rolled in
@@ -173,15 +173,16 @@ terraform fmt -check -recursive infra/terraform
 ```
 
 With read-only AWS credentials the lane can additionally run
-`terraform plan -var-file=fixtures/example.tfvars` in `stacks/example`
-(TESTING §5-M5). The committed `.terraform.lock.hcl` files pin providers for
+`terraform plan -var-file=fixtures/example.tfvars` in `stacks/example`.
+The committed `.terraform.lock.hcl` files pin providers for
 `linux_amd64`; run `terraform providers lock -platform=darwin_arm64 ...` to
 extend them for other operator platforms.
 
-## Manual AWS gates (TESTING §5-M5)
+## Manual AWS gates
 
 CI has no AWS account, so these are runbook-driven manual gates. Record the
-evidence (command output, run id, screenshots) in the milestone PR:
+evidence (command output, run id, screenshots) in the PR that changes this
+module:
 
 1. **Fresh-account stamp smoke** — steps 1–7 above on a clean account: one
    `terraform apply` → stack up → one linear run lands.
@@ -200,14 +201,14 @@ evidence (command output, run id, screenshots) in the milestone PR:
    `drain-old-workers.sh` refuses to retire the old build until the run
    closes.
 
-## Security invariants enforced here (DESIGN §16 mapping)
+## Security invariants enforced here
 
 | Invariant | Where |
 |---|---|
-| §16.2 STS session policies scope creds to `{tenant}/{env}` | `data-access` role + `templates/sts-session-policy.json.tpl`; runtime (WS-7) mints with it |
-| §16.3 sandboxes credential-free, data in / artifacts out | sandbox task role (no grants + explicit deny), no-ingress endpoint-only sandbox SG, separate minimal execution role |
-| §16.4 payload codec per stack | generated codec-key secret; codec itself is runtime code |
-| §16.6 artifacts never hard-deleted | bucket versioning; no delete grants on the data path; no expiring lifecycle rules |
-| §16.7 no egress assumptions | all external endpoints (Temporal, model gateway, Langfuse, WorkOS) are variables |
+| STS session policies scope creds to `{tenant}/{env}` | `data-access` role + `templates/sts-session-policy.json.tpl`; the runtime mints per-run sessions with it |
+| Sandboxes credential-free, data in / artifacts out | sandbox task role (no grants + explicit deny), no-ingress endpoint-only sandbox SG, separate minimal execution role |
+| Payload codec key per stack | generated codec-key secret; the codec itself is runtime code |
+| Artifacts never hard-deleted | bucket versioning; no delete grants on the data path; no expiring lifecycle rules |
+| No egress assumptions | all external endpoints (Temporal, model gateway, Langfuse, WorkOS) are variables |
 | No public ingress except HTTPS ALB | ALB is the only resource in public subnets with an ingress rule; listener is 443-only |
-| RLS even in dedicated stacks (§16.1) | app-layer migrations; DB substrate forces TLS and private access — Terraform cannot express RLS |
+| RLS even in dedicated stacks | app-layer migrations; DB substrate forces TLS and private access — Terraform cannot express RLS |

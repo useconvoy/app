@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 #
 # drain-old-workers.sh — retire worker services whose build ids no longer
-# have reachable runs (the drain-old half of the versioned deploy pattern,
-# DESIGN §8.3).
+# have reachable runs (the drain-old half of the versioned deploy pattern).
 #
 # For every ECS service convoy-<stack>-temporal-worker-<build-id> except the
 # task queue's current default build id, ask Temporal whether the build id is

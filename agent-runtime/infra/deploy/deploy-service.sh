@@ -3,7 +3,7 @@
 # deploy-service.sh — rolling deploy for the STATELESS services
 # (control-plane, litellm). NOT for Temporal workers: workers are
 # build-id-versioned and must go through deploy-workers.sh so mid-flight runs
-# keep replaying on the build that started them (DESIGN §8.3).
+# keep replaying on the build that started them.
 #
 # Usage:
 #   STACK_NAME=acme-prod AWS_REGION=us-east-1 \
