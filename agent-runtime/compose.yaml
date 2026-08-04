@@ -1,0 +1,56 @@
+name: convoy-agent-runtime
+
+services:
+  temporal:
+    image: temporalio/temporal:latest
+    command: ["server", "start-dev", "--ip", "0.0.0.0", "--port", "7233", "--ui-port", "8233"]
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "127.0.0.1:7233"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: convoy_admin
+      POSTGRES_PASSWORD: convoy_admin
+      POSTGRES_DB: convoy
+    ports:
+      - "5433:5432"
+    volumes:
+      # Projection schema + RLS policies + app role, applied at first boot.
+      - ./src/convoy_runtime/projections/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U convoy_admin -d convoy"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: convoy
+      MINIO_ROOT_PASSWORD: convoy-secret-key
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  mock-model:
+    build: docker/mock-model
+    ports:
+      - "8901:8901"
+
+  stub-env:
+    build: docker/stub-env
+    ports:
+      - "8902:8902"
