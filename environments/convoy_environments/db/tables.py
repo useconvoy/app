@@ -109,6 +109,8 @@ class Environment(Base):
     backing_type: Mapped[str] = mapped_column(String(16), default="live")  # live | hermetic
     browser_policy: Mapped[dict] = mapped_column(PortableJSON, nullable=True)
     budget_defaults: Mapped[dict] = mapped_column(PortableJSON, default=dict)
+    sandbox_template: Mapped[str] = mapped_column(String(128), default="")
+    data_namespace: Mapped[str] = mapped_column(String(255), default="")
     policy_hash: Mapped[str] = mapped_column(String(64), index=True)
     description: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[str] = mapped_column(String(64), nullable=True)

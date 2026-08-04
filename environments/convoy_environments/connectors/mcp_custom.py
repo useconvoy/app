@@ -17,10 +17,9 @@ from __future__ import annotations
 import itertools
 from typing import Any, Dict, Optional
 
+from ..mcp_protocol import MCP_PROTOCOL_VERSION as _PROTOCOL_VERSION
 from ..schema import ConnectionManifest, ToolSpec
 from .base import Connector, ConnectorError, raise_for_status, register
-
-_PROTOCOL_VERSION = "2025-06-18"
 
 
 @register

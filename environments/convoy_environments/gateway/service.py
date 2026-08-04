@@ -83,17 +83,18 @@ class GatewayService:
 
     # -- API ---------------------------------------------------------------
 
-    def list_tools(self, claims: RunClaims):
+    def list_tools(self, claims: RunClaims, connection_id: Optional[str] = None):
         snapshot = self._policy.load_environment(claims.environment_id, claims.environment_version)
-        return self._policy.allowed_tools(snapshot)
+        return self._policy.allowed_tools(snapshot, connection_id=connection_id)
 
     async def call_tool(self, claims: RunClaims, tool: str, args: Dict[str, Any],
                         step_id: Optional[str] = None,
-                        idempotency_key: Optional[str] = None) -> Any:
+                        idempotency_key: Optional[str] = None,
+                        connection_id: Optional[str] = None) -> Any:
         base = self._base(claims, step_id)
         snapshot = self._policy.load_environment(claims.environment_id, claims.environment_version)
         try:
-            resolution = self._policy.resolve(snapshot, tool)
+            resolution = self._policy.resolve(snapshot, tool, connection_id=connection_id)
         except PolicyDenied as denial:
             self._log.append({**base, "type": "tool_denied", "tool": tool, "args": args,
                               "reason": denial.reason}, workspace_id=claims.workspace_id)
@@ -157,6 +158,51 @@ class GatewayService:
                           "result": result}, workspace_id=claims.workspace_id)
         self._debit(base, claims)
         return result
+
+    def environment_binding(self, environment_id: str, version: Optional[int] = None,
+                            base_url: str = "") -> Any:
+        """Registry fulfillment of the frozen runtime seam (convoy_core.binding).
+
+        Resolves environment@version (latest when unpinned) into an immutable
+        EnvironmentBinding snapshot. Every connector endpoint is a gateway
+        door — /mcp/{connection_id} on this server — per the fulfillment
+        clause; browser identities carry no MCP endpoint (they surface
+        through the fill sidecar instead)."""
+        from convoy_core.binding import EnvironmentBinding, ToolGrant
+        from sqlalchemy import select
+
+        from ..db.tables import Environment as EnvironmentRow
+
+        if version is None:
+            with self._policy._sf() as session:
+                version = session.execute(
+                    select(EnvironmentRow.version).where(EnvironmentRow.id == environment_id)
+                    .order_by(EnvironmentRow.version.desc()).limit(1)
+                ).scalar_one_or_none()
+            if version is None:
+                raise PolicyDenied("unknown environment %s" % environment_id)
+        snapshot = self._policy.load_environment(environment_id, version)
+        env = snapshot.row
+        grants = self._policy.allowed_tools(snapshot)
+        endpoints = {
+            r.connection.id: "%s/mcp/%s" % (base_url.rstrip("/"), r.connection.id)
+            for r in grants
+        }
+        return EnvironmentBinding(
+            id="%s@%d" % (environment_id, version),
+            tenant_id=env.workspace_id,
+            kind="production" if env.backing_type == "live" else "sandbox",
+            tool_registry=[
+                ToolGrant(tool=r.spec.name, connection_id=r.connection.id,
+                          effect_class=r.effect_class, description=r.spec.description,
+                          input_schema=r.spec.inputSchema or {})
+                for r in grants
+            ],
+            connector_endpoints=endpoints,
+            credential_scope="convoy-gateway:run-jwt:%s@%d" % (environment_id, version),
+            data_namespace=env.data_namespace or "%s/%s" % (env.workspace_id, environment_id),
+            sandbox_template=env.sandbox_template or "",
+        )
 
     def browser_credential_lease(self, claims: RunClaims, domain: str) -> Dict[str, Any]:
         """Resolve a browser_identity credential for `domain`. Requires: the

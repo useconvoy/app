@@ -42,8 +42,9 @@ export CONVOY_INTERNAL_TOKEN=$(openssl rand -hex 32)
 
 ## Runtime interface (for agent-runtime)
 
+- `GET /gateway/internal/environments/{id}/binding[?version=N]` (header `X-Convoy-Internal`) → the frozen `EnvironmentBinding` snapshot (`convoy_core.binding`). Unpinned resolves latest; pin the returned `id` (`env_x@3`) as `RunState.binding_ref`. Every URL in `connector_endpoints` is a gateway door (`/mcp/{connection_id}`), per the fulfillment clause — never a direct connector server.
 - `POST /gateway/internal/run-tokens` (header `X-Convoy-Internal`) → per-run JWT scoped to `(run, mission, workspace, environment@version)`; hand it to the devbox.
-- The devbox agent speaks MCP to `POST /gateway/mcp` (`Authorization: Bearer <run-jwt>`). A parked gate comes back as a successful tool result with `structuredContent: {status: "parked", gateId, idempotencyKey}` — land state and die; retry with the same `idempotencyKey` in `_meta` after resolution.
+- The devbox agent speaks MCP to the per-connection doors from the binding (`POST /gateway/mcp/{connection_id}`) or the aggregate `POST /gateway/mcp` (`Authorization: Bearer <run-jwt>`). Scoped doors filter both discovery and dispatch. A parked gate comes back as a successful tool result with `structuredContent: {status: "parked", gateId, idempotencyKey}` — land state and die; retry with the same `idempotencyKey` in `_meta` after resolution.
 - Gate resolutions appear in the event log (`gate_resolved`); the runtime's scheduler watches for them to resume missions.
 - Bake `convoy-egress-proxy` + `convoy-fill-sidecar` into the devbox image (env-var config: `CONVOY_GATEWAY_URL`, `CONVOY_RUN_TOKEN`, `CONVOY_ALLOWED_DOMAINS`, `CONVOY_CDP_URL`); launch Chromium with `--proxy-server=http://127.0.0.1:3128`.
 

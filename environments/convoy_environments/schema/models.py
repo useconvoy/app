@@ -114,11 +114,14 @@ class Environment(_Model):
     connections: List[EnvironmentConnection] = Field(default_factory=list)
     browserPolicy: Optional[BrowserPolicy] = None
     budgetDefaults: Dict[str, Any] = Field(default_factory=dict)
+    sandboxTemplate: str = ""  # E2B template id the runtime instantiates
+    dataNamespace: str = ""  # defaults to ws_<id>/env_<id> when unset
     description: str = ""
 
     @property
     def policyHash(self) -> str:
-        return _policy_hash(self.backingType, self.connections, self.browserPolicy)
+        return _policy_hash(self.backingType, self.connections, self.browserPolicy,
+                            self.sandboxTemplate, self.dataNamespace)
 
     def connection_policy(self, connection_id: str) -> Optional[EnvironmentConnection]:
         for ec in self.connections:

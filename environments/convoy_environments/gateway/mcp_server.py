@@ -21,11 +21,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from ..connectors import ConnectorError
+from ..mcp_protocol import MCP_PROTOCOL_VERSION as PROTOCOL_VERSION
 from .policy import PolicyDenied
 from .service import GatewayService, Parked
 from .tokens import RunClaims, TokenError, mint_run_token, verify_run_token
-
-PROTOCOL_VERSION = "2025-06-18"
 
 
 def _rpc_result(id: Any, result: Any) -> JSONResponse:
@@ -60,9 +59,16 @@ class MintRequest(BaseModel):
 
 
 def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
-              internal_token: Optional[str] = None) -> FastAPI:
+              internal_token: Optional[str] = None,
+              public_url: Optional[str] = None) -> FastAPI:
     app = FastAPI(title="convoy-gateway")
     internal = internal_token or os.environ.get("CONVOY_INTERNAL_TOKEN", "")
+    base_url = (public_url or os.environ.get("CONVOY_GATEWAY_PUBLIC_URL",
+                                             "http://127.0.0.1:8780/gateway")).rstrip("/")
+
+    def internal_dep(x_convoy_internal: str = Header(default="")) -> None:
+        if not internal or x_convoy_internal != internal:
+            raise HTTPException(401, "invalid internal token")
 
     def claims_dep(authorization: str = Header(default="")) -> RunClaims:
         if not authorization.startswith("Bearer "):
@@ -74,6 +80,18 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
 
     @app.post("/mcp")
     async def mcp(request: Request, claims: RunClaims = Depends(claims_dep)):
+        """Aggregate door: every tool the environment allows."""
+        return await _mcp(request, claims, None)
+
+    @app.post("/mcp/{connection_id}")
+    async def mcp_scoped(connection_id: str, request: Request,
+                         claims: RunClaims = Depends(claims_dep)):
+        """Per-connection door — what EnvironmentBinding.connector_endpoints
+        points at. Scopes discovery AND dispatch to one connection, so a tool
+        name granted through connection A cannot be reached through B's door."""
+        return await _mcp(request, claims, connection_id)
+
+    async def _mcp(request: Request, claims: RunClaims, connection_id: Optional[str]):
         body = await request.json()
         rpc_id = body.get("id")
         method = body.get("method", "")
@@ -92,7 +110,7 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
                 {"name": r.spec.name, "description": r.spec.description,
                  "inputSchema": r.spec.inputSchema or {"type": "object"},
                  "annotations": {"readOnlyHint": r.effect_class == "read"}}
-                for r in service.list_tools(claims)
+                for r in service.list_tools(claims, connection_id=connection_id)
             ]
             return _rpc_result(rpc_id, {"tools": tools})
         if method == "tools/call":
@@ -104,6 +122,7 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
                     claims, tool, args,
                     step_id=meta.get("stepId"),
                     idempotency_key=meta.get("idempotencyKey"),
+                    connection_id=connection_id,
                 )
                 return _rpc_result(rpc_id, _tool_text_result(result))
             except Parked as parked:
@@ -129,10 +148,21 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
             raise HTTPException(403, denial.reason)
         return lease
 
+    @app.get("/internal/environments/{environment_id}/binding")
+    async def binding(environment_id: str, version: Optional[int] = None,
+                      _: None = Depends(internal_dep)):
+        """Registry endpoint for the runtime: environment_id → frozen
+        EnvironmentBinding snapshot (convoy_core.binding). Unpinned resolves
+        latest; the runtime pins the returned id as RunState.binding_ref."""
+        try:
+            result = service.environment_binding(environment_id, version=version,
+                                                 base_url=base_url)
+        except PolicyDenied as denial:
+            raise HTTPException(404, denial.reason)
+        return result.model_dump(mode="json")
+
     @app.post("/internal/run-tokens")
-    async def mint(req: MintRequest, x_convoy_internal: str = Header(default="")):
-        if not internal or x_convoy_internal != internal:
-            raise HTTPException(401, "invalid internal token")
+    async def mint(req: MintRequest, _: None = Depends(internal_dep)):
         token = mint_run_token(
             RunClaims(run_id=req.runId, mission_id=req.missionId, workspace_id=req.workspaceId,
                       environment_id=req.environmentId, environment_version=req.environmentVersion),

@@ -34,6 +34,8 @@ def policy_hash(
     backing_type: str,
     connection_policies: Any,
     browser_policy: Any = None,
+    sandbox_template: str = "",
+    data_namespace: str = "",
 ) -> str:
     """Hash of everything about an environment that affects agent behavior.
 
@@ -59,5 +61,9 @@ def policy_hash(
         "backingType": backing_type,
         "connections": rows,
         "browserPolicy": browser_policy,
+        # Binding-seam fields: both affect run behavior, so both are
+        # hash-relevant (folded in Aug 2026, before anything was certified).
+        "sandboxTemplate": sandbox_template,
+        "dataNamespace": data_namespace,
     }
     return sha256_hex(canonical_json(payload))

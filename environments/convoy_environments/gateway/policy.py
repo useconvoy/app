@@ -57,11 +57,15 @@ class PolicyEngine:
             ).all()
         return EnvironmentSnapshot(row=env, connections=[(ec, c) for ec, c in pairs])
 
-    def allowed_tools(self, snapshot: EnvironmentSnapshot) -> List[ToolResolution]:
+    def allowed_tools(self, snapshot: EnvironmentSnapshot,
+                      connection_id: Optional[str] = None) -> List[ToolResolution]:
         """Every tool this environment version exposes (drifted or revoked
-        connections contribute nothing)."""
+        connections contribute nothing). `connection_id` scopes to one
+        connection — the per-connection MCP doors use this."""
         out: List[ToolResolution] = []
         for ec, conn in snapshot.connections:
+            if connection_id is not None and conn.id != connection_id:
+                continue
             if conn.status != "active" or conn.manifest_hash != ec.manifest_hash:
                 continue
             manifest = ConnectionManifest.model_validate(conn.manifest)
@@ -72,8 +76,11 @@ class PolicyEngine:
                                               effect_class=self._effective(ec, spec)))
         return out
 
-    def resolve(self, snapshot: EnvironmentSnapshot, tool: str) -> ToolResolution:
+    def resolve(self, snapshot: EnvironmentSnapshot, tool: str,
+                connection_id: Optional[str] = None) -> ToolResolution:
         for ec, conn in snapshot.connections:
+            if connection_id is not None and conn.id != connection_id:
+                continue
             if tool not in (ec.tool_allowlist or []):
                 continue
             if conn.status != "active":

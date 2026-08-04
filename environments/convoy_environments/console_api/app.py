@@ -66,6 +66,8 @@ class CreateEnvironment(BaseModel):
     connections: List[EnvConnectionInput] = Field(default_factory=list)
     browserPolicy: Optional[Dict[str, Any]] = None
     budgetDefaults: Dict[str, Any] = Field(default_factory=dict)
+    sandboxTemplate: str = ""  # E2B template id for the devbox image
+    dataNamespace: str = ""  # empty → derived ws_<id>/env_<id>
 
 
 class CreateGrant(BaseModel):
@@ -170,16 +172,20 @@ def build_console_app(session_factory, secrets: SecretsService,
                            connection_id=conn.id, manifest_hash=conn.manifest_hash,
                            tool_allowlist=ec.toolAllowlist, gate_overrides=ec.gateOverrides)
             )
+        namespace = req.dataNamespace or "%s/%s" % (workspace_id, env_id)
         phash = policy_hash(
             req.backingType,
             [{"connectionId": r.connection_id, "manifestHash": r.manifest_hash,
               "toolAllowlist": r.tool_allowlist, "gateOverrides": r.gate_overrides}
              for r in conn_rows],
             req.browserPolicy,
+            sandbox_template=req.sandboxTemplate,
+            data_namespace=namespace,
         )
         env = EnvironmentRow(id=env_id, version=version, workspace_id=workspace_id,
                              name=req.name, backing_type=req.backingType,
                              browser_policy=req.browserPolicy, budget_defaults=req.budgetDefaults,
+                             sandbox_template=req.sandboxTemplate, data_namespace=namespace,
                              policy_hash=phash, description=req.description, created_by=user)
         return env, conn_rows
 
