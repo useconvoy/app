@@ -25,6 +25,8 @@ infra/
     ├── deploy-service.sh          # rolling deploys: control-plane, litellm
     ├── deploy-workers.sh          # build-id-versioned worker rollout
     ├── drain-old-workers.sh       # retires unreachable old worker builds
+    ├── seed-litellm-models.sh     # seeds the proxy's model list into the stack DB
+    ├── litellm-models.example.json  # models-file template for the seed step
     └── lib/common.sh
 ```
 
@@ -99,7 +101,9 @@ exist in the ops account.
    ```
    (`bootstrap` matches the module's default `image_tag` and
    `worker_build_id`; the bootstrap worker service starts polling once its
-   image exists.) Then register `bootstrap` as the queue's initial default
+   image exists. The `sandbox` image only has to provide a `python3` on
+   PATH — the runtime injects its own job runner into each sandbox task at
+   launch.) Then register `bootstrap` as the queue's initial default
    build id:
    ```sh
    temporal task-queue update-build-ids add-new-default \
@@ -111,9 +115,25 @@ exist in the ops account.
    connection must set tenant context). The DB is private: run migrations
    from a one-off ECS task or via a bastion pattern, never by exposing the
    DB.
-6. **DNS**: point the customer hostname (the one on the ACM cert) at
+6. **Seed the LiteLLM model list**: the proxy runs with
+   `STORE_MODEL_IN_DB=True` and starts serving **zero models** until seeded.
+   Write the stack's models file (start from
+   `deploy/litellm-models.example.json` — provider keys are referenced as
+   `os.environ/<NAME>` and resolve inside the proxy task from the secrets
+   named in `model_provider_secrets`; never put a key value in the file),
+   then, from somewhere that resolves the stack's internal DNS (bastion /
+   one-off ECS task / SSM port-forward — same pattern as migrations):
+   ```sh
+   STACK_NAME=<stack> AWS_REGION=<region> \
+     deploy/seed-litellm-models.sh --models-file <stack>-models.json
+   ```
+   Idempotent: existing model names are skipped, so re-run it to add models.
+   Model names seeded here must match the runtime's `CONVOY_MODEL_GATEWAY`
+   approved set. (Compose is unaffected — the local stack keeps its baked
+   config file.)
+7. **DNS**: point the customer hostname (the one on the ACM cert) at
    `control_plane_alb_dns_name`.
-7. **Verification smoke — one linear run lands**: against the stack API,
+8. **Verification smoke — one linear run lands**: against the stack API,
    `POST /runs` with a small linear goal → watch SSE events → confirm the
    run reaches `completed`, the `LandReport` artifact exists under
    `s3://<artifact_bucket>/<tenant>/<env>/...`, and `GET /runs/{id}` serves
@@ -121,11 +141,26 @@ exist in the ops account.
 
 ### Codec verification (part of the stamp gate)
 
-After the smoke run, fetch the run's history via the Temporal CLI and assert
-payloads are ciphertext (no plaintext markers — goal text, tenant id):
+After the smoke run, the raw Temporal history must be ciphertext: no
+plaintext markers (goal text, tenant id) anywhere, and every workflow payload
+carrying the `binary/encrypted` encoding. The runtime repo's
+history-is-ciphertext test automates exactly this scan and points at any
+namespace via the environment — run it against the live namespace with the
+smoke run's id and its known plaintext:
+
+```sh
+TEMPORAL_ADDRESS=<ns>.<acct>.tmprl.cloud:7233 TEMPORAL_NAMESPACE=<ns>.<acct> \
+TEMPORAL_TLS_CERT_PEM="$(cat client.pem)" TEMPORAL_TLS_KEY_PEM="$(cat client.key)" \
+CONVOY_CIPHERTEXT_RUN_ID=<run-id> \
+CONVOY_CIPHERTEXT_MARKERS='<the smoke goal text>,<tenant-id>' \
+uv run pytest \
+  agent-runtime/tests/integration/test_codec_ciphertext.py::test_live_history_is_ciphertext -v
+```
+
+(The same scanner runs automatically against the compose dev server in the
+e2e lane.) For a quick eyeball instead:
 `temporal workflow show --workflow-id <run-id> --output json | grep -c '<marker>'`
-must be 0. The runtime repo's history-is-ciphertext test automates this; run
-it pointed at the live namespace.
+must be 0.
 
 ## Worker-versioned deploy procedure
 
@@ -184,16 +219,34 @@ CI has no AWS account, so these are runbook-driven manual gates. Record the
 evidence (command output, run id, screenshots) in the PR that changes this
 module:
 
-1. **Fresh-account stamp smoke** — steps 1–7 above on a clean account: one
+1. **Fresh-account stamp smoke** — steps 1–8 above on a clean account: one
    `terraform apply` → stack up → one linear run lands.
 2. **History-is-ciphertext** — codec verification above passes against the
-   live namespace.
-3. **ECS SandboxProvider contract suite** — `tests/contracts/` (runtime repo)
-   run against the stamped stack's sandbox substrate: same suite Local
-   passes, pointed at `sandbox_task_family` / `sandbox_security_group_id`.
+   live namespace (the exact command is in that section).
+3. **ECS SandboxProvider contract suite** — the identical battery the local
+   provider passes in CI, pointed at the stamped stack's sandbox substrate
+   via the same variables the worker consumes (values from
+   `terraform output`); it skips unless they are set:
+   ```sh
+   CONVOY_SANDBOX_CLUSTER=<ecs_cluster_name> \
+   CONVOY_SANDBOX_TASK_FAMILY=<sandbox_task_family> \
+   CONVOY_SANDBOX_SUBNETS=<private_subnet_ids, comma-separated> \
+   CONVOY_SANDBOX_SECURITY_GROUP=<sandbox_security_group_id> \
+   CONVOY_ARTIFACT_BUCKET=<artifact_bucket_name> \
+   AWS_REGION=<region> \
+   uv run pytest agent-runtime/tests/contracts/test_ecs_sandbox.py -v
+   ```
+   Ambient AWS credentials must be able to RunTask/StopTask in the cluster,
+   pass the sandbox roles, and read/write the artifact bucket (the worker
+   task role's surface). The sandbox image only needs a `python3` on PATH —
+   the runtime ships its own runner into the task at create time over an
+   integrity-pinned presigned URL. Expect real Fargate startup latency
+   (~1 min per sandbox).
    Also verify the credential-free invariant from inside a sandbox task:
    `aws s3 ls s3://<artifact_bucket>` and any `sts:AssumeRole` must fail
-   (explicit deny), and outbound internet must time out (endpoint-only SG).
+   (explicit deny), and outbound internet must time out (endpoint-only SG) —
+   while presigned URLs for the stack bucket keep working through the S3
+   gateway endpoint, which is exactly the intended data plane.
 4. **Versioned deploy against a live run** — start a multi-step run; mid-run,
    deploy a new worker build via the procedure above; assert the run
    completes on its original build id (`temporal workflow describe` shows

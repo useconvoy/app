@@ -11,7 +11,9 @@ import os
 from dataclasses import dataclass
 from typing import Literal
 
-from convoy_core import ModelGatewayConfig
+from temporalio.service import TLSConfig
+
+from convoy_core import ModelGatewayConfig, SandboxProviderConfig
 from convoy_runtime.carry import (
     DEFAULT_MIDSTEP_COMPACTION_TOKENS,
     DEFAULT_TURN_LIMIT,
@@ -32,6 +34,27 @@ _DEFAULT_GATEWAY: dict[str, object] = {
 
 def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)
+
+
+def temporal_tls_from_env() -> TLSConfig | bool:
+    """mTLS material for the Temporal connection, from the environment.
+
+    The stack injects the client certificate and key as PEM *content* in
+    TEMPORAL_TLS_CERT_PEM / TEMPORAL_TLS_KEY_PEM; when both are present the
+    connection uses mutual TLS (Temporal Cloud). When neither is set the
+    connection is plaintext (the compose dev server). A half-configured pair
+    fails fast rather than silently connecting without client auth.
+    """
+    cert = os.environ.get("TEMPORAL_TLS_CERT_PEM", "")
+    key = os.environ.get("TEMPORAL_TLS_KEY_PEM", "")
+    if bool(cert) != bool(key):
+        raise RuntimeError(
+            "TEMPORAL_TLS_CERT_PEM and TEMPORAL_TLS_KEY_PEM must be set together "
+            "(both for an mTLS namespace, neither for a plaintext dev server)"
+        )
+    if not cert:
+        return False
+    return TLSConfig(client_cert=cert.encode(), client_private_key=key.encode())
 
 
 def _env_first(*names: str, default: str) -> str:
@@ -66,8 +89,15 @@ class RuntimeConfig:
     model_gateway: ModelGatewayConfig
     turn_limit: int
     midstep_compaction_tokens: int
+    sandbox: SandboxProviderConfig
     sandbox_dir: str
+    sandbox_cluster: str
+    sandbox_task_family: str
+    sandbox_subnets: tuple[str, ...]
+    sandbox_security_group: str
     promoted_tool_delay_seconds: float
+    temporal_worker_build_id: str
+    temporal_tls: TLSConfig | bool
 
     @classmethod
     def from_env(cls) -> "RuntimeConfig":
@@ -75,6 +105,11 @@ class RuntimeConfig:
         if executor not in ("scripted", "pydantic_ai"):
             raise RuntimeError(
                 f"CONVOY_TURN_EXECUTOR must be 'scripted' or 'pydantic_ai', got {executor!r}"
+            )
+        sandbox_provider = _env("CONVOY_SANDBOX_PROVIDER", "local")
+        if sandbox_provider not in ("local", "ecs"):
+            raise RuntimeError(
+                f"CONVOY_SANDBOX_PROVIDER must be 'local' or 'ecs', got {sandbox_provider!r}"
             )
         gateway_json = _env("CONVOY_MODEL_GATEWAY", "")
         gateway_raw = json.loads(gateway_json) if gateway_json else _DEFAULT_GATEWAY
@@ -116,10 +151,30 @@ class RuntimeConfig:
             midstep_compaction_tokens=int(
                 _env("CONVOY_MIDSTEP_COMPACTION_TOKENS", str(DEFAULT_MIDSTEP_COMPACTION_TOKENS))
             ),
+            # Which sandbox substrate backs promoted jobs: the local
+            # subprocess provider (compose, CI) or per-run ECS Fargate tasks
+            # (stacks). The ECS wiring facts below come from the stack.
+            sandbox=SandboxProviderConfig(
+                provider=sandbox_provider,
+                default_template=_env("CONVOY_SANDBOX_TEMPLATE", "default"),
+            ),
             # Workspace root for the local sandbox provider; workspaces are
             # cache, snapshots in the artifact store are truth.
             sandbox_dir=_env("CONVOY_SANDBOX_DIR", "/tmp/convoy-sandboxes"),
+            sandbox_cluster=_env("CONVOY_SANDBOX_CLUSTER", ""),
+            sandbox_task_family=_env("CONVOY_SANDBOX_TASK_FAMILY", ""),
+            sandbox_subnets=tuple(
+                subnet.strip()
+                for subnet in _env("CONVOY_SANDBOX_SUBNETS", "").split(",")
+                if subnet.strip()
+            ),
+            sandbox_security_group=_env("CONVOY_SANDBOX_SECURITY_GROUP", ""),
             # Test knob widening the crash window after a promoted side
             # effect lands (0 in production paths).
             promoted_tool_delay_seconds=float(_env("CONVOY_PROMOTED_TOOL_DELAY", "0")),
+            # Worker deploys are pinned to build ids: when the deploy pipeline
+            # injects TEMPORAL_WORKER_BUILD_ID the worker starts versioned
+            # under that id; without it, behavior is unchanged.
+            temporal_worker_build_id=_env("TEMPORAL_WORKER_BUILD_ID", ""),
+            temporal_tls=temporal_tls_from_env(),
         )

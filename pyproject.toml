@@ -44,4 +44,5 @@ addopts = "-ra"
 markers = [
     "e2e: tests that require the docker compose stack (excluded from the fast lane)",
     "chaos: crash/durability tests that kill workers against the compose stack (own lane)",
+    "live: opt-in live-smoke tests that call a real model with a provider key from the environment (own lane, never CI-default)",
 ]

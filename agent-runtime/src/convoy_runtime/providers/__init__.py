@@ -1,8 +1,6 @@
 """Provider seams: artifact store, turn executors, model gateway, virtual
-keys, grants, and context assembly.
-
-TODO: `SandboxProvider` implementations (a local provider first, then ECS)
-for promoted tool execution.
+keys, grants, context assembly, and the sandbox substrate (local subprocess
+and ECS Fargate implementations behind one Protocol).
 """
 
 from convoy_runtime.providers.artifact_store import ArtifactStore

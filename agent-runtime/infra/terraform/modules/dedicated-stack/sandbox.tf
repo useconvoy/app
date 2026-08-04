@@ -5,13 +5,16 @@
 # Two invariants are enforced here, in infra, not in app code:
 #
 #   1. CREDENTIAL-FREE: the sandbox task role can reach no data store (see
-#      iam.tf — empty grants plus explicit deny). Data is materialized into
-#      the workspace by trusted workers before exec; artifacts are pulled out
-#      by trusted workers after. Model-generated code never sees keys.
+#      iam.tf — empty grants plus explicit deny). Data moves only over
+#      short-lived presigned S3 URLs minted by trusted workers — capability
+#      URLs for one object and one verb, handed in via RunTask overrides and
+#      job documents. Data in, artifacts out; model-generated code never
+#      sees keys.
 #   2. NO NETWORK BEYOND THE SUBSTRATE: the sandbox security group has no
 #      ingress at all and egress only to the stack's VPC endpoints (image
-#      pull via ECR endpoints + the S3 gateway prefix list, stdout/stderr to
-#      the logs endpoint). No internet, no database, no LiteLLM.
+#      pull via ECR endpoints; the presigned-URL data plane and image layers
+#      via the S3 gateway prefix list; stdout/stderr to the logs endpoint).
+#      No internet, no database, no LiteLLM.
 
 resource "aws_security_group" "sandbox" {
   name        = "${local.name_prefix}-sandbox"

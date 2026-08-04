@@ -11,10 +11,9 @@ returns the recorded result instead of doubling the side effect.
 `LocalSandboxProvider` runs jobs as local subprocesses in a temp workspace
 directory — CI-safe, no container-in-container. Jobs are credential-free by
 construction: they see a minimal environment plus the job's own variables,
-with data materialized in and artifacts collected out.
-
-TODO: ECS SandboxProvider implementation behind this same Protocol (it must
-pass the identical contract suite in tests/contracts/).
+with data materialized in and artifacts collected out. The dedicated-stack
+implementation over per-run Fargate tasks lives in `sandbox_ecs` behind this
+same Protocol and passes the identical contract battery.
 """
 
 import asyncio

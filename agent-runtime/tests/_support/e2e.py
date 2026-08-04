@@ -1,6 +1,7 @@
 """Constants and helpers shared between the e2e conftest and e2e tests."""
 
 import json
+import os
 import time
 from typing import Any
 
@@ -13,11 +14,33 @@ CONTROL_PLANE_URL = f"http://localhost:{CONTROL_PLANE_PORT}"
 AI_CONTROL_PLANE_PORT = 8701
 AI_CONTROL_PLANE_URL = f"http://localhost:{AI_CONTROL_PLANE_PORT}"
 AI_TASK_QUEUE = "agent-runtime-ai"
+# The opt-in live-smoke pair: same executor, real provider models through the
+# proxy's live routes, keyed from the operator's environment.
+LIVE_CONTROL_PLANE_PORT = 8703
+LIVE_CONTROL_PLANE_URL = f"http://localhost:{LIVE_CONTROL_PLANE_PORT}"
+LIVE_TASK_QUEUE = "agent-runtime-live"
 DEV_TOKEN = "e2e-dev-token"
 PG_APP_DSN = "postgresql://convoy_app:convoy_app@localhost:5433/convoy"
 PG_ADMIN_DSN = "postgresql://convoy_admin:convoy_admin@localhost:5433/convoy"
 LITELLM_URL = "http://localhost:4000"
 LITELLM_MASTER_KEY = "sk-convoy-e2e-master-key"
+
+
+def live_smoke_model() -> str | None:
+    """The proxy route the live-smoke lane runs against, or None when no
+    provider key is available (a key is required regardless of overrides —
+    without one the lane must skip). CONVOY_LIVE_SMOKE_MODEL overrides the
+    route (any model_name the proxy serves); otherwise the available key
+    picks the default live route.
+    """
+    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")):
+        return None
+    explicit = os.environ.get("CONVOY_LIVE_SMOKE_MODEL")
+    if explicit:
+        return explicit
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return "live-anthropic"
+    return "live-openai"
 
 
 def auth_headers(tenant: str = "tenant-e2e", actor: str = "e2e@convoy.test") -> dict[str, str]:

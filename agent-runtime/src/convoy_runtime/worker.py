@@ -32,7 +32,8 @@ from convoy_runtime.providers.artifact_store import ArtifactStore
 from convoy_runtime.providers.model_gateway import ModelGateway
 from convoy_runtime.providers.model_keys import LiteLLMKeyProvider
 from convoy_runtime.providers.pydantic_ai_turn import PydanticAITurnExecutor
-from convoy_runtime.providers.sandbox import LocalSandboxProvider
+from convoy_runtime.providers.sandbox import LocalSandboxProvider, SandboxProvider
+from convoy_runtime.providers.sandbox_ecs import EcsSandboxProvider
 from convoy_runtime.providers.turn_executor import ScriptedTurnExecutor, TurnExecutor
 from convoy_runtime.workflows.agent_run import AgentRunWorkflow
 from convoy_runtime.workflows.subagent import SubagentWorkflow
@@ -58,11 +59,40 @@ def build_turn_executor(
     return ScriptedTurnExecutor(store, turn_delay_seconds=config.scripted_turn_delay_seconds)
 
 
+def build_sandbox_provider(config: RuntimeConfig, store: ArtifactStore) -> SandboxProvider:
+    if config.sandbox.provider == "ecs":
+        missing = [
+            name
+            for name, value in (
+                ("CONVOY_SANDBOX_CLUSTER", config.sandbox_cluster),
+                ("CONVOY_SANDBOX_TASK_FAMILY", config.sandbox_task_family),
+                ("CONVOY_SANDBOX_SUBNETS", ",".join(config.sandbox_subnets)),
+                ("CONVOY_SANDBOX_SECURITY_GROUP", config.sandbox_security_group),
+            )
+            if not value
+        ]
+        if missing:
+            raise RuntimeError(
+                f"sandbox provider 'ecs' requires the stack wiring variables {missing}"
+            )
+        return EcsSandboxProvider(
+            store,
+            cluster=config.sandbox_cluster,
+            task_family=config.sandbox_task_family,
+            subnets=list(config.sandbox_subnets),
+            security_group=config.sandbox_security_group,
+        )
+    if config.sandbox.provider != "local":
+        raise RuntimeError(f"sandbox provider {config.sandbox.provider!r} is not implemented")
+    return LocalSandboxProvider(store, base_dir=Path(config.sandbox_dir))
+
+
 async def run_worker(config: RuntimeConfig) -> None:
     client = await Client.connect(
         config.temporal_host,
         namespace=config.temporal_namespace,
         data_converter=runtime_data_converter(config.codec_key),
+        tls=config.temporal_tls,
     )
     store = ArtifactStore(
         bucket=config.s3_bucket,
@@ -94,9 +124,7 @@ async def run_worker(config: RuntimeConfig) -> None:
         stub_env_url=config.stub_env_url,
         completion_delay_seconds=config.promoted_tool_delay_seconds,
     )
-    sandbox_activities = SandboxJobActivities(
-        store, LocalSandboxProvider(store, base_dir=Path(config.sandbox_dir))
-    )
+    sandbox_activities = SandboxJobActivities(store, build_sandbox_provider(config, store))
 
     worker = Worker(
         client,
@@ -117,6 +145,12 @@ async def run_worker(config: RuntimeConfig) -> None:
             promoted_activities.run_promoted_tool,
             sandbox_activities.run_sandbox_job,
         ],
+        # Deploys are pinned to worker build ids: with TEMPORAL_WORKER_BUILD_ID
+        # set (the deploy pipeline's contract) the worker polls versioned under
+        # that id, so runs keep replaying on the build that started them.
+        # Without it the worker runs unversioned, exactly as before.
+        build_id=config.temporal_worker_build_id or None,
+        use_worker_versioning=bool(config.temporal_worker_build_id),
     )
     logging.getLogger(__name__).info("worker started on task queue %s", config.task_queue)
     try:

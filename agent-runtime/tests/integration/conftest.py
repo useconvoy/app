@@ -8,6 +8,7 @@ the scripted executor on the default task queue, and the Pydantic AI executor
 """
 
 import asyncio
+import json
 import os
 import subprocess
 import sys
@@ -31,8 +32,12 @@ from _support.e2e import (
     DEV_TOKEN,
     LITELLM_MASTER_KEY,
     LITELLM_URL,
+    LIVE_CONTROL_PLANE_PORT,
+    LIVE_CONTROL_PLANE_URL,
+    LIVE_TASK_QUEUE,
     PG_ADMIN_DSN,
     PG_APP_DSN,
+    live_smoke_model,
 )
 
 SCHEMA_PATH = (
@@ -74,6 +79,21 @@ def _ai_environ() -> dict[str, str]:
     env["CONVOY_TURN_EXECUTOR"] = "pydantic_ai"
     env["CONVOY_TASK_QUEUE"] = AI_TASK_QUEUE
     env["CONVOY_DEFAULT_MODEL"] = "mock-fallback"
+    return env
+
+
+def _live_environ(model: str) -> dict[str, str]:
+    """The live-smoke pair: the Pydantic AI executor pointed at a real
+    provider route through the same LiteLLM proxy, on its own queue. The
+    approved-model set is exactly the smoke model — no fallback chain, so
+    the run either lands on the real model or fails loudly."""
+    env = _base_environ()
+    env["CONVOY_TURN_EXECUTOR"] = "pydantic_ai"
+    env["CONVOY_TASK_QUEUE"] = LIVE_TASK_QUEUE
+    env["CONVOY_DEFAULT_MODEL"] = model
+    env["CONVOY_MODEL_GATEWAY"] = json.dumps(
+        {"endpoints": {}, "approved_models": [model], "fallback_chains": {}}
+    )
     return env
 
 
@@ -175,4 +195,38 @@ def api(e2e_stack: dict[str, str]) -> Iterator[httpx.Client]:
 @pytest.fixture
 def api_ai(e2e_stack: dict[str, str]) -> Iterator[httpx.Client]:
     with httpx.Client(base_url=AI_CONTROL_PLANE_URL, timeout=60.0) as client:
+        yield client
+
+
+@pytest.fixture(scope="session")
+def live_stack() -> Iterator[str]:
+    """Worker + control plane for the opt-in live-smoke lane. Only built when
+    a live test runs; requires a real provider key in the environment."""
+    model = live_smoke_model()
+    assert model is not None, "live-smoke needs ANTHROPIC_API_KEY or OPENAI_API_KEY"
+    env = _live_environ(model)
+    asyncio.run(_bootstrap_async())
+
+    procs: list[subprocess.Popen[bytes]] = []
+    worker = _spawn([sys.executable, "-m", "convoy_runtime.worker"], env)
+    procs.append(worker)
+    procs.append(_spawn(_control_plane_cmd(LIVE_CONTROL_PLANE_PORT), env))
+    try:
+        _wait_http_ready(f"{LIVE_CONTROL_PLANE_URL}/openapi.json", timeout=60)
+        if worker.poll() is not None:
+            raise RuntimeError(f"live worker exited early: {_drain(worker)}")
+        yield model
+    finally:
+        for proc in procs:
+            proc.terminate()
+        for proc in procs:
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+
+
+@pytest.fixture
+def api_live(live_stack: str) -> Iterator[httpx.Client]:
+    with httpx.Client(base_url=LIVE_CONTROL_PLANE_URL, timeout=120.0) as client:
         yield client

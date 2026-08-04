@@ -37,13 +37,16 @@ class ArtifactStore:
         secret_key: str | None = None,
     ) -> None:
         self._bucket = bucket
+        # SigV4 explicitly: presigned URLs default to the legacy signature
+        # otherwise, which real S3 rejects (and KMS-encrypted buckets require
+        # v4 unconditionally). MinIO speaks v4 as well.
         self._client: S3Client = boto3.client(  # pyright: ignore[reportUnknownMemberType]
             "s3",
             endpoint_url=endpoint_url,
             region_name=region,
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
-            config=BotoConfig(s3={"addressing_style": "path"}),
+            config=BotoConfig(signature_version="s3v4", s3={"addressing_style": "path"}),
         )
 
     @property
@@ -102,6 +105,66 @@ class ArtifactStore:
             return response["Body"].read()
 
         return json.loads(await anyio.to_thread.run_sync(_get))
+
+    # Presigned URLs are the credential-free data plane for sandboxes: the
+    # trusted worker mints short-lived, capability-scoped URLs (one object, one
+    # verb, one expiry) and hands them across the boundary. The holder can do
+    # exactly what the URL says and nothing else — no IAM credentials move.
+
+    def presign_get(self, ref: ArtifactRef, *, expires_seconds: int) -> str:
+        """Short-lived GET capability for one existing artifact."""
+        return self._client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": ref.bucket, "Key": ref.key},
+            ExpiresIn=expires_seconds,
+        )
+
+    def presign_get_key(self, key: str, *, expires_seconds: int) -> str:
+        """GET capability for a runtime-owned conventional key in this bucket.
+
+        The object may not exist yet — polling the URL simply returns 404
+        until something writes it, which is what makes it usable as a
+        one-way mailbox the worker fills after minting.
+        """
+        return self._client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": self._bucket, "Key": key},
+            ExpiresIn=expires_seconds,
+        )
+
+    def presign_put(
+        self,
+        key: str,
+        *,
+        expires_seconds: int,
+        content_type: str = "application/octet-stream",
+    ) -> str:
+        """Short-lived PUT capability for one conventional key. The upload
+        must send the same Content-Type header the signature covers."""
+        return self._client.generate_presigned_url(
+            "put_object",
+            Params={"Bucket": self._bucket, "Key": key, "ContentType": content_type},
+            ExpiresIn=expires_seconds,
+        )
+
+    def presign_post_prefix(
+        self, key_prefix: str, *, expires_seconds: int
+    ) -> tuple[str, dict[str, str]]:
+        """POST-policy capability scoped to a key prefix.
+
+        Unlike a PUT (one exact key), the policy admits any key under the
+        prefix — how a sandbox uploads output files whose names are only known
+        at runtime, while still being unable to write anywhere else. Returns
+        the form URL and the signed fields the uploader must include.
+        """
+        prefix = key_prefix if key_prefix.endswith("/") else f"{key_prefix}/"
+        post = self._client.generate_presigned_post(
+            Bucket=self._bucket,
+            Key=f"{prefix}${{filename}}",
+            Conditions=[["starts-with", "$key", prefix]],
+            ExpiresIn=expires_seconds,
+        )
+        return post["url"], {str(k): str(v) for k, v in post["fields"].items()}
 
     async def ensure_bucket(self) -> None:
         """Create the bucket if missing (dev/compose convenience)."""

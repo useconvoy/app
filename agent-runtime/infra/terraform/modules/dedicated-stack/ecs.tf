@@ -370,6 +370,7 @@ resource "aws_ecs_task_definition" "worker" {
       environment = concat(local.common_env, [
         { name = "CONVOY_SERVICE", value = "temporal-worker" },
         { name = "TEMPORAL_WORKER_BUILD_ID", value = var.worker_build_id },
+        { name = "CONVOY_SANDBOX_PROVIDER", value = "ecs" },
         { name = "CONVOY_SANDBOX_CLUSTER", value = aws_ecs_cluster.this.name },
         { name = "CONVOY_SANDBOX_TASK_FAMILY", value = "${local.name_prefix}-sandbox" },
         { name = "CONVOY_SANDBOX_SUBNETS", value = join(",", aws_subnet.private[*].id) },

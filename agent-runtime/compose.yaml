@@ -70,6 +70,13 @@ services:
       LITELLM_MASTER_KEY: sk-convoy-e2e-master-key
       DATABASE_URL: postgresql://litellm:litellm@postgres:5432/litellm
       LITELLM_LOG: ERROR
+      # Live-smoke routes resolve their upstream model and key from here;
+      # unset keys leave the deterministic lanes untouched (nothing in them
+      # requests the live-* model names).
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      CONVOY_LIVE_ANTHROPIC_MODEL: ${CONVOY_LIVE_ANTHROPIC_MODEL:-anthropic/claude-sonnet-5}
+      CONVOY_LIVE_OPENAI_MODEL: ${CONVOY_LIVE_OPENAI_MODEL:-openai/gpt-4o}
     ports:
       - "4000:4000"
     depends_on:

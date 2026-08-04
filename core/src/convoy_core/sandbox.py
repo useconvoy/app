@@ -1,8 +1,7 @@
 """Sandbox substrate pure types.
 
 The `SandboxProvider` Protocol lives in the runtime (`convoy_runtime.providers`);
-these are the data types it exchanges. TODO: first provider implementation
-(`LocalSandboxProvider`) with workspace snapshot/rehydrate.
+these are the data types it exchanges.
 """
 
 from datetime import timedelta

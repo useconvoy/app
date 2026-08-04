@@ -75,6 +75,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
         config.temporal_host,
         namespace=config.temporal_namespace,
         data_converter=runtime_data_converter(config.codec_key),
+        tls=config.temporal_tls,
     )
     app.state.store = ArtifactStore(
         bucket=config.s3_bucket,
