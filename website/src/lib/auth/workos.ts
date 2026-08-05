@@ -14,6 +14,18 @@ export function workosEnabled(): boolean {
   return Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
 }
 
+/**
+ * Whether the explicit email-and-name sign-in may be offered. It exists so a
+ * laptop and CI can hold a session without an identity provider, and it
+ * verifies nothing: anyone reaching it can claim any address. A deployment
+ * therefore refuses it outright, leaving hosted sign-in as the only door.
+ * Failing closed is deliberate: a deployment missing its identity
+ * configuration must reject sign-in, not fall back to an open form.
+ */
+export function localSignInAllowed(): boolean {
+  return !workosEnabled() && process.env.NODE_ENV !== "production";
+}
+
 function workos(): WorkOS {
   if (!client) {
     const apiKey = process.env.WORKOS_API_KEY;
