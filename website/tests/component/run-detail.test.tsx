@@ -177,7 +177,10 @@ describe("RunDetail vitals", () => {
     const events = fixture("run-landed");
     stream(events);
     render(<RunDetail initial={initialView(events)} />);
-    const files = screen.getByText("Files");
+    // "Files" appears in the vitals rail and again in the W2 land report
+    // section; the vitals count is the one under test here.
+    const vitals = screen.getByRole("region", { name: "Vitals" });
+    const files = within(vitals).getByText("Files");
     expect(files.parentElement).toHaveTextContent("2");
   });
 
@@ -211,7 +214,11 @@ describe("RunDetail rehearsal variant (law 2)", () => {
     render(<RunDetail initial={initialView(events)} />);
     const answered = events.find((event) => event.type === "gate_answered")!;
     const row = screen.getByText("Answered").closest("li") as HTMLElement;
-    const virtualStamp = friendlyDateTime(answered.virtual_ts!);
+    // A scripted answer's honest instant is the moment the simulated human
+    // answered (payload.simulated_at), not the clock's position after the
+    // advance that delivered it (W2).
+    const simulatedAt = answered.payload["simulated_at"] as string;
+    const virtualStamp = friendlyDateTime(simulatedAt);
     const realStamp = friendlyDateTime(answered.ts);
     expect(within(row).getByText(virtualStamp)).toBeInTheDocument();
     expect(within(row).getByText(realStamp)).toBeInTheDocument();

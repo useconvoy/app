@@ -8,17 +8,27 @@
  * Production is unlabeled, always.
  */
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { BudgetMeter } from "@/components/BudgetMeter";
+import { Button } from "@/components/Button";
 import { DisconnectBanner } from "@/components/DisconnectBanner";
+import { LandReportSection } from "@/components/LandReportSection";
 import { RehearsalBanner } from "@/components/RehearsalBanner";
 import { RouteStepList } from "@/components/RouteStepList";
 import { StatusChip } from "@/components/StatusChip";
 import { TimelineRow } from "@/components/TimelineRow";
-import { checkpointKinds, copy, stepStatusLabels } from "@/lexicon";
+import {
+  checkpointKinds,
+  copy,
+  promotionStatusLabels,
+  stepStatusLabels,
+  type PromotionStatus,
+} from "@/lexicon";
 import type { RunView } from "@/lib/api/client";
 import { friendlyDateTime, money } from "@/lib/format";
+import type { PromotionSubmitResult } from "@/lib/promotions/actions";
+import type { RunCommandHandlers } from "@/lib/runs/command-types";
 import {
   childRuns,
   heldKind,
@@ -33,6 +43,7 @@ import {
   type ChildRunLine,
   type RunStreamEvent,
 } from "@/lib/runs/status";
+import { RunControls, type BlockedStep } from "./run-controls";
 import { useRunEvents } from "./use-run-events";
 
 function planVersion(plan: RunView["plan"]): number | null {
@@ -44,6 +55,119 @@ function workspaceIdFrom(events: readonly RunStreamEvent[]): string | null {
   const started = events.find((event) => event.type === "run_started");
   const id = started?.payload["environment_id"];
   return typeof id === "string" ? id : null;
+}
+
+/**
+ * Steps holding at a checkpoint right now, from confirmed events: opened
+ * gates minus answered/timed-out ones. Before the stream's replay arrives,
+ * the fetched view's flat steps stand in so the respond form still mounts.
+ */
+function openBlockedSteps(events: readonly RunStreamEvent[], initial: RunView): BlockedStep[] {
+  if (events.length === 0) {
+    return (initial.steps ?? [])
+      .filter((step) => step.status === "blocked_on_human")
+      .map((step) => ({ stepId: step.step_id, prompt: step.description ?? "" }));
+  }
+  const open = new Map<string, BlockedStep>();
+  for (const event of events) {
+    const stepId = event.payload["step_id"];
+    if (typeof stepId !== "string") continue;
+    if (event.type === "gate_opened") {
+      const prompt = event.payload["prompt"];
+      const onTimeout = event.payload["on_timeout"];
+      open.set(stepId, {
+        stepId,
+        prompt: typeof prompt === "string" ? prompt : "",
+        onTimeout:
+          onTimeout === "pause" || onTimeout === "skip" || onTimeout === "fail"
+            ? onTimeout
+            : null,
+      });
+    } else if (event.type === "gate_answered" || event.type === "gate_timed_out") {
+      open.delete(stepId);
+    }
+  }
+  return [...open.values()];
+}
+
+/** The run's current virtual moment, when it runs a virtual clock. */
+function latestVirtualTs(events: readonly RunStreamEvent[]): string | null {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const ts = events[i]!.virtual_ts;
+    if (typeof ts === "string") return ts;
+  }
+  return null;
+}
+
+export interface RunViewerContext {
+  /** Whether the viewer may act on runs at all (member and up). */
+  canAct: boolean;
+  canSubmitPromotion: boolean;
+  canExportEvidence: boolean;
+}
+
+export interface PromotionSummary {
+  requestId: string;
+  status: PromotionStatus;
+}
+
+/**
+ * The promotion block on a rehearsal land report (C8): submit for review,
+ * or the request's current standing with a link to the review page.
+ */
+function PromotionBlock({
+  runId,
+  promotion,
+  submitPromotion,
+}: {
+  runId: string;
+  promotion: PromotionSummary | null;
+  submitPromotion?: (runId: string) => Promise<PromotionSubmitResult>;
+}) {
+  const [request, setRequest] = useState<PromotionSummary | null>(promotion);
+  const [message, setMessage] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function submit() {
+    if (!submitPromotion || pending) return;
+    setPending(true);
+    setMessage(null);
+    const result = await submitPromotion(runId);
+    if (result.kind === "accepted") {
+      setRequest({ requestId: result.requestId, status: "requested" });
+      setMessage(copy.promotionRequestedNote);
+    } else {
+      setMessage(result.message);
+    }
+    setPending(false);
+  }
+
+  return (
+    <div id="promote" className="flex flex-wrap items-center gap-3">
+      {request ? (
+        <>
+          <span className="font-mono text-xs uppercase tracking-wide text-muted">
+            {promotionStatusLabels[request.status]}
+          </span>
+          <Link
+            href={`/app/promotions/${request.requestId}`}
+            className="text-sm text-ink underline underline-offset-2"
+          >
+            {copy.promotionReviewTitle}
+          </Link>
+        </>
+      ) : (
+        <Button disabled={pending} onClick={() => void submit()}>
+          {copy.submitForPromotion}
+        </Button>
+      )}
+      {message && (
+        <p role="status" className="w-full text-sm text-muted">
+          {message}
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** Fan-out compaction (C7): one group line per helper run, linking through. */
@@ -77,7 +201,20 @@ function FanoutGroup({ children }: { children: ChildRunLine[] }) {
   );
 }
 
-export function RunDetail({ initial }: { initial: RunView }) {
+export function RunDetail({
+  initial,
+  commands,
+  viewer,
+  promotion = null,
+  submitPromotion,
+}: {
+  initial: RunView;
+  /** Session-bound server actions, wired in by the page. */
+  commands?: Partial<RunCommandHandlers>;
+  viewer?: RunViewerContext;
+  promotion?: PromotionSummary | null;
+  submitPromotion?: (runId: string) => Promise<PromotionSubmitResult>;
+}) {
   const { events, connected, lastEventAt, done } = useRunEvents(initial.run_id);
 
   const status = latestRunStatus(events, initial.status);
@@ -93,6 +230,8 @@ export function RunDetail({ initial }: { initial: RunView }) {
     [plan, initial.steps, events],
   );
   const children = useMemo(() => childRuns(events), [events]);
+  // Cheap pure scan; recomputing per render keeps the compiler's memo intact.
+  const blockedSteps = openBlockedSteps(events, initial);
   const kind = heldKind(status);
   const version = planVersion(plan);
   const workspaceId = workspaceIdFrom(events);
@@ -151,13 +290,21 @@ export function RunDetail({ initial }: { initial: RunView }) {
                       <FanoutGroup key="fanout">{children}</FanoutGroup>
                     ) : null;
                   }
+                  // A scripted answer is stamped with the clock's position
+                  // after the advance that delivered it; the moment the
+                  // simulated human answered is the honest primary stamp.
+                  const simulatedAt = event.payload["simulated_at"];
+                  const virtualAt =
+                    event.type === "gate_answered" && typeof simulatedAt === "string"
+                      ? simulatedAt
+                      : (event.virtual_ts ?? undefined);
                   return (
                     <TimelineRow
                       key={event.seq}
                       event={event.type}
                       actor={event.actor}
                       at={event.ts}
-                      virtualAt={event.virtual_ts ?? undefined}
+                      virtualAt={virtualAt}
                       payload={event.payload}
                     />
                   );
@@ -166,10 +313,51 @@ export function RunDetail({ initial }: { initial: RunView }) {
             )}
           </section>
 
-          {/* TODO(website-W2): pause/resume/land, the steer composer, and
-              Advance clock mount in this container with the checkpoint
-              packet; W1 renders the read path only. */}
-          <section aria-label="Controls" data-slot="run-controls" />
+          {(viewer?.canAct ?? true) && (
+            <RunControls
+              runId={initial.run_id}
+              status={status}
+              rehearsal={rehearsal}
+              virtualNow={latestVirtualTs(events)}
+              blockedSteps={blockedSteps}
+              planVersion={version}
+              planSteps={board.map((step) => step.sentence)}
+              events={events}
+              commands={commands}
+            />
+          )}
+
+          {landReport && (
+            <LandReportSection
+              report={landReport}
+              budget={budget}
+              steps={board.map((step) => ({
+                step_id: step.id,
+                description: step.sentence,
+                status: step.status,
+              }))}
+              rehearsal={rehearsal}
+            >
+              <div className="flex flex-wrap items-center gap-4">
+                {(viewer?.canExportEvidence ?? true) && (
+                  <a
+                    href={`/api/runs/${initial.run_id}/evidence`}
+                    download
+                    className="inline-flex items-center rounded-md border border-line bg-card px-3 py-1.5 text-sm font-medium text-ink hover:bg-field"
+                  >
+                    {copy.exportEvidenceBinder}
+                  </a>
+                )}
+                {rehearsal && (viewer?.canSubmitPromotion ?? false) && (
+                  <PromotionBlock
+                    runId={initial.run_id}
+                    promotion={promotion}
+                    submitPromotion={submitPromotion}
+                  />
+                )}
+              </div>
+            </LandReportSection>
+          )}
         </div>
 
         <aside className="flex flex-col gap-5">

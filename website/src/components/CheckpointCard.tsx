@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import {
   checkpointKinds,
   copy,
@@ -35,6 +37,12 @@ export interface CheckpointCardProps {
   answeredBy?: string;
   rehearsal?: boolean;
   onAction?: () => void;
+  /**
+   * Inline detail below the card body: deadline countdown, the respond
+   * field, or a reject-reason affordance (W2 inbox). Renders above the
+   * action row so the one typed verb stays the card's last word.
+   */
+  children?: ReactNode;
 }
 
 export function CheckpointCard({
@@ -49,6 +57,7 @@ export function CheckpointCard({
   answeredBy,
   rehearsal = false,
   onAction,
+  children,
 }: CheckpointCardProps) {
   const checkpoint = checkpointKinds[kind];
   return (
@@ -91,6 +100,8 @@ export function CheckpointCard({
           ))}
         </ul>
       )}
+
+      {children && <div className="mt-3">{children}</div>}
 
       {answeredBy ? (
         <p className="mt-4 text-sm text-muted">{copy.answeredBy(answeredBy)}</p>

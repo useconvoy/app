@@ -37,6 +37,18 @@ export function registerRun(record: Omit<RunRecord, "createdAt">): void {
   directory().set(record.runId, { ...record, createdAt: new Date().toISOString() });
 }
 
+/**
+ * Register a run the console first met through its detail page (created
+ * outside the console, e.g. by an operator at the edge), so lists and the
+ * Checkpoints inbox can see it. Never overwrites a creation-time record,
+ * which knows the routine. TODO(runtime-D8): retired with the directory.
+ */
+export function ensureRunRegistered(runId: string, tenantId: string): void {
+  if (!directory().has(runId)) {
+    directory().set(runId, { runId, tenantId, createdAt: new Date().toISOString() });
+  }
+}
+
 export function routineIdForRun(runId: string): string | undefined {
   return directory().get(runId)?.routineId;
 }

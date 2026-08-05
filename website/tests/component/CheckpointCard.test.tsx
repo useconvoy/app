@@ -89,6 +89,17 @@ describe("CheckpointCard", () => {
     expect(onAction).toHaveBeenCalledTimes(1);
   });
 
+  it("renders inline detail children above the action row (W2 inbox)", () => {
+    render(
+      <CheckpointCard {...base} kind="blocked_on_human">
+        <p>due in 3h 12m</p>
+      </CheckpointCard>,
+    );
+    expect(screen.getByText("due in 3h 12m")).toBeInTheDocument();
+    // The one typed verb is still the card's last word.
+    expect(screen.getByRole("button", { name: "Respond" })).toBeInTheDocument();
+  });
+
   it("marks rehearsal checkpoints with the dashed graphite treatment", () => {
     const { container } = render(<CheckpointCard {...base} kind="paused" rehearsal />);
     expect(screen.getByText("rehearsal")).toBeInTheDocument();

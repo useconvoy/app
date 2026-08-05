@@ -280,6 +280,7 @@ export const copy = {
   viewersCannotAct: "Viewers cannot act on runs.",
   assignedToSomeoneElse: "This run's routine is assigned to someone else.",
   rehearsalOnlyAnswerAt: "Scheduled answers only work on rehearsal runs.",
+  rehearsalOnlyPromotion: "Only rehearsal results can be submitted for promotion.",
   platformRefused: "The platform did not accept this action.",
 } as const;
 
