@@ -121,7 +121,7 @@ class GatewayService:
 
     def environment_binding(self, environment_id: str, version: Optional[int] = None,
                             kind: str = "production", base_url: str = "") -> Any:
-        """Registry fulfillment of the frozen runtime seam (convoy_core.binding).
+        """Registry fulfillment of the runtime seam (convoy_core DESIGN §5).
 
         One environment definition compiles into two immutable bindings
         (SERVICE-CONTRACTS §2): `production` (real connectors, real clock) and
@@ -129,8 +129,12 @@ class GatewayService:
         validated: every side-effecting tool must resolve to a mock — until
         the mock registry exists, a sandbox request with side-effecting tools
         fails closed listing the unmocked tools rather than silently handing
-        production connectors to a rehearsal."""
-        from convoy_core.binding import ClockConfig, EnvironmentBinding, PermissionScope, ToolGrant
+        production connectors to a rehearsal.
+
+        connector_endpoints carries the reserved `data_plane` key (what the
+        runtime's turn executor and promoted-tool activities call today) plus
+        one MCP door per connection (the richer surface it can move to)."""
+        from convoy_core import ClockConfig, EnvironmentBinding, PermissionScope, ToolGrant
         from sqlalchemy import select
 
         from ..db.tables import Environment as EnvironmentRow
@@ -159,25 +163,48 @@ class GatewayService:
         else:
             clock = ClockConfig(mode="real")
 
+        base = base_url.rstrip("/")
+        endpoints = {
+            # Reserved key the runtime consumes today: plain-HTTP data plane,
+            # environment-scoped so unauthenticated compose parity still
+            # resolves policy correctly.
+            "data_plane": "%s/data-plane/%s/%d" % (base, environment_id, version),
+        }
+        for r in grants:
+            endpoints[r.connection.id] = "%s/mcp/%s" % (base, r.connection.id)
         return EnvironmentBinding(
             id="%s@%d/%s" % (environment_id, version, kind),
             tenant_id=env.workspace_id,
             kind=kind,
             tool_registry=[
                 ToolGrant(tool_id=r.spec.name,
-                          scope=PermissionScope(connection_id=r.connection.id),
+                          scope=PermissionScope(
+                              resource="connector:%s" % r.connection.id,
+                              actions=["write"] if r.side_effecting else ["read"]),
                           execution=r.execution, side_effecting=r.side_effecting)
                 for r in grants
             ],
-            connector_endpoints={
-                r.connection.id: "%s/mcp/%s" % (base_url.rstrip("/"), r.connection.id)
-                for r in grants
-            },
+            connector_endpoints=endpoints,
             credential_scope="convoy-gateway:run-jwt:%s@%d" % (environment_id, version),
             data_namespace=env.data_namespace or "%s/%s" % (env.workspace_id, environment_id),
             sandbox_template=env.sandbox_template or "",
             clock=clock,
         )
+
+    async def call_effect(self, claims: RunClaims, tool: str, args: Dict[str, Any],
+                          idempotency_key: str, step_id: Optional[str] = None,
+                          connection_id: Optional[str] = None):
+        """Promoted-call entry for the data-plane facade: returns
+        (result, replayed) matching the runtime's PromotedToolOutcome
+        expectations — replayed=True means the key had already executed and
+        the recorded result was returned without touching the world."""
+        recorded = self._recorded_result(claims, idempotency_key)
+        if recorded is not None:
+            return recorded.result, True
+        result = await self.call_tool(claims, tool, args, step_id=step_id,
+                                      idempotency_key=idempotency_key,
+                                      connection_id=connection_id)
+        return result, False
 
     # -- browser credential lease (trusted fill service only) --------------
 

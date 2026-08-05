@@ -1,0 +1,51 @@
+# LiteLLM proxy config for the local compose stack. Deterministic lanes route
+# every approved model to the mock-model container; per-token prices are fixed
+# so the proxy-computed response cost is exactly reproducible in tests.
+#
+# mock-primary maps to an upstream model name the mock always fails (HTTP 500),
+# which is how tests exercise the runtime's policy-constrained fallback chain.
+model_list:
+  - model_name: mock-primary
+    litellm_params:
+      model: openai/mock-failing-1
+      api_base: http://mock-model:8901/v1
+      api_key: mock-upstream-key
+    model_info:
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.000008
+  - model_name: mock-fallback
+    litellm_params:
+      model: openai/mock-model-1
+      api_base: http://mock-model:8901/v1
+      api_key: mock-upstream-key
+    model_info:
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000004
+
+  # Live-smoke routes: real provider models, keyed and selected entirely from
+  # the container environment (compose passes the host's ANTHROPIC_API_KEY /
+  # OPENAI_API_KEY through and supplies upstream-model defaults). Nothing in
+  # the deterministic lanes ever requests these model names, so unset keys
+  # leave those lanes untouched; per-token prices are pinned here so the
+  # proxy-computed response cost is nonzero even where the bundled price map
+  # predates the model.
+  - model_name: live-anthropic
+    litellm_params:
+      model: os.environ/CONVOY_LIVE_ANTHROPIC_MODEL
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      input_cost_per_token: 0.000003
+      output_cost_per_token: 0.000015
+  - model_name: live-openai
+    litellm_params:
+      model: os.environ/CONVOY_LIVE_OPENAI_MODEL
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.0000025
+      output_cost_per_token: 0.00001
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+litellm_settings:
+  drop_params: true

@@ -2,7 +2,7 @@
 
 import json
 
-from convoy_core.events import parse_event
+from convoy_core.mission_events import parse_event
 
 
 def _roundtrip(raw):

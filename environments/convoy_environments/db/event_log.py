@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
-from convoy_core.events import parse_event
+from convoy_core.mission_events import parse_event
 from convoy_core.ports import ClockPort, system_clock
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError

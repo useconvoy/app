@@ -1,0 +1,27 @@
+# Resuming an exhausted run must not buy another turn: enforcement re-arms at
+# the boundary and pauses again before any work is scheduled.
+name: budget-exhausted-repause
+run:
+  budget_cap_usd: "0.50"
+  policy:
+    on_budget_exhausted: pause
+turns:
+  - {cost_usd: "0.60", outcome: continue}
+actions:
+  - {after_event: paused, signal: resume}
+  - {after_event: paused, occurrence: 2, signal: land}
+expect:
+  final_status: completed
+  land_status: landed_partial
+  events:
+    - run_started
+    - plan_created
+    - step_started
+    - budget_exhausted
+    - paused
+    - resumed
+    - paused
+    - landing_started
+    - run_completed
+  budget_spent: "0.60"
+  turn_calls: 1

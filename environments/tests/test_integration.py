@@ -8,7 +8,7 @@ runtime idempotency key and survives an activity retry without double-firing
 import hashlib
 
 import httpx
-from convoy_core.binding import EnvironmentBinding
+from convoy_core import EnvironmentBinding
 
 from convoy_environments.console_api import build_console_app
 from convoy_environments.db import SqlEventLog

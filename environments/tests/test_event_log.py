@@ -1,4 +1,4 @@
-from convoy_core.events import ToolIntent
+from convoy_core.mission_events import ToolIntent
 from convoy_environments.db import SqlEventLog
 
 

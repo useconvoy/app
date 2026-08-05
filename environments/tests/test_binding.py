@@ -3,7 +3,7 @@
 
 import httpx
 import pytest
-from convoy_core.binding import EnvironmentBinding
+from convoy_core import EnvironmentBinding
 
 from convoy_environments.console_api import build_console_app
 from convoy_environments.db import SqlEventLog
@@ -91,12 +91,16 @@ async def test_production_binding_fulfills_frozen_seam(world):
     assert grants["slack.read_messages"].side_effecting is True
     assert grants["github.list_issues"].execution == "inline"
     assert grants["github.list_issues"].side_effecting is False
-    assert grants["github.list_issues"].scope.connection_id == world["github"]["connectionId"]
+    assert grants["github.list_issues"].scope.resource == "connector:%s" % world["github"]["connectionId"]
+    assert grants["github.list_issues"].scope.actions == ["read"]
+    assert grants["slack.post_message"].scope.actions == ["write"]
 
-    # every endpoint is a gateway door, keyed by connection
+    # the reserved data_plane door plus one MCP door per connection
     slack_id, gh_id = world["slack"]["connectionId"], world["github"]["connectionId"]
     assert {str(u) for u in binding.connector_endpoints.values()} == {
+        "%s/data-plane/%s/1" % (BASE, env_id),
         "%s/mcp/%s" % (BASE, slack_id), "%s/mcp/%s" % (BASE, gh_id)}
+    assert "data_plane" in binding.connector_endpoints
 
 
 async def test_sandbox_binding_fails_closed_on_unmocked_side_effects(world):

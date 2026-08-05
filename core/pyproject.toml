@@ -1,22 +1,13 @@
 [project]
 name = "convoy-core"
 version = "0.1.0"
-description = "Convoy core contracts: the co-signed event taxonomy and runtime ports. Changes require both founders' review."
-requires-python = ">=3.9"
-dependencies = [
-  "pydantic>=2.5",
-  "typing_extensions>=4.8",
-]
-
-[project.optional-dependencies]
-dev = ["pytest>=8"]
+description = "Convoy shared datatypes - owned by no service"
+requires-python = ">=3.12"
+dependencies = ["pydantic>=2.11"]
 
 [build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.setuptools.packages.find]
-include = ["convoy_core*"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/convoy_core"]

@@ -1,0 +1,25 @@
+# Soft budget threshold: crossing 80% of the cap emits exactly one warning
+# and the run still completes normally.
+name: budget-warning
+run:
+  budget_cap_usd: "1.00"
+turns:
+  - {cost_usd: "0.85", outcome: step_done}
+  - {cost_usd: "0.10", outcome: step_done}
+expect:
+  final_status: completed
+  land_status: completed
+  events:
+    - run_started
+    - plan_created
+    - step_started
+    - step_done
+    - compaction_applied
+    - budget_warning
+    - step_started
+    - step_done
+    - compaction_applied
+    - landing_started
+    - run_completed
+  budget_spent: "0.95"
+  turn_calls: 2

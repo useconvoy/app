@@ -1,0 +1,49 @@
+[tool.uv.workspace]
+members = ["core", "agent-runtime", "environments", "agent-evals"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.12",
+    "pyright[nodejs]>=1.1.403",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.23",
+    "anyio>=4.9",
+    "moto[s3]>=5.1",
+    "httpx>=0.28",
+    "boto3-stubs[s3]>=1.39",
+    "pyyaml>=6.0.3",
+    "types-pyyaml>=6.0.12.20260724",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["core/src", "agent-runtime/src"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF", "ASYNC"]
+ignore = [
+    # Pydantic models use mutable defaults by design (pydantic deep-copies them per instance).
+    "RUF012",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["convoy_core", "convoy_runtime"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
+include = ["core/src", "agent-runtime/src", "agent-runtime/tests"]
+extraPaths = ["agent-runtime/tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["agent-runtime/tests"]
+pythonpath = ["agent-runtime/tests"]
+addopts = "-ra"
+markers = [
+    "e2e: tests that require the docker compose stack (excluded from the fast lane)",
+    "chaos: crash/durability tests that kill workers against the compose stack (own lane)",
+    "live: opt-in live-smoke tests that call a real model with a provider key from the environment (own lane, never CI-default)",
+]
