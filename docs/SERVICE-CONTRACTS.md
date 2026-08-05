@@ -62,6 +62,8 @@ Temporal payloads are ciphertext (codec) — nothing outside runtime workers can
 
 ## 8. Tenancy: workspace ≡ tenant (amendment, Aug 5 2026 — pending runtime decision-log entry)
 
+**In plain English:** the console's "workspace" and the runtime's "tenant" are the same thing — one customer. Every service uses the same id for that customer, so their data joins directly everywhere (runs, environments, audit, files) with no translation table. For now, one customer = one workspace = one dedicated infrastructure stack; the database *can* hold many workspaces, but that capability is reserved for a future shared-SaaS mode and nothing may rely on it yet.
+
 Proposed by environments/, needs Aneesh's sign-off per §0's amendment rule.
 
 - **`environments.workspaces.id` and the runtime's `tenant_id` are the same value.** The binding already asserts this (`EnvironmentBinding.tenant_id` is populated from the workspace row); this section makes it a named contract instead of a coincidence. Every `tenant_id` in RunEvents, RLS predicates, STS session policies, and S3 prefixes (`s3://{stack-bucket}/{tenant}/…`) is a workspace id.
