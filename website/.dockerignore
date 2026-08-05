@@ -1,0 +1,34 @@
+# Build context for the console image. Dependencies are installed inside the
+# image from the lockfile and the app is built there, so nothing already
+# built on a laptop may leak in.
+node_modules
+.next
+out
+*.tsbuildinfo
+
+# Local-only state.
+.env
+.env.*
+.dev-runtime.pids
+.git
+.gitignore
+
+# Test and report output; the image runs the app, it does not test it.
+tests
+test-results
+playwright-report
+coverage
+playwright.config.ts
+vitest.config.mts
+eslint.config.mjs
+
+# Prose.
+docs
+*.md
+
+# Infrastructure code is not application code. Two files are exceptions: the
+# migrate task runs the role-password sync, and the runtime needs the RDS
+# certificate bundle.
+infra/*
+!infra/db
+!infra/docker

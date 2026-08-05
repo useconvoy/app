@@ -1,0 +1,17 @@
+# Terraform working files — state must live in the encrypted S3 backend, never in git.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfplan
+
+# Real per-console variable files may contain account specifics; only the
+# committed fixtures/example.tfvars template belongs in git.
+terraform.tfvars
+*.auto.tfvars
+!fixtures/example.tfvars
