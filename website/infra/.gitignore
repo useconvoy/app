@@ -11,7 +11,8 @@ override.tf.json
 *.tfplan
 
 # Real per-console variable files may contain account specifics; only the
-# committed fixtures/example.tfvars template belongs in git.
-terraform.tfvars
-*.auto.tfvars
+# committed fixtures/example.tfvars template belongs in git. The runbook has
+# operators write <name>.tfvars, so the pattern has to cover every tfvars name
+# rather than just the two Terraform loads automatically.
+*.tfvars
 !fixtures/example.tfvars
