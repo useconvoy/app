@@ -282,3 +282,134 @@ export const notificationSettingsCopy = {
   otherChannels: "Email and Slack are coming later.",
   save: "Save preferences",
 } as const;
+
+/** Feedback kinds (DESIGN §3) as users pick them in the composer. */
+export const feedbackKindLabels = {
+  rating: "Helpful",
+  comment: "Comment",
+  correction: "Correction",
+} as const;
+
+export type FeedbackKind = keyof typeof feedbackKindLabels;
+
+/** Star labels for the 1..5 helpfulness rating, in rating order. */
+export const ratingLabels: Record<number, string> = {
+  1: "Not helpful",
+  2: "Slightly helpful",
+  3: "Somewhat helpful",
+  4: "Helpful",
+  5: "Very helpful",
+};
+
+/**
+ * The learning handoff lifecycle (D12) in quiet, plain words. Keys are the
+ * feedback table's learning_status values; the chip never says "queue" in
+ * pipeline jargon, it says what happened to the person's words.
+ */
+export const learningStatusLabels = {
+  new: "Noted",
+  queued: "Queued for learning",
+  consumed: "Applied",
+} as const;
+
+export type LearningStatus = keyof typeof learningStatusLabels;
+
+/** Improvement lifecycle states on the learning queue. */
+export const improvementStatusLabels = {
+  proposed: "Proposed",
+  approved: "Approved",
+  shipped: "Shipped",
+} as const;
+
+export type ImprovementStatus = keyof typeof improvementStatusLabels;
+
+/**
+ * One-sentence summary of a test-score trend, the accessible text every
+ * trend line carries, e.g. "Test score 91, up 19 points over 8 runs".
+ */
+export function testScoreSummary(latest: number, delta: number, runCount: number): string {
+  if (runCount <= 1) return `Test score ${latest} from the first scored run`;
+  const runs = `${runCount} runs`;
+  if (delta > 0) return `Test score ${latest}, up ${delta} ${delta === 1 ? "point" : "points"} over ${runs}`;
+  if (delta < 0) {
+    const drop = Math.abs(delta);
+    return `Test score ${latest}, down ${drop} ${drop === 1 ? "point" : "points"} over ${runs}`;
+  }
+  return `Test score ${latest}, steady over ${runs}`;
+}
+
+/**
+ * Test-score evidence on an improvement card, e.g.
+ * "Test score 84 -> 91 across 3 rehearsal runs".
+ */
+export function testScoreEvidence(before: number, after: number, runCount: number): string {
+  return `Test score ${before} -> ${after} across ${runCount} rehearsal ${
+    runCount === 1 ? "run" : "runs"
+  }`;
+}
+
+/** Shared copy for the feedback composer and stream. */
+export const feedbackCopy = {
+  composerTitle: "Leave feedback",
+  kindLegend: "What kind of feedback?",
+  ratingLegend: "How helpful was this run?",
+  bodyLabel: "Your feedback",
+  bodyPlaceholderComment: "What should the team know about this run?",
+  bodyPlaceholderCorrection: "What should have happened instead?",
+  submit: "Send feedback",
+  bodyRequired: "Write your feedback before sending.",
+  ratingRequired: "Pick a star rating before sending.",
+  noRunsYetNote: "Feedback attaches to a run. This routine has not run yet.",
+  attachesToLatestRun: "Your feedback attaches to this routine's latest run.",
+  emptyStream: "No feedback yet",
+  sent: "Feedback sent",
+  starsOutOfFive: (rating: number) => `${rating} of 5`,
+} as const;
+
+/** Shared copy for the routine evaluation and learning surfaces. */
+export const improveCopy = {
+  evaluationTitle: "Routine evaluation",
+  evaluationIntro: "How each routine scores in rehearsal, and the runs behind the numbers.",
+  suitesTitle: "Scenario groups",
+  scenarioCount: (count: number) => `${count} ${count === 1 ? "scenario" : "scenarios"}`,
+  trendTitle: "Test score trend",
+  noScoresYet: "No test scores yet",
+  noScoresBody: "Rehearsal results will chart here once this routine has been scored.",
+  scorecardsTitle: "Run scorecards",
+  trajectoriesTitle: "Recent scored runs",
+  learningTitle: "Learning",
+  learningIntro: "What the routines have learned, waiting for a person to approve it.",
+  queueTitle: "Improvements to review",
+  queueEmpty: "Nothing to review right now",
+  queueEmptyBody: "Improvements appear here when a routine has something worth changing.",
+  approveAction: "Approve",
+  shipAction: "Ship",
+  changelogTitle: "Routine changelog",
+  changelogEmpty: "No changes yet",
+  changelogEmptyBody: "Changes shipped to this routine will appear here.",
+  feedbackReviewTitle: "Recent feedback",
+  readOnlyQueueNote: "You can read this queue. Approving and shipping need an operator.",
+} as const;
+
+/** Shared copy for the logs surface. */
+export const logsCopy = {
+  title: "Logs",
+  intro: "Every event from this organization's runs, newest first, with spend alongside.",
+  emptyTitle: "No events yet",
+  emptyBody: "Events appear here as soon as a routine starts working.",
+  filterEventType: "Event type",
+  filterRun: "Run",
+  filterLens: "Show",
+  allEvents: "All events",
+  allRuns: "All runs",
+  allLenses: "Everything",
+  apply: "Apply filters",
+  timeColumn: "Time",
+  eventColumn: "What happened",
+  actorColumn: "Who",
+  runColumn: "Run",
+  payloadSummary: "Details",
+  spendTitle: "Spend",
+  totalSpend: "Total spend across these runs",
+  spendByStep: "Spend by step",
+} as const;
