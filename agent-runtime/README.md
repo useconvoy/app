@@ -106,6 +106,22 @@ Postgres (with row-level security), MinIO, a scriptable OpenAI-compatible mock
 model, a stub environment service (tool registry + side-effect journal), and a
 LiteLLM proxy. Deterministic lanes never call a real model.
 
+### Demo profile
+
+`compose.yaml` also carries an opt-in `demo` profile that adds `real-env`: the
+real environments service (`environments/`, gateway + console) on port 8780,
+backed by its own database on the stack's Postgres. Start it with:
+
+```sh
+docker compose --profile demo up -d --build
+```
+
+The default stack and every test lane ignore the profile. To point a host-run
+worker/control plane at it instead of the stub, set
+`CONVOY_STUB_ENV_URL=http://localhost:8780/gateway` — defaults are unchanged;
+see the comment on the `real-env` service in `compose.yaml`, including the
+dev-only `CONVOY_DATA_PLANE_ALLOW_ANON` stop-gap.
+
 ### Invariants worth knowing before changing code
 
 - Workflow code does no I/O, reads no clock or env, and uses no randomness;

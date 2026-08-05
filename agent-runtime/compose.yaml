@@ -26,6 +26,10 @@ services:
       # then the LiteLLM proxy's dedicated key-store database.
       - ./src/convoy_runtime/projections/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
       - ./docker/postgres-init/20-litellm-db.sql:/docker-entrypoint-initdb.d/20-litellm-db.sql:ro
+      # Dedicated database for the `demo` profile's real-env service. Inert
+      # for the default stack and test lanes: it only creates an empty
+      # database + role that nothing outside the profile ever touches.
+      - ./docker/postgres-init/30-environments-db.sql:/docker-entrypoint-initdb.d/30-environments-db.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U convoy_admin -d convoy"]
       interval: 2s
@@ -60,6 +64,55 @@ services:
       DATA_PLANE_URL: http://localhost:8902
     ports:
       - "8902:8902"
+
+  # --------------------------------------------------------------------------
+  # Opt-in `demo` profile: the REAL environments service (gateway + registry
+  # from the monorepo's environments/ package) as an alternative to stub-env.
+  #
+  #   docker compose --profile demo up -d --build
+  #
+  # Without --profile demo this service does not exist; the default stack and
+  # every test lane are untouched, and stub-env keeps serving as before.
+  #
+  # SWITCH-OVER: the runtime reads exactly ONE variable for the environments
+  # seam — CONVOY_STUB_ENV_URL (src/convoy_runtime/config.py), consumed by the
+  # control plane's registry lookup (control_plane/app.py) and the
+  # promoted-tool activities (activities/promoted.py). Repoint it at the real
+  # gateway to switch off the stub — its default is deliberately NOT changed:
+  #   host-run worker/control-plane:  CONVOY_STUB_ENV_URL=http://localhost:8780/gateway
+  #   inside the compose network:     CONVOY_STUB_ENV_URL=http://real-env:8780/gateway
+  # --------------------------------------------------------------------------
+  real-env:
+    profiles: ["demo"]
+    build:
+      # Repo root, not agent-runtime/: the image copies core/ because
+      # convoy-core is a path dependency of convoy-environments.
+      context: ..
+      dockerfile: environments/Dockerfile
+    environment:
+      # Shares the stack's Postgres but lives in its own database (created by
+      # docker/postgres-init/30-environments-db.sql), so environments tables
+      # never mix with the runtime's projections.
+      CONVOY_DATABASE_URL: postgresql+psycopg2://convoy_env:convoy_env@postgres:5432/convoy_environments
+      # DEV-ONLY secrets, hardcoded on purpose for this compose profile;
+      # never reuse them anywhere else. The master key is a valid Fernet key:
+      # base64 of the 32 bytes "convoy-demo-profile-master-key!!".
+      CONVOY_MASTER_KEY: Y29udm95LWRlbW8tcHJvZmlsZS1tYXN0ZXIta2V5ISE=
+      CONVOY_GATEWAY_SECRET: dev-gateway-secret-demo-profile-only
+      CONVOY_INTERNAL_TOKEN: dev-internal-token-demo-profile-only
+      # Base URL advertised inside bindings. It must be the URL as the
+      # RUNTIME WORKERS reach it — they run on the host, so this is the
+      # mapped port, not the service name.
+      CONVOY_GATEWAY_PUBLIC_URL: http://localhost:8780/gateway
+      # !! DEV-ONLY STOP-GAP !! Anonymous data plane exists ONLY until the
+      # runtime attaches run JWTs to its data-plane calls (raised on PR #17).
+      # Remove the moment that lands; never set this outside this profile.
+      CONVOY_DATA_PLANE_ALLOW_ANON: "1"
+    ports:
+      - "8780:8780"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   litellm:
     # Built fully offline from prefetched inputs; run
