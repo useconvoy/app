@@ -1,0 +1,23 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`StatusChip > renders the rehearsal variant dashed in graphite with a label 1`] = `
+<span
+  class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-xs uppercase tracking-wide border-dashed border-graphite bg-graphite-soft text-graphite"
+>
+  <span
+    aria-hidden="true"
+    class="pulse-live size-1.5 rounded-full bg-pass"
+  />
+  <span>
+    Running
+  </span>
+  <span
+    aria-hidden="true"
+  >
+    ·
+  </span>
+  <span>
+    rehearsal
+  </span>
+</span>
+`;
