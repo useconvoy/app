@@ -126,10 +126,16 @@ class GatewayService:
         One environment definition compiles into two immutable bindings
         (SERVICE-CONTRACTS §2): `production` (real connectors, real clock) and
         `sandbox` (mocks, virtual-capable clock). Sandbox compilation is
-        validated: every side-effecting tool must resolve to a mock — until
-        the mock registry exists, a sandbox request with side-effecting tools
-        fails closed listing the unmocked tools rather than silently handing
-        production connectors to a rehearsal.
+        validated: every side-effecting connector tool must resolve to a mock
+        — until the mock registry exists, a sandbox request with
+        side-effecting tools fails closed listing the unmocked tools rather
+        than silently handing production connectors to a rehearsal.
+
+        When the environment sets a `sandbox_template`, both binding kinds
+        additionally grant `sandbox_exec` (promoted, side-effecting, scoped to
+        `sandbox:<template>`): the runtime routes it by its `sandbox_` prefix
+        to its own SandboxProvider, so it gets no connector_endpoints entry
+        and is exempt from the sandbox mock requirement.
 
         connector_endpoints carries the reserved `data_plane` key (what the
         runtime's turn executor and promoted-tool activities call today) plus
@@ -154,6 +160,12 @@ class GatewayService:
         grants = self._policy.allowed_tools(snapshot)
 
         if kind == "sandbox":
+            # sandbox_exec (appended below when a template is set) is EXEMPT
+            # from the mock requirement: sandbox jobs execute inside the
+            # sandbox itself with effects journaled in the workspace — they
+            # never reach a production connector, so they are rehearsal-safe
+            # by construction in both binding kinds. Only connector tools
+            # (the `grants` resolutions checked here) need mocks.
             unmocked = sorted(r.spec.name for r in grants if r.side_effecting)
             if unmocked:
                 raise PolicyDenied(
@@ -172,18 +184,31 @@ class GatewayService:
         }
         for r in grants:
             endpoints[r.connection.id] = "%s/mcp/%s" % (base, r.connection.id)
+        tool_registry = [
+            ToolGrant(tool_id=r.spec.name,
+                      scope=PermissionScope(
+                          resource="connector:%s" % r.connection.id,
+                          actions=["write"] if r.side_effecting else ["read"]),
+                      execution=r.execution, side_effecting=r.side_effecting)
+            for r in grants
+        ]
+        if env.sandbox_template:
+            # Not a connector: the runtime routes sandbox_* tool ids by prefix
+            # to its own SandboxProvider, so no connector_endpoints entry.
+            # This grant derives from the environment's sandbox_template,
+            # never from a connection allowlist.
+            tool_registry.append(ToolGrant(
+                tool_id="sandbox_exec",
+                scope=PermissionScope(resource="sandbox:" + env.sandbox_template,
+                                      actions=["execute"]),
+                execution="promoted",
+                side_effecting=True,
+            ))
         return EnvironmentBinding(
             id="%s@%d/%s" % (environment_id, version, kind),
             tenant_id=env.workspace_id,
             kind=kind,
-            tool_registry=[
-                ToolGrant(tool_id=r.spec.name,
-                          scope=PermissionScope(
-                              resource="connector:%s" % r.connection.id,
-                              actions=["write"] if r.side_effecting else ["read"]),
-                          execution=r.execution, side_effecting=r.side_effecting)
-                for r in grants
-            ],
+            tool_registry=tool_registry,
             connector_endpoints=endpoints,
             credential_scope="convoy-gateway:run-jwt:%s@%d" % (environment_id, version),
             data_namespace=env.data_namespace or "%s/%s" % (env.workspace_id, environment_id),
