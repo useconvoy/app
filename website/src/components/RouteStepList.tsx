@@ -1,12 +1,14 @@
-import { stepStatusLabels } from "@/lexicon";
+import { stepStatusLabels, terms } from "@/lexicon";
 
-export type RouteStepState = "done" | "active" | "held" | "queued";
+export type RouteStepState = "done" | "active" | "held" | "queued" | "failed";
 
 export interface RouteStep {
   id: string;
   /** Plain sentence, law 3: no ids, no tool names. */
   sentence: string;
   state: RouteStepState;
+  /** A human gate sits on this step: render the checkpoint marker. */
+  checkpoint?: boolean;
 }
 
 const stateLabels: Record<RouteStepState, string> = {
@@ -14,6 +16,7 @@ const stateLabels: Record<RouteStepState, string> = {
   active: stepStatusLabels.active ?? "In progress",
   held: stepStatusLabels.blocked_on_human ?? "Held",
   queued: stepStatusLabels.queued ?? "Queued",
+  failed: stepStatusLabels.failed ?? "Failed",
 };
 
 const nodeClasses: Record<RouteStepState, string> = {
@@ -21,6 +24,7 @@ const nodeClasses: Record<RouteStepState, string> = {
   active: "pulse-live border-pass bg-pass",
   held: "border-hold bg-hold",
   queued: "border-line bg-card",
+  failed: "border-fail bg-fail",
 };
 
 const stateTextClasses: Record<RouteStepState, string> = {
@@ -28,6 +32,7 @@ const stateTextClasses: Record<RouteStepState, string> = {
   active: "text-pass",
   held: "text-hold",
   queued: "text-muted",
+  failed: "text-fail",
 };
 
 export interface RouteStepListProps {
@@ -54,13 +59,20 @@ export function RouteStepList({ steps }: RouteStepListProps) {
             <span className={step.state === "queued" ? "text-muted" : "text-ink"}>
               {step.sentence}
             </span>
-            <span
-              className={[
-                "font-mono text-[11px] uppercase tracking-wide",
-                stateTextClasses[step.state],
-              ].join(" ")}
-            >
-              {stateLabels[step.state]}
+            <span className="flex items-baseline gap-2">
+              <span
+                className={[
+                  "font-mono text-[11px] uppercase tracking-wide",
+                  stateTextClasses[step.state],
+                ].join(" ")}
+              >
+                {stateLabels[step.state]}
+              </span>
+              {step.checkpoint && (
+                <span className="rounded-full border border-hold-soft bg-hold-soft px-1.5 font-mono text-[11px] uppercase tracking-wide text-hold">
+                  {terms.gate}
+                </span>
+              )}
             </span>
           </span>
         </li>

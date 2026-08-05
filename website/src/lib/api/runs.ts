@@ -87,13 +87,30 @@ export async function createRun(
   input: CreateRunInput,
 ): Promise<{ runId: string; status: string }> {
   const { data, error } = await controlPlane(actor).POST("/runs", {
+    // The generated body type surfaces the API's defaulted fields as
+    // required; they are sent verbatim at their documented defaults.
     body: {
       goal: input.goal,
       environment_id: input.environmentId,
       budget_usd: input.budgetUsd,
+      fixture_gates: {},
+      max_children: 5,
+      success_criteria: [],
+      tools: [],
       ...(input.requirePlanApproval === undefined
         ? {}
-        : { policy: { require_plan_approval: input.requirePlanApproval } }),
+        : {
+            policy: {
+              approval_scope: "major_revisions" as const,
+              max_depth: 1,
+              max_parallel: 5,
+              max_steps: 50,
+              on_budget_exhausted: "pause" as const,
+              on_group_partial_failure: "join_with_partials" as const,
+              plan_shape: "linear_fanout" as const,
+              require_plan_approval: input.requirePlanApproval,
+            },
+          }),
     },
   });
   if (error || !data) {

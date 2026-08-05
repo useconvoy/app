@@ -142,6 +142,37 @@ export const grantLabels: Record<string, string> = {
   write: "Can update",
 };
 
+/** Trigger kinds (DESIGN D1) as plain phrases on routine surfaces. */
+export const triggerKindLabels = {
+  schedule: "On a schedule",
+  manual: "On demand",
+  event: "When something happens",
+} as const;
+
+export type TriggerKind = keyof typeof triggerKindLabels;
+
+/** Workspace clock modes and what they mean for the people watching. */
+export const clockModeLabels = {
+  wall: "Wall clock",
+  virtual: "Virtual time",
+} as const;
+
+export const clockModeDescriptions = {
+  wall: "Runs here use real time.",
+  virtual: "Rehearsal runs here can move the clock forward without waiting.",
+} as const;
+
+export type ClockMode = keyof typeof clockModeLabels;
+
+/** Runs list filter chips (DESIGN §5): All plus the four status groups. */
+export const runFilterLabels = {
+  all: "All",
+  held: "Held",
+  running: "Running",
+  failed: "Failed",
+  landed: "Landed",
+} as const;
+
 /** Shared copy fragments reused across surfaces. */
 export const copy = {
   rehearsalBanner: "You are looking at a rehearsal. Nothing here touches live systems.",
@@ -164,6 +195,30 @@ export const copy = {
   answeredBy: (name: string) => `Answered by ${name}`,
   standInFor: (system: string) => `Stand-in for ${system}`,
   actsOnVersion: (version: number) => `Acts on v${version}`,
+  startRehearsalRun: "Start a rehearsal run",
+  searchRuns: "Search runs",
+  productionFilter: "Production",
+  rehearsalsFilter: "Rehearsals",
+  runsEmptyBody: "Runs appear here as soon as a routine starts working.",
+  helperRuns: "Helper runs",
+  operatorDetails: "Details for operators",
+  copyRunId: "Copy run id",
+  pinnedVersion: (version: number) => `Pinned to v${version}`,
+  runNow: "Run now",
+  runNowRehearsalNote:
+    "Run now starts a rehearsal in this workspace's rehearsal copy. Nothing touches live systems.",
+  runNowProductionNote: "Run now starts a live run in this workspace, within this routine's budget.",
+  noRunsYet: "No runs yet",
+  rehearsalCopyAutoNote: "A rehearsal copy is created automatically.",
+  rehearsalCopyExplainer:
+    "Every workspace carries a rehearsal copy. Rehearsal runs use stand-ins for anything that would touch the outside world.",
+  standInRequired: (system: string) =>
+    `${system} makes changes outside this organization. Add a stand-in before creating the workspace.`,
+  upToPerRun: (amount: string) => `Up to ${amount} per run`,
+  workspaceCardFact: (systems: number, routines: number) =>
+    `Connects ${systems} ${systems === 1 ? "system" : "systems"} · used by ${routines} ${
+      routines === 1 ? "routine" : "routines"
+    }`,
 } as const;
 
 /** Format a checkpoint age for cards and lists, e.g. "HELD 26M". */
@@ -172,3 +227,58 @@ export function heldAgeLabel(minutes: number): string {
   if (minutes < 60 * 24) return `HELD ${Math.floor(minutes / 60)}H`;
   return `HELD ${Math.floor(minutes / (60 * 24))}D`;
 }
+
+/**
+ * Notification titles (DESIGN §4). The notifier is the only caller. Each
+ * title is a short plain sentence; when the event carries the run's goal or
+ * the checkpoint's own prompt (both already written in plain language) the
+ * title leads with it.
+ */
+export const notificationTitles = {
+  respond: (prompt?: string | null) =>
+    prompt && prompt.trim().length > 0
+      ? prompt.trim()
+      : "A run asked a question and is waiting for an answer.",
+  approve: (goal?: string | null) =>
+    goal ? `The plan for "${goal}" is ready to review.` : "A plan is ready to review.",
+  resume: () => "A run is paused and waiting for someone to resume it.",
+  deadline: () => "A checkpoint is coming up on its deadline.",
+  promotionRequested: () => "A routine finished rehearsing and is ready to review for promotion.",
+  budgetWarning: (goal?: string | null) =>
+    goal ? `"${goal}" is approaching its budget.` : "A run is approaching its budget.",
+  budgetExhausted: (goal?: string | null) =>
+    goal ? `"${goal}" ran out of budget.` : "A run ran out of budget.",
+  runFailed: (goal?: string | null) => (goal ? `"${goal}" failed.` : "A run failed."),
+  runLanded: (goal?: string | null) => (goal ? `"${goal}" landed.` : "A run landed."),
+  improvementReady: () => "An improvement is ready to review.",
+} as const;
+
+/** Bell panel grouping: which classes read as held vs alert vs update. */
+export const notificationClassGroups: Record<string, "held" | "alert" | "update"> = {
+  checkpoint_opened: "held",
+  checkpoint_deadline: "held",
+  promotion_requested: "held",
+  budget_warning: "alert",
+  budget_exhausted: "alert",
+  run_failed: "alert",
+  run_landed: "update",
+  improvement_ready: "update",
+};
+
+/** "3 held · 1 alert" style summary for the bell panel header. */
+export function bellSummary(counts: { held: number; alert: number; update: number }): string {
+  const parts: string[] = [];
+  if (counts.held > 0) parts.push(`${counts.held} held`);
+  if (counts.alert > 0) parts.push(counts.alert === 1 ? "1 alert" : `${counts.alert} alerts`);
+  if (counts.update > 0) parts.push(counts.update === 1 ? "1 update" : `${counts.update} updates`);
+  return parts.join(" · ");
+}
+
+/** Copy for the notification settings page (in-app only in v1, D6). */
+export const notificationSettingsCopy = {
+  title: "Notifications",
+  intro: "Choose which updates reach you in the app. Each one links straight to the action it needs.",
+  inAppLabel: "In app",
+  otherChannels: "Email and Slack are coming later.",
+  save: "Save preferences",
+} as const;

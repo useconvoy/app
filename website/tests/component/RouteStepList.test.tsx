@@ -9,7 +9,7 @@ const accessReview = routines[0]!;
 const steps: RouteStep[] = [
   { id: "s1", sentence: accessReview.planSteps[0]!, state: "done" },
   { id: "s2", sentence: accessReview.planSteps[1]!, state: "active" },
-  { id: "s3", sentence: accessReview.planSteps[2]!, state: "held" },
+  { id: "s3", sentence: accessReview.planSteps[2]!, state: "held", checkpoint: true },
   { id: "s4", sentence: accessReview.planSteps[3]!, state: "queued" },
 ];
 
@@ -35,5 +35,17 @@ describe("RouteStepList", () => {
   it("pulses only the active node", () => {
     const { container } = render(<RouteStepList steps={steps} />);
     expect(container.querySelectorAll(".pulse-live")).toHaveLength(1);
+  });
+
+  it("marks gated steps with the checkpoint marker", () => {
+    render(<RouteStepList steps={steps} />);
+    expect(screen.getByText("checkpoint")).toBeInTheDocument();
+  });
+
+  it("renders a failed step with its label", () => {
+    render(
+      <RouteStepList steps={[{ id: "f1", sentence: accessReview.planSteps[4]!, state: "failed" }]} />,
+    );
+    expect(screen.getByText("Failed")).toBeInTheDocument();
   });
 });
