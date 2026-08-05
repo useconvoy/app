@@ -1,0 +1,93 @@
+name: convoy-agent-runtime
+
+services:
+  temporal:
+    image: temporalio/temporal:latest
+    command: ["server", "start-dev", "--ip", "0.0.0.0", "--port", "7233", "--ui-port", "8233"]
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "127.0.0.1:7233"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: convoy_admin
+      POSTGRES_PASSWORD: convoy_admin
+      POSTGRES_DB: convoy
+    ports:
+      - "5433:5432"
+    volumes:
+      # Projection schema + RLS policies + app role, applied at first boot,
+      # then the LiteLLM proxy's dedicated key-store database.
+      - ./src/convoy_runtime/projections/schema.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+      - ./docker/postgres-init/20-litellm-db.sql:/docker-entrypoint-initdb.d/20-litellm-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U convoy_admin -d convoy"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: convoy
+      MINIO_ROOT_PASSWORD: convoy-secret-key
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  mock-model:
+    build: docker/mock-model
+    ports:
+      - "8901:8901"
+
+  stub-env:
+    build: docker/stub-env
+    environment:
+      # Data-plane URL advertised inside bindings, as reachable by the
+      # host-run worker (tool calls go to the mapped port).
+      DATA_PLANE_URL: http://localhost:8902
+    ports:
+      - "8902:8902"
+
+  litellm:
+    # Built fully offline from prefetched inputs; run
+    # docker/litellm/prefetch.sh once before `docker compose build`
+    # (`make e2e-up` does this automatically).
+    build: docker/litellm
+    environment:
+      LITELLM_MASTER_KEY: sk-convoy-e2e-master-key
+      DATABASE_URL: postgresql://litellm:litellm@postgres:5432/litellm
+      LITELLM_LOG: ERROR
+      # Live-smoke routes resolve their upstream model and key from here;
+      # unset keys leave the deterministic lanes untouched (nothing in them
+      # requests the live-* model names).
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      CONVOY_LIVE_ANTHROPIC_MODEL: ${CONVOY_LIVE_ANTHROPIC_MODEL:-anthropic/claude-sonnet-5}
+      CONVOY_LIVE_OPENAI_MODEL: ${CONVOY_LIVE_OPENAI_MODEL:-openai/gpt-4o}
+      # Environments whose egress goes through a TLS-intercepting proxy can
+      # point CONVOY_PROXY_CA_CERT at the proxy's CA bundle on the host; it is
+      # mounted read-only and trusted for the proxy's outbound model calls.
+      # Unset, this resolves to an empty SSL_CERT_FILE, which Python ignores.
+      SSL_CERT_FILE: ${CONVOY_PROXY_CA_CERT:+/etc/convoy/proxy-ca.crt}
+    volumes:
+      - ${CONVOY_PROXY_CA_CERT:-/dev/null}:/etc/convoy/proxy-ca.crt:ro
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock-model:
+        condition: service_healthy

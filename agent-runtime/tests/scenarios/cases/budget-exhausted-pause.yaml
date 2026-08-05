@@ -1,0 +1,29 @@
+# Hard budget cap with the default policy: the run pauses (actor: system),
+# schedules no further turns, and a human land wraps it up with partials.
+name: budget-exhausted-pause
+run:
+  budget_cap_usd: "1.00"
+  policy:
+    on_budget_exhausted: pause
+turns:
+  - {cost_usd: "0.85", outcome: step_done}
+  - {cost_usd: "0.20", outcome: continue}
+actions:
+  - {after_event: paused, signal: land}
+expect:
+  final_status: completed
+  land_status: landed_partial
+  events:
+    - run_started
+    - plan_created
+    - step_started
+    - step_done
+    - compaction_applied
+    - budget_warning
+    - step_started
+    - budget_exhausted
+    - paused
+    - landing_started
+    - run_completed
+  budget_spent: "1.05"
+  turn_calls: 2

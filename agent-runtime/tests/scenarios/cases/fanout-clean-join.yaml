@@ -1,0 +1,54 @@
+# Clean fan-out: a two-member group spawns child workflows (serialized here
+# so the interleaved parent+child event order is exact), each child lands its
+# compacted SubagentResult back to the parent with its unspent slice
+# refunded, and the join step proceeds once every member is done.
+name: fanout-clean-join
+run:
+  budget_cap_usd: "10"
+  max_children: 2
+  fanout:
+    size: 2
+    budget_slice: "1.00"
+  policy:
+    max_parallel: 1
+child_turns:
+  fan-1:
+    - {cost_usd: "0.25", outcome: step_done}
+  fan-2:
+    - {cost_usd: "0.25", outcome: step_done}
+expect:
+  final_status: completed
+  land_status: completed
+  events:
+    - run_started
+    - plan_created
+    - step_started        # step-1 (self)
+    - step_done
+    - compaction_applied
+    - step_started        # fan-1 member goes running
+    - child_spawned       # slice carved into reserved before the child runs
+    - run_started         # child fan-1's own stream begins
+    - step_started
+    - step_done
+    - run_completed
+    - child_landed        # cost booked, unspent slice refunded
+    - step_done           # fan-1 member done
+    - step_started        # fan-2
+    - child_spawned
+    - run_started
+    - step_started
+    - step_done
+    - run_completed
+    - child_landed
+    - step_done
+    - step_started        # the join proceeds with both results
+    - step_done
+    - compaction_applied
+    - landing_started
+    - run_completed
+  turn_calls: 4           # two parent turns + one per child
+  budget_spent: "0.5002"
+  budget_reserved: "0"
+  child_refunds:
+    fan-1: "0.75"
+    fan-2: "0.75"

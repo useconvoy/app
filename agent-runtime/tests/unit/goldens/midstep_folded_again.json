@@ -1,0 +1,25 @@
+{
+  "archive_ref": {
+    "bucket": "convoy-test",
+    "content_type": "application/json",
+    "key": "runs/run-golden-2/transcripts/step-1/turn-6.json",
+    "sha256": "f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
+    "size_bytes": 7
+  },
+  "folded_turns": 10,
+  "format": "folded-transcript",
+  "progress_note": "Folded 8 turn entries; latest progress: echo: step step-1 turn 4 | Folded 2 turn entries; latest progress: echo: step step-1 turn 5",
+  "run_id": "run-golden-2",
+  "step_id": "step-1",
+  "step_turns": 5,
+  "turns": [
+    {
+      "content": "execute step step-1 (turn 6)",
+      "role": "user"
+    },
+    {
+      "content": "echo: step step-1 turn 6",
+      "role": "assistant"
+    }
+  ]
+}

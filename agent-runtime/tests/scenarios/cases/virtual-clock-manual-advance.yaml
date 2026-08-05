@@ -1,0 +1,41 @@
+# A rehearsal run on a sandbox binding with a manual virtual clock: step-2's
+# gate would wait an hour of virtual time, so the operator fast-forwards the
+# clock to exactly the deadline. The gate timeout resolves at that virtual
+# instant (on_timeout: skip), every event carries dual timestamps, and the
+# virtual stamp of the timeout equals the advance target.
+name: virtual-clock-manual-advance
+run:
+  budget_cap_usd: "10"
+  environment_kind: sandbox
+  clock:
+    mode: virtual
+    advance: manual
+  gates:
+    step-2:
+      kind: approval
+      prompt: "Approve summarizing the findings?"
+      timeout_seconds: 3600
+      on_timeout: skip
+turns:
+  - {outcome: step_done}
+actions:
+  - {after_event: gate_opened, signal: advance_clock, seconds: 3600,
+     actor: operator@convoy.test}
+expect:
+  final_status: completed
+  land_status: landed_partial   # the skipped summary step was required
+  events:
+    - run_started
+    - plan_created
+    - step_started
+    - step_done
+    - compaction_applied
+    - step_started
+    - gate_opened
+    - gate_timed_out
+    - step_skipped
+    - landing_started
+    - run_completed
+  turn_calls: 1
+  dual_stamped: true
+  gate_timeout_at_virtual_seconds: 3600

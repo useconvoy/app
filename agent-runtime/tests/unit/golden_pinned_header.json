@@ -1,0 +1,38 @@
+{
+  "budget": {
+    "cap_usd": "2.50",
+    "remaining_usd": "1.25",
+    "reserved_usd": "0",
+    "spent_fraction": "0.5000",
+    "spent_usd": "1.25"
+  },
+  "goal": "map the Q3 numbers",
+  "plan": [
+    {
+      "attempt": 1,
+      "description": "Investigate: map the Q3 numbers",
+      "id": "step-1",
+      "status": "done"
+    },
+    {
+      "attempt": 1,
+      "description": "Summarize findings for: map the Q3 numbers",
+      "id": "step-2",
+      "status": "running"
+    }
+  ],
+  "run_id": "run-golden-1",
+  "steers": [
+    {
+      "author": "human",
+      "author_id": "ana@example.test",
+      "body": "prefer the finance ledger",
+      "id": "steer-1",
+      "mode": "note"
+    }
+  ],
+  "success_criteria": [
+    "report lands"
+  ],
+  "turn": 2
+}

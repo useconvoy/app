@@ -1,0 +1,33 @@
+# A step's human gate goes unanswered: the durable timeout fires with the
+# default on_timeout action, the run pauses (actor: system) with the gate
+# still open, and a human land wraps it up with partial results.
+name: gate-timeout-pause
+run:
+  budget_cap_usd: "10"
+  gates:
+    step-2:
+      kind: approval
+      prompt: "Approve summarizing the findings?"
+      timeout_seconds: 60
+      on_timeout: pause
+turns:
+  - {outcome: step_done}
+actions:
+  - {after_event: gate_opened, signal: skip_time, seconds: 61}
+  - {after_event: paused, signal: land}
+expect:
+  final_status: completed
+  land_status: landed_partial
+  events:
+    - run_started
+    - plan_created
+    - step_started
+    - step_done
+    - compaction_applied
+    - step_started
+    - gate_opened
+    - gate_timed_out
+    - paused
+    - landing_started
+    - run_completed
+  turn_calls: 1
