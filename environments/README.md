@@ -47,6 +47,10 @@ export CONVOY_INTERNAL_TOKEN=$(openssl rand -hex 32)
 - Runtime activities speak MCP to the per-connection doors from the binding (`POST /gateway/mcp/{connection_id}`) or the aggregate `POST /gateway/mcp` (`Authorization: Bearer <run-jwt>`). Scoped doors filter both discovery and dispatch. Promoted calls carry the runtime's idempotency key in `_meta.idempotencyKey`; a retried activity gets the recorded result, never a second side effect.
 - Bake `convoy-egress-proxy` into the sandbox image (holds no secrets; Chromium launches with `--proxy-server=http://127.0.0.1:3128`); run `convoy-fill-sidecar` in the trusted stack pointed at the sandbox's CDP endpoint (env-var config: `CONVOY_GATEWAY_URL`, `CONVOY_RUN_TOKEN`, `CONVOY_CDP_URL`).
 
+## Accounts and sign-in, in plain English
+
+**How someone logs in.** The website signs people in with WorkOS (company SSO / email login). On every console request, the website forwards that login token; the console checks the token is genuinely from WorkOS (cryptographic signature, not trust) and then looks the person up in its own user list. The first time someone signs in with an email an admin has invited, their WorkOS identity gets connected to that user automatically — after that they're recognized by identity alone. If nobody invited them, they're turned away with a note to ask an admin: **logging in never creates an account by itself.** For local development with no WorkOS configured, the old `X-Convoy-User` header keeps working; the moment WorkOS is configured, headers stop being accepted.
+
 ## Deliberately not here (runtime-owned per DESIGN v1)
 
 Budgets (workflow `BudgetState` + LiteLLM caps) · human gates and approvals (plan-step `HumanGate`, `human_response` signals; gate UX is website/) · runs/missions state · sandbox lifecycle (`SandboxProvider` impls) · idempotency-key minting (we only honor them).
