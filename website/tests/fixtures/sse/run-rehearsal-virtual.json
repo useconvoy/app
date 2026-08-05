@@ -1,0 +1,411 @@
+[
+  {
+    "id": "run-581d7b8678e5:1",
+    "run_id": "run-581d7b8678e5",
+    "tenant_id": "tenant-fixtures",
+    "seq": 1,
+    "type": "run_started",
+    "ts": "2026-08-05T05:25:42.122504Z",
+    "virtual_ts": "2026-08-05T05:25:42.122504Z",
+    "sandbox": true,
+    "actor": "fixtures@convoy.test",
+    "actor_type": "human",
+    "payload": {
+      "run_status": "planning",
+      "environment_id": "stub-local-virtual"
+    }
+  },
+  {
+    "id": "run-581d7b8678e5:2",
+    "run_id": "run-581d7b8678e5",
+    "tenant_id": "tenant-fixtures",
+    "seq": 2,
+    "type": "plan_created",
+    "ts": "2026-08-05T05:25:42.244595Z",
+    "virtual_ts": "2026-08-05T05:25:42.122504Z",
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "plan": {
+        "goal": "Rehearse the attestation chase across fast-forwarded days",
+        "steps": [
+          {
+            "id": "step-1",
+            "status": "ready",
+            "attempt": 0,
+            "outputs": [],
+            "executor": "self",
+            "group_id": null,
+            "required": true,
+            "subagent": null,
+            "error_ref": null,
+            "eval_gate": null,
+            "depends_on": [],
+            "human_gate": null,
+            "description": "Investigate: Rehearse the attestation chase across fast-forwarded days",
+            "budget_slice": null,
+            "max_attempts": 2
+          },
+          {
+            "id": "step-2",
+            "status": "pending",
+            "attempt": 0,
+            "outputs": [],
+            "executor": "self",
+            "group_id": null,
+            "required": true,
+            "subagent": null,
+            "error_ref": null,
+            "eval_gate": null,
+            "depends_on": [
+              "step-1"
+            ],
+            "human_gate": {
+              "kind": "input",
+              "prompt": "Has everyone confirmed?",
+              "timeout": null,
+              "on_timeout": "pause"
+            },
+            "description": "Summarize findings for: Rehearse the attestation chase across fast-forwarded days",
+            "budget_slice": null,
+            "max_attempts": 2
+          }
+        ],
+        "version": 1,
+        "revisions": [
+          {
+            "ops": [
+              {
+                "op": "add_step",
+                "step": {
+                  "id": "step-1",
+                  "status": "ready",
+                  "attempt": 0,
+                  "outputs": [],
+                  "executor": "self",
+                  "group_id": null,
+                  "required": true,
+                  "subagent": null,
+                  "error_ref": null,
+                  "eval_gate": null,
+                  "depends_on": [],
+                  "human_gate": null,
+                  "description": "Investigate: Rehearse the attestation chase across fast-forwarded days",
+                  "budget_slice": null,
+                  "max_attempts": 2
+                },
+                "after": null,
+                "reason": "initial plan",
+                "changes": null,
+                "step_id": null
+              },
+              {
+                "op": "add_step",
+                "step": {
+                  "id": "step-2",
+                  "status": "pending",
+                  "attempt": 0,
+                  "outputs": [],
+                  "executor": "self",
+                  "group_id": null,
+                  "required": true,
+                  "subagent": null,
+                  "error_ref": null,
+                  "eval_gate": null,
+                  "depends_on": [
+                    "step-1"
+                  ],
+                  "human_gate": {
+                    "kind": "input",
+                    "prompt": "Has everyone confirmed?",
+                    "timeout": null,
+                    "on_timeout": "pause"
+                  },
+                  "description": "Summarize findings for: Rehearse the attestation chase across fast-forwarded days",
+                  "budget_slice": null,
+                  "max_attempts": 2
+                },
+                "after": null,
+                "reason": "initial plan",
+                "changes": null,
+                "step_id": null
+              }
+            ],
+            "author": "system",
+            "reason": "initial",
+            "version": 1,
+            "author_id": null,
+            "approved_by": null,
+            "snapshot_ref": {
+              "key": "runs/run-581d7b8678e5/plans/v1.json",
+              "bucket": "convoy-artifacts",
+              "sha256": "5eaee40e1c2c5487d28b25a4b2db5df3c4d4c340a3b5693b73b5edad12bc6bc7",
+              "size_bytes": 2220,
+              "content_type": "application/json"
+            }
+          }
+        ],
+        "success_criteria": []
+      },
+      "run_status": "running",
+      "plan_version": 1
+    }
+  },
+  {
+    "id": "run-581d7b8678e5:3",
+    "run_id": "run-581d7b8678e5",
+    "tenant_id": "tenant-fixtures",
+    "seq": 3,
+    "type": "step_started",
+    "ts": "2026-08-05T05:25:42.283236Z",
+    "virtual_ts": "2026-08-05T05:25:42.122504Z",
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "attempt": 1,
+      "step_id": "step-1"
+    }
+  },
+  {
+    "id": "run-581d7b8678e5:4",
+    "run_id": "run-581d7b8678e5",
+    "tenant_id": "tenant-fixtures",
+    "seq": 4,
+    "type": "step_done",
+    "ts": "2026-08-05T05:25:42.813846Z",
+    "virtual_ts": "2026-08-05T05:25:42.122504Z",
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "budget": {
+        "cap_usd": "30",
+        "spent_usd": "0.0001",
+        "reserved_usd": "0"
+      },
+      "outcome": "step_done",
+      "step_id": "step-1",
+      "cost_usd": "0.0001",
+      "model_used": "scripted-echo-1",
+      "model_fallback": false,
+      "model_requested": "scripted-echo-1"
+    }
+  },
+  {
+    "id": "run-581d7b8678e5:5",
+    "run_id": "run-581d7b8678e5",
+    "tenant_id": "tenant-fixtures",
+    "seq": 5,
+    "type": "compaction_applied",
+    "ts": "2026-08-05T05:25:42.896852Z",
+    "virtual_ts": "2026-08-05T05:25:42.122504Z",
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "step_id": "step-1",
+      "boundary": "step_end",
+      "headline": "Completed step-1: Investigate: Rehearse the attestation chase across fast-forwarded days",
+      "summary_ref": {
+        "key": "runs/run-581d7b8678e5/summaries/step-1.json",
+        "bucket": "convoy-artifacts",
+        "sha256": "c7f317099b560d7ad56eca91ac9a55d6e5525b16b8bc81616f7ab1f2daa68c23",
+        "size_bytes": 712,
+        "content_type": "application/json"
+      },
+      "archived_ref": {
+        "key": "runs/run-581d7b8678e5/transcripts/step-1/turn-1.json",
+        "bucket": "convoy-artifacts",
+        "sha256": "d8d67b57fc6f67ac91a845d3b8df8bd1e4247fbd3edc65cea1c0ff0f2dbe0188",
+        "size_bytes": 340,
+        "content_type": "application/json"
+      }
+    }
+  },
+  {
+    "id": "run-581d7b8678e5:6",
+    "run_id": "run-581d7b8678e5",
+    "tenant_id": "tenant-fixtures",
+    "seq": 6,
+    "type": "step_started",
+    "ts": "2026-08-05T05:25:42.929078Z",
+    "virtual_ts": "2026-08-05T05:25:42.122504Z",
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "attempt": 1,
+      "step_id": "step-2"
+    }
+  },
+  {
+    "id": "run-581d7b8678e5:7",
+    "run_id": "run-581d7b8678e5",
+    "tenant_id": "tenant-fixtures",
+    "seq": 7,
+    "type": "gate_opened",
+    "ts": "2026-08-05T05:25:42.958326Z",
+    "virtual_ts": "2026-08-05T05:25:42.122504Z",
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "kind": "input",
+      "prompt": "Has everyone confirmed?",
+      "step_id": "step-2",
+      "deadline": null,
+      "on_timeout": "pause",
+      "run_status": "blocked_on_human",
+      "timeout_seconds": null
+    }
+  },
+  {
+    "id": "run-581d7b8678e5:8",
+    "run_id": "run-581d7b8678e5",
+    "tenant_id": "tenant-fixtures",
+    "seq": 8,
+    "type": "gate_answered",
+    "ts": "2026-08-05T05:25:43.183821Z",
+    "virtual_ts": "2026-08-08T05:25:42.122000Z",
+    "sandbox": true,
+    "actor": "fixtures@convoy.test",
+    "actor_type": "human",
+    "payload": {
+      "kind": "input",
+      "step_id": "step-2",
+      "response": "Everyone confirmed after the reminder",
+      "run_status": "running",
+      "simulated_at": "2026-08-07T05:25:42.122000+00:00"
+    }
+  },
+  {
+    "id": "run-581d7b8678e5:9",
+    "run_id": "run-581d7b8678e5",
+    "tenant_id": "tenant-fixtures",
+    "seq": 9,
+    "type": "step_done",
+    "ts": "2026-08-05T05:25:43.734319Z",
+    "virtual_ts": "2026-08-08T05:25:42.122000Z",
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "budget": {
+        "cap_usd": "30",
+        "spent_usd": "0.0002",
+        "reserved_usd": "0"
+      },
+      "outcome": "step_done",
+      "step_id": "step-2",
+      "cost_usd": "0.0001",
+      "model_used": "scripted-echo-1",
+      "model_fallback": false,
+      "model_requested": "scripted-echo-1"
+    }
+  },
+  {
+    "id": "run-581d7b8678e5:10",
+    "run_id": "run-581d7b8678e5",
+    "tenant_id": "tenant-fixtures",
+    "seq": 10,
+    "type": "compaction_applied",
+    "ts": "2026-08-05T05:25:43.812025Z",
+    "virtual_ts": "2026-08-08T05:25:42.122000Z",
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "step_id": "step-2",
+      "boundary": "step_end",
+      "headline": "Completed step-2: Summarize findings for: Rehearse the attestation chase across fast-forwarded days",
+      "summary_ref": {
+        "key": "runs/run-581d7b8678e5/summaries/step-2.json",
+        "bucket": "convoy-artifacts",
+        "sha256": "9d80bc818ba5a2a8704c17ee66a39be94a6ebfc26a98b1194f62db93abdbe577",
+        "size_bytes": 723,
+        "content_type": "application/json"
+      },
+      "archived_ref": {
+        "key": "runs/run-581d7b8678e5/transcripts/step-2/turn-2.json",
+        "bucket": "convoy-artifacts",
+        "sha256": "18d251c894079a2c73f6aa5cf10fc2888e83f52685c935342598bfeddd8c10b8",
+        "size_bytes": 362,
+        "content_type": "application/json"
+      }
+    }
+  },
+  {
+    "id": "run-581d7b8678e5:11",
+    "run_id": "run-581d7b8678e5",
+    "tenant_id": "tenant-fixtures",
+    "seq": 11,
+    "type": "landing_started",
+    "ts": "2026-08-05T05:25:43.843718Z",
+    "virtual_ts": "2026-08-08T05:25:42.122000Z",
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "run_status": "landing"
+    }
+  },
+  {
+    "id": "run-581d7b8678e5:12",
+    "run_id": "run-581d7b8678e5",
+    "tenant_id": "tenant-fixtures",
+    "seq": 12,
+    "type": "run_completed",
+    "ts": "2026-08-05T05:25:43.906411Z",
+    "virtual_ts": "2026-08-08T05:25:42.122000Z",
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "budget": {
+        "cap_usd": "30",
+        "spent_usd": "0.0002",
+        "reserved_usd": "0"
+      },
+      "run_status": "completed",
+      "land_report": {
+        "goal": "Rehearse the attestation chase across fast-forwarded days",
+        "run_id": "run-581d7b8678e5",
+        "status": "completed",
+        "tokens": {
+          "input_tokens": 24,
+          "output_tokens": 14
+        },
+        "cost_usd": "0.0002",
+        "report_ref": {
+          "key": "runs/run-581d7b8678e5/reports/land.json",
+          "bucket": "convoy-artifacts",
+          "sha256": "b05169d9d359e84b598cc27722af615a23697c812eaeaaca23100359bf6c60c7",
+          "size_bytes": 747,
+          "content_type": "application/json"
+        },
+        "steps_done": 2,
+        "deliverables": [
+          {
+            "key": "runs/run-581d7b8678e5/outputs/step-1.json",
+            "bucket": "convoy-artifacts",
+            "sha256": "37c7dfe487db9838e10e200839f3996cca0f464d351a79907e4fcf9500e7365b",
+            "size_bytes": 57,
+            "content_type": "application/json"
+          },
+          {
+            "key": "runs/run-581d7b8678e5/outputs/step-2.json",
+            "bucket": "convoy-artifacts",
+            "sha256": "2e3f85136cde097e036ced9cc3ba069d14467147848d565fa15e52adfdef4b2f",
+            "size_bytes": 57,
+            "content_type": "application/json"
+          }
+        ],
+        "steps_failed": 0,
+        "steps_skipped": 0,
+        "success_criteria": []
+      }
+    }
+  }
+]
