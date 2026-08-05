@@ -11,9 +11,8 @@ import { adminCopy, billingCopy } from "@/lexicon";
 export const metadata: Metadata = { title: "Admin" };
 
 /**
- * The Admin index (DESIGN §5 Admin row), complete as of W6: members and
- * teams from W0, then policies & budget defaults, notification defaults,
- * billing, API access, and the org audit log.
+ * The Admin index: members and teams, policies & budget defaults,
+ * notification defaults, billing, API access, and the org audit log.
  */
 export default async function AdminPage() {
   const { session } = await requireAdminPage();

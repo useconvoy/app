@@ -1,7 +1,7 @@
 /**
  * Cost rollups beside the Logs table: total spend, spend per run, and the
- * per-step breakdown with model names, which are operator detail (law 3)
- * and therefore live in mono behind a details affordance, never in the
+ * per-step breakdown with model names, which are operator detail and
+ * therefore live in mono behind a details affordance, never in the
  * main rows.
  */
 import { money } from "@/lib/format";

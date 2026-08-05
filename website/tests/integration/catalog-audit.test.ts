@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * W6 governance against a real Postgres: catalog publishes and org policy
+ * Governance against a real Postgres: catalog publishes and org policy
  * updates land admin_audit rows with the acting human attributed, and the
  * catalog RLS policy shows convoy-visible entries cross-org while hiding
  * private ones. Seeding follows the db-rls suite: orgs/users/memberships

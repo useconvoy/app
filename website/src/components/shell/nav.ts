@@ -1,5 +1,5 @@
 /**
- * The portal nav map (DESIGN §5 shell): Overview · Checkpoints · Runs,
+ * The portal nav map: Overview · Checkpoints · Runs,
  * BUILD (Routines · Workspaces), IMPROVE (Routine evaluation · Learning),
  * then Logs · Admin. Filtering by role is a lens only; every page enforces
  * its own server-side check.

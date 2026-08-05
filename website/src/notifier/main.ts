@@ -9,7 +9,7 @@
  * bounds every read and write to the org being processed.
  *
  * Logs are structured single lines with counts only: no titles, no
- * prompts, no payload bodies, no secrets (iron rule 10).
+ * prompts, no payload bodies, no secrets.
  */
 import { withUserContext } from "../lib/db";
 import { consumerTick } from "./consumer";

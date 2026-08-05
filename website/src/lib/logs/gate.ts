@@ -1,6 +1,6 @@
 /**
  * Page-level gate for the Logs surface: Admin, Operator, and Member
- * (DESIGN §5, Logs lens A/O/M). Viewers are redirected server-side; the
+ * only. Viewers are redirected server-side; the
  * nav lens hiding the item is convenience only.
  */
 import "server-only";

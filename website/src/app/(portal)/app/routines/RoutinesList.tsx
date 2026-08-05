@@ -1,9 +1,8 @@
 /**
- * The routines list, presentational (DESIGN §5 Routines row): plain
+ * The routines list, presentational: plain
  * descriptors, health from the latest run, the how-it-fits strip, and no
  * "New routine" button anywhere. Phase 1 routines are set up with the
- * Convoy team; install/create screens arrive behind the Operator lens
- * later. TODO(website-W6): catalog install flow.
+ * Convoy team; the catalog install flow lives behind the Operator lens.
  */
 import Link from "next/link";
 

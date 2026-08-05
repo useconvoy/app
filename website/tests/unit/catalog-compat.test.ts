@@ -1,5 +1,5 @@
 /**
- * The pure compatibility computation (DESIGN §6): capability requirements
+ * The pure compatibility computation: capability requirements
  * crossed with a workspace's system grants produce the report the install
  * flow renders. Table-driven over the matching rules: family match with
  * scope covering, one candidate green, several a mapping choice, none a

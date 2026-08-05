@@ -1,6 +1,6 @@
 /**
  * Page-level gate for catalog surfaces: the storefront and install flow
- * live behind the Operator lens (DESIGN §6: phase-1 installs are performed
+ * live behind the Operator lens (phase-1 installs are performed
  * by staff Operators through the same screens customers will use later),
  * so Admin and Operator only. Publishing is checked separately with
  * can("publish_catalog") where the affordance renders and again in the

@@ -1,5 +1,5 @@
 /**
- * billing_accounts access (DESIGN §3, §8): one row per org, plan and
+ * billing_accounts access: one row per org, plan and
  * status arriving only by Stripe webhook, read by the admin billing page.
  * Every query runs through withOrgContext so RLS bounds it; the webhook's
  * org id comes from Stripe-signed customer metadata written by Convoy

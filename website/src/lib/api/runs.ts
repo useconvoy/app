@@ -2,7 +2,7 @@
  * Run listing and creation over the control plane.
  *
  * The runtime does not yet expose an org-wide run list; that addition is
- * requested as runtime D8 (`GET /runs`). Until it lands, this directory
+ * requested from the runtime (`GET /runs`). Until it lands, this directory
  * tracks run ids per tenant in process memory: runs created through the
  * console register here, and every read hydrates through the real
  * `GET /runs/{id}` so nothing domain-shaped is ever cached or persisted on

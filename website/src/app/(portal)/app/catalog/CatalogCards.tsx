@@ -1,8 +1,8 @@
 /**
- * Storefront cards (DESIGN §6), presentational: name and tagline from the
+ * Storefront cards, presentational: name and tagline from the
  * storefront jsonb, the test score floor as plain language, and a quiet
  * "update available" chip when an installed entry's snapshot moved past
- * the pinned version. Law 3: no ids, no version refs in the list.
+ * the pinned version. List views stay plain: no ids, no version refs.
  */
 import Link from "next/link";
 

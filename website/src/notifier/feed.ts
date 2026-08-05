@@ -2,7 +2,7 @@
  * The notifier's event feed.
  *
  * The intended source is the runtime's org-wide `GET /events?after=seq`
- * (runtime addition D8). That endpoint does not exist yet, so the consumer
+ * (a requested runtime addition). That endpoint does not exist yet, so the consumer
  * is written against the small `EventFeed` interface below and the fan-in
  * fallback here polls `GET /runs/{id}/events?after={per-run cursor}` for
  * every run id the tenant knows, merging the results into one ordered feed.
@@ -51,14 +51,14 @@ export interface OrgFeedEvent {
   orgSeq: number;
 }
 
-/** What the consumer is written against; D8's org feed will slot in here. */
+/** What the consumer is written against; the runtime's org feed will slot in here. */
 export interface EventFeed {
   /** Events after the given org cursor, in org-cursor order. */
   pull(afterOrgSeq: number): Promise<OrgFeedEvent[]>;
 }
 
 /**
- * The W1 run directory (src/lib/api/runs.ts) registers runs created through
+ * The run directory (src/lib/api/runs.ts) registers runs created through
  * the console in this process-global map. It is read here through
  * `globalThis` rather than by importing that module, because runs.ts is
  * `server-only` and the notifier also runs as a standalone tsx worker.
@@ -109,7 +109,7 @@ function compareEvents(a: RunEvent, b: RunEvent): number {
 /**
  * Parse an events poll body. The endpoint streams SSE frames; a plain JSON
  * array is also accepted so the same parser covers a future non-streaming
- * D8 feed and recorded fixtures. Partial trailing frames (a cut-off read)
+ * org feed and recorded fixtures. Partial trailing frames (a cut-off read)
  * are dropped; the per-run cursor simply does not advance past them.
  */
 export function parseFeedBody(body: string): RunEvent[] {

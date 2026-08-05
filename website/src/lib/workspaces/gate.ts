@@ -1,6 +1,6 @@
 /**
- * Page-level gate for workspace surfaces: Admin and Operator only
- * (DESIGN §2, manage workspaces and systems). Server-side enforcement
+ * Page-level gate for workspace surfaces: only Admins and Operators
+ * manage workspaces and systems. Server-side enforcement
  * lives here AND in every action; the nav lens is convenience only.
  */
 import "server-only";

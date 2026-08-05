@@ -1,8 +1,8 @@
 /**
- * Table-driven mirror of the DESIGN §2 permissions matrix. Each row below
- * is a transcription of one line of the design table (true = check mark,
- * false = dash, "cap" = grantable capability), so a drift between
- * permissions.ts and the frozen design fails here, not in production.
+ * Table-driven mirror of the intended permissions matrix. Each row below
+ * transcribes one line of the role/permission table (true = allowed,
+ * false = denied, "cap" = grantable capability), so an accidental drift
+ * in permissions.ts fails here, not in production.
  */
 import { describe, expect, it } from "vitest";
 
@@ -133,7 +133,7 @@ const DESIGN_MATRIX: MatrixRow[] = [
 const ROLES: Role[] = ["admin", "operator", "member", "viewer"];
 const ALL_CAPABILITIES: Capability[] = ["approver", "promoter", "ship_improvements"];
 
-describe("permissions matrix mirrors DESIGN §2", () => {
+describe("permissions matrix matches the intended role table", () => {
   it("covers every action exactly once", () => {
     const actions = DESIGN_MATRIX.map((row) => row.action);
     expect(new Set(actions).size).toBe(actions.length);

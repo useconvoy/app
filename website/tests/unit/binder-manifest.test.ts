@@ -1,5 +1,5 @@
 /**
- * Binder assembly (C10): the manifest carries per-file sha256 checksums,
+ * Binder assembly: the manifest carries per-file sha256 checksums,
  * archive file names stay plain (internal ids live inside the manifest
  * only), and platform-held files are listed with their note.
  */

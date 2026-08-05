@@ -4,7 +4,7 @@
  * imports only; nothing domain-shaped is hand-written): per-run spend
  * comes from the budget view, per-step costs from steps[].cost_usd, and
  * model groupings from steps[].model_used. Model names are operator
- * detail (law 3): the panel shows them behind a details affordance, never
+ * detail: the panel shows them behind a details affordance, never
  * in the main table.
  */
 import type { RunView } from "@/lib/api/client";

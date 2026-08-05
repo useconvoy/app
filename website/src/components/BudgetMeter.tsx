@@ -12,7 +12,7 @@ function toAmount(value: string | null | undefined): number {
 }
 
 /**
- * Cap / spent / reserved (C6). Reserved renders as a hatched middle segment
+ * Cap / spent / reserved. Reserved renders as a hatched middle segment
  * labeled "set aside". Crossing 80% is an explicit hold-colored moment;
  * breach is fail-colored. Never color alone: each moment carries its label.
  */

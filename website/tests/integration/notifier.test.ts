@@ -39,7 +39,7 @@ const events = gatedFixture as unknown as RunEvent[];
 const RUN_ID = events[0]!.run_id;
 const resolveRoutineId = () => ROUTINE_ID;
 
-/** The recorded feed with org seqs; respects the cursor like D8 will. */
+/** The recorded feed with org seqs; respects the cursor like the runtime's org feed will. */
 function recordedFeed(feedEvents: RunEvent[]): EventFeed {
   return {
     pull: async (after) =>

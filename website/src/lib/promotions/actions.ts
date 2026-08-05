@@ -1,5 +1,5 @@
 /**
- * Promotion flow actions (C8): submit a rehearsal land report for review,
+ * Promotion flow actions: submit a rehearsal land report for review,
  * then promote or send back. Role checks are server-side; promote and
  * send-back are promoter-gated and both land an admin_audit row, since a
  * promotion decision is website-side governance, not a runtime write.

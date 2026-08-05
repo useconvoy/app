@@ -2,7 +2,7 @@ import { runStatusLabels, terms } from "@/lexicon";
 
 type Tone = "neutral" | "pass" | "hold" | "fail";
 
-/** Status colors are semantic, never decorative (UI-SPEC §2). */
+/** Status colors are semantic, never decorative. */
 const toneByStatus: Record<string, Tone> = {
   planning: "neutral",
   awaiting_approval: "hold",

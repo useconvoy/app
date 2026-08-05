@@ -1,8 +1,8 @@
 /**
  * Scored-run trajectories for a routine: a plain headline per run with a
- * friendly date. Rehearsal rows carry the pencil treatment (law 2):
- * graphite, dashed, and labeled; production rows are unlabeled. No run ids
- * in the list (law 3): the scorecards below carry the detail.
+ * friendly date. Rehearsal rows carry the pencil treatment: graphite,
+ * dashed, and labeled; production rows are unlabeled. No run ids in the
+ * list; lists stay plain and the scorecards below carry the detail.
  */
 import { Chip } from "@/components/Chip";
 import type { Trajectory } from "@/lib/api/evals";

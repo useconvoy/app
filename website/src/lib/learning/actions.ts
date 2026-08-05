@@ -2,7 +2,7 @@
  * Server actions for the learning queue. Approving and shipping are gated
  * by ship_improvements (Admins and Operators; Members via the grantable
  * capability), re-checked server-side on every call. Approving an
- * improvement is the D12 handoff moment: the routine's "new" feedback is
+ * improvement is the learning handoff moment: the routine's "new" feedback is
  * queued for learning alongside it; shipping consumes what was queued.
  * TODO(learning): the service takes over both transitions when it exists.
  */

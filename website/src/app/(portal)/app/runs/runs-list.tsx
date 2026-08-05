@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * The runs list (DESIGN §5, Portal_Runs reference): filter chips, the
+ * The runs list: filter chips, the
  * production/rehearsals toggle, search over goal text, and the four
- * columns run/status/progress/spent. Law 3 holds: no run ids, version
+ * columns run/status/progress/spent. Lists stay plain: no run ids, version
  * chips, or model names here; ids live only in the href. Filtering runs
  * client-side over server-fetched data (list sizes are small).
  */
@@ -17,7 +17,7 @@ import { money } from "@/lib/format";
 import { filterGroup, type RunFilterGroup } from "@/lib/runs/status";
 
 export interface RunListRow {
-  /** Used for the link href only; never rendered (law 3). */
+  /** Used for the link href only; never rendered in the list. */
   id: string;
   goal: string;
   status: string;

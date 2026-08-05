@@ -4,7 +4,7 @@ export type RouteStepState = "done" | "active" | "held" | "queued" | "failed";
 
 export interface RouteStep {
   id: string;
-  /** Plain sentence, law 3: no ids, no tool names. */
+  /** Plain sentence: no ids, no tool names. */
   sentence: string;
   state: RouteStepState;
   /** A human gate sits on this step: render the checkpoint marker. */

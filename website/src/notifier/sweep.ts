@@ -1,5 +1,5 @@
 /**
- * The deadline sweep (DESIGN §4): open_gates rows whose deadline falls
+ * The deadline sweep: open_gates rows whose deadline falls
  * inside the warning window and that have not been noticed yet get a
  * checkpoint_deadline notification, once. The window math is a pure
  * function so the boundaries are unit-testable; the tick wraps it in the
@@ -49,7 +49,7 @@ export function deadlineEventId(runId: string, stepId: string): string {
 export interface SweepOptions {
   now?: Date;
   windowMs?: number;
-  /** Run id -> routine id; defaults to the W1 run directory seam. */
+  /** Run id -> routine id; defaults to the run directory seam in src/lib/api/runs. */
   resolveRoutineId?: (runId: string) => string | undefined;
 }
 

@@ -52,9 +52,10 @@ export interface Workspace {
 }
 
 /**
- * Shape of the E3 compatibility computation, rendered during catalog
- * installs: green checks, mapping choices, and connect prompts.
- * TODO(environments-E0): consumed by the W6 install flow; unused until then.
+ * Shape of the compatibility report rendered during catalog installs:
+ * green checks, mapping choices, and connect prompts.
+ * TODO(environments-E0): the environments service will own this
+ * computation; lib/catalog/compat computes it website-side until then.
  */
 export interface CompatibilityReport {
   workspaceId: string;

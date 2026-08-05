@@ -3,10 +3,6 @@
  * the composer, wired to the real feedback tables. This is a server
  * component; mount it from a server page (the run detail page's server
  * shell), never from a client component.
- *
- * Built in W5 but not mounted on the run detail page here, because that
- * page is in flight in another packet; the integrator mounts
- * `<RunFeedbackPanel runId={runId} />` under the run detail once both land.
  */
 import "server-only";
 

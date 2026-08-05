@@ -10,7 +10,7 @@ import { NoActiveOrgError, requireOrgSession, UnauthenticatedError } from "@/lib
 import { getMembership, listUserOrgs } from "@/lib/orgs/queries";
 
 /**
- * The portal shell (DESIGN §5): left nav, top bar (org switcher, command-K
+ * The portal shell: left nav, top bar (org switcher, command-K
  * jump, bell), content on field. The nav lens hides areas the role cannot
  * use; every page still enforces its own server-side check.
  */
@@ -52,8 +52,10 @@ export default async function PortalLayout({ children }: { children: React.React
             <BellButton />
           </div>
         </header>
-        {/* TODO(website-Wn): RehearsalBanner from "@/components/RehearsalBanner"
-            mounts in this slot when a rehearsal-context page renders. */}
+        {/* TODO(website): shell-level rehearsal framing. Pages that know
+            they are in rehearsal context (run detail) mount their own
+            RehearsalBanner today; this slot exists so the shell can take
+            that over once rehearsal context is known at layout level. */}
         <div data-slot="rehearsal-banner" />
         <main className="flex-1 bg-field px-8 py-10">{children}</main>
       </div>

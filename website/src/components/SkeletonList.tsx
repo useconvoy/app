@@ -2,7 +2,7 @@ export interface SkeletonListProps {
   rows?: number;
 }
 
-/** List placeholder while data loads; never a full-page spinner (C5). */
+/** List placeholder while data loads; lists get skeletons, never a full-page spinner. */
 export function SkeletonList({ rows = 4 }: SkeletonListProps) {
   return (
     <div role="status" aria-label="Loading" aria-busy="true" className="space-y-2">

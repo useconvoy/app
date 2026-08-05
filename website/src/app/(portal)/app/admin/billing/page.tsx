@@ -12,7 +12,7 @@ import { BillingOverview } from "./BillingOverview";
 export const metadata: Metadata = { title: "Billing" };
 
 /**
- * Admin billing (DESIGN §8, invoice-first D11): plan and status read from
+ * Admin billing, invoice-first: plan and status read from
  * billing_accounts (synced by webhook), invoices listed straight from
  * Stripe as hosted links, payment method managed in the Stripe-hosted
  * portal. Everything API-backed is env-gated; without STRIPE_SECRET_KEY

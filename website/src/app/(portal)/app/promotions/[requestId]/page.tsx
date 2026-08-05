@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: "Promotion review" };
 export const dynamic = "force-dynamic";
 
 /**
- * The promotion review page (C8): the rehearsal's land report in full,
+ * The promotion review page: the rehearsal's land report in full,
  * with the stand-in outbox, then the promote checkpoint. Reached from the
  * Checkpoints inbox and the promotion-requested notification. Store
  * lookups are org-scoped: another org's request id is simply not found.

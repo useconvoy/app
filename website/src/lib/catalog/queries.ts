@@ -1,5 +1,5 @@
 /**
- * Server-only data access for the catalog (DESIGN §6). A catalog entry is
+ * Server-only data access for the catalog. A catalog entry is
  * the four-part bundle: routine snapshot reference + scenario suite +
  * test-score thresholds + storefront metadata, published by the Convoy
  * workshop org and readable by every org through the 0001 catalog RLS
@@ -148,7 +148,7 @@ async function auditRow(
  * One row per routine per publisher: a republish bumps the snapshot ref in
  * place and appends to the changelog jsonb, so installers see the full
  * version history behind one storefront entry. Visibility is always
- * "convoy" in phase 1 (DESIGN §6: Convoy-published only). Writes the
+ * "convoy" in phase 1: only Convoy-published entries exist. Writes the
  * admin_audit row in the same transaction as the entry.
  *
  * Called by the publish server action after its permission gate; also

@@ -2,7 +2,7 @@ import { copy } from "@/lexicon";
 import { friendlyDateTime } from "@/lib/format";
 
 export interface DisconnectBannerProps {
-  /** When the last event arrived; silent staleness is a bug (C5). */
+  /** When the last event arrived; a stale surface must say so, never sit silent. */
   lastEventAt?: string | Date;
 }
 

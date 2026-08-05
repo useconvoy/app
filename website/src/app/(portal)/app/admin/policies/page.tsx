@@ -10,9 +10,9 @@ import { PoliciesForm } from "./PoliciesForm";
 export const metadata: Metadata = { title: "Policies" };
 
 /**
- * Org policies and budget defaults (DESIGN §5 Admin row, §9), stored in
- * organizations.settings (migration 0004). Admin lens; the action
- * re-checks manage_org_settings and writes the audit row.
+ * Org policies and budget defaults, stored in organizations.settings
+ * (migration 0004). Admin-only surface; the action re-checks
+ * manage_org_settings server-side and writes the audit row.
  */
 export default async function PoliciesPage() {
   const { session } = await requireAdminPage();

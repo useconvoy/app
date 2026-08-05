@@ -44,7 +44,7 @@ export default async function OverviewPage() {
   );
 }
 
-/** Stuck runs, one typed line per kind (law 1), each linking to its run. */
+/** Stuck runs, one typed line per stuck kind, each linking to its run. */
 function HeldForYou({ runs }: { runs: RunView[] }) {
   if (runs.length === 0) {
     return <QuietSection title="Held for you" message="Nothing is waiting on your judgment." />;

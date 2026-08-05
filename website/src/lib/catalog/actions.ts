@@ -1,5 +1,5 @@
 /**
- * Server actions for the catalog (DESIGN §6). Org and actor derive from
+ * Server actions for the catalog. Org and actor derive from
  * the verified session, the permissions matrix is re-checked server-side,
  * and administrative writes land admin_audit rows. Publishing snapshots
  * into catalog_entries; installing is a shell that pins the version into

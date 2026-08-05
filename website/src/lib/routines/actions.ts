@@ -1,6 +1,6 @@
 /**
  * Server actions for routine surfaces: approver assignment, trigger edits,
- * and the D13 on-demand run. Every action derives org and actor from the
+ * and the on-demand run. Every action derives org and actor from the
  * verified session and re-checks the permissions matrix server-side; the
  * UI lens hiding a control is convenience only. Routine assignment is
  * routing, not org administration, so it carries no admin_audit row; run
@@ -96,7 +96,7 @@ export async function removeApprover(routineId: string, assignmentId: string): P
 
 /**
  * Edit a routine's schedule text. Editing triggers of live routines is
- * promoter territory (DESIGN §2): Operators hold it, Admins and senior
+ * promoter territory: Operators hold it, Admins and senior
  * Members via the promoter capability.
  */
 export async function updateTriggerSchedule(routineId: string, description: string): Promise<void> {
@@ -117,7 +117,7 @@ export interface RunNowResult {
 }
 
 /**
- * The D13 on-demand run. Anyone who may trigger runs gets the rehearsal
+ * The on-demand run. Anyone who may trigger runs gets the rehearsal
  * copy by default; the live workspace is used only when the caller holds
  * the promote capability, and assigned Members stay within the routine's
  * budget cap either way (the cap rides the create call).
@@ -135,7 +135,7 @@ export async function runRoutineNow(routineId: string): Promise<RunNowResult> {
   }
   const production = can("promote", membership.role, membership.capabilities);
   if (production && membership.role === "member") {
-    // D13: Members trigger live runs only on routines assigned to them.
+    // Members trigger live runs only on routines assigned to them.
     const assigned = await isAssignedToRoutine(session.orgId, session.userId, routineId);
     if (!assigned) throw new Error("You are not assigned to this routine");
   }

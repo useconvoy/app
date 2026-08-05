@@ -13,7 +13,7 @@ export interface ScorecardTableProps {
   /** Plain sentence describing the run, from its trajectory. */
   headline: string;
   at?: string;
-  /** Rehearsal runs carry the pencil treatment (law 2). */
+  /** Rehearsal runs carry the pencil treatment: graphite, dashed, labeled. */
   rehearsal?: boolean;
 }
 

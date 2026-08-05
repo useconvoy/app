@@ -1,9 +1,9 @@
 /**
- * The honest phase-1 API access screen (DESIGN §5 Admin row): access to
- * the platform edge is managed by Convoy through the bridge identity, so
- * there is nothing to create, reveal, or rotate here. The only fact shown
- * is the platform address; no key material exists anywhere on this site
- * (iron rule 10), and this component must never gain any.
+ * The honest phase-1 API access screen: access to the platform edge is
+ * managed by Convoy through the bridge identity, so there is nothing to
+ * create, reveal, or rotate here. The only fact shown is the platform
+ * address; secrets never touch website code, so no key material exists
+ * anywhere on this site and this component must never gain any.
  *
  * TODO(website): self-serve API keys land here when the platform edge
  * gains OIDC clients; until then this stays a notice, not a manager.

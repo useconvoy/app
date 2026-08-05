@@ -1,5 +1,5 @@
 /**
- * The org audit log table (DESIGN §5 Admin row, §9), presentational:
+ * The org audit log table, presentational:
  * actor names resolved, friendly dates, and mono for the facts from the
  * log (action names and subjects). Filtering and pagination live in the
  * page; this only renders rows.

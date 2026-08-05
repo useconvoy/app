@@ -1,7 +1,8 @@
 /**
- * Routine detail, presentational (UI-SPEC C3): what it does, systems it
- * uses, plan template, checkpoints + approvers, triggers with the D13
- * Run now action, run history, and the W5 placeholders. Interactivity
+ * Routine detail, presentational: what it does, systems it uses, plan
+ * template, checkpoints + approvers, triggers with the Run now action
+ * (assigned members may trigger on-demand production runs within caps),
+ * run history, trend, changelog, and feedback. Interactivity
  * rides plain forms whose actions the server page binds; this component
  * stays renderable with test doubles.
  */
@@ -52,7 +53,7 @@ export interface RoutineDetailProps {
   removeAction: FormAction;
   runNowAction: FormAction;
   scheduleAction: FormAction;
-  /** W5 read surfaces; optional so the component renders empty without them. */
+  /** Trend/changelog/feedback surfaces; optional so the component renders empty without them. */
   trend?: TrendPoint[];
   changelog?: ChangelogEntry[];
   feedback?: FeedbackStreamItem[];

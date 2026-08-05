@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * Stripe webhook -> billing_accounts sync (DESIGN §8, D11) against a real
+ * Stripe webhook -> billing_accounts sync against a real
  * Postgres. Events are signed with the SDK's own test-header helper and
  * POSTed straight to the route handler: a good signature syncs the org's
  * row, a bad signature is a 400 with no write, unknown org metadata and

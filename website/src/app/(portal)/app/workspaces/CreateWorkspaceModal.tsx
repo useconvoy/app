@@ -1,9 +1,9 @@
 /**
- * Create-workspace modal (DESIGN §5 Workspaces row): name, purpose, the
- * system picker with View only / Can update grants, and the automatic
- * rehearsal-copy note. The W4 gate lives here: any side-effecting system
- * granted Can update must take its stand-in before submit; the server
- * action re-validates the same rule.
+ * Create-workspace modal: name, purpose, the system picker with View
+ * only / Can update grants, and the automatic rehearsal-copy note. One
+ * hard rule lives here: any side-effecting system granted Can update
+ * must take its stand-in before submit; the server action re-validates
+ * the same rule.
  */
 "use client";
 

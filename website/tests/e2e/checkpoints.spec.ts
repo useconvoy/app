@@ -1,5 +1,5 @@
 /**
- * W2 gate: every human action against the real local stack. No mocked
+ * Every human action against the real local stack. No mocked
  * domain: runs are created at the control plane under this org's tenant
  * (or through the console's own start seam) and every verb is exercised
  * through the UI, with truth arriving via events.

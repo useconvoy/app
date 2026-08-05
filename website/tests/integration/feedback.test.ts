@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
  * Feedback capture against a real Postgres: the submit round-trip lands a
- * row with learning_status "new", the D12 lifecycle moves new -> queued ->
+ * row with learning_status "new", the learning lifecycle moves new -> queued ->
  * consumed (and only along that path), the routine-level handoff queues
  * exactly the routine's rows, and RLS keeps every row invisible to another
  * org. Seeding follows the db-rls suite: orgs/users/memberships ride the

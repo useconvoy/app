@@ -11,7 +11,7 @@ import { CatalogCards } from "./CatalogCards";
 export const metadata: Metadata = { title: "Catalog" };
 
 /**
- * The storefront (DESIGN §6): entries this org published plus every
+ * The storefront: entries this org published plus every
  * convoy-visible one, behind the Operator lens. Publish renders only for
  * holders of publish_catalog; the action re-checks it regardless.
  */

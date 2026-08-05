@@ -11,7 +11,7 @@
  * dates via `lib/format`, monospace reserved for facts from the log.
  */
 
-/** Internal noun -> user-facing term (DESIGN §1). */
+/** Internal noun -> user-facing term. */
 export const terms = {
   agent: "routine",
   environment: "workspace",
@@ -58,7 +58,7 @@ export const stepStatusLabels: Record<string, string> = {
 };
 
 /**
- * The three stuck states and their typed verbs (DESIGN §5 law 1). There is
+ * The three stuck states and their typed verbs. There is
  * exactly one verb per state and no generic "resolve" anywhere.
  */
 export const checkpointKinds = {
@@ -78,7 +78,7 @@ export const checkpointKinds = {
     description: "This run asked a question and is holding until someone answers.",
   },
   /**
-   * The promotion review is the fourth inbox item kind (C8): not a stuck
+   * The promotion review is the fourth inbox item kind: not a stuck
    * run but a rehearsal result waiting for a person before anything goes
    * live. It keeps the same one-verb discipline as the other three.
    */
@@ -134,7 +134,7 @@ export const eventLabels: Record<string, string> = {
   run_failed: "Failed",
 };
 
-/** Notification classes -> bell panel copy (DESIGN §4). */
+/** Notification classes -> bell panel copy. */
 export const notificationClassLabels: Record<string, string> = {
   checkpoint_opened: "Held for you",
   checkpoint_deadline: "Deadline approaching",
@@ -152,7 +152,7 @@ export const grantLabels: Record<string, string> = {
   write: "Can update",
 };
 
-/** Trigger kinds (DESIGN D1) as plain phrases on routine surfaces. */
+/** Trigger kinds as plain phrases on routine surfaces. */
 export const triggerKindLabels = {
   schedule: "On a schedule",
   manual: "On demand",
@@ -174,7 +174,7 @@ export const clockModeDescriptions = {
 
 export type ClockMode = keyof typeof clockModeLabels;
 
-/** Runs list filter chips (DESIGN §5): All plus the four status groups. */
+/** Runs list filter chips: All plus the four status groups. */
 export const runFilterLabels = {
   all: "All",
   held: "Held",
@@ -229,7 +229,7 @@ export const copy = {
     `Connects ${systems} ${systems === 1 ? "system" : "systems"} · used by ${routines} ${
       routines === 1 ? "routine" : "routines"
     }`,
-  // Run controls (W2): pause/resume/land, the steer composer, clock.
+  // Run controls: pause/resume/land, the steer composer, clock.
   pauseAction: "Pause",
   landAction: "Land",
   steerNote: "Note",
@@ -247,12 +247,12 @@ export const copy = {
   responseLabel: "Your answer",
   rejectReasonLabel: "What should change",
   rejectReasonRequired: "Say what should change before sending a plan back.",
-  // Checkpoints inbox (W2): triage keys, conflict flips, sent state.
+  // Checkpoints inbox: triage keys, conflict flips, sent state.
   triageKeysHint: "Keys: j next · k previous · A approve · E edit · R reject",
   reviewNewerOnRun: "Review the newer version",
   checkpointsIntro: "Everything waiting on a person, each with its one action.",
   actionSent: "Sent. This clears once the run confirms.",
-  // Land report + promotion review (C8).
+  // Land report + promotion review.
   landReportTitle: "Land report",
   outcomeTitle: "Outcome",
   outcomeLanded: (goal: string) => `Finished: ${goal}`,
@@ -312,7 +312,7 @@ export function heldAgeLabel(minutes: number): string {
 }
 
 /**
- * Notification titles (DESIGN §4). The notifier is the only caller. Each
+ * Notification titles. The notifier is the only caller. Each
  * title is a short plain sentence; when the event carries the run's goal or
  * the checkpoint's own prompt (both already written in plain language) the
  * title leads with it.
@@ -357,7 +357,7 @@ export function bellSummary(counts: { held: number; alert: number; update: numbe
   return parts.join(" · ");
 }
 
-/** Copy for the notification settings page (in-app only in v1, D6). */
+/** Copy for the notification settings page (in-app only in v1). */
 export const notificationSettingsCopy = {
   title: "Notifications",
   intro: "Choose which updates reach you in the app. Each one links straight to the action it needs.",
@@ -367,7 +367,7 @@ export const notificationSettingsCopy = {
 } as const;
 
 /**
- * Catalog copy (DESIGN §6). Product vocabulary only: routines, systems,
+ * Catalog copy. Product vocabulary only: routines, systems,
  * workspaces, test scores. The stored eval_thresholds column never reaches
  * the screen by that name; users see a "test score floor".
  */
@@ -405,7 +405,7 @@ export const catalogCopy = {
   emptyBody: "Published routines appear here for every organization to install.",
 } as const;
 
-/** Billing copy (DESIGN §8, invoice-first Stripe D11). */
+/** Billing copy; billing is invoice-first Stripe. */
 export const billingCopy = {
   title: "Billing",
   intro: "Your plan, invoices, and payment details.",
@@ -420,7 +420,7 @@ export const billingCopy = {
   viewInvoice: "View invoice",
 } as const;
 
-/** Admin close-out copy: policies, API access, org audit (DESIGN §5, §9). */
+/** Admin copy: policies, API access, org audit. */
 export const adminCopy = {
   policiesTitle: "Policies",
   policiesIntro: "Budget defaults and export rules for this organization.",
@@ -457,7 +457,7 @@ export const adminCopy = {
   auditOlder: "Older",
 } as const;
 
-/** Feedback kinds (DESIGN §3) as users pick them in the composer. */
+/** Feedback kinds as users pick them in the composer. */
 export const feedbackKindLabels = {
   rating: "Helpful",
   comment: "Comment",
@@ -476,7 +476,7 @@ export const ratingLabels: Record<number, string> = {
 };
 
 /**
- * The learning handoff lifecycle (D12) in quiet, plain words. Keys are the
+ * The learning handoff lifecycle in quiet, plain words. Keys are the
  * feedback table's learning_status values; the chip never says "queue" in
  * pipeline jargon, it says what happened to the person's words.
  */

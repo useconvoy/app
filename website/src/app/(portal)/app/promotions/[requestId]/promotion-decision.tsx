@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The promote checkpoint on a promotion review (C8): Promote or Send back
+ * The promote checkpoint on a promotion review: Promote or Send back
  * with a note. Both are promoter-gated server-side; the buttons here are a
  * lens. Decisions settle the website-side request and land an admin_audit
  * row; the page refetches so the settled state renders from the store, not

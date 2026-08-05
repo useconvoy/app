@@ -1,5 +1,5 @@
 /**
- * Server-only data access for feedback capture (DESIGN §3, D12). The
+ * Server-only data access for feedback capture. The
  * feedback table is the website-side capture of the shared core/ Feedback
  * shape that learning/ consumes; learning_status tracks that handoff:
  * new -> queued (a person approved an improvement, the routine's feedback
@@ -118,7 +118,7 @@ export async function listFeedbackForOrg(orgId: string, limit = 20): Promise<Fee
   });
 }
 
-/** Move rows along the D12 lifecycle; only the legal step is taken. */
+/** Move rows along the new -> queued -> consumed lifecycle; only the legal step is taken. */
 async function transition(
   client: PoolClient,
   orgId: string,
@@ -150,7 +150,7 @@ export async function markFeedbackConsumed(orgId: string, ids: string[]): Promis
 }
 
 /**
- * Queue every "new" feedback row on a routine's runs, the D12 moment when
+ * Queue every "new" feedback row on a routine's runs: the moment when
  * a person approves an improvement and the feedback behind it rides along
  * to learning.
  */

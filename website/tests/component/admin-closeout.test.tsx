@@ -1,5 +1,5 @@
 /**
- * Admin close-out surfaces (DESIGN §5 Admin row, §9): policies form
+ * Admin surfaces: policies form
  * validation, the audit table's friendly dates and mono facts, the
  * phase-1 API access page containing nothing key-shaped, and the billing
  * page's plain unconfigured state.

@@ -14,7 +14,7 @@ export interface InstalledRoutine {
   entryId: string;
   routineId: string;
   workspaceId: string;
-  /** Snapshot version pinned at install time (DESIGN §6). */
+  /** Snapshot version pinned at install time; template updates never move it silently. */
   pinnedVersion: number;
   installedAt: string;
 }

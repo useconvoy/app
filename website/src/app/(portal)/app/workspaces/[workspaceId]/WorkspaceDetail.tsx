@@ -1,5 +1,5 @@
 /**
- * Workspace detail, presentational (DESIGN §5 Workspaces row): connected
+ * Workspace detail, presentational: connected
  * systems with their grants, stand-ins per side-effecting system, the
  * rehearsal copy, the clock, versions, and the activity placeholder.
  */
@@ -112,7 +112,8 @@ export function WorkspaceDetail({ workspace, routineNames }: WorkspaceDetailProp
         )}
       </Section>
 
-      {/* TODO(website-W5): activity feed from the org events explorer. */}
+      {/* TODO(website): wire this activity feed to the cross-run event
+          explorer behind Logs; until then it renders the empty state. */}
       <Section title="Activity">
         <EmptyState
           title="No activity yet"

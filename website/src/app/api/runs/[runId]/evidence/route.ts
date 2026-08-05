@@ -1,8 +1,9 @@
 /**
- * Evidence binder export (C10): GET streams the zip. Session-verified,
- * export_evidence-gated server-side (every role holds it in v1; the org
- * policy toggle for viewers arrives with W6 policies). A 404 may mean
- * wrong tenant and stays a 404, never probed further.
+ * Evidence binder export: GET streams the zip. Session-verified,
+ * export_evidence-gated server-side (every role holds it in v1; the
+ * org-settings toggle limiting viewer exports is stored by the admin
+ * policies form but not yet enforced here). A 404 may mean the run
+ * belongs to another organization and stays a 404, never probed further.
  */
 import type { NextRequest } from "next/server";
 

@@ -1,5 +1,5 @@
 /**
- * Pure derivations over the land report (C8): plain facts for the report
+ * Pure derivations over the land report: plain facts for the report
  * sections and the stand-in outbox rows for rehearsal runs. Shared by the
  * run detail and the promotion review page; no IO, no server-only imports.
  */
@@ -65,7 +65,7 @@ const SIDE_EFFECT_PATTERN =
   /\b(send|sends|sent|email|emails|remind|reminds|chase|chases|request|requests|notify|notifies|message|messages|post|posts|update|updates|file|files)\b/i;
 
 /**
- * The stand-in outbox (C8): everything the routine would have done, in
+ * The stand-in outbox: everything the routine would have done, in
  * plain language. When the runtime's land report carries an explicit
  * `outbox` list it renders verbatim; the scripted runtime's report does
  * not, so rows derive from the run's own records instead. Each completed
@@ -73,8 +73,8 @@ const SIDE_EFFECT_PATTERN =
  * own description) are marked as held by the stand-in, the rest as kept
  * with the run's files, and the deliverable stands in for the content.
  *
- * TODO(runtime): C8 wants the actual email text and the actual record
- * change. The scripted runtime's land report carries neither an outbox
+ * TODO(runtime): the outbox should show the actual email text and the
+ * actual record change. The scripted runtime's land report carries neither an outbox
  * list nor deliverable content over the edge; when a real outbox shape
  * lands, render it here and drop the derivation.
  */

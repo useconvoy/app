@@ -1,9 +1,9 @@
 /**
- * The permissions matrix (DESIGN §2), enforced server-side on every route
+ * The permissions matrix, enforced server-side on every route
  * handler and server action. The UI lens system hides unauthorized areas
  * but is never the enforcement point.
  *
- * `cap` cells in the design table are capability grants carried on the
+ * Some cells are capability grants carried on the
  * membership: `approver` (checkpoint routing target) and `promoter`
  * (rehearsal -> production promotion; Operators hold it implicitly).
  */

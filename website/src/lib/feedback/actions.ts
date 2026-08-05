@@ -27,7 +27,7 @@ const MAX_BODY_LENGTH = 4000;
 
 /**
  * Capture one piece of feedback on a run (optionally a step). Inserts with
- * learning_status "new"; the learning handoff moves it along later (D12).
+ * learning_status "new"; the learning handoff moves it along later.
  */
 export async function submitFeedback(input: SubmitFeedbackInput): Promise<void> {
   const session = await requireOrgSession();

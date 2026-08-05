@@ -1,10 +1,10 @@
 /**
- * Result and handler shapes for the run command actions (W2). They live
+ * Result and handler shapes for the run command actions. They live
  * apart from `commands.ts` because a "use server" module may only export
  * async functions; client components import these types and receive the
  * action references themselves as props from server pages.
  *
- * The discipline the shapes encode (CLAUDE.md rule 7): every write is a
+ * The discipline the shapes encode: every write is a
  * 202 whose truth arrives via events; a conflict is shown, never retried;
  * a 404 is a 404. `refused` carries the server-side permission or
  * validation verdict as a plain sentence ready to render.
@@ -25,6 +25,14 @@ export type SteerResult =
   | { kind: "refused"; message: string };
 
 export type SteerMode = "note" | "redirect";
+
+/** A conflict or refusal, as one plain sentence for a status line. */
+export function failureSentence(result: CommandResult): string | null {
+  if (result.kind === "refused") return result.message;
+  if (result.kind === "notFound") return "That run cannot be found.";
+  if (result.kind === "conflict") return result.detail;
+  return null;
+}
 
 /** The full set of run commands a page can hand to its client components. */
 export interface RunCommandHandlers {

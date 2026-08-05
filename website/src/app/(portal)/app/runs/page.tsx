@@ -14,7 +14,11 @@ import { RunsList, type RunListRow } from "./runs-list";
 export const metadata: Metadata = { title: "Runs" };
 export const dynamic = "force-dynamic";
 
-/** The D13 on-demand seam for demos and E2E. TODO(website-W4): moves behind Routines. */
+/**
+ * On-demand run start for demos and E2E. TODO(website): the Routines
+ * surface now owns on-demand triggers (runRoutineNow); drop this direct
+ * seam once demos and E2E drive runs through it.
+ */
 async function startDemoRun(): Promise<void> {
   "use server";
   await startFixtureRun("routine-access-review");

@@ -1,6 +1,6 @@
 /**
- * Trigger configuration per routine: schedule, manual, event (DESIGN D1,
- * a routine's triggers are properties of the one object). Kept in process
+ * Trigger configuration per routine: schedule, manual, event; a
+ * routine's triggers are properties of the one object. Kept in process
  * over fixture defaults until the scheduler and event sources exist.
  *
  * TODO(environments-E0): event sources are designed with environments/
@@ -12,7 +12,7 @@ import "server-only";
 export interface RoutineTriggers {
   /** Plain schedule text, e.g. "Mondays at 9am"; absent when unscheduled. */
   schedule?: { description: string };
-  /** Whether people may start this routine on demand (D13). */
+  /** Whether people may start this routine on demand. */
   manual: boolean;
   /** Plain event description; the source wiring does not exist yet. */
   event?: { description: string };

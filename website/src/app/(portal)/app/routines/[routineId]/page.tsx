@@ -21,7 +21,7 @@ import { RoutineDetail } from "./RoutineDetail";
 export const metadata: Metadata = { title: "Routine" };
 
 /**
- * Routine detail (UI-SPEC C3): everything about the routine today, read
+ * Routine detail: everything about the routine today, read
  * rich. The page binds server actions and re-derives every permission
  * server-side; RoutineDetail just renders.
  */
@@ -48,8 +48,8 @@ export default async function RoutineDetailPage({
     ? await Promise.all([listMembers(session.orgId), listTeams(session.orgId)])
     : [[], []];
 
-  // W5 read surfaces: test-score trend and changelog from the fixture
-  // adapters (TODO(evals), TODO(learning)); the feedback stream is real.
+  // Test-score trend and changelog come from the fixture adapters
+  // (TODO(evals), TODO(learning)); the feedback stream is real.
   const [trend, changelog, feedback] = await Promise.all([
     evalsClient().scoreTrend(routineId),
     learningClient().listChangelog(routineId),

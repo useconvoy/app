@@ -1,6 +1,6 @@
 /**
  * Server action for the notification settings page. Prefs are per user,
- * per org, per class; v1 exposes the in_app channel only (D6) while the
+ * per org, per class; v1 exposes the in_app channel only while the
  * channels[] schema stays ready for email/Slack dispatchers later. Org and
  * user always derive from the verified session, never from the form.
  */

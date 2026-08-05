@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * The human controls on a run (W2, UI-SPEC C2): pause/resume/land, the
+ * The human controls on a run: pause/resume/land, the
  * steer composer, plan approval, gate responses, and the rehearsal clock.
  *
- * Discipline (CLAUDE.md rule 7): every button fires a server action that
+ * Discipline: every button fires a server action that
  * returns 202-shaped results; nothing here flips run state locally. The
  * steer composer is the single optimistic surface: it renders "Guidance
  * sent" immediately and the steer_received event confirms it. Approvals
@@ -25,10 +25,11 @@ import {
   timeoutBehaviorLabels,
   type TimeoutBehavior,
 } from "@/lexicon";
-import type {
-  CommandResult,
-  RunCommandHandlers,
-  SteerMode,
+import {
+  failureSentence,
+  type CommandResult,
+  type RunCommandHandlers,
+  type SteerMode,
 } from "@/lib/runs/command-types";
 import type { RunStreamEvent } from "@/lib/runs/status";
 
@@ -72,14 +73,6 @@ function toIso(localValue: string): string | null {
 
 function plusDays(iso: string, days: number): string {
   return new Date(new Date(iso).getTime() + days * 86_400_000).toISOString();
-}
-
-/** A conflict or refusal, as one plain sentence for a status line. */
-function failureSentence(result: CommandResult): string | null {
-  if (result.kind === "conflict") return result.detail;
-  if (result.kind === "refused") return result.message;
-  if (result.kind === "notFound") return "That run cannot be found.";
-  return null;
 }
 
 export function RunControls({
@@ -462,7 +455,7 @@ function SteerComposer({
 }
 
 /**
- * The rehearsal clock (C2): move virtual time forward. Seeded from the
+ * The rehearsal clock: move virtual time forward. Seeded from the
  * run's current virtual moment; the quick buttons jump straight ahead.
  * The runtime's 409 (real clock, backwards move) surfaces as a sentence.
  */

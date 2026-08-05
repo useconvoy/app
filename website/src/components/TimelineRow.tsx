@@ -10,7 +10,7 @@ export interface TimelineRowProps {
   at: string | Date;
   /**
    * Rehearsal virtual time. When present it renders as the primary stamp
-   * and real time drops to secondary (law 2).
+   * and real time drops to secondary.
    */
   virtualAt?: string | Date;
   /** Expandable raw detail; a quiet operator affordance, mono. */

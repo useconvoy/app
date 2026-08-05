@@ -1,10 +1,10 @@
 /**
- * Org settings (migration 0004): the jsonb home for DESIGN §5's Admin
- * "policies & budget defaults" row and the org notification defaults.
+ * Org settings (migration 0004): the jsonb home for the Admin area's
+ * policies & budget defaults and the org notification defaults.
  * This module is the only writer of organizations.settings; every shape
  * goes through zod on the way in, and reads tolerate missing or older
  * shapes by falling back to defaults. Admin mutations write admin_audit
- * rows in the same transaction (§9).
+ * rows in the same transaction, keeping the audit trail complete.
  */
 import "server-only";
 
@@ -15,11 +15,11 @@ import { withOrgContext, type DbContext } from "@/lib/db";
 import { NOTIFICATION_CLASSES } from "@/notifier/rules";
 
 export const policiesSchema = z.object({
-  /** Default budget cap for a run, dollars (DESIGN §5 Admin row). */
+  /** Default budget cap for a run, dollars. */
   defaultRunBudgetCapUsd: z.number().positive().max(100_000),
   /** Monthly spend that triggers an admin notice, dollars. */
   monthlySpendNoticeUsd: z.number().positive().max(1_000_000),
-  /** §9: Viewer's evidence-export right is org-policy toggleable. */
+  /** The Viewer role's evidence-export right is org-policy toggleable. */
   viewerEvidenceExport: z.boolean(),
 });
 

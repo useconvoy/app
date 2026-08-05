@@ -1,5 +1,5 @@
 /**
- * Run controls (W2, C2): the steer composer's optimistic "Guidance sent",
+ * Run controls: the steer composer's optimistic "Guidance sent",
  * the approve panel's 409 flip to its stale state (no retry), the
  * at_virtual toggle appearing on rehearsal runs only, and the advance
  * clock quick buttons.

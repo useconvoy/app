@@ -15,6 +15,7 @@ import {
   steerRun,
 } from "@/lib/runs/commands";
 import { requireRunPage } from "@/lib/runs/context";
+import { RunFeedbackPanel } from "@/components/RunFeedbackPanel";
 import { RunDetail, type PromotionSummary } from "./run-detail";
 
 export const metadata: Metadata = { title: "Run" };
@@ -23,10 +24,11 @@ export const dynamic = "force-dynamic";
 /**
  * Server shell for the run detail: verifies the session, resolves the org's
  * tenant, and fetches the initial view through the single authenticated
- * edge. A 404 may mean wrong tenant and renders as not-found, full stop
- * (CLAUDE.md rule 7). The live timeline hydrates purely from the SSE
- * stream inside RunDetail; the W2 controls receive their session-bound
- * server actions here so every mutation carries the acting human.
+ * edge. A 404 may mean the run belongs to another organization; it
+ * renders as not-found, full stop, and the console never probes further.
+ * The live timeline hydrates purely from the SSE stream inside RunDetail;
+ * the run controls receive their session-bound server actions here so
+ * every mutation carries the acting human.
  */
 export default async function RunDetailPage({
   params,
@@ -51,18 +53,21 @@ export default async function RunDetailPage({
     : null;
 
   return (
-    <RunDetail
-      initial={run}
-      commands={{ pauseRun, resumeRun, landRun, steerRun, approvePlan, respondToGate, advanceClock }}
-      viewer={{
-        canAct: can("answer_checkpoints", membership.role, membership.capabilities),
-        canSubmitPromotion:
-          routineId !== null &&
-          can("submit_promotion", membership.role, membership.capabilities),
-        canExportEvidence: can("export_evidence", membership.role, membership.capabilities),
-      }}
-      promotion={promotion}
-      submitPromotion={submitForPromotion}
-    />
+    <>
+      <RunDetail
+        initial={run}
+        commands={{ pauseRun, resumeRun, landRun, steerRun, approvePlan, respondToGate, advanceClock }}
+        viewer={{
+          canAct: can("answer_checkpoints", membership.role, membership.capabilities),
+          canSubmitPromotion:
+            routineId !== null &&
+            can("submit_promotion", membership.role, membership.capabilities),
+          canExportEvidence: can("export_evidence", membership.role, membership.capabilities),
+        }}
+        promotion={promotion}
+        submitPromotion={submitForPromotion}
+      />
+      <RunFeedbackPanel runId={runId} />
+    </>
   );
 }

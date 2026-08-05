@@ -10,7 +10,7 @@ import { improveCopy } from "@/lexicon";
 export const metadata: Metadata = { title: "Routine evaluation" };
 
 /**
- * Routine evaluation (DESIGN §5): per-routine test-score trends and the
+ * Routine evaluation: per-routine test-score trends and the
  * scenario suites behind them, read by every role. Data comes through the
  * typed evals client; the fixture adapter serves it until the service is
  * live. TODO(evals).

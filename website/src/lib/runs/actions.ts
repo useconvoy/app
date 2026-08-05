@@ -1,8 +1,8 @@
 /**
- * Server actions for run surfaces. W1 carries one seam: starting a fixture
- * routine's rehearsal run on demand, for demos and E2E. This is the D13
- * on-demand trigger in embryo. TODO(website-W4): fold this into the
- * Routines surface's triggers (runRoutineNow) and drop the direct seam.
+ * Server actions for run surfaces: starting a fixture routine's
+ * rehearsal run on demand, for demos and E2E. TODO(website): the
+ * Routines surface now owns on-demand triggers (runRoutineNow); drop
+ * this direct seam once demos and E2E drive runs through it.
  */
 "use server";
 
@@ -17,7 +17,7 @@ import { requireRunContext } from "./context";
 /**
  * Start a rehearsal run of a fixture routine in the sandbox-bound local
  * workspace. Role-checked server-side; truth arrives via re-fetch and the
- * event stream, never an optimistic flip (CLAUDE.md rule 7).
+ * event stream, never an optimistic flip.
  */
 export async function startFixtureRun(routineId: string): Promise<{ runId: string }> {
   const { membership, actor } = await requireRunContext();

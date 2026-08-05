@@ -1,5 +1,5 @@
 /**
- * Billing server actions (DESIGN §8): the one mutation is opening the
+ * Billing server actions: the one mutation is opening the
  * Stripe-hosted portal for payment details. Env-gated; admin-only via the
  * same org-settings permission that guards the billing page.
  */

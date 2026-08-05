@@ -4,8 +4,8 @@
  * Live run events over the SSE proxy. EventSource handles most
  * reconnection natively (re-sending Last-Event-ID), so this hook
  * accumulates events, dedupes replays by seq, and tracks connection state
- * so the UI can surface disconnects. Silent staleness is a bug (CLAUDE.md
- * rule 11): consumers must render a DisconnectBanner whenever `connected`
+ * so the UI can surface disconnects. Silent staleness is a bug:
+ * consumers must render a DisconnectBanner whenever `connected`
  * is false and the stream is not `done`.
  *
  * Going offline does not sever an idle SSE socket, so EventSource alone

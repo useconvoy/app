@@ -1,5 +1,5 @@
 /**
- * The billing surface (DESIGN §8), presentational: plan and status from
+ * The billing surface, presentational: plan and status from
  * billing_accounts, invoices as Stripe-hosted links, and the portal
  * button when billing is connected. Unconfigured environments render the
  * plain "handled by your Convoy contact" state with sample invoices so

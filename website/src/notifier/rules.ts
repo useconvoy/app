@@ -1,11 +1,11 @@
 /**
  * The pure rule engine: one runtime event in, zero or more notification
- * candidates out (DESIGN §4 classes). No I/O here; routing decides who
+ * candidates out. No I/O here; routing decides who
  * receives a candidate and the consumer writes it.
  *
  * Class mapping choices, documented once:
  * - `gate_opened` -> checkpoint_opened with the respond deep link; the run
- *   is blocked_on_human and the one correct verb is respond (§5 law 1).
+ *   is blocked_on_human and the one correct verb is respond.
  * - `paused` -> checkpoint_opened with the resume deep link.
  * - `plan_created` -> checkpoint_opened with the approve deep link, but
  *   only when the event itself says approval is wanted: the recorded
@@ -18,8 +18,9 @@
  *   run_failed map to their own classes.
  * - checkpoint_deadline comes from the open_gates sweep, not the feed.
  * - promotion_requested and improvement_ready have no runtime event; they
- *   are enqueued directly (see consumer.ts) by the promotion flow
- *   (TODO(website-W2)) and the learning packet (TODO(website-W5)).
+ *   are enqueued directly (see consumer.ts). The promotion submit action
+ *   calls its enqueue; improvement_ready has no caller yet
+ *   (TODO(learning)).
  *
  * Every cta_url is the TYPED deep link: respond/approve/resume anchor the
  * exact action on the run page; landed and budget notices open the run.

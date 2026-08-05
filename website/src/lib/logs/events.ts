@@ -1,15 +1,15 @@
 /**
  * Cross-run event fan-in for the Logs surface.
  *
- * The honest v1 (DESIGN §5): there is no org-wide events endpoint yet, so
+ * The honest v1: there is no org-wide events endpoint yet, so
  * the explorer pulls `GET /runs/{id}/events?after=0` for every run the
  * tenant knows, bounded and capped, then merges newest-first.
  * TODO(runtime-D8): replace the fan-in with the org feed and delete the
  * polling machinery here.
  *
  * The notifier owns a sibling fan-in (src/notifier/feed.ts) with cursor
- * semantics this surface does not need; per CLAUDE.md, notifier internals
- * are never imported into pages, so the minimal read-and-parse pattern is
+ * semantics this surface does not need; notifier internals are never
+ * imported into pages, so the minimal read-and-parse pattern is
  * deliberately duplicated here in page-shaped form (full replay, no
  * cursors, newest first).
  */
@@ -49,7 +49,7 @@ function compareDesc(a: LogEvent, b: LogEvent): number {
 
 /**
  * Parse an events poll body: SSE frames, or a plain JSON array so the same
- * parser covers recorded fixtures and a future non-streaming D8 feed.
+ * parser covers recorded fixtures and a future non-streaming org feed.
  * Partial trailing frames from a cut-off read are dropped.
  */
 export function parseEventsBody(body: string): LogEvent[] {

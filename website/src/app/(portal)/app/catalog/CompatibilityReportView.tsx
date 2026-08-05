@@ -1,5 +1,5 @@
 /**
- * Renders the E3-shaped CompatibilityReport during an install (DESIGN §6):
+ * Renders the environments-layer CompatibilityReport during an install:
  * green checks for satisfied systems, a "needs a mapping" picker when
  * several connected systems could serve, "connect X first" prompts for
  * missing ones, and the portability line for vendor-specific tools.

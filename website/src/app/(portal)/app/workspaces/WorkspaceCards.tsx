@@ -1,6 +1,6 @@
 /**
  * Workspace cards, presentational: name, purpose, and the connects/used-by
- * fact line (DESIGN §5 Workspaces row).
+ * fact line ("Connects N systems · used by N routines").
  */
 import Link from "next/link";
 

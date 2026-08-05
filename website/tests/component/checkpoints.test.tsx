@@ -1,6 +1,6 @@
 /**
- * The Checkpoints inbox (W2): one typed card per stuck kind, the live
- * deadline countdown, keyboard triage (C11), the approve-from-inbox
+ * The Checkpoints inbox: one typed card per stuck kind, the live
+ * deadline countdown, keyboard triage, the approve-from-inbox
  * version pin with the 409 flip, and the axe pass.
  */
 import { render, screen, waitFor, within } from "@testing-library/react";

@@ -15,11 +15,11 @@ import { improveCopy } from "@/lexicon";
 export const metadata: Metadata = { title: "Learning" };
 
 /**
- * Learning (DESIGN §5): the improvements queue with diffs and test-score
+ * Learning: the improvements queue with diffs and test-score
  * evidence, the routine changelog, and a strip of recent feedback. The
  * queue's Approve / Ship actions are gated server-side by
- * ship_improvements; everyone else reads. Viewers see the changelog only
- * (DESIGN §2: queue review excludes viewers). Improvements come through
+ * ship_improvements; everyone else reads. Viewers see the changelog only,
+ * since queue review excludes the Viewer role. Improvements come through
  * the typed learning client's fixture adapter; feedback is real.
  * TODO(learning).
  */

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Org policies form (DESIGN §5 Admin row, §9): the run budget default,
+ * Org policies form: the run budget default,
  * the monthly spend notice, and the viewer evidence-export toggle.
  * Client-side validation is a courtesy; the server action re-validates
  * with zod and refuses anything off.

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Minimal workshop-org publish form (DESIGN §6): pick a routine, name the
+ * Minimal workshop-org publish form: pick a routine, name the
  * snapshot version, write the storefront copy, set the test score floor.
  * Capability requirements ride along per routine, derived by the page;
  * the server action validates everything again with zod.

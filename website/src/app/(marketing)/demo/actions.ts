@@ -53,7 +53,8 @@ export async function requestDemo(
     return { status: "invalid", errors };
   }
 
-  // TODO(website-W6): hand the validated request to the CRM. Until then we
-  // acknowledge the submission and deliberately store nothing.
+  // TODO(website): hand the validated request to the CRM once one is
+  // connected. Until then we acknowledge the submission and deliberately
+  // store nothing.
   return { status: "submitted", errors: {}, name: parsed.data.name };
 }

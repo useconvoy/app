@@ -1,6 +1,6 @@
 /**
  * Server-only data access for routine assignments (website-side routing
- * facts, DESIGN §3). Every query runs through withOrgContext so RLS bounds
+ * facts). Every query runs through withOrgContext so RLS bounds
  * it; org ids arrive from the verified session, never from client input.
  */
 import "server-only";
@@ -34,7 +34,7 @@ export async function listApprovers(orgId: string, routineId: string): Promise<A
 
 /**
  * Whether a user is assigned to a routine, directly or through a team, in
- * any relationship. D13's gate: assigned Members may trigger on-demand
+ * any relationship. The gate it serves: assigned Members may trigger on-demand
  * production runs within caps.
  */
 export async function isAssignedToRoutine(

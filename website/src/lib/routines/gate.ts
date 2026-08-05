@@ -1,6 +1,6 @@
 /**
- * Page-level gate for routine surfaces: any active membership may view
- * (DESIGN §2, all roles view routines). Server-side enforcement lives
+ * Page-level gate for routine surfaces: any active membership may view,
+ * since every role may view routines. Server-side enforcement lives
  * here AND in every action; the nav lens is convenience only.
  */
 import "server-only";

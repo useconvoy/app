@@ -2,8 +2,8 @@
  * The canonical fixture world, reused across unit, component, and E2E
  * suites and by the fixture adapters that stand in for services that are
  * not live yet. One world everywhere: the two demo routines plus the
- * attestation chase, generic J. Doe-style people, and the budget shapes the
- * design mocks use ($75 / $40 / $30).
+ * attestation chase, generic J. Doe-style people, and the canonical
+ * budget shapes ($75 / $40 / $30).
  */
 
 export interface FixturePerson {
@@ -23,7 +23,7 @@ export const people: FixturePerson[] = [
 export interface FixtureRoutine {
   id: string;
   name: string;
-  /** Plain descriptor shown in lists (law 3: no jargon, no ids). */
+  /** Plain descriptor shown in lists: no jargon, no ids. */
   descriptor: string;
   systems: string[];
   budgetCapUsd: number;
@@ -73,7 +73,7 @@ export const routines: FixtureRoutine[] = [
   },
 ];
 
-/** Budget shapes the design mocks exercise: cap / spent / reserved. */
+/** Canonical budget shapes: cap / spent / reserved. */
 export const budgets = {
   comfortable: { cap_usd: "75", spent_usd: "12.40", reserved_usd: "6.00" },
   warning: { cap_usd: "40", spent_usd: "33.10", reserved_usd: "4.50" },

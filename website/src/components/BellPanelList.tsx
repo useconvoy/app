@@ -8,8 +8,8 @@ export interface BellPanelItem {
   /** Plain copy, e.g. the checkpoint prompt or the run's name. */
   title: string;
   /**
-   * Deep link to the typed action (resume / approve plan / respond), never
-   * a generic resolve surface (C4). The caller builds the URL.
+   * Deep link to the typed action (resume / approve plan / respond); there
+   * is no generic resolve surface. The caller builds the URL.
    */
   actionUrl: string;
   at?: string | Date;

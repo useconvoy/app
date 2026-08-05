@@ -14,7 +14,7 @@ import { InstallFlow } from "./InstallFlow";
 export const metadata: Metadata = { title: "Install a routine" };
 
 /**
- * The install screen (DESIGN §6): the server resolves the entry's
+ * The install screen: the server resolves the entry's
  * capability requirements against every workspace up front, so picking a
  * workspace shows its compatibility report instantly; confirming installs
  * with the snapshot version pinned.

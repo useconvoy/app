@@ -1,6 +1,6 @@
 import { SkeletonList } from "@/components/SkeletonList";
 
-/** List skeleton while runs hydrate; never a full-page spinner (C5). */
+/** List skeleton while runs hydrate; never a full-page spinner. */
 export default function RunsLoading() {
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">

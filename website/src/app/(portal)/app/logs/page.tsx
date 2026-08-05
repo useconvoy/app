@@ -31,10 +31,11 @@ function applyFilters(events: LogEvent[], filters: LogsFilters): LogEvent[] {
 }
 
 /**
- * Logs v1 (DESIGN §5, the handoff's honest gap): a cross-run event
- * explorer over real projections plus cost rollups. Viewer role is
- * redirected server-side (lens A/O/M). Events fan in per run until the
- * runtime's org feed exists. TODO(runtime-D8).
+ * Logs v1, honest about what the runtime exposes today: a cross-run
+ * event explorer over real projections plus cost rollups. Viewer role is
+ * redirected server-side; Admins, Operators, and Members may look.
+ * Events fan in per run until the runtime's org feed exists.
+ * TODO(runtime-D8).
  */
 export default async function LogsPage({
   searchParams,

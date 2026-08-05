@@ -10,7 +10,7 @@ import { NOTIFICATION_CLASSES } from "@/notifier/rules";
 export const metadata: Metadata = { title: "Notifications" };
 
 /**
- * Per-class notification preferences. v1 channels: in-app only (D6); the
+ * Per-class notification preferences. v1 channels: in-app only; the
  * schema's channels[] keeps email/Slack a dispatcher away, so the other
  * channels render as "coming later" rather than pretending to exist. A
  * class without a stored row defaults to in-app on; unchecking writes an

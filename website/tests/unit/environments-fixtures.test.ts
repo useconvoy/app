@@ -1,5 +1,5 @@
 /**
- * Shape stability for the environments fixture adapter (W4 gate): the
+ * Shape stability for the environments fixture adapter: the
  * workspaces the console renders must bind to the local stub registry's
  * runnable environment ids, side-effecting write grants must carry their
  * stand-ins, and the workspace-to-routine usage mapping must stay put.

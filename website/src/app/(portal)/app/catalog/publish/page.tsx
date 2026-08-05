@@ -13,7 +13,7 @@ import { PublishForm } from "./PublishForm";
 export const metadata: Metadata = { title: "Publish a routine" };
 
 /**
- * Workshop-org publish (DESIGN §6), minimal: the storefront copy plus a
+ * Workshop-org publish, minimal: the storefront copy plus a
  * snapshot version and test score floor. Capability requirements derive
  * from the routine's systems: side-effecting systems need a write grant,
  * the rest read. TODO(environments-E0): the registry supplies real

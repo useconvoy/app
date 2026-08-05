@@ -1,5 +1,5 @@
 /**
- * Run detail composition (UI-SPEC C2) fed by the recorded control-plane
+ * Run detail composition fed by the recorded control-plane
  * fixtures. The SSE hook is mocked; everything below it renders for real.
  */
 import { render, screen, within } from "@testing-library/react";
@@ -79,7 +79,7 @@ describe("RunDetail timeline", () => {
     }
   });
 
-  it("compacts fan-out into one helper-runs group linking each child (C7)", () => {
+  it("compacts fan-out into one helper-runs group linking each child", () => {
     const events = fixture("run-fanout");
     stream(events);
     render(<RunDetail initial={initialView(events)} />);
@@ -154,7 +154,7 @@ describe("RunDetail states", () => {
 });
 
 describe("RunDetail vitals", () => {
-  it("renders the budget meter with the reserved segment (C6)", () => {
+  it("renders the budget meter with the reserved segment", () => {
     stream([]);
     render(<RunDetail initial={initialView([], { budget: budgets.comfortable })} />);
     expect(screen.getByTestId("budget-reserved")).toHaveTextContent("$6 set aside");
@@ -177,7 +177,7 @@ describe("RunDetail vitals", () => {
     const events = fixture("run-landed");
     stream(events);
     render(<RunDetail initial={initialView(events)} />);
-    // "Files" appears in the vitals rail and again in the W2 land report
+    // "Files" appears in the vitals rail and again in the land report
     // section; the vitals count is the one under test here.
     const vitals = screen.getByRole("region", { name: "Vitals" });
     const files = within(vitals).getByText("Files");
@@ -195,7 +195,7 @@ describe("RunDetail vitals", () => {
   });
 });
 
-describe("RunDetail rehearsal variant (law 2)", () => {
+describe("RunDetail rehearsal variant", () => {
   it("frames rehearsal streams with the banner and pencil treatment", () => {
     const events = fixture("run-rehearsal-virtual");
     stream(events);
@@ -216,7 +216,7 @@ describe("RunDetail rehearsal variant (law 2)", () => {
     const row = screen.getByText("Answered").closest("li") as HTMLElement;
     // A scripted answer's honest instant is the moment the simulated human
     // answered (payload.simulated_at), not the clock's position after the
-    // advance that delivered it (W2).
+    // advance that delivered it.
     const simulatedAt = answered.payload["simulated_at"] as string;
     const virtualStamp = friendlyDateTime(simulatedAt);
     const realStamp = friendlyDateTime(answered.ts);
@@ -241,7 +241,7 @@ describe("RunDetail rehearsal variant (law 2)", () => {
   });
 });
 
-describe("RunDetail disconnect (C5, rule 11)", () => {
+describe("RunDetail disconnect", () => {
   it("surfaces a dropped stream with the last-event time", () => {
     const events = fixture("run-landed").filter((event) => event.seq <= 4);
     stream(events, { connected: false, done: false });

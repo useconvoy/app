@@ -1,7 +1,7 @@
 /**
- * Server-side assembly of the Checkpoints inbox (DESIGN §5 law 1): the
- * three stuck kinds from the live run list, each with its one typed verb,
- * plus promotion reviews (C8). Deadlines join in from the website-side
+ * Server-side assembly of the Checkpoints inbox: the three stuck kinds
+ * from the live run list, each with its one typed verb,
+ * plus promotion reviews. Deadlines join in from the website-side
  * open_gates rows the notifier keeps; team-held labeling and assignee
  * chips come from routine assignments. Nothing domain-shaped is stored:
  * runs are read through the edge on every request.

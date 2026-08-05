@@ -1,5 +1,5 @@
 /**
- * Who gets notified (DESIGN §2 teams + §4 routing). Pure resolution over an
+ * Who gets notified. Pure resolution over an
  * in-memory `RoutingWorld` so the matching rules are unit-testable; a small
  * loader hydrates that world from the website DB under the org's RLS
  * context.
@@ -17,14 +17,14 @@
  *   the target relationships resolves to nobody by design; its people chose
  *   their relationships.
  *
- * Teams expand to every member (D5: a team-held item notifies all members;
+ * Teams expand to every member (a team-held item notifies all members;
  * first response wins is an answering concern handled by the runtime's
  * gate_answered actor, not a notification concern). Each person receives at
  * most one notification per event regardless of how many routes hit them.
  * notification_prefs filter last: a class row without "in_app" suppresses;
  * without a row, the org's stored default channels for the class apply
- * (organizations.settings.notification_defaults, W6 admin close-out), and
- * with neither, in-app stays on (D6 default). Personal choices always win.
+ * (organizations.settings.notification_defaults), and
+ * with neither, in-app stays on. Personal choices always win.
  */
 import type { PoolClient } from "pg";
 
@@ -91,7 +91,7 @@ function inAppEnabled(world: RoutingWorld, userId: string, cls: NotificationClas
   );
   if (pref) return pref.channels.includes("in_app");
   // No personal row: the org's stored default for the class decides;
-  // no stored default keeps in-app on (D6).
+  // no stored default keeps in-app on.
   if (world.defaultChannels) return world.defaultChannels.includes("in_app");
   return true;
 }
@@ -204,7 +204,7 @@ export async function loadRoutingWorld(
     )
   ).rows;
 
-  // Org default channels for the class (W6): the fallback when a person
+  // Org default channels for the class: the fallback when a person
   // has no prefs row. The organizations row is visible to the notifier's
   // org context through the id = app_org_id() select policy.
   const { rows: defaultsRows } = await client.query<{ channels: unknown }>(

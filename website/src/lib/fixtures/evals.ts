@@ -9,7 +9,8 @@
  * Trend shapes by design: the access review climbs 72 -> 91 across eight
  * rehearsals, the vendor check holds steady around 85, and the attestation
  * chase is sparse (scored twice). Every rehearsal trajectory carries
- * sandbox: true; the single production trajectory is unlabeled (law 2).
+ * sandbox: true; the single production trajectory is unlabeled, since
+ * production is always the unlabeled default.
  */
 import type { EvalSuite, RunScorecard, TestScorePoint, Trajectory } from "@/lib/api/evals";
 

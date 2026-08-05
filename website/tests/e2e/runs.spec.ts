@@ -1,5 +1,5 @@
 /**
- * W1 gate: the runs read path against the real local stack. No mocked
+ * The runs read path against the real local stack. No mocked
  * domain: the dev server proxies to the control plane on :8700 and these
  * specs watch real runs stream.
  */
@@ -31,7 +31,7 @@ test("start a fixture run, watch it appear, stream live, and land", async ({ pag
     page.getByRole("heading", { name: "Quarterly user access review" }),
   ).toBeVisible({ timeout: 20_000 });
 
-  // Rehearsal is unmistakable on a sandbox-bound run (law 2).
+  // Rehearsal is unmistakable on a sandbox-bound run.
   await expect(
     page.getByText("You are looking at a rehearsal. Nothing here touches live systems."),
   ).toBeVisible({ timeout: 20_000 });

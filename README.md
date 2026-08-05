@@ -4,7 +4,7 @@ Platform for long-running, specialized agents that execute routine work in sandb
 
 ## Repository Structure
 
-- `website/` — Web app: environment setup, agent configuration, run console, and telemetry dashboards.
+- `website/` — Console, BFF, and identity/commerce layer: the portal and marketing site, orgs/teams/roles, notifications, feedback capture, catalog, and billing.
 - `agent-runtime/` — Durable agent orchestration: agent loop, plans, budgets, pause/steer, and subagent coordination.
 - `environments/` — Sandbox and production environments: tool connections, permissions, and compute selection.
 - `agent-evals/` — Eval harness: task suites, run scoring, and benchmarks for specialized agents.

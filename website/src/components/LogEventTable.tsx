@@ -2,8 +2,8 @@
  * The cross-run event table for Logs: friendly time in mono, the event in
  * plain language through the lexicon, the acting identity, and the run's
  * goal as the link. Raw payloads are operator detail and live behind an
- * expandable row, never in the main columns (law 3). Rehearsal events are
- * labeled (law 2); production rows carry no tag.
+ * expandable row, never in the main columns. Rehearsal events are
+ * labeled; production rows carry no tag.
  */
 import Link from "next/link";
 
@@ -52,7 +52,7 @@ export function LogEventTable({ events, runGoals }: LogEventTableProps) {
               ].join(" ")}
             >
               <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs uppercase text-muted">
-                {/* Virtual time is primary for rehearsal events (law 2). */}
+                {/* Virtual time is primary for rehearsal events; real time is secondary. */}
                 {friendlyDateTime(event.virtual_ts ?? event.ts)}
               </td>
               <td className="px-4 py-2.5">

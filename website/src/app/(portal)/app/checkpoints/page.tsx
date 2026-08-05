@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Checkpoints" };
 export const dynamic = "force-dynamic";
 
 /**
- * The Checkpoints page (DESIGN §5 law 1): one inbox, three typed verbs,
+ * The Checkpoints page: one inbox, three typed verbs,
  * plus promotion reviews. Viewers have nothing actionable here and are
  * redirected; the lens system hides the nav item, this is the server-side
  * check behind it. Items are gathered fresh from the edge on every

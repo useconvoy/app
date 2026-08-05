@@ -2,7 +2,8 @@
  * Pure validation for org, membership, and invite flows. No I/O here: the
  * server actions call these, and the unit suite exercises them directly.
  * Role and capability vocabularies mirror the DB check constraints and
- * DESIGN §2; a drift between them is a bug in this file.
+ * the permissions matrix in lib/permissions; a drift between them is a
+ * bug in this file.
  */
 import { randomBytes } from "node:crypto";
 
@@ -12,7 +13,7 @@ export const ROLES: readonly Role[] = ["admin", "operator", "member", "viewer"];
 
 export const CAPABILITIES: readonly Capability[] = ["approver", "promoter", "ship_improvements"];
 
-/** Invite links live exactly seven days (packet W0). */
+/** Invite links live exactly seven days. */
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function isRole(value: unknown): value is Role {

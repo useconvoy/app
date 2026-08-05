@@ -1,6 +1,6 @@
 /**
  * Read/mark access to the signed-in user's notification inbox and prefs.
- * The notifier is the only writer of notifications (iron rule 9); this
+ * The notifier is the only writer of notifications; this
  * module only reads them and flips read_at on the user's own rows. RLS
  * already scopes notifications to (active org, own user); the queries
  * repeat the predicates for clarity and index use.

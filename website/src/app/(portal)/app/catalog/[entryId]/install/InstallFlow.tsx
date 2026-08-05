@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The install flow shell (DESIGN §6): pick a workspace, read the
+ * The install flow shell: pick a workspace, read the
  * compatibility report the server computed for it, then confirm with the
  * version pinned. The confirm stays disabled while systems are missing;
  * the server action re-checks the same line. Completion records nothing

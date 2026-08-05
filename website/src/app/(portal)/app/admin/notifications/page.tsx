@@ -11,10 +11,10 @@ import { adminCopy, notificationClassLabels, notificationSettingsCopy } from "@/
 export const metadata: Metadata = { title: "Notification defaults" };
 
 /**
- * Org notification defaults (DESIGN §5 Admin row), stored in
+ * Org notification defaults, stored in
  * organizations.settings.notification_defaults. The notifier reads a
  * person's own preferences first and falls back to these (see
- * notifier/routing). v1 channels are in-app only (D6): in app renders
+ * notifier/routing). v1 channels are in-app only: in app renders
  * fixed on, email and Slack as coming later; saving records the explicit
  * in-app default per class.
  */

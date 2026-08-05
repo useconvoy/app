@@ -161,7 +161,7 @@ describe("routeStateFor", () => {
 });
 
 describe("childRuns", () => {
-  it("compacts spawn/land pairs into one line per child (C7)", () => {
+  it("compacts spawn/land pairs into one line per child", () => {
     const events = fixture("run-fanout");
     const children = childRuns(events);
     expect(children).toHaveLength(2);

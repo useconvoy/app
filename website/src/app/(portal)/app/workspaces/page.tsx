@@ -11,7 +11,7 @@ import { WorkspaceCards } from "./WorkspaceCards";
 export const metadata: Metadata = { title: "Workspaces" };
 
 /**
- * Workspaces list (DESIGN §5): Admin/Operator only, server-checked. Cards
+ * Workspaces list: Admin/Operator only, server-checked. Cards
  * carry the connects/used-by facts; the create modal hangs off the header.
  */
 export default async function WorkspacesPage() {

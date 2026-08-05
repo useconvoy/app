@@ -1,13 +1,14 @@
 /**
- * The human actions on runs (W2), one server action per typed verb.
+ * The human actions on runs, one server action per typed verb.
  *
  * Every action follows the same spine: verified session -> tenant resolved
  * from the org -> server-side permission check -> typed client call -> a
- * discriminated result. Writes are 202 + events (CLAUDE.md rule 7): nothing
- * here flips UI state, a 409 is returned as `conflict` and never retried,
- * and a 404 stays a 404. Steers are the single optimistic surface, so
- * steerRun alone returns the steer id for the composer's "Guidance sent".
- * Actor attribution rides the bridge headers on every call (rule 8).
+ * discriminated result. Writes are accepted and confirmed by events, so
+ * nothing here flips UI state: a 409 comes back as `conflict` and is never
+ * retried, and a 404 stays a 404. Steers are the single optimistic surface,
+ * so steerRun alone returns the steer id for the composer's "Guidance
+ * sent". Actor attribution rides the bridge headers on every call; human
+ * actions never ride a service identity.
  */
 "use server";
 
@@ -26,7 +27,7 @@ type Guard =
 
 /**
  * The shared gate: active member with answer_checkpoints (member and up;
- * pause/land/steer ride the same grant per DESIGN §2), plus assignment
+ * pause/land/steer deliberately ride the same grant), plus assignment
  * awareness. A member acting on a run that maps to a routine must be
  * assigned to that routine; admins and operators pass regardless.
  */
@@ -120,7 +121,7 @@ export async function steerRun(
 
 /**
  * Approve or reject exactly the plan version the human saw rendered. A 409
- * means the plan moved: the caller shows v(n+1), never retries (rule 7).
+ * means the plan moved: the caller shows v(n+1), never retries.
  * Rejections must say why, checked here before the wire does.
  */
 export async function approvePlan(

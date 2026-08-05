@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Run detail (UI-SPEC C2): plan board, live timeline hydrated purely from
+ * Run detail: plan board, live timeline hydrated purely from
  * the SSE stream (seq 0 replays everything), and the vitals rail. The
- * rehearsal variant (law 2) branches on the stream's sandbox flag:
+ * rehearsal variant branches on the stream's sandbox flag:
  * graphite/dashed treatment, rehearsal banner, virtual time primary.
  * Production is unlabeled, always.
  */
@@ -112,7 +112,7 @@ export interface PromotionSummary {
 }
 
 /**
- * The promotion block on a rehearsal land report (C8): submit for review,
+ * The promotion block on a rehearsal land report: submit for review,
  * or the request's current standing with a link to the review page.
  */
 function PromotionBlock({
@@ -170,7 +170,7 @@ function PromotionBlock({
   );
 }
 
-/** Fan-out compaction (C7): one group line per helper run, linking through. */
+/** Fan-out compaction: one group line per helper run, linking through to its own detail. */
 function FanoutGroup({ children }: { children: ChildRunLine[] }) {
   return (
     <li className="my-2 rounded-md border border-line-soft bg-field px-3 py-2">

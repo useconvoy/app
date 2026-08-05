@@ -1,5 +1,6 @@
 /**
- * SSE proxy for a run's event stream (CLAUDE.md rule 11). The BFF holds the
+ * SSE proxy for a run's event stream: all SSE reaches the browser through
+ * this route, never directly from the control plane. The BFF holds the
  * bearer and translates the verified session into actor/tenant headers; the
  * browser never talks to the control plane. Frames pipe through unchanged
  * (id:/event:/data:), so the browser's native EventSource resume works: on
@@ -79,6 +80,43 @@ export async function GET(
     return new Response("", { status: 200, headers: STREAM_HEADERS });
   }
 
-  // Pipe the byte stream through untouched: no buffering, no reframing.
-  return new Response(upstream.body, { status: 200, headers: STREAM_HEADERS });
+  return new Response(relay(upstream.body, request.signal), {
+    status: 200,
+    headers: STREAM_HEADERS,
+  });
+}
+
+/**
+ * Pump upstream bytes to the browser untouched: no buffering, no reframing.
+ * A browser that navigates away or closes its EventSource tears the
+ * destination down mid-write, which is ordinary for a live stream and not a
+ * fault: the pump releases the upstream connection and ends quietly rather
+ * than surfacing a write failure.
+ */
+function relay(body: ReadableStream<Uint8Array>, signal: AbortSignal): ReadableStream<Uint8Array> {
+  const reader = body.getReader();
+  const release = () => void reader.cancel().catch(() => undefined);
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      signal.addEventListener("abort", release, { once: true });
+      void (async () => {
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            controller.enqueue(value);
+          }
+          controller.close();
+        } catch {
+          release();
+          try {
+            controller.close();
+          } catch {
+            // The destination is already gone; nothing left to close.
+          }
+        }
+      })();
+    },
+    cancel: release,
+  });
 }

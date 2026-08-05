@@ -2,10 +2,10 @@
  * The pure compatibility computation of the catalog install flow: a
  * routine's capability requirements crossed with a workspace's system
  * grants produce the CompatibilityReport the install screen renders
- * (DESIGN §6: green checks, mapping picker, connect prompts, and the
+ * (green checks, mapping picker, connect prompts, and the
  * "portable except N vendor-specific tools" line).
  *
- * This mirrors the E3 computation the environments service will own;
+ * This mirrors the computation the environments service will own;
  * until it does the website computes the report itself over the typed
  * workspace shape. TODO(environments-E0): replace this module's callers
  * with the service's report once the registry serves one.

@@ -1,5 +1,5 @@
 /**
- * A minimal ZIP encoder for the evidence binder (C10). STORE method only:
+ * A minimal ZIP encoder for the evidence binder. STORE method only:
  * evidence files are small JSON/NDJSON and an uncompressed archive keeps
  * this dependency-free and byte-auditable. Layout per the PKWARE APPNOTE:
  * local file headers + data, then the central directory, then the end

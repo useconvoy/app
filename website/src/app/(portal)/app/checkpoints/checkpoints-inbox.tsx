@@ -1,14 +1,14 @@
 "use client";
 
 /**
- * The Checkpoints inbox (DESIGN §5 law 1, UI-SPEC C4/C11): one list, three
- * typed verbs, never merged. Every card carries exactly one action; plan
+ * The Checkpoints inbox: one list, three typed verbs, never merged.
+ * Every card carries exactly one action; plan
  * approvals submit the version rendered on the card and a 409 flips the
  * card to its newer-version state with a link to the run, never a retry.
  * Answers and resumes render as cleared only after the run confirms via a
  * refetch; the inbox itself never flips run state.
  *
- * Keyboard triage (C11): j/k move a roving focus between cards, A fires
+ * Keyboard triage: j/k move a roving focus between cards, A fires
  * the approve-verb of the focused card (approve plan / resume / focus the
  * answer), E opens the edit affordance (reason or answer field), R opens
  * reject on plan cards with the reason focused. Keys are ignored while
@@ -23,7 +23,7 @@ import { CheckpointCard } from "@/components/CheckpointCard";
 import { EmptyState } from "@/components/EmptyState";
 import { copy, dueInLabel } from "@/lexicon";
 import type { CheckpointItem } from "@/lib/checkpoints/data";
-import type { CommandResult } from "@/lib/runs/command-types";
+import { failureSentence, type CommandResult } from "@/lib/runs/command-types";
 
 export interface InboxCommands {
   resumeRun: (runId: string) => Promise<CommandResult>;
@@ -54,13 +54,6 @@ const IDLE: ItemState = {
   message: null,
 };
 
-function failureSentence(result: CommandResult): string | null {
-  if (result.kind === "refused") return result.message;
-  if (result.kind === "notFound") return "That run cannot be found.";
-  if (result.kind === "conflict") return result.detail;
-  return null;
-}
-
 export function CheckpointsInbox({
   items,
   commands,
@@ -71,7 +64,7 @@ export function CheckpointsInbox({
   const router = useRouter();
   const [states, setStates] = useState<Record<string, ItemState>>({});
   const [focusIndex, setFocusIndex] = useState(0);
-  // The countdown re-renders each minute (C11's live "due in 3h 12m").
+  // The countdown re-renders each minute so "due in 3h 12m" stays live.
   const [now, setNow] = useState(() => Date.now());
   const itemRefs = useRef<Array<HTMLLIElement | null>>([]);
   const answerRefs = useRef(new Map<string, HTMLTextAreaElement>());
@@ -255,7 +248,7 @@ export function CheckpointsInbox({
   );
 }
 
-/** The plan moved: show the newer version's home, never auto-retry (C4). */
+/** The plan moved: show the newer version's home, never auto-retry. */
 function ConflictCard({ item }: { item: CheckpointItem }) {
   return (
     <div

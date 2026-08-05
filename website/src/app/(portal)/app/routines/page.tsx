@@ -11,9 +11,9 @@ import { RoutinesList } from "./RoutinesList";
 export const metadata: Metadata = { title: "Routines" };
 
 /**
- * Routines list (DESIGN §5): every role views; health comes from the
+ * Routines list: every role views; health comes from the
  * latest real run per routine. No "New routine" button in phase 1; the
- * catalog lives behind this list instead (DESIGN §6): staff Operators
+ * catalog lives behind this list instead: staff Operators
  * install published routines, so the only affordance is "Install a
  * routine" under the Operator lens.
  */

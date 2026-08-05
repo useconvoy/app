@@ -1,9 +1,9 @@
 /**
- * Promotion requests (C8): a rehearsal run's land report submitted for a
+ * Promotion requests: a rehearsal run's land report submitted for a
  * person to review before anything goes live. The request is website-side
  * state, keyed org + routine + run so resubmitting is idempotent.
  *
- * Storage is in-process for W2, like the run directory it accompanies.
+ * Storage is in-process for now, like the run directory it accompanies.
  * TODO(website): decide durable storage (a website table under RLS, or a
  * runtime-side promotion object) before multi-instance deployment; the
  * accessors below are the seam.

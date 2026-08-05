@@ -1,7 +1,7 @@
 /**
- * POST /api/webhooks/stripe: the one writer of billing_accounts
- * (DESIGN §8, invoice-first D11). Plan and status arrive here by webhook;
- * the site itself never mutates them.
+ * POST /api/webhooks/stripe: the one writer of billing_accounts. Billing
+ * is invoice-first Stripe: plan and status arrive here by webhook; the
+ * site itself never mutates them.
  *
  * Trust model: the signature over the raw body (STRIPE_WEBHOOK_SECRET)
  * authenticates the event; the org comes from metadata.org_id, which
@@ -10,8 +10,8 @@
  * round-trip). That signed, staff-written metadata is the one org context
  * not derived from a session. Unknown events and unknown orgs are
  * acknowledged with 200 and ignored, so Stripe never retries them; a bad
- * signature is a 400. Nothing about the request is logged (iron rule 10:
- * no secrets in logs; the signature header and body stay out of them).
+ * signature is a 400. Nothing about the request is logged: secrets never
+ * touch logs, so the signature header and body stay out of them.
  */
 import type Stripe from "stripe";
 import { NextResponse } from "next/server";

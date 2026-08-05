@@ -1,6 +1,6 @@
 /**
- * Server actions for org policies and notification defaults (DESIGN §5
- * Admin row, §9). Org and actor derive from the verified session, the
+ * Server actions for org policies and notification defaults.
+ * Org and actor derive from the verified session, the
  * manage_org_settings cell of the permissions matrix is re-checked
  * server-side, shapes are zod-validated, and the cores write admin_audit
  * rows transactionally.
@@ -45,7 +45,7 @@ export async function updateOrgPolicies(policies: OrgPolicies): Promise<void> {
 
 /**
  * Save the org notification defaults. v1 keeps in_app fixed on for every
- * class (D6: in-app only), so the action normalizes whatever arrives to
+ * class (v1 channels are in-app only), so the action normalizes whatever arrives to
  * that shape; the schema stays wider so email/Slack are a dispatcher away.
  */
 export async function updateNotificationDefaults(): Promise<void> {

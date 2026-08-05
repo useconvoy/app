@@ -23,7 +23,7 @@ import {
 } from "@/lib/orgs/validation";
 
 describe("role validation", () => {
-  it("accepts exactly the four DESIGN §2 roles", () => {
+  it("accepts exactly the four roles", () => {
     expect(ROLES).toEqual(["admin", "operator", "member", "viewer"]);
     for (const role of ROLES) expect(isRole(role)).toBe(true);
   });

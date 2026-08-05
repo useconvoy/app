@@ -1,7 +1,7 @@
 /**
  * Feedback stream: what people said about a run or a routine, newest
  * first. Each item shows the author, the kind, the words, a friendly date,
- * and a quiet learning-status chip so the D12 lifecycle is visible without
+ * and a quiet learning-status chip so the learning lifecycle is visible without
  * shouting ("Noted" -> "Queued for learning" -> "Applied").
  */
 import { Chip } from "@/components/Chip";

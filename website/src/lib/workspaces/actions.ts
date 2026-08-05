@@ -1,6 +1,6 @@
 /**
- * Server actions for workspace management (Admin/Operator surface,
- * DESIGN §2). Org and actor derive from the verified session; the
+ * Server actions for workspace management, an Admin/Operator-only
+ * surface. Org and actor derive from the verified session; the
  * permissions matrix is re-checked server-side; workspace management is
  * administrative, so every mutation writes an admin_audit row with actor
  * attribution. The workspace itself lands in the environments fixture

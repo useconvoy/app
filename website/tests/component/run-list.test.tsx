@@ -42,7 +42,7 @@ const rows: RunListRow[] = [
 ];
 
 describe("RunsList", () => {
-  it("renders run, status, progress, and spent columns without run ids (law 3)", () => {
+  it("renders run, status, progress, and spent columns without run ids", () => {
     render(<RunsList rows={rows} />);
     const row = screen.getByText(accessReview.name).closest("tr") as HTMLElement;
     expect(within(row).getByText("Running")).toBeInTheDocument();
@@ -88,7 +88,7 @@ describe("RunsList", () => {
     expect(screen.queryByText(accessReview.name)).not.toBeInTheDocument();
   });
 
-  it("gives rehearsal rows the pencil treatment and label (law 2)", () => {
+  it("gives rehearsal rows the pencil treatment and label", () => {
     render(<RunsList rows={rows} />);
     const rehearsalRow = screen.getByText(attestation.name).closest("tr");
     expect(rehearsalRow).toHaveAttribute("data-rehearsal", "true");
@@ -119,7 +119,7 @@ describe("RunsList", () => {
 });
 
 describe("RunsLoading", () => {
-  it("renders a list skeleton, never a full-page spinner (C5)", () => {
+  it("renders a list skeleton, never a full-page spinner", () => {
     render(<RunsLoading />);
     expect(screen.getByRole("status", { name: "Loading" })).toBeInTheDocument();
   });

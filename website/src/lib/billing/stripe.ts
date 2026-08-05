@@ -1,7 +1,8 @@
 /**
- * Env-gated Stripe access (DESIGN §8, invoice-first D11). The secret key
+ * Env-gated Stripe access; billing is invoice-first. The secret key
  * never leaves process.env: it is read here, handed to the SDK, and never
- * logged, rendered, or stored (iron rule 10). When STRIPE_SECRET_KEY is
+ * logged, rendered, or stored: secrets never touch website code or the
+ * website DB. When STRIPE_SECRET_KEY is
  * absent the whole billing surface degrades to the plain "handled by your
  * Convoy contact" state instead of erroring.
  */

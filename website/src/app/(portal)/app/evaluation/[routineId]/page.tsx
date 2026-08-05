@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: "Routine evaluation" };
 /**
  * Per-routine evaluation detail: the trend large, per-run scorecards with
  * labeled pass/fail criteria, and the trajectories behind them with
- * rehearsal rows in the pencil treatment (law 2). All reads go through the
+ * rehearsal rows in the graphite dashed pencil treatment. All reads go through the
  * typed evals client. TODO(evals).
  */
 export default async function EvaluationDetailPage({

@@ -1,5 +1,5 @@
 /**
- * Evidence binder assembly (C10): one zip per run with a manifest whose
+ * Evidence binder assembly: one zip per run with a manifest whose
  * checksums make the export self-verifying. File names inside the archive
  * are plain (manifest.json, run-summary.json, events.ndjson,
  * land-report.json); internal identifiers appear inside the manifest only.

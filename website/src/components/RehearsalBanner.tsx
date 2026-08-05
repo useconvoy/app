@@ -5,7 +5,7 @@ export interface RehearsalBannerProps {
   exitHref: string;
 }
 
-/** The persistent frame around rehearsal context (law 2): graphite, dashed. */
+/** The persistent frame that makes rehearsal context unmistakable: graphite, dashed. */
 export function RehearsalBanner({ exitHref }: RehearsalBannerProps) {
   return (
     <aside

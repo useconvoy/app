@@ -8,7 +8,7 @@ export interface ErrorBlockProps {
   action?: ReactNode;
 }
 
-/** Errors say what happened and what to do; never a bare failure (C5). */
+/** Errors say what happened and what to do; never a bare failure message. */
 export function ErrorBlock({ whatHappened, whatToDo, action }: ErrorBlockProps) {
   return (
     <div role="alert" className="rounded-lg border border-fail-soft bg-fail-soft p-4">

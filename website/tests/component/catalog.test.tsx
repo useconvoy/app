@@ -1,5 +1,5 @@
 /**
- * Catalog surfaces (DESIGN §6): storefront cards from the storefront
+ * Catalog surfaces: storefront cards from the storefront
  * jsonb with the quiet update-available chip, and the compatibility
  * report's four states: all green, mapping needed, connect prompt, and
  * the vendor-specific portability line.

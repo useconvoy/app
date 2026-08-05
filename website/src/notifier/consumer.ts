@@ -3,7 +3,7 @@
  * rules times routing, write notifications exactly once, and keep the
  * open_gates table current for the deadline sweep.
  *
- * Iron rule 9 discipline: this module (plus sweep.ts) is the ONLY writer of
+ * Single-writer discipline: this module (plus sweep.ts) is the ONLY writer of
  * notifications. Every insert is idempotent on (event_id, user_id) via
  * ON CONFLICT DO NOTHING, and the org cursor only ever moves forward
  * (GREATEST), never backward, in the same transaction as the writes it
@@ -20,7 +20,7 @@ import { candidatesForEvent, type NotificationCandidate } from "./rules";
 import { loadRoutingWorld, resolveRecipients, type RoutingWorld } from "./routing";
 
 export interface ConsumerOptions {
-  /** Run id -> routine id; defaults to the W1 run directory seam. */
+  /** Run id -> routine id; defaults to the run directory seam in src/lib/api/runs. */
   resolveRoutineId?: (runId: string) => string | undefined;
 }
 
@@ -159,11 +159,10 @@ export async function consumerTick(
 }
 
 /**
- * Direct enqueue for the promotion review flow, which is website-side (W2)
+ * Direct enqueue for the promotion review flow, which is website-side
  * and has no runtime event to consume. Routes to promoter-capability
- * members. Idempotent on the synthetic event id, so the flow may call it
- * on every submit. TODO(website-W2): wire this into the promotion submit
- * action.
+ * members. Idempotent on the synthetic event id, so the promotion submit
+ * action calls it on every submit.
  */
 export async function notifyPromotionRequested(
   orgId: string,
@@ -184,9 +183,9 @@ export async function notifyPromotionRequested(
 }
 
 /**
- * Direct enqueue for the learning packet: an improvement backed by `runId`
- * is ready to review. No source emits this yet. TODO(website-W5): call
- * from the improvements pipeline when it lands.
+ * Direct enqueue for an improvement backed by `runId` that is ready to
+ * review. No source emits this yet. TODO(learning): call this from the
+ * improvements pipeline when it exists.
  */
 export async function notifyImprovementReady(
   orgId: string,

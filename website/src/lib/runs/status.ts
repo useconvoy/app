@@ -26,7 +26,7 @@ export interface RunStreamEvent {
   payload: Record<string, unknown>;
 }
 
-/** The three stuck states (DESIGN §5 law 1), each with its own typed verb. */
+/** The three stuck states, each with its own typed verb. */
 export type HeldKind = "paused" | "awaiting_approval" | "blocked_on_human";
 
 const HELD_KINDS: readonly HeldKind[] = ["paused", "awaiting_approval", "blocked_on_human"];
@@ -97,7 +97,7 @@ export function latestLandReport(
   return fallback;
 }
 
-/** Rehearsal context comes from the stream itself (law 2). */
+/** Rehearsal context comes from the stream itself, never from the URL or props. */
 export function isRehearsal(events: readonly RunStreamEvent[], fallback = false): boolean {
   return events.length > 0 ? events[0]!.sandbox === true : fallback;
 }
@@ -224,7 +224,7 @@ export interface ChildRunLine {
 }
 
 /**
- * Fan-out compaction (C7): child_spawned/child_landed pairs merge into one
+ * Fan-out compaction: child_spawned/child_landed pairs merge into one
  * line per child, grouped under the parent's group step.
  */
 export function childRuns(events: readonly RunStreamEvent[]): ChildRunLine[] {

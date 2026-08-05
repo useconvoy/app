@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Audit log" };
 const PAGE_SIZE = 50;
 
 /**
- * The org audit log surface (DESIGN §5 Admin row, §9): admin_audit rows
+ * The org audit log surface, admin-only: admin_audit rows
  * newest first, filterable by action prefix through a plain GET form,
  * paginated with simple limit/offset links.
  */

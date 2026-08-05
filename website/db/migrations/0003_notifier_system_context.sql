@@ -1,4 +1,4 @@
--- W3 notifier support. Two additive pieces; nothing in 0001/0002 is
+-- Notifier support. Two additive pieces; nothing in 0001/0002 is
 -- rewritten or weakened.
 --
 -- Constraint 1: the notifier worker iterates every organization to run its

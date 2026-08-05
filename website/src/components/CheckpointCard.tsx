@@ -21,7 +21,11 @@ export interface CheckpointAssignee {
 }
 
 export interface CheckpointCardProps {
-  /** One of the three stuck states; picks the one typed verb (law 1). */
+  /**
+   * One of the three stuck states; picks the one typed verb (paused ->
+   * resume, awaiting approval -> approve plan, blocked on human ->
+   * respond). Never a merged or generic action.
+   */
   kind: CheckpointKind;
   /** What is being asked, as a plain sentence. */
   prompt: string;
@@ -39,7 +43,7 @@ export interface CheckpointCardProps {
   onAction?: () => void;
   /**
    * Inline detail below the card body: deadline countdown, the respond
-   * field, or a reject-reason affordance (W2 inbox). Renders above the
+   * field, or a reject-reason affordance. Renders above the
    * action row so the one typed verb stays the card's last word.
    */
   children?: ReactNode;

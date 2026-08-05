@@ -13,7 +13,7 @@ import { catalogCopy, grantLabels } from "@/lexicon";
 export const metadata: Metadata = { title: "Catalog" };
 
 /**
- * Entry detail (DESIGN §6): the storefront description, what the routine
+ * Entry detail: the storefront description, what the routine
  * needs in plain language, the test score floor ("ships only above 85"),
  * and the changelog of published snapshots. Install hangs off the header;
  * the pinned-version and update-available states render quietly.

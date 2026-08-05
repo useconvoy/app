@@ -1,4 +1,4 @@
--- Website schema (DESIGN §3): identity/org structure, notifications,
+-- Website schema: identity/org structure, notifications,
 -- feedback capture, catalog, billing, and the website-side audit trail.
 -- Every org-scoped table carries RLS keyed to the per-transaction org
 -- context; the app connects as convoy_website_app, which cannot bypass RLS.
@@ -132,7 +132,7 @@ CREATE TABLE notification_prefs (
 );
 
 -- Website-side capture of the shared core/ Feedback shape, consumed by
--- learning/ (D12). learning_status tracks the handoff lifecycle.
+-- learning/. learning_status tracks the handoff lifecycle.
 CREATE TABLE feedback (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id          uuid NOT NULL REFERENCES organizations(id),
@@ -160,7 +160,7 @@ CREATE TABLE catalog_entries (
   created_at              timestamptz NOT NULL DEFAULT now()
 );
 
--- Invoice-first Stripe (D11): plan and status arrive by webhook; invoices
+-- Invoice-first Stripe: plan and status arrive by webhook; invoices
 -- and payment methods live behind Stripe-hosted surfaces.
 CREATE TABLE billing_accounts (
   org_id             uuid PRIMARY KEY REFERENCES organizations(id),

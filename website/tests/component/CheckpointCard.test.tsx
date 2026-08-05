@@ -89,7 +89,7 @@ describe("CheckpointCard", () => {
     expect(onAction).toHaveBeenCalledTimes(1);
   });
 
-  it("renders inline detail children above the action row (W2 inbox)", () => {
+  it("renders inline detail children above the action row", () => {
     render(
       <CheckpointCard {...base} kind="blocked_on_human">
         <p>due in 3h 12m</p>

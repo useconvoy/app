@@ -1,5 +1,5 @@
 /**
- * Land report + promotion review (C8): the report's plain-language
+ * Land report + promotion review: the report's plain-language
  * sections, the stand-in outbox rows derived from the run's own records,
  * and the promoter gating on the decision (as props; the server action
  * enforces for real).

@@ -190,7 +190,7 @@ export interface AuditPage {
 }
 
 /**
- * The org audit surface (DESIGN §5 Admin row, §9): admin_audit newest
+ * The org audit surface, admin-only: admin_audit newest
  * first, filterable by action prefix, actor names resolved through the
  * shared-org users policy. Simple limit/offset pagination; one extra row
  * is fetched to learn whether an older page exists.
