@@ -11,6 +11,7 @@ watches to resume parked missions.
 
 from __future__ import annotations
 
+import os
 import uuid
 from typing import Any, Dict, List, Literal, Optional
 
@@ -41,6 +42,11 @@ def _id(prefix: str) -> str:
 class CreateWorkspace(BaseModel):
     name: str
     creatorEmail: str
+
+
+class CreateMembership(BaseModel):
+    email: str
+    role: Literal["admin", "builder", "member"]
 
 
 class CreateConnection(BaseModel):
@@ -76,9 +82,19 @@ class CreateGrant(BaseModel):
 
 
 def build_console_app(session_factory, secrets: SecretsService,
-                      auth: Optional[ConsoleAuth] = None) -> FastAPI:
+                      auth: Optional[ConsoleAuth] = None,
+                      provisioning_token: Optional[str] = None) -> FastAPI:
     app = FastAPI(title="convoy-console-api")
     auth = auth or ConsoleAuth()
+    provisioning = provisioning_token if provisioning_token is not None else os.environ.get(
+        "CONVOY_INTERNAL_TOKEN", "")
+
+    def provisioning_dep(x_convoy_internal: str = Header(default="")) -> None:
+        """Workspace creation is a provisioning act (it corresponds to a
+        stamped stack), not a self-serve signup — same fail-closed shared
+        secret the gateway's internal surface uses."""
+        if not provisioning or x_convoy_internal != provisioning:
+            raise HTTPException(401, "workspace creation requires the provisioning token")
 
     def user_dep(authorization: str = Header(default=""),
                  x_convoy_user: str = Header(default="")) -> str:
@@ -93,7 +109,7 @@ def build_console_app(session_factory, secrets: SecretsService,
     # -- workspaces --------------------------------------------------------
 
     @app.post("/workspaces")
-    async def create_workspace(req: CreateWorkspace):
+    async def create_workspace(req: CreateWorkspace, _: None = Depends(provisioning_dep)):
         with session_factory() as s:
             ws = Workspace(id=_id("ws"), name=req.name)
             user = s.query(User).filter_by(email=req.creatorEmail).one_or_none()
@@ -105,6 +121,41 @@ def build_console_app(session_factory, secrets: SecretsService,
             _audit(s, ws.id, user.id, "workspace.create", "workspace", ws.id)
             s.commit()
             return {"workspaceId": ws.id, "userId": user.id}
+
+    # -- memberships -------------------------------------------------------
+
+    @app.post("/workspaces/{workspace_id}/memberships")
+    async def upsert_membership(workspace_id: str, req: CreateMembership,
+                                user: str = Depends(user_dep)):
+        """Invite-by-email: creates (or reuses) the user row and attaches the
+        workspace role. The invitee gets access the moment they first log in
+        through WorkOS with this email (auth.py links idp_subject then) — no
+        email delivery in this layer; the website owns notifications."""
+        with session_factory() as s:
+            require_workspace_role(s, workspace_id, user, "admin")
+            invitee = s.query(User).filter_by(email=req.email).one_or_none()
+            if invitee is None:
+                invitee = User(id=_id("usr"), email=req.email)
+                s.add(invitee)
+            existing = s.get(Membership, (workspace_id, invitee.id))
+            if existing is not None:
+                existing.role = req.role
+            else:
+                s.add(Membership(workspace_id=workspace_id, user_id=invitee.id, role=req.role))
+            _audit(s, workspace_id, user, "membership.upsert", "membership",
+                   "%s:%s" % (workspace_id, invitee.id), {"email": req.email, "role": req.role})
+            s.commit()
+            return {"userId": invitee.id, "email": invitee.email, "role": req.role,
+                    "linked": invitee.idp_subject is not None}
+
+    @app.get("/workspaces/{workspace_id}/memberships")
+    async def list_memberships(workspace_id: str, user: str = Depends(user_dep)):
+        with session_factory() as s:
+            require_workspace_role(s, workspace_id, user, "member")
+            rows = (s.query(Membership, User).join(User, User.id == Membership.user_id)
+                    .filter(Membership.workspace_id == workspace_id).all())
+            return [{"userId": u.id, "email": u.email, "role": m.role,
+                     "linked": u.idp_subject is not None} for m, u in rows]
 
     # -- connections -------------------------------------------------------
 
