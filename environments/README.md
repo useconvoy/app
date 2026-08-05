@@ -20,7 +20,7 @@ Spec: `convoy-environments-spec.md` (Desktop, v0.1 + settled decisions). Contrac
 | `schema/` | control-plane Pydantic models, canonical `manifest_hash` / `policy_hash` |
 | `db/` | SQLAlchemy tables (spec §3) + the shared `events` table (the DDL proposal) + `SqlEventLog` honoring the agent-evals EventLog contract |
 | `secrets/` | write-only secrets service; builtin envelope-encryption backend (1Password/KMS slots later) |
-| `connectors/` | slack, notion, github (token-based) + `mcp_custom` (BYO remote MCP; unannotated tools default to promoted + side-effecting) |
+| `connectors/` | slack, notion, github (token-based), google (service-account JWT grant: Drive list, Sheets read/append) + `mcp_custom` (BYO remote MCP; unannotated tools default to promoted + side-effecting) |
 | `gateway/` | per-run JWTs, policy engine (fail-closed on manifest drift), GatewayService, MCP termination, binding registry, credential leases |
 | `console_api/` | workspaces, connections, versioned environments, grants (viewer/operator/env_admin) |
 | `devbox/` | `convoy-egress-proxy` (in-sandbox, secret-free) + `convoy-fill-sidecar` (trusted stack service) |
