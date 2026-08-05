@@ -1,0 +1,21 @@
+{
+  "run_id": "run-golden-2",
+  "step_id": "step-1",
+  "turn": 5,
+  "step_turns": 5,
+  "now": "2026-08-04T10:00:00+00:00",
+  "pinned_ref_key": "runs/run-golden-2/pinned/turn-5.json",
+  "steers_drained": [],
+  "turns": [
+    {"role": "user", "content": "execute step step-1 (turn 1)"},
+    {"role": "assistant", "content": "echo: step step-1 turn 1"},
+    {"role": "user", "content": "execute step step-1 (turn 2)"},
+    {"role": "assistant", "content": "echo: step step-1 turn 2"},
+    {"role": "user", "content": "execute step step-1 (turn 3)"},
+    {"role": "assistant", "content": "echo: step step-1 turn 3"},
+    {"role": "user", "content": "execute step step-1 (turn 4)"},
+    {"role": "assistant", "content": "echo: step step-1 turn 4"},
+    {"role": "user", "content": "execute step step-1 (turn 5)"},
+    {"role": "assistant", "content": "echo: step step-1 turn 5"}
+  ]
+}

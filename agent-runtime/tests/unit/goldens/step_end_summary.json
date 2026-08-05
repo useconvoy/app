@@ -1,0 +1,33 @@
+{
+  "archive_ref": {
+    "bucket": "convoy-test",
+    "content_type": "application/json",
+    "key": "runs/run-golden-1/transcripts/step-1/turn-4.json",
+    "sha256": "f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
+    "size_bytes": 7
+  },
+  "decisions": [
+    "assessed steer(s) steer-1: plan_already_covers",
+    "promoted tool kb_delete executed (key 0123456789ab)"
+  ],
+  "findings": [
+    "echo: step step-1 turn 1",
+    "echo: step step-1 turn 2",
+    "echo: step step-1 turn 3"
+  ],
+  "headline": "Completed step-1: Investigate: the Q3 close",
+  "open_questions": [
+    "Is the Q3 restatement final?"
+  ],
+  "output_refs": [
+    {
+      "bucket": "convoy-test",
+      "content_type": "application/json",
+      "key": "runs/run-golden-1/outputs/step-1.json",
+      "sha256": "f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
+      "size_bytes": 7
+    }
+  ],
+  "run_id": "run-golden-1",
+  "step_id": "step-1"
+}
