@@ -22,7 +22,9 @@
  * gate_answered actor, not a notification concern). Each person receives at
  * most one notification per event regardless of how many routes hit them.
  * notification_prefs filter last: a class row without "in_app" suppresses;
- * no row means in-app stays on (D6 default).
+ * without a row, the org's stored default channels for the class apply
+ * (organizations.settings.notification_defaults, W6 admin close-out), and
+ * with neither, in-app stays on (D6 default). Personal choices always win.
  */
 import type { PoolClient } from "pg";
 
@@ -56,6 +58,12 @@ export interface RoutingWorld {
   teamMembers: Map<string, string[]>;
   members: MemberRow[];
   prefs: PrefRow[];
+  /**
+   * Org default channels for the class being routed, from
+   * organizations.settings.notification_defaults; absent or null means no
+   * default is stored and in-app stays on.
+   */
+  defaultChannels?: string[] | null;
 }
 
 const CLASS_RELATIONSHIPS: Record<NotificationClass, Relationship[] | "promoters"> = {
@@ -81,7 +89,11 @@ function inAppEnabled(world: RoutingWorld, userId: string, cls: NotificationClas
   const pref = world.prefs.find(
     (row) => row.userId === userId && row.notificationClass === cls,
   );
-  return pref ? pref.channels.includes("in_app") : true;
+  if (pref) return pref.channels.includes("in_app");
+  // No personal row: the org's stored default for the class decides;
+  // no stored default keeps in-app on (D6).
+  if (world.defaultChannels) return world.defaultChannels.includes("in_app");
+  return true;
 }
 
 /**
@@ -192,5 +204,19 @@ export async function loadRoutingWorld(
     )
   ).rows;
 
-  return { assignments, teamMembers, members, prefs };
+  // Org default channels for the class (W6): the fallback when a person
+  // has no prefs row. The organizations row is visible to the notifier's
+  // org context through the id = app_org_id() select policy.
+  const { rows: defaultsRows } = await client.query<{ channels: unknown }>(
+    `SELECT settings -> 'notification_defaults' -> $2 AS channels
+       FROM organizations WHERE id = $1`,
+    [orgId, cls],
+  );
+  const storedDefault = defaultsRows[0]?.channels;
+  const defaultChannels =
+    Array.isArray(storedDefault) && storedDefault.every((channel) => typeof channel === "string")
+      ? (storedDefault as string[])
+      : null;
+
+  return { assignments, teamMembers, members, prefs, defaultChannels };
 }

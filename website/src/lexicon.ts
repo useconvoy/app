@@ -77,6 +77,16 @@ export const checkpointKinds = {
     verb: "Respond",
     description: "This run asked a question and is holding until someone answers.",
   },
+  /**
+   * The promotion review is the fourth inbox item kind (C8): not a stuck
+   * run but a rehearsal result waiting for a person before anything goes
+   * live. It keeps the same one-verb discipline as the other three.
+   */
+  promotion: {
+    label: "Promotion review",
+    verb: "Review",
+    description: "Look over rehearsal results before anything goes live.",
+  },
 } as const;
 
 export type CheckpointKind = keyof typeof checkpointKinds;
@@ -219,7 +229,79 @@ export const copy = {
     `Connects ${systems} ${systems === 1 ? "system" : "systems"} · used by ${routines} ${
       routines === 1 ? "routine" : "routines"
     }`,
+  // Run controls (W2): pause/resume/land, the steer composer, clock.
+  pauseAction: "Pause",
+  landAction: "Land",
+  steerNote: "Note",
+  steerRedirect: "Redirect",
+  steerExplainer: "A redirect may propose a plan revision.",
+  steerBodyLabel: "Guidance for this run",
+  sendGuidance: "Send guidance",
+  guidanceSent: "Guidance sent",
+  advanceClock: "Advance clock",
+  advanceClockLabel: "Move rehearsal time to",
+  plusOneDay: "+1 day",
+  plusOneWeek: "+1 week",
+  answerAtVirtual: "Answer at a moment in rehearsal time",
+  answerAtVirtualLabel: "Rehearsal moment",
+  responseLabel: "Your answer",
+  rejectReasonLabel: "What should change",
+  rejectReasonRequired: "Say what should change before sending a plan back.",
+  // Checkpoints inbox (W2): triage keys, conflict flips, sent state.
+  triageKeysHint: "Keys: j next · k previous · A approve · E edit · R reject",
+  reviewNewerOnRun: "Review the newer version",
+  checkpointsIntro: "Everything waiting on a person, each with its one action.",
+  actionSent: "Sent. This clears once the run confirms.",
+  // Land report + promotion review (C8).
+  landReportTitle: "Land report",
+  outcomeTitle: "Outcome",
+  outcomeLanded: (goal: string) => `Finished: ${goal}`,
+  outcomeNotLanded: (goal: string) => `Stopped before finishing: ${goal}`,
+  stepsSummary: (done: number, failed: number, skipped: number) =>
+    `${done} done · ${failed} failed · ${skipped} skipped`,
+  exceptionsTitle: "Exceptions",
+  noExceptions: "No exceptions",
+  filesTitle: "Files",
+  spendVsCapTitle: "Spend",
+  outboxWhat: "What",
+  outboxWhere: "To whom or where",
+  outboxContent: "What would have gone out",
+  outboxDerivedNote: "Worked out from the run's steps and files.",
+  outboxContentHeld: "Content held by the platform",
+  outboxKeptWithFiles: "Kept with the run's files",
+  outboxOutsideWorld: "Outside this organization, held by the stand-in",
+  submitForPromotion: "Submit for promotion",
+  promotionRequestedNote: "Promotion requested. A promoter will look it over.",
+  promotionReviewTitle: "Promotion review",
+  promotionNeedsPromoter: "Promoting needs a promoter.",
+  sendBackNoteLabel: "What should change before this goes live",
+  sendBackNoteRequired: "Say what should change before sending this back.",
+  notTiedToRoutine: "This run is not tied to a routine, so there is nothing to promote.",
+  viewersCannotAct: "Viewers cannot act on runs.",
+  assignedToSomeoneElse: "This run's routine is assigned to someone else.",
+  rehearsalOnlyAnswerAt: "Scheduled answers only work on rehearsal runs.",
+  platformRefused: "The platform did not accept this action.",
 } as const;
+
+/** Promotion request lifecycle as users see it. */
+export const promotionStatusLabels = {
+  requested: "Waiting for review",
+  promoted: "Promoted",
+  sent_back: "Sent back",
+} as const;
+
+export type PromotionStatus = keyof typeof promotionStatusLabels;
+
+/**
+ * Live deadline countdown once a checkpoint is under a day out, e.g.
+ * "due in 3h 12m". The inbox re-renders it each minute.
+ */
+export function dueInLabel(minutesLeft: number): string {
+  if (minutesLeft <= 0) return "past due";
+  const hours = Math.floor(minutesLeft / 60);
+  const minutes = minutesLeft % 60;
+  return hours > 0 ? `due in ${hours}h ${minutes}m` : `due in ${minutes}m`;
+}
 
 /** Format a checkpoint age for cards and lists, e.g. "HELD 26M". */
 export function heldAgeLabel(minutes: number): string {

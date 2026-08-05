@@ -175,6 +175,48 @@ export interface InvitePreview {
   expiresAt: Date;
 }
 
+export interface AuditEntryRow {
+  id: string;
+  action: string;
+  subject: string;
+  ts: Date;
+  /** Resolved actor name; null when the actor left the org. */
+  actorName: string | null;
+}
+
+export interface AuditPage {
+  entries: AuditEntryRow[];
+  hasMore: boolean;
+}
+
+/**
+ * The org audit surface (DESIGN §5 Admin row, §9): admin_audit newest
+ * first, filterable by action prefix, actor names resolved through the
+ * shared-org users policy. Simple limit/offset pagination; one extra row
+ * is fetched to learn whether an older page exists.
+ */
+export async function listAuditEntries(
+  orgId: string,
+  options: { actionPrefix?: string; limit?: number; offset?: number } = {},
+): Promise<AuditPage> {
+  const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+  const offset = Math.max(options.offset ?? 0, 0);
+  const prefix = options.actionPrefix?.trim() || null;
+  return withOrgContext({ orgId }, async (client) => {
+    const { rows } = await client.query<AuditEntryRow>(
+      `SELECT a.id, a.action, a.subject, a.ts, u.name AS "actorName"
+         FROM admin_audit a
+         LEFT JOIN users u ON u.id = a.actor_id
+        WHERE a.org_id = $1
+          AND ($2::text IS NULL OR a.action LIKE $2 || '%')
+        ORDER BY a.ts DESC
+        LIMIT $3 OFFSET $4`,
+      [orgId, prefix, limit + 1, offset],
+    );
+    return { entries: rows.slice(0, limit), hasMore: rows.length > limit };
+  });
+}
+
 /**
  * Resolve an invite link for the signed-in user, before membership exists.
  * Visibility is scoped to the presented token via the transaction-local
