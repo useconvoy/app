@@ -283,6 +283,97 @@ export const notificationSettingsCopy = {
   save: "Save preferences",
 } as const;
 
+/**
+ * Catalog copy (DESIGN §6). Product vocabulary only: routines, systems,
+ * workspaces, test scores. The stored eval_thresholds column never reaches
+ * the screen by that name; users see a "test score floor".
+ */
+export const catalogCopy = {
+  title: "Catalog",
+  intro: "Routines published by Convoy, ready to install into one of your workspaces.",
+  installRoutine: "Install a routine",
+  publishAction: "Publish to catalog",
+  publishTitle: "Publish a routine",
+  publishIntro:
+    "Publishing takes a snapshot of the routine and puts it on the storefront for every organization.",
+  whatItNeeds: "What it needs",
+  testScoreFloorLabel: "Test score floor",
+  testScoreFloor: (score: number) => `Ships only above ${score}`,
+  updateAvailable: "Update available",
+  installedPinned: (version: number) => `Installed · pinned to v${version}`,
+  chooseWorkspace: "Choose a workspace",
+  chooseWorkspaceHint: "Pick the workspace this routine should work inside.",
+  compatibilityTitle: "How it fits this workspace",
+  allGreen: "Everything this routine needs is already connected.",
+  connectedCheck: (system: string) => `${system} is connected`,
+  needsMapping: (system: string) => `Choose which ${system} this routine should use`,
+  connectFirst: (system: string) => `Connect ${system} first`,
+  portableExcept: (count: number) =>
+    `Portable except ${count} vendor-specific ${count === 1 ? "tool" : "tools"}`,
+  fullyPortable: "Fully portable across vendors",
+  installPinned: (version: number) => `Install pinned to v${version}`,
+  installBlocked: "Connect the missing systems before installing.",
+  installedNote:
+    "Installed. This routine appears on the routines list once its workspace wiring lands.",
+  changelogTitle: "Changelog",
+  versionChip: (version: number) => `v${version}`,
+  publishedBy: (publisher: string) => `Published by ${publisher}`,
+  emptyTitle: "Nothing on the storefront yet",
+  emptyBody: "Published routines appear here for every organization to install.",
+} as const;
+
+/** Billing copy (DESIGN §8, invoice-first Stripe D11). */
+export const billingCopy = {
+  title: "Billing",
+  intro: "Your plan, invoices, and payment details.",
+  handledByConvoy: "Billing is handled by your Convoy contact.",
+  managePayment: "Manage payment details",
+  invoicesTitle: "Invoices",
+  planLabel: "Plan",
+  statusLabel: "Status",
+  noPlanYet: "No plan on file yet",
+  sampleInvoicesNote: "Sample invoices are shown until billing is connected.",
+  noInvoicesYet: "No invoices yet",
+  viewInvoice: "View invoice",
+} as const;
+
+/** Admin close-out copy: policies, API access, org audit (DESIGN §5, §9). */
+export const adminCopy = {
+  policiesTitle: "Policies",
+  policiesIntro: "Budget defaults and export rules for this organization.",
+  defaultRunBudgetCap: "Default budget per run",
+  defaultRunBudgetCapHint: "New routines start with this cap unless one is set for them.",
+  monthlySpendNotice: "Monthly spend notice",
+  monthlySpendNoticeHint: "Admins hear about it when monthly spend passes this amount.",
+  viewerEvidenceExport: "Viewers can export the evidence binder",
+  viewerEvidenceExportHint: "Turn this off to limit exports to members and above.",
+  savePolicies: "Save policies",
+  policiesSaved: "Policies saved.",
+  amountInvalid: "Enter an amount above zero",
+  noticeBelowCap: "The spend notice should not be below the per-run cap",
+  apiAccessTitle: "API access",
+  apiAccessIntro: "How this organization reaches the Convoy platform.",
+  apiAccessPhase1:
+    "During phase 1, access to the platform is managed by Convoy. Every call your organization makes travels through Convoy's bridge identity, so there are no keys to create, copy, or rotate here.",
+  apiAccessNoKeys: "No key material is ever shown or stored on this site.",
+  apiAccessSelfServe: "Self-serve keys arrive when sign-in reaches the platform edge directly.",
+  controlPlaneUrlLabel: "Platform address",
+  notificationDefaultsTitle: "Notification defaults",
+  notificationDefaultsIntro:
+    "Defaults for people who have not chosen their own notification preferences. Personal choices always win.",
+  inAppFixedOn: "In app, always on",
+  saveDefaults: "Save defaults",
+  auditTitle: "Audit log",
+  auditIntro: "Administrative actions taken on this site: who did what, and when.",
+  auditFilterLabel: "Filter by action",
+  auditFilterHint: "Start of an action name, like member or catalog",
+  auditApplyFilter: "Filter",
+  auditEmpty: "No entries match",
+  auditFormerMember: "Former member",
+  auditNewer: "Newer",
+  auditOlder: "Older",
+} as const;
+
 /** Feedback kinds (DESIGN §3) as users pick them in the composer. */
 export const feedbackKindLabels = {
   rating: "Helpful",

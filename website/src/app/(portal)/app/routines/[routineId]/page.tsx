@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { evalsClient } from "@/lib/api/evals";
+import { learningClient } from "@/lib/api/learning";
+import { submitFeedbackForm } from "@/lib/feedback/actions";
+import { listFeedbackForRoutine } from "@/lib/feedback/queries";
 import { listMembers, listTeams } from "@/lib/orgs/queries";
 import { can } from "@/lib/permissions";
 import {
@@ -39,9 +43,25 @@ export default async function RoutineDetailPage({
   const canAssignApprovers = can("edit_routines_rehearsal", membership.role, membership.capabilities);
   const canRunNow = can("trigger_production_run", membership.role, membership.capabilities);
   const canEditTriggers = can("promote", membership.role, membership.capabilities);
+  const canGiveFeedback = can("give_feedback", membership.role, membership.capabilities);
   const [members, teams] = canAssignApprovers
     ? await Promise.all([listMembers(session.orgId), listTeams(session.orgId)])
     : [[], []];
+
+  // W5 read surfaces: test-score trend and changelog from the fixture
+  // adapters (TODO(evals), TODO(learning)); the feedback stream is real.
+  const [trend, changelog, feedback] = await Promise.all([
+    evalsClient().scoreTrend(routineId),
+    learningClient().listChangelog(routineId),
+    listFeedbackForRoutine(session.orgId, routineId),
+  ]);
+
+  // Feedback composed on the routine page attaches to the latest run;
+  // without any runs the composer renders disabled with a plain note.
+  const latestRunId = data.runs[0]?.runId ?? null;
+  const feedbackAction = latestRunId
+    ? submitFeedbackForm.bind(null, latestRunId, null)
+    : undefined;
 
   async function assignAction(formData: FormData) {
     "use server";
@@ -85,6 +105,11 @@ export default async function RoutineDetailPage({
       removeAction={removeAction}
       runNowAction={runNowAction}
       scheduleAction={scheduleAction}
+      trend={trend}
+      changelog={changelog}
+      feedback={feedback}
+      canGiveFeedback={canGiveFeedback}
+      feedbackAction={feedbackAction}
     />
   );
 }

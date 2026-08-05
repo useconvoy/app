@@ -10,15 +10,19 @@ import Link from "next/link";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
+import { FeedbackComposer } from "@/components/FeedbackComposer";
+import { FeedbackStream, type FeedbackStreamItem } from "@/components/FeedbackStream";
 import { RouteStepList } from "@/components/RouteStepList";
 import { StatusChip } from "@/components/StatusChip";
 import { SystemRow } from "@/components/SystemRow";
+import { TrendLine, type TrendPoint } from "@/components/TrendLine";
 import type { SystemGrant } from "@/lib/api/environments";
-import { money } from "@/lib/format";
+import type { ChangelogEntry } from "@/lib/api/learning";
+import { friendlyDate, money } from "@/lib/format";
 import type { RoutineRunSummary } from "@/lib/routines/data";
 import type { ApproverAssignment } from "@/lib/routines/queries";
 import type { RoutineTriggers } from "@/lib/routines/triggers";
-import { copy, triggerKindLabels } from "@/lexicon";
+import { copy, feedbackCopy, improveCopy, triggerKindLabels } from "@/lexicon";
 
 type FormAction = (formData: FormData) => void | Promise<void>;
 
@@ -48,6 +52,13 @@ export interface RoutineDetailProps {
   removeAction: FormAction;
   runNowAction: FormAction;
   scheduleAction: FormAction;
+  /** W5 read surfaces; optional so the component renders empty without them. */
+  trend?: TrendPoint[];
+  changelog?: ChangelogEntry[];
+  feedback?: FeedbackStreamItem[];
+  canGiveFeedback?: boolean;
+  /** Submit action bound to the routine's latest run; absent when it never ran. */
+  feedbackAction?: FormAction;
 }
 
 export function RoutineDetail({
@@ -68,6 +79,11 @@ export function RoutineDetail({
   removeAction,
   runNowAction,
   scheduleAction,
+  trend = [],
+  changelog = [],
+  feedback = [],
+  canGiveFeedback = false,
+  feedbackAction,
 }: RoutineDetailProps) {
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -265,25 +281,45 @@ export function RoutineDetail({
         )}
       </Section>
 
-      {/* TODO(website-W5): test-score trend from the evaluation surfaces. */}
       <Section title="Test score trend">
-        <EmptyState
-          title="No test scores yet"
-          body="Rehearsal results will chart here once this routine has been scored."
-        />
+        {trend.length > 0 ? (
+          <div className="rounded-lg border border-line bg-card p-5">
+            <TrendLine points={trend} title={routine.name} />
+          </div>
+        ) : (
+          <EmptyState title={improveCopy.noScoresYet} body={improveCopy.noScoresBody} />
+        )}
       </Section>
 
-      {/* TODO(website-W5): changelog from the learning surfaces. */}
       <Section title="Changelog">
-        <EmptyState title="No changes yet" body="Changes shipped to this routine will appear here." />
+        {changelog.length > 0 ? (
+          <ul className="m-0 list-none space-y-1.5 rounded-lg border border-line bg-card p-5">
+            {changelog.map((entry) => (
+              <li key={`${entry.at}:${entry.note}`} className="flex flex-wrap gap-3 text-sm">
+                <span className="font-mono text-xs uppercase text-muted">{friendlyDate(entry.at)}</span>
+                <span className="text-ink">{entry.note}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyState title={improveCopy.changelogEmpty} body={improveCopy.changelogEmptyBody} />
+        )}
       </Section>
 
-      {/* TODO(website-W5): feedback stream + composer. */}
       <Section title="Feedback">
-        <EmptyState
-          title="No feedback yet"
-          body="Feedback left on this routine's runs will appear here."
-        />
+        <div className="space-y-4">
+          <FeedbackStream
+            items={feedback}
+            emptyBody="Feedback left on this routine's runs will appear here."
+          />
+          {canGiveFeedback &&
+            (feedbackAction ? (
+              <FeedbackComposer action={feedbackAction} attachNote={feedbackCopy.attachesToLatestRun} />
+            ) : (
+              /* No runs yet: the composer renders disabled with a plain note. */
+              <FeedbackComposer disabledNote={feedbackCopy.noRunsYetNote} />
+            ))}
+        </div>
       </Section>
     </div>
   );
