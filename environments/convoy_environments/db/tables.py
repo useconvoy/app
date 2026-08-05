@@ -155,7 +155,8 @@ class AuditLog(Base):
 
     __tablename__ = "audit_log"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    # Nullable: user-level events (e.g. idp linkage) have no workspace scope.
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True, nullable=True)
     actor_user_id: Mapped[str] = mapped_column(String(64), nullable=True)
     action: Mapped[str] = mapped_column(String(64))
     subject_type: Mapped[str] = mapped_column(String(32))

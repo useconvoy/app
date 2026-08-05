@@ -30,6 +30,7 @@ from ..db.tables import (
 )
 from ..schema import ConnectionManifest, policy_hash
 from ..secrets import SecretsService
+from .auth import ConsoleAuth
 from .rbac import require_env_role, require_workspace_role
 
 
@@ -74,13 +75,15 @@ class CreateGrant(BaseModel):
     role: Literal["viewer", "operator", "env_admin"]
 
 
-def build_console_app(session_factory, secrets: SecretsService) -> FastAPI:
+def build_console_app(session_factory, secrets: SecretsService,
+                      auth: Optional[ConsoleAuth] = None) -> FastAPI:
     app = FastAPI(title="convoy-console-api")
+    auth = auth or ConsoleAuth()
 
-    def user_dep(x_convoy_user: str = Header(default="")) -> str:
-        if not x_convoy_user:
-            raise HTTPException(401, "missing X-Convoy-User")
-        return x_convoy_user
+    def user_dep(authorization: str = Header(default=""),
+                 x_convoy_user: str = Header(default="")) -> str:
+        with session_factory() as s:
+            return auth.resolve_user(s, authorization, x_convoy_user)
 
     def _audit(session, workspace_id: str, actor: str, action: str, subject_type: str, subject_id: str,
                diff: Optional[dict] = None) -> None:
