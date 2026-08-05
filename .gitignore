@@ -5,3 +5,8 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 dist/
+
+# python (evals/environments packages)
+.venv/
+__pycache__/
+*.egg-info/

@@ -1,0 +1,9 @@
+AMS POLICY SUMMARY
+policy_number: POL-105
+insured_name: Harbor Mechanical Inc
+contact: Priya Castillo <priya.castillo@harbormechanicalinc.example>
+carrier: Meridian Specialty
+premium: 46190
+expiring_date: {{t0+28d}}
+prior_carrier_contact: Priya Ops <priya@granitepeakinsurance.example>
+renewal_status: pending

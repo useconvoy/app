@@ -1,0 +1,8 @@
+LOSS RUN REPORT — Keystone National
+policy_number: POL-108
+expected_year: 2025
+year: 2025
+losses:
+- 2025-12-05  minor collision  paid $7,527
+- 2025-07-11  property damage  paid $20,703
+- 2025-07-26  slip and fall  paid $12,291

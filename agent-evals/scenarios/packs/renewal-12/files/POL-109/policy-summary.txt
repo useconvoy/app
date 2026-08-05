@@ -1,0 +1,9 @@
+AMS POLICY SUMMARY
+policy_number: POL-109
+insured_name: Lakeside Landscaping LLC
+contact: Nadia Kowalski <nadia.kowalski@lakesidelandscapingllc.example>
+carrier: Granite Peak Insurance
+premium: 13001
+expiring_date: {{t0+36d}}
+prior_carrier_contact: Ingrid Ops <ingrid@harborlineunderwriters.example>
+renewal_status: pending

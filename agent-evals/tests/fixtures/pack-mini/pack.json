@@ -1,0 +1,54 @@
+{
+  "records": [
+    {
+      "collection": "policy",
+      "id": "POL-1",
+      "fields": {
+        "insured": "Acme Robotics",
+        "carrier": "sentinel",
+        "expiring_date": "{{t0+3d}}",
+        "bound_on": "{{t0-360d}}",
+        "renewal_status": "not_started"
+      }
+    },
+    {
+      "collection": "policy",
+      "id": "POL-2",
+      "fields": {
+        "insured": "Blue Harbor LLC",
+        "carrier": "sentinel",
+        "expiring_date": "{{t0+40d}}",
+        "renewal_status": "not_started"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "attachments/loss-runs.txt",
+      "name": "loss-runs.txt",
+      "mime": "text/plain",
+      "contentFile": "attachments/loss-runs.txt"
+    },
+    {
+      "path": "attachments/acord-125.txt",
+      "name": "acord-125.txt",
+      "mime": "text/plain",
+      "contentFile": "attachments/acord-125.txt"
+    }
+  ],
+  "threads": [
+    {
+      "threadId": "thread_renewal-kickoff",
+      "messages": [
+        {
+          "from": "maria@acme-robotics.com",
+          "to": ["agent@convoy.sim"],
+          "subject": "Renewal kickoff",
+          "body": "Our policy POL-1 expires on {{t0+3d}}. Please handle the renewal.",
+          "ts": "{{t0-1d}}",
+          "direction": "inbound"
+        }
+      ]
+    }
+  ]
+}

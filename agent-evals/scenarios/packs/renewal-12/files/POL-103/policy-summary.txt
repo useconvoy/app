@@ -1,0 +1,9 @@
+AMS POLICY SUMMARY
+policy_number: POL-103
+insured_name: Harbor Landscaping Co
+contact: Ingrid Iverson <ingrid.iverson@harborlandscapingco.example>
+carrier: Granite Peak Insurance
+premium: 59699
+expiring_date: {{t0+24d}}
+prior_carrier_contact: Ingrid Ops <ingrid@atlasmutual.example>
+renewal_status: pending

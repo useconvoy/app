@@ -1,0 +1,9 @@
+AMS POLICY SUMMARY
+policy_number: POL-110
+insured_name: Crescent Landscaping LLC
+contact: Miguel Nguyen <miguel.nguyen@crescentlandscapingllc.example>
+carrier: Harborline Underwriters
+premium: 93991
+expiring_date: {{t0+38d}}
+prior_carrier_contact: Trent Ops <trent@meridianspecialty.example>
+renewal_status: pending

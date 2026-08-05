@@ -1,0 +1,7 @@
+LOSS RUN REPORT — Atlas Mutual
+policy_number: POL-106
+expected_year: 2025
+year: 2025
+losses:
+- 2025-05-26  slip and fall  paid $9,248
+- 2025-06-24  cargo damage  paid $23,413

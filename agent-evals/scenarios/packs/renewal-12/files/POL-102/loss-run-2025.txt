@@ -1,0 +1,7 @@
+LOSS RUN REPORT — Keystone National
+policy_number: POL-102
+expected_year: 2025
+year: 2025
+losses:
+- 2025-06-27  auto glass  paid $16,800
+- 2025-04-10  minor collision  paid $3,979
