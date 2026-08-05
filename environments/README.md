@@ -51,6 +51,10 @@ export CONVOY_INTERNAL_TOKEN=$(openssl rand -hex 32)
 
 **How someone logs in.** The website signs people in with WorkOS (company SSO / email login). On every console request, the website forwards that login token; the console checks the token is genuinely from WorkOS (cryptographic signature, not trust) and then looks the person up in its own user list. The first time someone signs in with an email an admin has invited, their WorkOS identity gets connected to that user automatically — after that they're recognized by identity alone. If nobody invited them, they're turned away with a note to ask an admin: **logging in never creates an account by itself.** For local development with no WorkOS configured, the old `X-Convoy-User` header keeps working; the moment WorkOS is configured, headers stop being accepted.
 
+**How teammates get added.** A workspace admin invites people by email with a role attached (`admin` — manages connections, secrets, and people; `builder` — creates environments; `member` — baseline). The invite is just a row in our database — no email is sent from this layer (the website owns notifications) — and it takes effect the moment the person first signs in with that email. Re-inviting the same email changes their role rather than creating a duplicate. Everyone can see the member list; only admins can change it.
+
+**How a workspace gets created.** Not self-serve, on purpose. A workspace is a customer: creating one goes hand in hand with provisioning that customer's infrastructure stack, so `POST /workspaces` requires a provisioning secret only the founders/deploy tooling hold. If the secret isn't configured at all, workspace creation is simply off.
+
 ## Deliberately not here (runtime-owned per DESIGN v1)
 
 Budgets (workflow `BudgetState` + LiteLLM caps) · human gates and approvals (plan-step `HumanGate`, `human_response` signals; gate UX is website/) · runs/missions state · sandbox lifecycle (`SandboxProvider` impls) · idempotency-key minting (we only honor them).
