@@ -1,0 +1,725 @@
+[
+  {
+    "id": "run-94966842e2d4:1",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 1,
+    "type": "run_started",
+    "ts": "2026-08-05T05:36:58.135059Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "fixtures@convoy.test",
+    "actor_type": "human",
+    "payload": {
+      "run_status": "planning",
+      "environment_id": "stub-local"
+    }
+  },
+  {
+    "id": "run-94966842e2d4:2",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 2,
+    "type": "plan_created",
+    "ts": "2026-08-05T05:36:58.258631Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "plan": {
+        "goal": "Request updated documents from each vendor",
+        "steps": [
+          {
+            "id": "step-1",
+            "status": "ready",
+            "attempt": 0,
+            "outputs": [],
+            "executor": "self",
+            "group_id": null,
+            "required": true,
+            "subagent": null,
+            "error_ref": null,
+            "eval_gate": null,
+            "depends_on": [],
+            "human_gate": null,
+            "description": "Investigate: Request updated documents from each vendor",
+            "budget_slice": null,
+            "max_attempts": 2
+          },
+          {
+            "id": "fan-1",
+            "status": "pending",
+            "attempt": 0,
+            "outputs": [],
+            "executor": "subagent",
+            "group_id": "fanout-1",
+            "required": false,
+            "subagent": {
+              "id": "run-94966842e2d4-root-fan-1",
+              "layer": 1,
+              "model": "scripted-echo-1",
+              "tools": [],
+              "parent_id": "run-94966842e2d4-root",
+              "prompt_ref": {
+                "key": "runs/run-94966842e2d4/prompts/root.json",
+                "bucket": "convoy-artifacts",
+                "sha256": "9a71403ca7bf6c0564d87800d00bb956e56b2c367855412b200b9aa27169cb40",
+                "size_bytes": 63,
+                "content_type": "application/json"
+              },
+              "max_children": 0
+            },
+            "error_ref": null,
+            "eval_gate": null,
+            "depends_on": [
+              "step-1"
+            ],
+            "human_gate": null,
+            "description": "Fan-out part 1 of: Request updated documents from each vendor",
+            "budget_slice": "5",
+            "max_attempts": 2
+          },
+          {
+            "id": "fan-2",
+            "status": "pending",
+            "attempt": 0,
+            "outputs": [],
+            "executor": "subagent",
+            "group_id": "fanout-1",
+            "required": false,
+            "subagent": {
+              "id": "run-94966842e2d4-root-fan-2",
+              "layer": 1,
+              "model": "scripted-echo-1",
+              "tools": [],
+              "parent_id": "run-94966842e2d4-root",
+              "prompt_ref": {
+                "key": "runs/run-94966842e2d4/prompts/root.json",
+                "bucket": "convoy-artifacts",
+                "sha256": "9a71403ca7bf6c0564d87800d00bb956e56b2c367855412b200b9aa27169cb40",
+                "size_bytes": 63,
+                "content_type": "application/json"
+              },
+              "max_children": 0
+            },
+            "error_ref": null,
+            "eval_gate": null,
+            "depends_on": [
+              "step-1"
+            ],
+            "human_gate": null,
+            "description": "Fan-out part 2 of: Request updated documents from each vendor",
+            "budget_slice": "5",
+            "max_attempts": 2
+          },
+          {
+            "id": "step-2",
+            "status": "pending",
+            "attempt": 0,
+            "outputs": [],
+            "executor": "self",
+            "group_id": null,
+            "required": true,
+            "subagent": null,
+            "error_ref": null,
+            "eval_gate": null,
+            "depends_on": [
+              "fan-1",
+              "fan-2"
+            ],
+            "human_gate": null,
+            "description": "Summarize findings for: Request updated documents from each vendor",
+            "budget_slice": null,
+            "max_attempts": 2
+          }
+        ],
+        "version": 1,
+        "revisions": [
+          {
+            "ops": [
+              {
+                "op": "add_step",
+                "step": {
+                  "id": "step-1",
+                  "status": "ready",
+                  "attempt": 0,
+                  "outputs": [],
+                  "executor": "self",
+                  "group_id": null,
+                  "required": true,
+                  "subagent": null,
+                  "error_ref": null,
+                  "eval_gate": null,
+                  "depends_on": [],
+                  "human_gate": null,
+                  "description": "Investigate: Request updated documents from each vendor",
+                  "budget_slice": null,
+                  "max_attempts": 2
+                },
+                "after": null,
+                "reason": "initial plan",
+                "changes": null,
+                "step_id": null
+              },
+              {
+                "op": "add_step",
+                "step": {
+                  "id": "fan-1",
+                  "status": "pending",
+                  "attempt": 0,
+                  "outputs": [],
+                  "executor": "subagent",
+                  "group_id": "fanout-1",
+                  "required": false,
+                  "subagent": {
+                    "id": "run-94966842e2d4-root-fan-1",
+                    "layer": 1,
+                    "model": "scripted-echo-1",
+                    "tools": [],
+                    "parent_id": "run-94966842e2d4-root",
+                    "prompt_ref": {
+                      "key": "runs/run-94966842e2d4/prompts/root.json",
+                      "bucket": "convoy-artifacts",
+                      "sha256": "9a71403ca7bf6c0564d87800d00bb956e56b2c367855412b200b9aa27169cb40",
+                      "size_bytes": 63,
+                      "content_type": "application/json"
+                    },
+                    "max_children": 0
+                  },
+                  "error_ref": null,
+                  "eval_gate": null,
+                  "depends_on": [
+                    "step-1"
+                  ],
+                  "human_gate": null,
+                  "description": "Fan-out part 1 of: Request updated documents from each vendor",
+                  "budget_slice": "5",
+                  "max_attempts": 2
+                },
+                "after": null,
+                "reason": "initial plan",
+                "changes": null,
+                "step_id": null
+              },
+              {
+                "op": "add_step",
+                "step": {
+                  "id": "fan-2",
+                  "status": "pending",
+                  "attempt": 0,
+                  "outputs": [],
+                  "executor": "subagent",
+                  "group_id": "fanout-1",
+                  "required": false,
+                  "subagent": {
+                    "id": "run-94966842e2d4-root-fan-2",
+                    "layer": 1,
+                    "model": "scripted-echo-1",
+                    "tools": [],
+                    "parent_id": "run-94966842e2d4-root",
+                    "prompt_ref": {
+                      "key": "runs/run-94966842e2d4/prompts/root.json",
+                      "bucket": "convoy-artifacts",
+                      "sha256": "9a71403ca7bf6c0564d87800d00bb956e56b2c367855412b200b9aa27169cb40",
+                      "size_bytes": 63,
+                      "content_type": "application/json"
+                    },
+                    "max_children": 0
+                  },
+                  "error_ref": null,
+                  "eval_gate": null,
+                  "depends_on": [
+                    "step-1"
+                  ],
+                  "human_gate": null,
+                  "description": "Fan-out part 2 of: Request updated documents from each vendor",
+                  "budget_slice": "5",
+                  "max_attempts": 2
+                },
+                "after": null,
+                "reason": "initial plan",
+                "changes": null,
+                "step_id": null
+              },
+              {
+                "op": "add_step",
+                "step": {
+                  "id": "step-2",
+                  "status": "pending",
+                  "attempt": 0,
+                  "outputs": [],
+                  "executor": "self",
+                  "group_id": null,
+                  "required": true,
+                  "subagent": null,
+                  "error_ref": null,
+                  "eval_gate": null,
+                  "depends_on": [
+                    "fan-1",
+                    "fan-2"
+                  ],
+                  "human_gate": null,
+                  "description": "Summarize findings for: Request updated documents from each vendor",
+                  "budget_slice": null,
+                  "max_attempts": 2
+                },
+                "after": null,
+                "reason": "initial plan",
+                "changes": null,
+                "step_id": null
+              }
+            ],
+            "author": "system",
+            "reason": "initial",
+            "version": 1,
+            "author_id": null,
+            "approved_by": null,
+            "snapshot_ref": {
+              "key": "runs/run-94966842e2d4/plans/v1.json",
+              "bucket": "convoy-artifacts",
+              "sha256": "0ff96d511f71a66746dea61250cb275b431bfe86f459afe480c81c6043080544",
+              "size_bytes": 5095,
+              "content_type": "application/json"
+            }
+          }
+        ],
+        "success_criteria": []
+      },
+      "run_status": "running",
+      "plan_version": 1
+    }
+  },
+  {
+    "id": "run-94966842e2d4:3",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 3,
+    "type": "step_started",
+    "ts": "2026-08-05T05:36:58.295043Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "attempt": 1,
+      "step_id": "step-1"
+    }
+  },
+  {
+    "id": "run-94966842e2d4:4",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 4,
+    "type": "step_done",
+    "ts": "2026-08-05T05:36:58.810557Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "budget": {
+        "cap_usd": "40",
+        "spent_usd": "0.0001",
+        "reserved_usd": "0"
+      },
+      "outcome": "step_done",
+      "step_id": "step-1",
+      "cost_usd": "0.0001",
+      "model_used": "scripted-echo-1",
+      "model_fallback": false,
+      "model_requested": "scripted-echo-1"
+    }
+  },
+  {
+    "id": "run-94966842e2d4:5",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 5,
+    "type": "compaction_applied",
+    "ts": "2026-08-05T05:36:58.894872Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "step_id": "step-1",
+      "boundary": "step_end",
+      "headline": "Completed step-1: Investigate: Request updated documents from each vendor",
+      "summary_ref": {
+        "key": "runs/run-94966842e2d4/summaries/step-1.json",
+        "bucket": "convoy-artifacts",
+        "sha256": "c43297dfc10000f5bb9e94215561b4dd8c896fb0efc30bcd38847f6a3f635d48",
+        "size_bytes": 697,
+        "content_type": "application/json"
+      },
+      "archived_ref": {
+        "key": "runs/run-94966842e2d4/transcripts/step-1/turn-1.json",
+        "bucket": "convoy-artifacts",
+        "sha256": "6b72dc9ea90e70740c2003597d7ce3dc810f2c98741cef300ed02bf379da3590",
+        "size_bytes": 340,
+        "content_type": "application/json"
+      }
+    }
+  },
+  {
+    "id": "run-94966842e2d4:6",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 6,
+    "type": "step_started",
+    "ts": "2026-08-05T05:36:58.925205Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "attempt": 1,
+      "step_id": "fan-1",
+      "executor": "subagent"
+    }
+  },
+  {
+    "id": "run-94966842e2d4:7",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 7,
+    "type": "child_spawned",
+    "ts": "2026-08-05T05:36:58.960330Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "run-94966842e2d4-root",
+    "actor_type": "agent",
+    "payload": {
+      "goal": "Fan-out part 1 of: Request updated documents from each vendor",
+      "layer": 1,
+      "budget": {
+        "cap_usd": "40",
+        "spent_usd": "0.0001",
+        "reserved_usd": "5"
+      },
+      "step_id": "fan-1",
+      "group_id": "fanout-1",
+      "budget_slice": "5",
+      "child_run_id": "run-94966842e2d4--fan-1-a1",
+      "budget_reserved": "5"
+    }
+  },
+  {
+    "id": "run-94966842e2d4:8",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 8,
+    "type": "step_started",
+    "ts": "2026-08-05T05:36:59.038368Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "attempt": 1,
+      "step_id": "fan-2",
+      "executor": "subagent"
+    }
+  },
+  {
+    "id": "run-94966842e2d4:9",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 9,
+    "type": "child_spawned",
+    "ts": "2026-08-05T05:36:59.092153Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "run-94966842e2d4-root",
+    "actor_type": "agent",
+    "payload": {
+      "goal": "Fan-out part 2 of: Request updated documents from each vendor",
+      "layer": 1,
+      "budget": {
+        "cap_usd": "40",
+        "spent_usd": "0.0001",
+        "reserved_usd": "10"
+      },
+      "step_id": "fan-2",
+      "group_id": "fanout-1",
+      "budget_slice": "5",
+      "child_run_id": "run-94966842e2d4--fan-2-a1",
+      "budget_reserved": "5"
+    }
+  },
+  {
+    "id": "run-94966842e2d4:10",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 10,
+    "type": "child_landed",
+    "ts": "2026-08-05T05:37:00.234731Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "error": null,
+      "budget": {
+        "cap_usd": "40",
+        "spent_usd": "0.0002",
+        "reserved_usd": "5"
+      },
+      "status": "done",
+      "step_id": "fan-1",
+      "cost_usd": "0.0001",
+      "group_id": "fanout-1",
+      "headline": "Completed: Fan-out part 1 of: Request updated documents from each vendor",
+      "refund_usd": "4.9999",
+      "summary_ref": {
+        "key": "runs/run-94966842e2d4/subagents/fan-1/result.json",
+        "bucket": "convoy-artifacts",
+        "sha256": "2e9b4c4f2e44d3f472365b9cbbbedb3f9eddcfd250a217a5d9773e5f766a8719",
+        "size_bytes": 1342,
+        "content_type": "application/json"
+      },
+      "child_run_id": "run-94966842e2d4--fan-1-a1",
+      "cost_assumed": false,
+      "slice_reserved": "5"
+    }
+  },
+  {
+    "id": "run-94966842e2d4:11",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 11,
+    "type": "step_done",
+    "ts": "2026-08-05T05:37:00.335064Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "budget": {
+        "cap_usd": "40",
+        "spent_usd": "0.0002",
+        "reserved_usd": "5"
+      },
+      "outcome": "subagent",
+      "step_id": "fan-1",
+      "cost_usd": "0.0001"
+    }
+  },
+  {
+    "id": "run-94966842e2d4:12",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 12,
+    "type": "child_landed",
+    "ts": "2026-08-05T05:37:00.535622Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "error": null,
+      "budget": {
+        "cap_usd": "40",
+        "spent_usd": "0.0003",
+        "reserved_usd": "0"
+      },
+      "status": "done",
+      "step_id": "fan-2",
+      "cost_usd": "0.0001",
+      "group_id": "fanout-1",
+      "headline": "Completed: Fan-out part 2 of: Request updated documents from each vendor",
+      "refund_usd": "4.9999",
+      "summary_ref": {
+        "key": "runs/run-94966842e2d4/subagents/fan-2/result.json",
+        "bucket": "convoy-artifacts",
+        "sha256": "9c1ce157e372b2e11b14283558916180c2e29eb51728473d7120e35b981e1869",
+        "size_bytes": 1342,
+        "content_type": "application/json"
+      },
+      "child_run_id": "run-94966842e2d4--fan-2-a1",
+      "cost_assumed": false,
+      "slice_reserved": "5"
+    }
+  },
+  {
+    "id": "run-94966842e2d4:13",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 13,
+    "type": "step_done",
+    "ts": "2026-08-05T05:37:00.634711Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "budget": {
+        "cap_usd": "40",
+        "spent_usd": "0.0003",
+        "reserved_usd": "0"
+      },
+      "outcome": "subagent",
+      "step_id": "fan-2",
+      "cost_usd": "0.0001"
+    }
+  },
+  {
+    "id": "run-94966842e2d4:14",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 14,
+    "type": "step_started",
+    "ts": "2026-08-05T05:37:00.735358Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "attempt": 1,
+      "step_id": "step-2"
+    }
+  },
+  {
+    "id": "run-94966842e2d4:15",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 15,
+    "type": "step_done",
+    "ts": "2026-08-05T05:37:01.426369Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "budget": {
+        "cap_usd": "40",
+        "spent_usd": "0.0004",
+        "reserved_usd": "0"
+      },
+      "outcome": "step_done",
+      "step_id": "step-2",
+      "cost_usd": "0.0001",
+      "model_used": "scripted-echo-1",
+      "model_fallback": false,
+      "model_requested": "scripted-echo-1"
+    }
+  },
+  {
+    "id": "run-94966842e2d4:16",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 16,
+    "type": "compaction_applied",
+    "ts": "2026-08-05T05:37:01.506038Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "step_id": "step-2",
+      "boundary": "step_end",
+      "headline": "Completed step-2: Summarize findings for: Request updated documents from each vendor",
+      "summary_ref": {
+        "key": "runs/run-94966842e2d4/summaries/step-2.json",
+        "bucket": "convoy-artifacts",
+        "sha256": "610fd5bcd86f5339d4bfce21582d23023e504c027366a7f2cfd3649e85991af4",
+        "size_bytes": 708,
+        "content_type": "application/json"
+      },
+      "archived_ref": {
+        "key": "runs/run-94966842e2d4/transcripts/step-2/turn-2.json",
+        "bucket": "convoy-artifacts",
+        "sha256": "e6553938e7ab944d5a69592d0dacaebbd07d3493781e5b40f7ea238374bd301d",
+        "size_bytes": 340,
+        "content_type": "application/json"
+      }
+    }
+  },
+  {
+    "id": "run-94966842e2d4:17",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 17,
+    "type": "landing_started",
+    "ts": "2026-08-05T05:37:01.541397Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "run_status": "landing"
+    }
+  },
+  {
+    "id": "run-94966842e2d4:18",
+    "run_id": "run-94966842e2d4",
+    "tenant_id": "tenant-fixtures",
+    "seq": 18,
+    "type": "run_completed",
+    "ts": "2026-08-05T05:37:01.612391Z",
+    "virtual_ts": null,
+    "sandbox": true,
+    "actor": "system",
+    "actor_type": "system",
+    "payload": {
+      "budget": {
+        "cap_usd": "40",
+        "spent_usd": "0.0004",
+        "reserved_usd": "0"
+      },
+      "run_status": "completed",
+      "land_report": {
+        "goal": "Request updated documents from each vendor",
+        "run_id": "run-94966842e2d4",
+        "status": "completed",
+        "tokens": {
+          "input_tokens": 48,
+          "output_tokens": 28
+        },
+        "cost_usd": "0.0004",
+        "report_ref": {
+          "key": "runs/run-94966842e2d4/reports/land.json",
+          "bucket": "convoy-artifacts",
+          "sha256": "649f4988ac619bebf3e52abc34622081716e3e02dd2647f68997a8389abde017",
+          "size_bytes": 1182,
+          "content_type": "application/json"
+        },
+        "steps_done": 4,
+        "deliverables": [
+          {
+            "key": "runs/run-94966842e2d4/outputs/step-1.json",
+            "bucket": "convoy-artifacts",
+            "sha256": "37c7dfe487db9838e10e200839f3996cca0f464d351a79907e4fcf9500e7365b",
+            "size_bytes": 57,
+            "content_type": "application/json"
+          },
+          {
+            "key": "runs/run-94966842e2d4--fan-1-a1/outputs/fan-1.json",
+            "bucket": "convoy-artifacts",
+            "sha256": "1a53ad043d98154bf709003dc9b7a4667dc0f4356b9352151b5abaf4850e709a",
+            "size_bytes": 55,
+            "content_type": "application/json"
+          },
+          {
+            "key": "runs/run-94966842e2d4--fan-2-a1/outputs/fan-2.json",
+            "bucket": "convoy-artifacts",
+            "sha256": "52af89f189114a6c92241bb6bc1af59ccaa608105ef080a0521316ac456b5f64",
+            "size_bytes": 55,
+            "content_type": "application/json"
+          },
+          {
+            "key": "runs/run-94966842e2d4/outputs/step-2.json",
+            "bucket": "convoy-artifacts",
+            "sha256": "2e3f85136cde097e036ced9cc3ba069d14467147848d565fa15e52adfdef4b2f",
+            "size_bytes": 57,
+            "content_type": "application/json"
+          }
+        ],
+        "steps_failed": 0,
+        "steps_skipped": 0,
+        "success_criteria": []
+      }
+    }
+  }
+]

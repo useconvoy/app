@@ -1,0 +1,62 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+/* Bridge the CSS-variable tokens into Tailwind v4 theme keys so utilities
+ * like bg-field / text-ink / border-line resolve to token values only. */
+@theme inline {
+  --color-field: var(--color-field);
+  --color-card: var(--color-card);
+  --color-ink: var(--color-ink);
+  --color-pine: var(--color-pine);
+  --color-pine-deep: var(--color-pine-deep);
+  --color-line: var(--color-line);
+  --color-line-soft: var(--color-line-soft);
+  --color-muted: var(--color-muted);
+  --color-pass: var(--color-pass);
+  --color-pass-soft: var(--color-pass-soft);
+  --color-hold: var(--color-hold);
+  --color-hold-soft: var(--color-hold-soft);
+  --color-fail: var(--color-fail);
+  --color-fail-soft: var(--color-fail-soft);
+  --color-graphite: var(--color-graphite);
+  --color-graphite-soft: var(--color-graphite-soft);
+
+  --font-display: var(--font-besley), Georgia, serif;
+  --font-sans: var(--font-public-sans), system-ui, sans-serif;
+  --font-mono: var(--font-spline-mono), ui-monospace, monospace;
+}
+
+body {
+  background: var(--color-field);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* The pulse exists for running/live indicators only. */
+@keyframes pulse-live {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.pulse-live {
+  animation: pulse-live 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -1,0 +1,50 @@
+name: website
+
+on:
+  push:
+    branches: [main]
+    paths: ["website/**", ".github/workflows/website.yml"]
+  pull_request:
+    paths: ["website/**", ".github/workflows/website.yml"]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: convoy_admin
+          POSTGRES_PASSWORD: convoy_admin
+          POSTGRES_DB: convoy_website
+        ports: ["5434:5432"]
+        options: >-
+          --health-cmd "pg_isready -U convoy_admin -d convoy_website"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: website/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run check:lexicon
+      - run: npm run check:tokens
+      - run: npm run check:client-drift
+      - run: npm run db:migrate
+        env:
+          WEBSITE_PG_ADMIN_DSN: postgresql://convoy_admin:convoy_admin@localhost:5434/convoy_website
+      - run: npm run test
+        env:
+          WEBSITE_PG_DSN: postgresql://convoy_website_app:convoy_website_app@localhost:5434/convoy_website
+          WEBSITE_PG_ADMIN_DSN: postgresql://convoy_admin:convoy_admin@localhost:5434/convoy_website
+          SESSION_SECRET: ci-session-secret-ci-session-secret-ci

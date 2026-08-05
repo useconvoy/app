@@ -1,0 +1,24 @@
+/* Design tokens. The only file in the app where hex values may appear;
+ * `npm run check:tokens` enforces this. Status colors are semantic, never
+ * decorative. Graphite is the rehearsal treatment; production carries no
+ * marker of its own. */
+:root {
+  --color-field: #f2f5ef;
+  --color-card: #fbfcfa;
+  --color-ink: #182420;
+  --color-pine: #153b2e;
+  --color-pine-deep: #0e2a21;
+  --color-line: #d8dfd3;
+  --color-line-soft: #e4eae0;
+  --color-muted: #5e6c61;
+  --color-pass: #2e7d5b;
+  --color-pass-soft: #e3eee6;
+  --color-hold: #a87718;
+  --color-hold-soft: #f5ecd4;
+  --color-fail: #b23a24;
+  --color-fail-soft: #f7e5e0;
+  --color-graphite: #565d57;
+  --color-graphite-soft: #edefea;
+
+  --focus-ring: 2px solid #2e7d5b;
+}
