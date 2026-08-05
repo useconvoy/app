@@ -40,6 +40,7 @@ jobs:
       - run: npm run check:lexicon
       - run: npm run check:tokens
       - run: npm run check:client-drift
+      - run: npm run check:release-age
       - run: npm run db:migrate
         env:
           WEBSITE_PG_ADMIN_DSN: postgresql://convoy_admin:convoy_admin@localhost:5434/convoy_website

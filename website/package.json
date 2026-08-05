@@ -14,6 +14,7 @@
     "test:e2e": "playwright test",
     "check:lexicon": "node scripts/check-lexicon.mjs",
     "check:tokens": "node scripts/check-tokens.mjs",
+    "check:release-age": "node scripts/check-release-age.mjs",
     "generate:client": "node scripts/generate-client.mjs",
     "check:client-drift": "node scripts/generate-client.mjs --check",
     "db:migrate": "node scripts/migrate.mjs",
@@ -40,7 +41,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.3",
     "@types/node": "^26.1.2",
-    "@types/pg": "^8.20.4",
+    "@types/pg": "^8.20.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
@@ -52,7 +53,7 @@
     "openapi-typescript": "^7.13.0",
     "postcss": "^8.5.25",
     "tailwindcss": "^4.3.3",
-    "tsx": "^4.23.6",
+    "tsx": "^4.23.5",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   }
