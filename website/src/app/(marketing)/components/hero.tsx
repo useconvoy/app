@@ -24,19 +24,17 @@ export function Hero() {
     <header className="pt-14 pb-16 sm:pt-20 sm:pb-24">
       <div className="mx-auto grid max-w-[1160px] grid-cols-[repeat(auto-fit,minmax(min(100%,460px),1fr))] items-center gap-11 px-5 sm:px-7 lg:gap-16">
         <div>
-          <p className="mb-5 font-mono text-xs font-semibold tracking-[0.17em] text-muted uppercase">
-            Durable routines for regulated operations
-          </p>
+          {/* No eyebrow. The headline says it, and a label above a line that
+              short only crowds it. */}
           <h1 className="mb-6 font-display text-[clamp(42px,5.4vw,70px)] leading-[1.05] font-medium tracking-[-0.012em] text-ink">
-            Delegate the work.
+            Routine work,
             <br />
-            <em className="font-medium italic">Keep control.</em>
+            <em className="font-medium italic">done carefully.</em>
           </h1>
-          <p className="mb-8 max-w-[56ch] text-[18.5px] leading-[1.68] text-muted">
-            Convoy runs specialized routines that carry recurring operational
-            work from start to finish. Every run is planned up front, approved
-            by you, and recorded step by step, even when the job takes days.
-            Built first for audit and compliance teams.
+          <p className="mb-8 max-w-[52ch] text-[18.5px] leading-[1.68] text-muted">
+            Convoy runs the routines your team repeats every close and every
+            quarter. It rehearses each one before anything is real, and holds
+            for your judgment at every step that matters.
           </p>
           <div className="mb-9 flex flex-wrap gap-3.5">
             <Link
