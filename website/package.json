@@ -51,6 +51,7 @@
     "jsdom": "^30.0.1",
     "msw": "^2.15.0",
     "openapi-typescript": "^7.13.0",
+    "pngjs": "^7.0.0",
     "postcss": "^8.5.25",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.5",
