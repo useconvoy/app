@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { people, routines } from "@/lib/fixtures/world";
+import { routines } from "@/lib/fixtures/world";
 import { money } from "@/lib/format";
 
 import { CtaBand } from "./components/cta-band";
@@ -48,8 +48,6 @@ const TRUST_POINTS = [
 
 export default function HomePage() {
   const accessReview = routines[0];
-  const reviewer = people[0];
-  const operator = people[1];
 
   const narrativeSteps: Step[] = (accessReview?.planSteps ?? []).map(
     (label, index): Step => {
@@ -201,42 +199,6 @@ export default function HomePage() {
                 </p>
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials (design-partner placeholders, generic names only) */}
-      <section aria-labelledby="voices-heading" className="border-t border-line">
-        <div className="mx-auto max-w-5xl px-6 py-20">
-          <h2
-            id="voices-heading"
-            className="text-center font-display text-3xl font-medium text-ink"
-          >
-            What careful teams say
-          </h2>
-          <div className="mt-12 grid gap-6 md:grid-cols-2">
-            <figure className="rounded-lg border border-line bg-card p-8">
-              <blockquote className="leading-relaxed text-ink">
-                &ldquo;The first time I watched the outbox review, I stopped
-                worrying. I could read every email it wanted to send before a
-                single one went out.&rdquo;
-              </blockquote>
-              <figcaption className="mt-5 text-sm text-muted">
-                {reviewer?.name ?? "J. Doe"}, compliance lead at a design
-                partner
-              </figcaption>
-            </figure>
-            <figure className="rounded-lg border border-line bg-card p-8">
-              <blockquote className="leading-relaxed text-ink">
-                &ldquo;Our access review used to eat a week each quarter. Now
-                it comes to me twice: once to approve the plan, once to sign
-                the exceptions.&rdquo;
-              </blockquote>
-              <figcaption className="mt-5 text-sm text-muted">
-                {operator?.name ?? "R. Roe"}, operations lead at a design
-                partner
-              </figcaption>
-            </figure>
           </div>
         </div>
       </section>
