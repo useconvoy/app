@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 
 import { PageIntro } from "../components/page-intro";
 
+export const dynamic = "force-static";
+
 export const metadata: Metadata = {
+  alternates: { canonical: "/privacy" },
   title: "Privacy policy",
   description:
     "What Convoy collects, why, and what we never do with it. Placeholder template.",

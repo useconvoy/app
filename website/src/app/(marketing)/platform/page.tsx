@@ -3,7 +3,10 @@ import type { Metadata } from "next";
 import { CtaBand } from "../components/cta-band";
 import { PageIntro } from "../components/page-intro";
 
+export const dynamic = "force-static";
+
 export const metadata: Metadata = {
+  alternates: { canonical: "/platform" },
   title: "Platform",
   description:
     "How Convoy works: routines, workspaces and systems, rehearsal copies, checkpoints, budgets, and evidence export.",
@@ -175,7 +178,14 @@ export default function PlatformPage() {
         </p>
       </Section>
 
-      <CtaBand />
+      {/* This page is the platform, so the default secondary link would send
+          the reader back to where they already are. */}
+      <CtaBand
+        secondary={{
+          href: "/solutions",
+          label: "See what teams hand over",
+        }}
+      />
     </>
   );
 }

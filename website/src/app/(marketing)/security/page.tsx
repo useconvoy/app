@@ -3,7 +3,10 @@ import type { Metadata } from "next";
 import { CtaBand } from "../components/cta-band";
 import { PageIntro } from "../components/page-intro";
 
+export const dynamic = "force-static";
+
 export const metadata: Metadata = {
+  alternates: { canonical: "/security" },
   title: "Security",
   description:
     "How Convoy handles isolation, roles, audit trails, credentials, and evidence. Honest and concrete, no badge theater.",

@@ -1,12 +1,28 @@
 import Link from "next/link";
 
-/** Closing call-to-action band shared by marketing pages. */
+/** Where the secondary link points when a page does not say otherwise. */
+const DEFAULT_SECONDARY = {
+  href: "/platform",
+  label: "Explore the platform",
+} as const;
+
+/**
+ * Closing call-to-action band shared by marketing pages.
+ *
+ * The secondary link is a prop rather than something derived from the current
+ * route, so this stays a server component: reading the pathname would need
+ * usePathname, which would push the whole band, on every marketing page, into
+ * the client bundle to decide one href. A page that would otherwise link to
+ * itself passes its own.
+ */
 export function CtaBand({
   title = "See a routine run with your own eyes",
   body = "We will walk you through a live rehearsal, checkpoints and all, in about thirty minutes.",
+  secondary = DEFAULT_SECONDARY,
 }: {
   title?: string;
   body?: string;
+  secondary?: { href: string; label: string };
 }) {
   return (
     <section
@@ -29,10 +45,10 @@ export function CtaBand({
             Request a demo
           </Link>
           <Link
-            href="/platform"
+            href={secondary.href}
             className="inline-flex items-center rounded-md border border-line bg-card px-5 py-2.5 text-sm font-medium text-ink hover:border-muted"
           >
-            Explore the platform
+            {secondary.label}
           </Link>
         </div>
       </div>

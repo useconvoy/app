@@ -4,7 +4,10 @@ import { friendlyDate } from "@/lib/format";
 
 import { PageIntro } from "../components/page-intro";
 
+export const dynamic = "force-static";
+
 export const metadata: Metadata = {
+  alternates: { canonical: "/writing" },
   title: "Writing",
   description:
     "Notes from the Convoy team on careful software, rehearsal, and work that has to be provable.",

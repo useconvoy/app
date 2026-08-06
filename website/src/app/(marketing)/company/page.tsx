@@ -4,7 +4,10 @@ import Link from "next/link";
 import { CtaBand } from "../components/cta-band";
 import { PageIntro } from "../components/page-intro";
 
+export const dynamic = "force-static";
+
 export const metadata: Metadata = {
+  alternates: { canonical: "/company" },
   title: "Company",
   description:
     "Why Convoy exists, the principles we build by, and how to reach us.",

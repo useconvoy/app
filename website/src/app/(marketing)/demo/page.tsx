@@ -3,7 +3,10 @@ import type { Metadata } from "next";
 import { PageIntro } from "../components/page-intro";
 import { DemoRequestForm } from "./demo-form";
 
+export const dynamic = "force-static";
+
 export const metadata: Metadata = {
+  alternates: { canonical: "/demo" },
   title: "Request a demo",
   description:
     "Tell us about the routine work you want to hand off and we will walk you through a live rehearsal.",

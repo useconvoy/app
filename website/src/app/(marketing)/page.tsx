@@ -7,7 +7,10 @@ import { money } from "@/lib/format";
 import { CtaBand } from "./components/cta-band";
 import { StepList, type Step } from "./components/step-list";
 
+export const dynamic = "force-static";
+
 export const metadata: Metadata = {
+  alternates: { canonical: "/" },
   title: { absolute: "Convoy: routine work, done carefully" },
   description:
     "Convoy runs your recurring routines, rehearses them safely first, and holds for your judgment at every step that matters.",

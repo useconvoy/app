@@ -7,7 +7,10 @@ import { CtaBand } from "../components/cta-band";
 import { PageIntro } from "../components/page-intro";
 import { StepList, type Step } from "../components/step-list";
 
+export const dynamic = "force-static";
+
 export const metadata: Metadata = {
+  alternates: { canonical: "/solutions" },
   title: "Solutions",
   description:
     "Three routines teams hand to Convoy: quarterly access reviews, vendor due diligence, and policy attestations.",

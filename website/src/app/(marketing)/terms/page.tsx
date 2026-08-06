@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 
 import { PageIntro } from "../components/page-intro";
 
+export const dynamic = "force-static";
+
 export const metadata: Metadata = {
+  alternates: { canonical: "/terms" },
   title: "Terms of service",
   description: "The terms that govern use of Convoy. Placeholder template.",
 };

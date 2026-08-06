@@ -4,7 +4,10 @@ import { friendlyDate } from "@/lib/format";
 
 import { PageIntro } from "../components/page-intro";
 
+export const dynamic = "force-static";
+
 export const metadata: Metadata = {
+  alternates: { canonical: "/changelog" },
   title: "Changelog",
   description:
     "What has shipped in Convoy recently, in plain language.",
