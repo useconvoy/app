@@ -1,208 +1,219 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-
-import { routines } from "@/lib/fixtures/world";
-import { money } from "@/lib/format";
 
 import { CtaBand } from "./components/cta-band";
-import { StepList, type Step } from "./components/step-list";
+import { Hero } from "./components/hero";
+import { Reveal } from "./components/reveal";
 
 export const dynamic = "force-static";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
-  title: { absolute: "Convoy: routine work, done carefully" },
+  title: { absolute: "Convoy Labs: routine work, done carefully" },
   description:
-    "Convoy runs your recurring routines, rehearses them safely first, and holds for your judgment at every step that matters.",
+    "Convoy runs the routines your team repeats every close and every quarter. Each one rehearses safely first, holds for your sign-off, and leaves a record built for an auditor.",
 };
 
-const HOW_IT_WORKS = [
+/* The work these teams actually own. The highest-intent words on the site, so
+ * they are real text rather than an image. */
+const WORK = [
+  "Quarterly access reviews",
+  "SOC 2 and ISO evidence collection",
+  "Control testing and workpapers",
+  "Vendor due-diligence refresh",
+  "Policy attestation chases",
+  "Audit request fulfillment",
+];
+
+const PHASES = [
   {
     number: "01",
-    title: "Rehearse safely",
-    body: "Every routine runs first against a rehearsal copy of your workspace. Emails land in an outbox that never sends, records change on a copy, and the clock can fast-forward through days in minutes.",
+    title: "Plan",
+    body: "Before anything runs, the routine writes down what it plans to do: the steps, the systems it will touch, where it will stop for your sign-off, and the most it is allowed to spend. Every change to the plan records who made it and why.",
   },
   {
     number: "02",
-    title: "Approve the plan",
-    body: "Before a routine touches anything real, you see its plan as a list of plain sentences. You approve it, edit it, or send it back. Nothing starts on a shrug.",
+    title: "Approve",
+    body: "Nothing sensitive happens without you. Read the plan, ask for changes, or approve it. Steps marked as checkpoints pause the run and wait for your sign-off before the work continues.",
   },
   {
     number: "03",
-    title: "It holds for your judgment",
-    body: "When a run reaches a decision that belongs to a person, it stops and asks. The checkpoint names who it is waiting for, what it needs, and what happens if nobody answers.",
+    title: "Execute",
+    body: "A run keeps working for as long as the job takes, hours or weeks. If something interrupts it, it picks up where it left off. You can pause it, drop in a note to redirect it, or resume it whenever you like.",
   },
-] as const;
+  {
+    number: "04",
+    title: "Learn",
+    body: "When a run finishes, Convoy looks at what went well and what did not, and proposes ways to do the routine better. Each change is tested against past runs and ships only with your approval. Your tenth access review goes smoother than your first.",
+  },
+];
 
-const TRUST_POINTS = [
+const LEDGER = [
   {
-    title: "Every action recorded",
-    body: "Each step a routine takes is written down with who or what did it and when. The record is built for handing to an auditor, not for us.",
+    label: "Sign-off",
+    value:
+      "Held steps require a named approver, recorded with the person and the time",
   },
   {
-    title: "Budgets on every run",
-    body: "Every run carries a spending cap you set. You see what is spent and what is set aside as it happens, and a run that reaches its cap stops.",
+    label: "Plans",
+    value: "Versioned end to end; every revision keeps its author and reason",
   },
   {
-    title: "Nothing live without rehearsal",
-    body: "A routine earns its way to production by showing you rehearsal results first. You review exactly what it would have done before anything goes out.",
+    label: "Records",
+    value: "An event history that cannot be edited; any run replayable step by step",
   },
-] as const;
+  { label: "Files", value: "Checksummed, traceable to the step that made them, ready to export" },
+  {
+    label: "Access",
+    value: "Per-system, per-run credentials; least privilege by default",
+  },
+  {
+    label: "Budgets",
+    value: "Dollar caps enforced ahead of the work, not counted up afterwards",
+  },
+  { label: "Encryption", value: "Run payloads encrypted while the work is in flight" },
+  { label: "Deployment", value: "Options to match your data boundary" },
+];
+
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="mb-4 block font-mono text-xs font-semibold tracking-[0.17em] text-muted uppercase">
+      {children}
+    </span>
+  );
+}
+
+function SectionHeading({
+  id,
+  children,
+}: {
+  id: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <h2
+      id={id}
+      className="font-display text-[clamp(30px,3.5vw,44px)] leading-[1.12] font-medium tracking-[-0.012em] text-ink"
+    >
+      {children}
+    </h2>
+  );
+}
 
 export default function HomePage() {
-  const accessReview = routines[0];
-
-  const narrativeSteps: Step[] = (accessReview?.planSteps ?? []).map(
-    (label, index): Step => {
-      if (index < 2) return { label, state: "done" };
-      if (index === 2) {
-        return {
-          label,
-          state: "held",
-          note: "Checkpoint: the exception memos wait here until a person reads them and signs off. The run does not move until someone does.",
-        };
-      }
-      return { label, state: "queued" };
-    },
-  );
-
   return (
     <>
-      {/* Hero */}
-      <section className="mx-auto max-w-4xl px-6 pt-20 pb-16 text-center sm:pt-28">
-        <h1 className="font-display text-5xl leading-tight font-medium text-ink sm:text-6xl">
-          Routine work, done carefully
-        </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg text-muted">
-          Convoy runs the routines your team repeats every month and every
-          quarter. It rehearses each one safely before anything is real, and it
-          holds for your judgment at every step that matters.
-        </p>
-        <div className="mt-10 flex flex-wrap justify-center gap-4">
-          <Link
-            href="/demo"
-            className="inline-flex items-center rounded-md bg-pine px-6 py-3 text-sm font-medium text-card hover:bg-pine-deep"
-          >
-            Request a demo
-          </Link>
-          <a
-            href="#how-it-works"
-            className="inline-flex items-center rounded-md border border-line bg-card px-6 py-3 text-sm font-medium text-ink hover:border-muted"
-          >
-            See how it works
-          </a>
+      <Hero />
+
+      {/* The work: split A, copy left, the vocabulary right. */}
+      <section
+        aria-labelledby="work-heading"
+        className="border-t border-line-soft py-16 sm:py-24"
+      >
+        <div className="mx-auto grid max-w-[1160px] gap-9 px-5 sm:px-7 lg:grid-cols-[1.15fr_0.85fr] lg:gap-[88px]">
+          <Reveal>
+            <Eyebrow>The work</Eyebrow>
+            <SectionHeading id="work-heading">
+              Chat cannot close a workpaper.
+            </SectionHeading>
+            <p className="mt-4 text-[17.5px] text-muted">
+              Recurring compliance work like access reviews, evidence
+              collection, control testing, and vendor reconciliations stretches
+              across days, systems, and deadlines. It does not fit in a chat
+              window, and it should not fill your evenings. Convoy gives each
+              routine its own run that plans the work, waits for your sign-off,
+              carries it across your systems, survives interruptions, and shows
+              its work.
+            </p>
+          </Reveal>
+          <Reveal className="flex flex-wrap content-start gap-2.5 pt-1.5">
+            {WORK.map((item) => (
+              <span
+                key={item}
+                className="rounded-full border border-line bg-card px-3.5 py-2 font-mono text-[12.5px] tracking-[0.04em] text-ink"
+              >
+                {item}
+              </span>
+            ))}
+          </Reveal>
         </div>
       </section>
 
-      {/* How it works */}
+      {/* How a run works: split B, the four phases. */}
       <section
-        id="how-it-works"
-        aria-labelledby="how-it-works-heading"
-        className="border-t border-line bg-card"
+        id="lifecycle"
+        aria-labelledby="lifecycle-heading"
+        className="border-t border-line-soft py-16 sm:py-24"
       >
-        <div className="mx-auto max-w-6xl px-6 py-20">
-          <h2
-            id="how-it-works-heading"
-            className="text-center font-display text-3xl font-medium text-ink"
-          >
-            How a routine earns your trust
-          </h2>
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {HOW_IT_WORKS.map((item) => (
-              <article
-                key={item.number}
-                className="rounded-lg border border-line bg-field p-6"
-              >
-                <p className="font-mono text-xs tracking-widest text-muted">
-                  {item.number}
-                </p>
-                <h3 className="mt-3 text-lg font-semibold text-ink">
-                  {item.title}
-                </h3>
-                <p className="mt-3 text-sm leading-relaxed text-muted">
-                  {item.body}
-                </p>
-              </article>
+        <div className="mx-auto grid max-w-[1160px] gap-9 px-5 sm:px-7 lg:grid-cols-[0.7fr_1.45fr] lg:gap-[88px]">
+          <Reveal>
+            <Eyebrow>How a run works</Eyebrow>
+            <SectionHeading id="lifecycle-heading">
+              Plan. Approve. Execute. <em className="font-medium italic">Learn.</em>
+            </SectionHeading>
+          </Reveal>
+          <div className="relative">
+            <span
+              aria-hidden="true"
+              className="absolute top-7 bottom-7 left-[19px] w-0.5 bg-line"
+            />
+            {PHASES.map((phase) => (
+              <Reveal key={phase.number}>
+                <div className="group relative grid grid-cols-[40px_1fr] gap-x-5 py-6 sm:gap-x-7">
+                  <span className="relative z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 border-line bg-card font-mono text-xs font-semibold text-muted transition-[border-color,color] duration-200 ease-[var(--ease-entrance)] group-hover:border-pass group-hover:text-pass-text">
+                    {phase.number}
+                  </span>
+                  <div>
+                    <h3 className="pt-1 font-display text-[22px] font-semibold text-ink">
+                      {phase.title}
+                    </h3>
+                    <p className="mt-2 max-w-[60ch] text-base text-muted">
+                      {phase.body}
+                    </p>
+                  </div>
+                </div>
+              </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Product narrative: the quarterly access review */}
+      {/* Built for scrutiny: the ledger. */}
       <section
-        aria-labelledby="narrative-heading"
-        className="border-t border-line"
+        id="scrutiny"
+        aria-labelledby="scrutiny-heading"
+        className="border-t border-line-soft py-16 sm:py-24"
       >
-        <div className="mx-auto max-w-6xl px-6 py-20">
-          <div className="grid items-start gap-12 lg:grid-cols-2">
-            <div>
-              <p className="font-mono text-xs tracking-widest text-muted uppercase">
-                A real routine
-              </p>
-              <h2
-                id="narrative-heading"
-                className="mt-4 font-display text-3xl font-medium text-ink"
-              >
-                The quarterly access review, handled
-              </h2>
-              <p className="mt-5 leading-relaxed text-muted">
-                Every quarter, someone on your team pulls the list of who can
-                reach which systems, compares it against HR records, writes up
-                every difference, and chases the people who never reply. It
-                takes days and it has to be right.
-              </p>
-              <p className="mt-4 leading-relaxed text-muted">
-                Convoy runs the same review as a routine. It gathers the lists,
-                notes the differences, and drafts an exception memo for each
-                one. Then it stops, because judging an exception is a decision
-                that belongs to a person.
-              </p>
-              <p className="mt-4 leading-relaxed text-muted">
-                In rehearsal, the whole review runs against a copy of your
-                workspace, and the reminder emails collect in an outbox that
-                never sends. You see exactly what it would have sent before
-                anything goes out, word for word, name by name.
-              </p>
-              <p className="mt-6 font-mono text-sm text-muted">
-                Up to {money(accessReview?.budgetCapUsd ?? 75)} per run, and
-                not a cent past it.
-              </p>
-            </div>
-            <div className="rounded-lg border border-line bg-card p-8">
-              <p className="text-sm font-semibold text-ink">
-                {accessReview?.name ?? "Quarterly user access review"}
-              </p>
-              <p className="mt-1 mb-6 text-sm text-muted">
-                {accessReview?.descriptor}
-              </p>
-              <StepList steps={narrativeSteps} />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Trust band */}
-      <section
-        aria-labelledby="trust-heading"
-        className="bg-pine-deep text-card"
-      >
-        <div className="mx-auto max-w-6xl px-6 py-20">
-          <h2
-            id="trust-heading"
-            className="text-center font-display text-3xl font-medium"
-          >
-            Careful is the whole product
-          </h2>
-          <div className="mt-12 grid gap-10 md:grid-cols-3">
-            {TRUST_POINTS.map((point) => (
-              <div key={point.title}>
-                <h3 className="text-lg font-semibold">{point.title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-card/75">
-                  {point.body}
-                </p>
-              </div>
-            ))}
-          </div>
+        <div className="mx-auto grid max-w-[1160px] gap-9 px-5 sm:px-7 lg:grid-cols-[0.7fr_1.45fr] lg:gap-[88px]">
+          <Reveal>
+            <Eyebrow>Built for scrutiny</Eyebrow>
+            <SectionHeading id="scrutiny-heading">
+              Answers ready before the auditor asks.
+            </SectionHeading>
+          </Reveal>
+          <Reveal>
+            <dl className="border-t border-line-soft">
+              {LEDGER.map((row) => (
+                <div
+                  key={row.label}
+                  className="grid grid-cols-1 items-baseline gap-1 border-b border-line-soft px-0.5 py-3.5 sm:grid-cols-[max-content_minmax(28px,1fr)_58%] sm:gap-4 sm:py-4"
+                >
+                  <dt className="font-mono text-[12.5px] font-semibold tracking-[0.1em] whitespace-nowrap text-ink uppercase">
+                    {row.label}
+                  </dt>
+                  {/* The leader that carries the eye across. It has nothing to
+                      say to a screen reader, and there is no room for it once
+                      the rows stack. */}
+                  <span
+                    aria-hidden="true"
+                    className="hidden -translate-y-1 border-b-[1.5px] border-dotted border-rule sm:block"
+                  />
+                  <dd className="text-[15px] leading-relaxed text-muted">
+                    {row.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </Reveal>
         </div>
       </section>
 
