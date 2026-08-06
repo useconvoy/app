@@ -307,3 +307,78 @@ resource "aws_route53_record" "www" {
   ttl     = 60
   records = [aws_lightsail_static_ip.console.ip_address]
 }
+
+# --- GitHub Actions deploy identity -----------------------------------------
+#
+# The deploy workflow pushes images to this console's repository. It assumes
+# this role through GitHub's OIDC provider rather than holding an access key,
+# so there is no long-lived credential in the repository's secrets and nothing
+# to rotate. The trust policy pins both the repository and the branch: a
+# workflow on a fork or a feature branch presents a different subject and
+# cannot assume it.
+
+resource "aws_iam_openid_connect_provider" "github" {
+  url             = "https://token.actions.githubusercontent.com"
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+
+  tags = merge(local.tags, { Name = "github-actions-oidc" })
+}
+
+resource "aws_iam_role" "github_deploy" {
+  name = "${local.name_prefix}-github-deploy"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
+        Action    = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+            "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:ref:refs/heads/${var.github_deploy_branch}"
+          }
+        }
+      },
+    ]
+  })
+
+  tags = merge(local.tags, { Name = "${local.name_prefix}-github-deploy" })
+}
+
+resource "aws_iam_role_policy" "github_deploy" {
+  name = "${local.name_prefix}-github-deploy"
+  role = aws_iam_role.github_deploy.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # GetAuthorizationToken has no resource form; the pushes it enables are
+        # confined by the statement below.
+        Sid      = "EcrAuth"
+        Effect   = "Allow"
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Sid    = "PushThisRepositoryOnly"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage",
+          # The workflow reads before it writes, to skip rebuilding a commit
+          # that is already published under an immutable tag.
+          "ecr:BatchGetImage",
+          "ecr:DescribeImages",
+        ]
+        Resource = aws_ecr_repository.website.arn
+      },
+    ]
+  })
+}

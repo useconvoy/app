@@ -27,3 +27,8 @@ output "bootstrap_log_hint" {
   description = "Where cloud-init records what it did, for when the console does not come up."
   value       = "ssh ubuntu@${aws_lightsail_static_ip.console.ip_address} sudo tail -f /var/log/convoy-bootstrap.log"
 }
+
+output "github_deploy_role_arn" {
+  description = "Set as the AWS_DEPLOY_ROLE_ARN repository variable for the deploy workflow."
+  value       = aws_iam_role.github_deploy.arn
+}

@@ -1,0 +1,147 @@
+name: deploy-console
+
+# Continuous delivery for the Lightsail demo console.
+#
+# A release is a pull and a restart, not a task-definition revision: the whole
+# deployment lives on one instance under docker compose. So this builds the
+# image, pushes it to ECR, repoints compose.yaml at the new tag, and restarts.
+#
+# Migrations do NOT run on a normal deploy. Postgres is a container on the
+# instance disk with no managed backups and no PITR, so a bad migration on a
+# merge would be unrecoverable. Run this workflow manually with
+# run_migrations = true when a release needs them.
+#
+# Setup (once) — see stacks/demo/README.md:
+#   vars.AWS_DEPLOY_ROLE_ARN  role created by the demo stack, assumed via OIDC
+#   vars.DEPLOY_HOST          instance IP (terraform output -raw static_ip)
+#   vars.DEPLOY_HOST_KEY      ssh-keyscan line for that host; strict checking
+#                             is skipped with a warning when this is unset
+#   secrets.DEPLOY_SSH_KEY    private key for ubuntu@ on the instance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      # Infrastructure and prose do not change the image, so they must not
+      # trigger a release. Negations apply in order; keep them after the
+      # include above.
+      - "!website/infra/**"
+      - "!website/**/*.md"
+      - ".github/workflows/deploy-console.yml"
+  workflow_dispatch:
+    inputs:
+      run_migrations:
+        description: "Run db:migrate and the app-role sync before restarting"
+        type: boolean
+        default: false
+
+# One deploy at a time, and never cancel a half-finished one: an interrupted
+# run can leave compose.yaml pointing at a tag that was never pulled.
+concurrency:
+  group: deploy-console
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # required to assume the deploy role via OIDC
+
+env:
+  AWS_REGION: us-west-2
+  STACK_NAME: demo
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: meta
+        run: echo "tag=$(git rev-parse --short=12 HEAD)" >>"$GITHUB_OUTPUT"
+
+      - name: Assume the deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # The repository has immutable tags, so re-running a deploy for a commit
+      # that is already built must skip the push rather than fail on it.
+      - name: Is this commit already in ECR?
+        id: existing
+        run: |
+          if aws ecr describe-images \
+               --repository-name "convoy-console-${STACK_NAME}/website" \
+               --image-ids "imageTag=${{ steps.meta.outputs.tag }}" >/dev/null 2>&1; then
+            echo "found=true" >>"$GITHUB_OUTPUT"
+            echo "::notice::${{ steps.meta.outputs.tag }} already in ECR; redeploying it without rebuilding"
+          else
+            echo "found=false" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push
+        if: steps.existing.outputs.found == 'false'
+        run: website/infra/deploy/build-and-push.sh --tag "${{ steps.meta.outputs.tag }}"
+
+      - name: Repoint the instance and restart
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_HOST_KEY: ${{ vars.DEPLOY_HOST_KEY }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          RUN_MIGRATIONS: ${{ github.event_name == 'workflow_dispatch' && inputs.run_migrations || false }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_HOST}" || { echo "vars.DEPLOY_HOST is not set"; exit 1; }
+          test -n "${DEPLOY_SSH_KEY}" || { echo "secrets.DEPLOY_SSH_KEY is not set"; exit 1; }
+
+          install -m 700 -d ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy_key
+          printf '%s\n' "${DEPLOY_SSH_KEY}" >~/.ssh/deploy_key
+
+          if [ -n "${DEPLOY_HOST_KEY}" ]; then
+            printf '%s\n' "${DEPLOY_HOST_KEY}" >~/.ssh/known_hosts
+            STRICT=yes
+          else
+            echo "::warning::vars.DEPLOY_HOST_KEY is unset; accepting the host key unverified. Set it to the output of: ssh-keyscan ${DEPLOY_HOST}"
+            STRICT=accept-new
+          fi
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking="${STRICT}" \
+            "ubuntu@${DEPLOY_HOST}" TAG="${TAG}" RUN_MIGRATIONS="${RUN_MIGRATIONS}" bash -euo pipefail -s <<'REMOTE'
+          cd /opt/convoy
+
+          # Only the console's own image lines. A blanket "replace the tag on
+          # every image line" also rewrites postgres:16-alpine and
+          # caddy:2-alpine, which breaks the next pull.
+          sudo sed -i -E "s#(image: [0-9]+\.dkr\.ecr\.[^:]*/website):.*#\1:${TAG}#" compose.yaml
+          grep -c "website:${TAG}" compose.yaml
+
+          sudo docker compose pull
+
+          if [ "${RUN_MIGRATIONS}" = "true" ]; then
+            # Both halves, in this order: the schema, then the app-role
+            # password sync that retires the password committed in
+            # 0001_init.sql. Skipping the second leaves the console on a
+            # published password.
+            sudo docker compose run --rm -T web sh -c \
+              'npm run db:migrate && node infra/db/sync-app-role.mjs'
+          fi
+
+          sudo docker compose up -d
+          sudo docker compose ps
+          REMOTE
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "### Console deploy"
+            echo
+            echo "| field | value |"
+            echo "|---|---|"
+            echo "| tag | \`${{ steps.meta.outputs.tag }}\` |"
+            echo "| rebuilt | ${{ steps.existing.outputs.found == 'false' }} |"
+            echo "| migrations | ${{ github.event_name == 'workflow_dispatch' && inputs.run_migrations || false }} |"
+          } >>"$GITHUB_STEP_SUMMARY"

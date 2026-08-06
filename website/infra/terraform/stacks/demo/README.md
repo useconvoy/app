@@ -144,7 +144,9 @@ aws cloudtrail lookup-events --region us-west-2 \
 # five minutes means the script never got to apt.
 aws lightsail get-instance-metric-data --instance-name convoy-console-demo \
   --region us-west-2 --metric-name NetworkIn --period 300 --unit Bytes \
-  --statistics Sum --start-time <t0> --end-time <t1>
+  --statistics Sum \
+  --start-time "$(date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%SZ)" \
+  --end-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 # Set once the instance pulls the console image.
 aws ecr describe-images --repository-name convoy-console-demo/website \
@@ -159,18 +161,52 @@ absence localizes the fault to the wrapper.
 
 ## Deploying a new version
 
-The instance holds the whole deployment, so a release is a pull and a restart
-rather than a task-definition revision:
+`.github/workflows/deploy-console.yml` does this on every push to `main` that
+touches application code. Infrastructure and prose are excluded — they do not
+change the image — so a Terraform-only commit does not trigger a release.
+
+**Migrations never run on an automatic deploy.** Postgres is a container on the
+instance disk with no managed backups and no PITR, so a bad migration arriving
+with a merge would be unrecoverable. When a release needs them, run the
+workflow by hand from the Actions tab with `run_migrations` checked.
+
+### One-time setup
+
+The stack creates the role; the repository needs to be told about it. Three
+repository *variables* and one *secret*:
+
+```sh
+terraform output -raw github_deploy_role_arn   # -> AWS_DEPLOY_ROLE_ARN
+terraform output -raw static_ip                # -> DEPLOY_HOST
+ssh-keyscan "$(terraform output -raw static_ip)"  # -> DEPLOY_HOST_KEY
+```
+
+`DEPLOY_SSH_KEY` is the secret: a private key whose public half is authorized
+for `ubuntu@` on the instance. `DEPLOY_HOST_KEY` is optional — without it the
+workflow accepts the host key unverified and says so in an annotation, which
+is worth avoiding.
+
+No AWS access key is involved. The workflow assumes the deploy role through
+GitHub's OIDC provider, and the trust policy pins the repository *and* the
+branch, so a run from a fork or a feature branch cannot assume it.
+
+### By hand
+
+The same two steps, when you need them directly:
 
 ```sh
 TAG=$(git rev-parse --short=12 HEAD)
 STACK_NAME=demo AWS_REGION=us-west-2 ../../../deploy/build-and-push.sh --tag "${TAG}"
 
-ssh ubuntu@$(terraform output -raw static_ip) '
-  cd /opt/convoy &&
-  sudo sed -i "s|:[^:]*$|:'"${TAG}"'|" compose.yaml &&
-  sudo docker compose pull && sudo docker compose up -d
-'
+ssh ubuntu@$(terraform output -raw static_ip) TAG="${TAG}" bash -euo pipefail -s <<'REMOTE'
+cd /opt/convoy
+# Anchored to the console's own image lines. A blanket
+# `sed "s|:[^:]*$|:${TAG}|"` rewrites every image line in the file, so
+# postgres:16-alpine and caddy:2-alpine become postgres:<sha> and
+# caddy:<sha> — tags that do not exist — and the next pull fails.
+sudo sed -i -E "s#(image: [0-9]+\.dkr\.ecr\.[^:]*/website):.*#\1:${TAG}#" compose.yaml
+sudo docker compose pull && sudo docker compose up -d
+REMOTE
 ```
 
 Migrations, when a release adds them, run both halves in the same order the

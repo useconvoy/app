@@ -100,3 +100,18 @@ variable "notifier_interval_ms" {
   type        = number
   default     = 15000
 }
+
+variable "github_repository" {
+  description = "owner/name of the repository whose Actions may assume the deploy role."
+  type        = string
+  default     = "useconvoy/app"
+}
+
+variable "github_deploy_branch" {
+  description = <<-EOT
+    Branch the deploy workflow runs on. Part of the OIDC subject, so a run on
+    any other branch — or on a fork — cannot assume the role.
+  EOT
+  type        = string
+  default     = "main"
+}
