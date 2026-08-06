@@ -113,12 +113,31 @@ export function RunCard() {
             <p className="font-display text-[19px] leading-tight font-semibold text-ink">
               Q3 user access review
             </p>
-            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10.5px] tracking-[0.1em] text-muted">
+            {/* The approval is a signature, not a stamp. It was a rotated red
+                box, which put the failure color on the one event in the card
+                that is unambiguously good and read as an error badge sitting
+                under the title. A check and a name is what an approval looks
+                like on paper, and it leaves the red for things that failed. */}
+            <p className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[10.5px] tracking-[0.1em] text-muted">
               <span className="tabular-nums">DAY 2 OF 4</span>
-              {/* The stamp, off true by a degree so it reads as applied to the
-                  page rather than set on it. */}
-              <span className="inline-block -rotate-[1.2deg] rounded-[3px] border border-fail px-1.5 py-0.5 font-semibold text-fail">
-                PLAN APPROVED · J. DOE
+              <span aria-hidden="true" className="h-2.5 w-px bg-rule" />
+              <span className="inline-flex items-center gap-1.5 font-semibold text-ink">
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 11 11"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M1.7 5.9 4.3 8.4 9.3 2.7"
+                    className="stroke-pass"
+                    strokeWidth="1.9"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                PLAN APPROVED BY J. DOE
               </span>
             </p>
           </div>
