@@ -44,8 +44,11 @@ apt-get update -y
 apt-get install -y ca-certificates curl gnupg jq unzip
 
 install -m 0755 -d /etc/apt/keyrings
+# --batch --yes so the keyring is overwritten rather than refused: gpg fails on
+# an existing output file, which would make re-running this script by hand
+# (the quickest recovery when a later step fails) die on its first apt step.
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg |
-  gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
 chmod a+r /etc/apt/keyrings/docker.gpg
 
 echo \

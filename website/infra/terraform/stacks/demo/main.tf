@@ -133,6 +133,13 @@ resource "aws_secretsmanager_secret_version" "runtime" {
 # scoped to exactly two reads — pull this one repository, read this one secret
 # — and nothing else in the account.
 
+# The secret sets no kms_key_id, so it is encrypted under this account's
+# AWS-managed Secrets Manager key. Looked up rather than hardcoded: the ARN
+# carries an account and region, and one is generated per account.
+data "aws_kms_key" "secretsmanager" {
+  key_id = "alias/aws/secretsmanager"
+}
+
 resource "aws_iam_user" "instance" {
   name = "${local.name_prefix}-instance"
   tags = merge(local.tags, { Name = "${local.name_prefix}-instance" })
@@ -168,6 +175,26 @@ resource "aws_iam_user_policy" "instance" {
         Resource = aws_secretsmanager_secret.runtime.arn
       },
       {
+        # GetSecretValue is only half of a secret read. The value is encrypted
+        # under the AWS-managed aws/secretsmanager key, and that key's policy
+        # delegates to IAM, so the caller needs kms:Decrypt of its own or
+        # Secrets Manager answers "Access to KMS is not allowed" — which is a
+        # KMS denial wearing a Secrets Manager error message. ViaService keeps
+        # the grant narrow: this key, only when Secrets Manager is the one
+        # using it, never directly.
+        Sid      = "DecryptThatSecret"
+        Effect   = "Allow"
+        Action   = "kms:Decrypt"
+        Resource = data.aws_kms_key.secretsmanager.arn
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "secretsmanager.${var.region}.amazonaws.com"
+          }
+        }
+      },
+      {
+        # NotAction, so every action added above must be repeated here or the
+        # explicit Deny overrides its own Allow.
         Sid    = "DenyEverythingElse"
         Effect = "Deny"
         NotAction = [
@@ -176,6 +203,7 @@ resource "aws_iam_user_policy" "instance" {
           "ecr:GetDownloadUrlForLayer",
           "ecr:BatchCheckLayerAvailability",
           "secretsmanager:GetSecretValue",
+          "kms:Decrypt",
         ]
         Resource = "*"
       },
@@ -210,7 +238,15 @@ resource "aws_lightsail_instance" "console" {
 
   # The secret has to hold a value before cloud-init reads it; creating the
   # version is a separate resource from creating the secret.
-  depends_on = [aws_secretsmanager_secret_version.runtime]
+  # The secret must hold its value before the box boots looking for it, and the
+  # key must carry its permissions before the box uses it. Neither is implied
+  # by the user_data references (which only need the secret's ARN and the key's
+  # id), so without this the instance can race ahead of its own policy and fail
+  # the very first secret read.
+  depends_on = [
+    aws_secretsmanager_secret_version.runtime,
+    aws_iam_user_policy.instance,
+  ]
 }
 
 resource "aws_lightsail_static_ip" "console" {
