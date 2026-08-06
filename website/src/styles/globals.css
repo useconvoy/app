@@ -6,16 +6,21 @@
 @theme inline {
   --color-field: var(--color-field);
   --color-card: var(--color-card);
+  --color-card-alt: var(--color-card-alt);
   --color-ink: var(--color-ink);
   --color-pine: var(--color-pine);
   --color-pine-deep: var(--color-pine-deep);
   --color-line: var(--color-line);
   --color-line-soft: var(--color-line-soft);
+  --color-rule: var(--color-rule);
   --color-muted: var(--color-muted);
   --color-pass: var(--color-pass);
   --color-pass-soft: var(--color-pass-soft);
+  --color-pass-line: var(--color-pass-line);
+  --color-pass-text: var(--color-pass-text);
   --color-hold: var(--color-hold);
   --color-hold-soft: var(--color-hold-soft);
+  --color-hold-text: var(--color-hold-text);
   --color-fail: var(--color-fail);
   --color-fail-soft: var(--color-fail-soft);
   --color-graphite: var(--color-graphite);
@@ -24,17 +29,41 @@
   --font-display: var(--font-besley), Georgia, serif;
   --font-sans: var(--font-public-sans), system-ui, sans-serif;
   --font-mono: var(--font-spline-mono), ui-monospace, monospace;
+
+  /* Motion. Durations and curves are applied at the call site rather than
+   * replacing Tailwind's defaults, so an incidental transition-colors
+   * somewhere else in the app keeps behaving the way its author expected. */
+  --ease-entrance: cubic-bezier(0, 0, 0.38, 0.9);
+  --ease-settle: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 body {
   background: var(--color-field);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  /* A missing weight must not be faked: a synthesized bold on a serif display
+   * face is immediately visible as counterfeit. */
+  font-synthesis-weight: none;
+}
+
+::selection {
+  background: var(--color-pine);
+  color: var(--color-card-alt);
 }
 
 :focus-visible {
   outline: var(--focus-ring);
   outline-offset: 1px;
+}
+
+/* Deep links have to clear the sticky header, and the target needs air of its
+ * own once it lands. Two different mechanisms, both required. */
+html {
+  scroll-padding-top: 88px;
+}
+
+[id] {
+  scroll-margin-block-start: 24px;
 }
 
 /* The pulse exists for running/live indicators only. */
@@ -44,19 +73,50 @@ body {
     opacity: 1;
   }
   50% {
-    opacity: 0.45;
+    opacity: 0.35;
   }
 }
 
 .pulse-live {
-  animation: pulse-live 2s ease-in-out infinite;
+  animation: pulse-live 1.8s ease-in-out infinite;
+}
+
+/* Scroll reveal. The element is always in the server HTML and always occupies
+ * its final box; only transform and opacity move, so a reveal can never shift
+ * layout. Fires once. */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 0.6s var(--ease-entrance),
+    transform 0.6s var(--ease-entrance);
+}
+
+[data-reveal][data-shown] {
+  opacity: 1;
+  transform: none;
+}
+
+/* Content must never depend on JavaScript to become visible. */
+.no-js [data-reveal] {
+  opacity: 1;
+  transform: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation: none !important;
-    transition: none !important;
+  /* Collapse the distance, keep the fade at its full duration. Switching
+   * motion off entirely also stops loading states and reads as broken rather
+   * than calm; what causes harm is travel and looping, not the fade. */
+  [data-reveal] {
+    transform: none;
+    transition-property: opacity;
+  }
+
+  .pulse-live {
+    animation: none;
+  }
+
+  html {
+    scroll-behavior: auto;
   }
 }
