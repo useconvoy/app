@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+# Brings up the whole console on a fresh Lightsail box.
+#
+# Terraform renders this with templatefile(). A doubled dollar-brace escapes to
+# a literal one, so those reach the shell as ordinary variables; a single one is
+# a Terraform value substituted before the instance ever sees it. No secret
+# value is templated in — only the key that reads them, so the rendered
+# user_data (which Lightsail displays, and hands to anyone who can describe the
+# instance) stays boring.
+set -euo pipefail
+
+exec > >(tee -a /var/log/convoy-bootstrap.log) 2>&1
+echo "==> convoy console bootstrap starting at $(date -Is)"
+
+export DEBIAN_FRONTEND=noninteractive
+APP_DIR=/opt/convoy
+
+# --- Packages ---------------------------------------------------------------
+
+apt-get update -y
+apt-get install -y ca-certificates curl gnupg jq unzip
+
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg |
+  gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$${VERSION_CODENAME}") stable" \
+  >/etc/apt/sources.list.d/docker.list
+
+apt-get update -y
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+systemctl enable --now docker
+
+# The Lightsail bundles ship without swap. A 2 GB box running Next.js, a
+# notifier, and Postgres survives a burst far better with some.
+if [ ! -f /swapfile ]; then
+  fallocate -l 2G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >>/etc/fstab
+fi
+
+# --- AWS CLI ----------------------------------------------------------------
+
+ARCH="$(uname -m)"
+curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$${ARCH}.zip" -o /tmp/awscliv2.zip
+unzip -q /tmp/awscliv2.zip -d /tmp
+/tmp/aws/install --update
+rm -rf /tmp/aws /tmp/awscliv2.zip
+
+# Root-only, because this key can read the runtime secret.
+install -d -m 0700 /root/.aws
+cat >/root/.aws/credentials <<'AWSCREDS'
+[default]
+aws_access_key_id = ${aws_access_key_id}
+aws_secret_access_key = ${aws_secret_key}
+AWSCREDS
+chmod 0600 /root/.aws/credentials
+
+cat >/root/.aws/config <<'AWSCONFIG'
+[default]
+region = ${aws_region}
+output = json
+AWSCONFIG
+
+# --- Runtime environment ----------------------------------------------------
+
+install -d -m 0700 "$${APP_DIR}"
+
+echo "==> fetching runtime environment from Secrets Manager"
+aws secretsmanager get-secret-value \
+  --secret-id '${secret_id}' \
+  --region '${aws_region}' \
+  --query SecretString --output text |
+  jq -r 'to_entries[] | "\(.key)=\(.value)"' >"$${APP_DIR}/.env"
+
+# Values are generated without special characters and the DSNs carry none, so
+# every line is a safe unquoted KEY=VALUE that both compose and the containers
+# read identically.
+cat >>"$${APP_DIR}/.env" <<'STATICENV'
+NODE_ENV=production
+PORT=3000
+HOSTNAME=0.0.0.0
+POSTGRES_USER=convoy_website_admin
+POSTGRES_DB=convoy_website
+STATICENV
+
+chmod 0600 "$${APP_DIR}/.env"
+
+# --- Compose project --------------------------------------------------------
+
+cat >"$${APP_DIR}/compose.yaml" <<'COMPOSE'
+name: convoy-console
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: [.env]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U convoy_website_admin -d convoy_website"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    image: IMAGE_PLACEHOLDER
+    restart: unless-stopped
+    command: ["npm", "run", "start"]
+    env_file: [.env]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose: ["3000"]
+
+  notifier:
+    image: IMAGE_PLACEHOLDER
+    restart: unless-stopped
+    command: ["npm", "run", "notifier"]
+    env_file: [.env]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web]
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+COMPOSE
+
+sed -i "s|IMAGE_PLACEHOLDER|${image}|g" "$${APP_DIR}/compose.yaml"
+
+# Caddy gets its own certificate from Let's Encrypt on first request and
+# renews without help. That is the whole reason this stack needs no ACM
+# certificate, no validation records, and no load balancer to terminate on.
+cat >"$${APP_DIR}/Caddyfile" <<'CADDY'
+${domain_name}, www.${domain_name} {
+	encode zstd gzip
+	reverse_proxy web:3000
+}
+CADDY
+
+# --- Bring it up ------------------------------------------------------------
+
+cd "$${APP_DIR}"
+
+echo "==> authenticating to ECR"
+aws ecr get-login-password --region '${aws_region}' |
+  docker login --username AWS --password-stdin '${registry_host}'
+
+echo "==> starting postgres"
+docker compose up -d postgres
+
+echo "==> waiting for postgres to accept connections"
+for _ in $(seq 1 60); do
+  if docker compose exec -T postgres pg_isready -U convoy_website_admin -d convoy_website >/dev/null 2>&1; then
+    break
+  fi
+  sleep 2
+done
+
+# Both halves, in this order, exactly as infra/deploy/run-migrations.sh does on
+# ECS: migrations create the RLS-bound role with the development password from
+# 0001_init.sql, and the sync retires it for the generated one. Skipping the
+# second half leaves the console running on a password that is in the repo.
+echo "==> applying migrations and syncing the app role"
+docker compose run --rm -T web sh -c 'npm run db:migrate && node infra/db/sync-app-role.mjs'
+
+echo "==> starting the console"
+docker compose up -d
+
+# Survives reboots without a unit file of its own: compose restart policies
+# plus a started docker do the work.
+echo "==> bootstrap complete at $(date -Is)"
