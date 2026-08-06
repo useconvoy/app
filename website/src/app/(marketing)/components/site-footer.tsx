@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { RouteMark } from "@/components/brand/route-mark";
+
 const FOOTER_COLUMNS = [
   {
     heading: "Product",
@@ -34,7 +36,16 @@ export function SiteFooter() {
       <div className="mx-auto max-w-6xl px-6 py-12">
         <div className="flex flex-col justify-between gap-10 sm:flex-row">
           <div>
-            <p className="font-display text-lg font-semibold text-ink">Convoy</p>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2.5 text-ink"
+              aria-label="Convoy Labs home"
+            >
+              <RouteMark width={26} />
+              <span className="font-display text-[15px] font-extrabold tracking-[0.06em]">
+                CONVOY
+              </span>
+            </Link>
             <p className="mt-2 max-w-xs text-sm text-muted">
               Routine work, done carefully.
             </p>
@@ -65,8 +76,8 @@ export function SiteFooter() {
           </nav>
         </div>
         <div className="mt-10 flex flex-col gap-2 border-t border-line-soft pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-muted">
-            &copy; {new Date().getFullYear()} Convoy. All rights reserved.
+          <p className="font-mono text-[11.5px] tracking-[0.06em] text-muted">
+            &copy; {new Date().getFullYear()} CONVOY LABS &middot; SAN FRANCISCO
           </p>
           <p className="text-xs text-muted">
             <Link href="/terms" className="hover:text-ink">
