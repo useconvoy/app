@@ -1,3 +1,26 @@
+#!/bin/sh
+# Lightsail bootstrap wrapper. POSIX sh on purpose — read this before adding
+# anything bash-flavoured above the heredoc.
+#
+# Lightsail prepends its own initialization (SSH CA registration) to whatever
+# user_data it is given and runs the combined file as one cloud-init script.
+# That pushes the real script's `#!/usr/bin/env bash` off line 1, so the
+# shebang is never honoured and cloud-init executes the whole thing with
+# /bin/sh — dash on Ubuntu. Dash has no `set -o pipefail` and no `>(...)`
+# process substitution, so the original script died on its second line with
+# "Illegal option -o pipefail", before installing a single package.
+#
+# So: write the real bootstrap out and run it under bash explicitly. Nothing
+# above the heredoc may use a bash-only feature.
+set -eu
+
+# Created empty and locked down first: the body carries the instance's AWS
+# key, and `cat >` alone would leave it world-readable under the default umask
+# until a later chmod.
+touch /opt/convoy-bootstrap.sh
+chmod 0700 /opt/convoy-bootstrap.sh
+
+cat >/opt/convoy-bootstrap.sh <<'CONVOY_BOOTSTRAP'
 #!/usr/bin/env bash
 # Brings up the whole console on a fresh Lightsail box.
 #
@@ -209,3 +232,6 @@ docker compose up -d
 # Survives reboots without a unit file of its own: compose restart policies
 # plus a started docker do the work.
 echo "==> bootstrap complete at $(date -Is)"
+CONVOY_BOOTSTRAP
+
+/bin/bash /opt/convoy-bootstrap.sh
