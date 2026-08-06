@@ -71,8 +71,13 @@ terraform apply stamp.tfplan
 ```
 
 The apply creates the ECR repository but cannot put an image in it, so push
-one before the instance is useful. The instance retries its pull, so the order
-below works without re-applying:
+one before the instance is useful. Cloud-init waits up to 30 minutes for the
+tag to appear before it migrates, so the order below works without
+re-applying; a push that takes longer than that needs the instance replaced
+(`terraform apply -replace=aws_lightsail_instance.console`, plus
+`-replace` on `aws_lightsail_static_ip_attachment.console` and
+`aws_lightsail_instance_public_ports.console` so the static IP and the port
+rules survive the new box):
 
 ```sh
 export STACK_NAME=demo AWS_REGION=us-west-2
