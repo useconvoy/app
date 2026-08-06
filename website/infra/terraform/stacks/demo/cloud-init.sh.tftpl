@@ -177,6 +177,24 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 
+# One apply creates both the repository and this instance, so on a first deploy
+# the box boots minutes before build-and-push.sh puts an image in ECR. Wait for
+# the tag to land instead of dying on the pull: under `set -e` an unpullable
+# image aborts the script here, and the console never starts at all.
+echo "==> waiting for ${image} to appear in ECR"
+for attempt in $(seq 1 60); do
+  if docker compose pull web >/dev/null 2>&1; then
+    echo "    image available after $${attempt} attempt(s)"
+    break
+  fi
+  echo "    not pushed yet (attempt $${attempt}/60); retrying in 30s"
+  sleep 30
+done
+
+# Unguarded on purpose: if the tag never arrived, fail loudly here rather than
+# leaving a half-started console behind.
+docker compose pull web
+
 # Both halves, in this order: migrations create the RLS-bound role with the
 # development password from 0001_init.sql, and the sync retires it for the
 # generated one. Skipping the second half leaves the console running on a
