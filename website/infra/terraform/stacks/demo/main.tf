@@ -3,8 +3,9 @@
 # One VM runs four containers behind Caddy: the Next.js server, the notifier,
 # Postgres, and Caddy itself terminating TLS from Let's Encrypt. That replaces
 # the VPC, NAT gateway, five interface endpoints, ALB, ACM certificate, ECS
-# cluster, and RDS instance that stacks/prod stamps — about $200/month of
-# managed infrastructure — with roughly $13.
+# cluster, and RDS instance the previous stack raised — about $200/month of
+# managed infrastructure — with roughly $13. That stack is in git history at
+# 4f1919a rather than beside this one, so there is one obvious way to deploy.
 #
 # Everything portable survives the swap: the same image, the same migrations,
 # the same environment contract. See README.md for the road back.
@@ -72,8 +73,8 @@ resource "random_password" "control_plane_token" {
 resource "aws_ecr_repository" "website" {
   name = "${local.name_prefix}/website"
 
-  # Matches stacks/prod: a tag always means the same bytes, so a rollback is
-  # exact rather than approximate.
+  # A tag always means the same bytes, so a rollback is exact rather than
+  # approximate.
   image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
@@ -113,7 +114,8 @@ resource "aws_secretsmanager_secret" "runtime" {
 
   # Zero, not the seven-day minimum: the secret name derives from the stack
   # name, so a recovery window would block re-stamping the demo until it
-  # expired. Matches how stacks/prod handles deletion_protection = false.
+  # expired. Seven days is the shortest window AWS accepts above zero, which
+  # is why repeatable destroy-then-re-stamp needs none at all.
   recovery_window_in_days = 0
 
   tags = merge(local.tags, { Name = "${local.name_prefix}-runtime-env" })

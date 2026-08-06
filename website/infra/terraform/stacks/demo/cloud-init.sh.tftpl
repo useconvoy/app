@@ -177,10 +177,11 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 
-# Both halves, in this order, exactly as infra/deploy/run-migrations.sh does on
-# ECS: migrations create the RLS-bound role with the development password from
-# 0001_init.sql, and the sync retires it for the generated one. Skipping the
-# second half leaves the console running on a password that is in the repo.
+# Both halves, in this order: migrations create the RLS-bound role with the
+# development password from 0001_init.sql, and the sync retires it for the
+# generated one. Skipping the second half leaves the console running on a
+# password that is in the repository. See "How the database works" in
+# infra/README.md.
 echo "==> applying migrations and syncing the app role"
 docker compose run --rm -T web sh -c 'npm run db:migrate && node infra/db/sync-app-role.mjs'
 

@@ -4,11 +4,10 @@
 # Sourced by the sibling scripts; not runnable on its own.
 #
 # Required environment (or flags on the calling scripts):
-#   STACK_NAME   Console short name, e.g. "prod" (resource prefix convoy-console-<name>).
+#   STACK_NAME   Console short name, e.g. "demo" (resource prefix convoy-console-<name>).
 #   AWS_REGION   Console region (falls back to AWS_DEFAULT_REGION / aws configure).
 #
 # Optional environment:
-#   CLUSTER_NAME   Override the derived ECS cluster name.
 #   ECR_REPO_URL   Override the derived ECR repository URL.
 #
 # Dependencies: aws CLI v2, jq. docker for build-and-push.sh.
@@ -28,7 +27,6 @@ require_stack_env() {
   [[ -n "${AWS_REGION:-}" ]] || die "AWS_REGION is not set"
   export AWS_REGION
   NAME_PREFIX="convoy-console-${STACK_NAME}"
-  CLUSTER_NAME="${CLUSTER_NAME:-${NAME_PREFIX}}"
 }
 
 account_id() {
@@ -61,49 +59,7 @@ ecr_tag_exists() { # $1 = tag
     --image-ids "imageTag=$1" >/dev/null 2>&1
 }
 
-# Clone the latest ACTIVE revision of a task-definition family, override the
-# first container's image, register the clone, and print the new revision ARN.
-#   clone_task_definition FAMILY IMAGE
-clone_task_definition() {
-  local family="$1" image="$2"
-
-  local current
-  current="$(aws ecs describe-task-definition \
-    --task-definition "${family}" \
-    --query 'taskDefinition' --output json)" ||
-    die "task-definition family not found: ${family} (has the console been stamped?)"
-
-  local next
-  next="$(jq --arg image "${image}" '
-      del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
-          .compatibilities, .registeredAt, .registeredBy, .deregisteredAt)
-      | .containerDefinitions[0].image = $image
-    ' <<<"${current}")"
-
-  aws ecs register-task-definition \
-    --cli-input-json "${next}" \
-    --query 'taskDefinition.taskDefinitionArn' --output text
-}
-
-wait_service_stable() { # $1 = service name
-  log "waiting for ${1} to reach steady state..."
-  aws ecs wait services-stable --cluster "${CLUSTER_NAME}" --services "$1"
-  log "${1} is stable"
-}
-
-# Private subnets and the no-ingress task security group, discovered from tags
-# so the scripts need nothing but STACK_NAME and a region. Sets SUBNET_IDS and
-# TASK_SECURITY_GROUP_ID.
-resolve_task_network() {
-  SUBNET_IDS="${SUBNET_IDS:-$(aws ec2 describe-subnets \
-    --filters "Name=tag:Name,Values=${NAME_PREFIX}-private-*" \
-    --query 'Subnets[].SubnetId' --output text | tr '\t' ',')}"
-  [[ -n "${SUBNET_IDS}" ]] ||
-    die "no private subnets tagged ${NAME_PREFIX}-private-* (has the console been stamped in ${AWS_REGION}?)"
-
-  TASK_SECURITY_GROUP_ID="${TASK_SECURITY_GROUP_ID:-$(aws ec2 describe-security-groups \
-    --filters "Name=group-name,Values=${NAME_PREFIX}-tasks" \
-    --query 'SecurityGroups[0].GroupId' --output text)}"
-  [[ -n "${TASK_SECURITY_GROUP_ID}" && "${TASK_SECURITY_GROUP_ID}" != "None" ]] ||
-    die "security group ${NAME_PREFIX}-tasks not found"
-}
+# The ECS helpers that used to live here — task-definition cloning, service
+# stability waits, and private-subnet discovery — went with the ECS stack. The
+# demo runs docker compose on one instance, so a release is a pull and a
+# restart over SSH rather than a task-definition revision.

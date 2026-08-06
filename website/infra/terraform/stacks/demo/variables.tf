@@ -1,9 +1,8 @@
 # Root inputs for the Lightsail demo console.
 #
 # This stack exists to run the console end to end for roughly the price of a
-# sandwich. It is deliberately not the production shape: see README.md in this
-# directory for what it gives up and what it would take to move back to
-# stacks/prod.
+# sandwich. It is deliberately not a production shape: see README.md in this
+# directory for what it gives up and what the road back looks like.
 
 variable "region" {
   description = "AWS region for the demo console."

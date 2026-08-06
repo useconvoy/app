@@ -1,14 +1,15 @@
 # The demo console — one Lightsail box
 
-`stacks/prod` stamps the console the way it should be run: a VPC, a NAT
-gateway, five interface endpoints, an ALB with an ACM certificate, an ECS
-cluster, and RDS. That is roughly **$200/month**, and more than half of it is
-plumbing rather than anything serving a request.
+The console used to be stamped the way it should be run: a VPC, a NAT gateway,
+five interface endpoints, an ALB with an ACM certificate, an ECS cluster, and
+RDS. That was roughly **$200/month**, and more than half of it was plumbing
+rather than anything serving a request. Those files were removed so there is
+one obvious way to deploy; they remain in git history at `4f1919a`.
 
 This stack serves the same image to the same domain for roughly **$13/month**
 by putting everything on one virtual machine.
 
-| | `stacks/prod` | `stacks/demo` |
+| | ECS stack (`4f1919a`) | `stacks/demo` |
 |---|---|---|
 | Compute | ECS Fargate, 2 web + 1 notifier | 2 containers on one Lightsail instance |
 | Database | RDS Postgres 16, managed backups | Postgres container on the instance disk |
@@ -30,29 +31,30 @@ Worth reading before this serves anyone who is not you.
 - **No managed backups and no point-in-time recovery.** Postgres writes to a
   Docker volume on the instance disk. Losing the instance loses the data.
   Lightsail snapshots are the cheap mitigation and are not wired up here.
-- **The database connection is not encrypted.** `stacks/prod` sets
-  `rds.force_ssl` and ships an RDS trust bundle in the image. Here Postgres is
-  reachable only over the compose bridge network on the same host, never
+- **The database connection is not encrypted.** The ECS stack set
+  `rds.force_ssl` and shipped an RDS trust bundle in the image. Here Postgres
+  is reachable only over the compose bridge network on the same host, never
   leaving the box — different protection, not the same one.
 - **An IAM access key lives on the instance.** Lightsail instances cannot
   carry an instance profile the way EC2 can, so the box authenticates with a
   key written to `/root/.aws/credentials` (mode 0600). It is scoped to pulling
   one ECR repository and reading one secret, with an explicit `Deny` on
-  everything else. That is the single largest posture difference from
-  `stacks/prod`, where no long-lived key exists anywhere.
+  everything else. That is the single largest posture difference from the ECS
+  stack, where no long-lived key existed anywhere.
 - **The runtime environment sits on disk** at `/opt/convoy/.env` (mode 0600,
   root). On ECS these values only ever exist in a task's memory.
 - **One instance means downtime is the normal case.** A reboot, a bad deploy,
   or a full disk takes the console down. There is no second target and nothing
   to fail over to.
-- **The security gates in `infra/README.md` do not all apply.** The "no task
-  role can reach a data store" check has no analogue, and the RLS checks run
-  against a local Postgres rather than RDS.
+- **Some of the old security gates have no analogue.** The "no task role can
+  reach a data store" check is meaningless without task roles, and the RLS
+  checks run against a local Postgres rather than RDS.
 
 The one thing it does *not* give up: the app runs the same image, the same
 migrations, and the same `convoy_website_app` RLS-bound role, with the
-development password from `0001_init.sql` retired at boot exactly as
-`deploy/run-migrations.sh` does on ECS.
+development password from `0001_init.sql` retired at boot in exactly the order
+the ECS migration task used. See "How the database works" in `infra/README.md`
+— that mechanism is hosting-independent and unchanged.
 
 ## Stamping
 
@@ -100,14 +102,14 @@ curl -I http://deployconvoy.com      # 308 to HTTPS, from Caddy
 curl -I https://deployconvoy.com     # 200, valid Let's Encrypt certificate
 ```
 
-Then sign in through AuthKit. As on `stacks/prod`, the run-timeline part of the
-smoke test cannot pass — `control_plane_url` points at a placeholder, so run,
-plan, and workspace surfaces stay dark by design.
+Then sign in through AuthKit. The run-timeline part of the smoke test cannot
+pass — `control_plane_url` points at a placeholder, so run, plan, and workspace
+surfaces stay dark by design.
 
 ## Deploying a new version
 
-There is no `deploy-service.sh` equivalent. The instance holds the whole
-deployment, so a release is a pull and a restart:
+The instance holds the whole deployment, so a release is a pull and a restart
+rather than a task-definition revision:
 
 ```sh
 TAG=$(git rev-parse --short=12 HEAD)
@@ -120,27 +122,37 @@ ssh ubuntu@$(terraform output -raw static_ip) '
 '
 ```
 
-Migrations, when a release adds them, run the same way `run-migrations.sh` does
-on ECS:
+Migrations, when a release adds them, run both halves in the same order the
+ECS migration task used — schema first, then the app-role password sync:
 
 ```sh
 sudo docker compose run --rm -T web sh -c \
   'npm run db:migrate && node infra/db/sync-app-role.mjs'
 ```
 
-## The road back to `stacks/prod`
+## The road back to a production stack
 
-This stack is a detour, not a replacement, and `stacks/prod` stays on `main`
-fully valid — moving back is switching it on, not rebuilding it. What the two
-share is what makes the move cheap: the same image, the same migrations, and
-the same environment-variable contract.
+This stack is a detour, not a destination. The ECS stack it replaced is not
+lost — it is in git history at `4f1919a`, `terraform fmt` and `validate` clean
+as of that commit:
 
-1. Dump the data: `pg_dump` from the compose Postgres.
-2. Stamp `stacks/prod` (it uses a different state key, so both can exist).
+```sh
+git show 4f1919a:website/infra/terraform/stacks/prod/main.tf
+git checkout 4f1919a -- website/infra/terraform/modules/console-stack \
+                        website/infra/terraform/stacks/prod
+```
+
+Restoring it is one command; whether it is the right starting point depends on
+how far the app has moved by then. Either way, what makes the move cheap is
+what the two share: the same image, the same migrations, and the same
+environment-variable contract.
+
+1. Restore or rewrite the production stack. It uses a different state key, so
+   both can exist at once and the demo keeps serving during the cutover.
+2. Dump the data: `pg_dump` from the compose Postgres.
 3. Load the dump into RDS through the migrate task.
-4. Move the three values out of this stack's single runtime secret into the
-   three separate secrets `stacks/prod` expects, and put their ARNs in
-   `prod.tfvars`.
+4. Split this stack's single runtime secret into the three separate secrets
+   the production stack expects, and put their ARNs in its tfvars.
 5. Re-point the A records from the static IP to the ALB alias.
 6. `terraform destroy` here. Everything is built to allow it — `force_delete`
    on the repository and a zero-day recovery window on the secret — so the
