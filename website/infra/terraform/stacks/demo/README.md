@@ -111,6 +111,52 @@ Then sign in through AuthKit. The run-timeline part of the smoke test cannot
 pass — `control_plane_url` points at a placeholder, so run, plan, and workspace
 surfaces stay dark by design.
 
+## When the box comes up empty
+
+`user_data` is not run the way it looks. Lightsail prepends its own
+initialization to whatever it is given and executes the combination as one
+cloud-init script, so the bootstrap's `#!/usr/bin/env bash` is not on line 1
+and the shebang is ignored: cloud-init runs the file under `/bin/sh`, which is
+dash on Ubuntu. That is why `cloud-init.sh.tftpl` is POSIX sh down to the
+heredoc and only then hands off to bash. **Anything bash-only added above that
+heredoc — `pipefail`, `[[`, arrays, `>(...)` — will fail at run time, not at
+`terraform validate`.** Reported line numbers are offset by the preamble, so
+"line 25" meant line 10 of this file.
+
+Check it before deploying, using the same shell cloud-init will:
+
+```sh
+dash -n rendered-user-data.sh    # parses
+dash rendered-user-data.sh       # actually runs it; parsing alone misses
+                                 # `set -o pipefail`, which is a run-time error
+```
+
+If the console never answers, these three read the box's state from the AWS
+side, without needing SSH:
+
+```sh
+# Did the instance ever authenticate to AWS? Zero events means the bootstrap
+# died before the Secrets Manager fetch.
+aws cloudtrail lookup-events --region us-west-2 \
+  --lookup-attributes AttributeKey=Username,AttributeValue=convoy-console-demo-instance
+
+# A working boot pulls ~500 MB of packages plus the image. Single-digit KB per
+# five minutes means the script never got to apt.
+aws lightsail get-instance-metric-data --instance-name convoy-console-demo \
+  --region us-west-2 --metric-name NetworkIn --period 300 --unit Bytes \
+  --statistics Sum --start-time <t0> --end-time <t1>
+
+# Set once the instance pulls the console image.
+aws ecr describe-images --repository-name convoy-console-demo/website \
+  --region us-west-2 --image-ids imageTag=bootstrap \
+  --query 'imageDetails[0].lastRecordedPullTime'
+```
+
+On the box itself, `sudo cloud-init status --long` and
+`/var/log/cloud-init-output.log` carry the failure;
+`/var/log/convoy-bootstrap.log` only exists once the bash half starts, so its
+absence localizes the fault to the wrapper.
+
 ## Deploying a new version
 
 The instance holds the whole deployment, so a release is a pull and a restart
