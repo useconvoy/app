@@ -263,6 +263,38 @@ migration catches up.
   losing its AZ cuts every control-plane call and the notifier's feed off from
   the internet.
 
+### Tearing a stamp down
+
+Only sane for a stamp stood up with `deletion_protection = false`. That flag
+is what governs whether the stack can be removed at all, and it covers three
+resources that each refuse deletion by default:
+
+| Resource | With protection on | With it off |
+|---|---|---|
+| Database | refuses deletion, keeps a final snapshot | deletes, no snapshot |
+| ECR repository | refuses deletion while it holds images | deletes with its images |
+| Secrets | 30-day recovery window, name stays taken | deleted immediately |
+
+```sh
+cd terraform/stacks/<name>
+terraform destroy -var-file=<name>.tfvars
+```
+
+The secret recovery window is the one that surprises people. Secret names are
+derived from the stack name, so with a window in force a destroyed stamp
+blocks its own replacement: the next apply asks for a name that still exists,
+pending deletion, and fails. Seven days is the shortest window AWS accepts,
+so a stamp that needs to be re-creatable has to run at zero.
+
+Flipping `deletion_protection` from true to false is itself an apply, and it
+has to land **before** the destroy. Discovering this halfway through a
+teardown means an apply, then the destroy again.
+
+Two things survive on purpose and are not the module's to remove: the Route 53
+hosted zone when `create_hosted_zone = false` (it is read as a data source),
+and every secret passed in through `secret_arns`, which belongs to whoever
+issued it.
+
 ### Reading the web service's logs
 
 Two lines look like problems and are not:

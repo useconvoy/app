@@ -11,6 +11,13 @@ resource "aws_ecr_repository" "website" {
   # tag, including the first `bootstrap` one.
   image_tag_mutability = "IMMUTABLE"
 
+  # A repository holding images refuses to be deleted, so a throwaway stamp
+  # that has pushed even the first `bootstrap` tag cannot be torn down without
+  # emptying it by hand. Tie that to the same flag that governs the database's
+  # final snapshot: a stack worth protecting keeps its images, a throwaway one
+  # goes away in a single destroy.
+  force_delete = !var.deletion_protection
+
   image_scanning_configuration {
     scan_on_push = true
   }

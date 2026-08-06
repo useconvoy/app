@@ -6,6 +6,13 @@
 # WorkOS, Stripe, and the control-plane bearer are deliberately absent: they
 # are issued and rotated by systems outside this stack and arrive by ARN
 # through var.secret_arns.
+#
+# Every secret here takes its recovery window from local.secret_recovery_days.
+# Deleting a secret normally schedules it behind a recovery window rather than
+# removing it, and these names are derived from the stack name, so a destroyed
+# throwaway stamp would block its own re-stamp: the next apply asks for a name
+# that still exists, pending deletion. Protected stacks keep the full window;
+# throwaway ones delete immediately so destroy and re-apply is repeatable.
 
 # --- Session signing key ---------------------------------------------------
 
@@ -17,9 +24,10 @@ resource "random_password" "session_secret" {
 }
 
 resource "aws_secretsmanager_secret" "session_secret" {
-  name        = "${local.name_prefix}/session-secret"
-  description = "Signing key for the console's session cookies. Rotating it signs every user out."
-  kms_key_id  = aws_kms_key.console.arn
+  name                    = "${local.name_prefix}/session-secret"
+  description             = "Signing key for the console's session cookies. Rotating it signs every user out."
+  kms_key_id              = aws_kms_key.console.arn
+  recovery_window_in_days = local.secret_recovery_days
 
   tags = merge(local.tags, { Name = "${local.name_prefix}-session-secret" })
 }
@@ -38,9 +46,10 @@ resource "aws_secretsmanager_secret_version" "session_secret" {
 # disable every policy in the schema.
 
 resource "aws_secretsmanager_secret" "db_credentials" {
-  name        = "${local.name_prefix}/db-credentials"
-  description = "Console Postgres master credentials. Used by the migrate task only; the running app never holds these."
-  kms_key_id  = aws_kms_key.console.arn
+  name                    = "${local.name_prefix}/db-credentials"
+  description             = "Console Postgres master credentials. Used by the migrate task only; the running app never holds these."
+  kms_key_id              = aws_kms_key.console.arn
+  recovery_window_in_days = local.secret_recovery_days
 
   tags = merge(local.tags, { Name = "${local.name_prefix}-db-credentials" })
 }
@@ -63,9 +72,10 @@ resource "random_password" "db_app" {
 }
 
 resource "aws_secretsmanager_secret" "db_app_credentials" {
-  name        = "${local.name_prefix}/db-app-credentials"
-  description = "Console Postgres credentials for the RLS-bound convoy_website_app role. The web and notifier tasks connect with these."
-  kms_key_id  = aws_kms_key.console.arn
+  name                    = "${local.name_prefix}/db-app-credentials"
+  description             = "Console Postgres credentials for the RLS-bound convoy_website_app role. The web and notifier tasks connect with these."
+  kms_key_id              = aws_kms_key.console.arn
+  recovery_window_in_days = local.secret_recovery_days
 
   tags = merge(local.tags, { Name = "${local.name_prefix}-db-app-credentials" })
 }
@@ -83,6 +93,12 @@ resource "aws_secretsmanager_secret_version" "db_app_credentials" {
 }
 
 locals {
+  # 0 deletes immediately; anything else is a window during which the name
+  # stays taken. Seven days is the smallest window AWS accepts, so there is no
+  # middle ground between "gone now" and "gone in a week" — a throwaway stamp
+  # that wants to be re-stampable has to take 0.
+  secret_recovery_days = var.deletion_protection ? 30 : 0
+
   # The migrations create this role by name; the value is the role's identity,
   # not a credential.
   db_app_username = "convoy_website_app"

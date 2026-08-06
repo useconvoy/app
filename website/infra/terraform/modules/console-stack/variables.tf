@@ -186,7 +186,18 @@ variable "db_performance_insights_enabled" {
 }
 
 variable "deletion_protection" {
-  description = "Enable deletion protection on the database (and keep a final snapshot). Disable only for throwaway stamps."
+  description = <<-EOT
+    Whether this stamp is worth protecting from its own operator. True is the
+    production answer and makes the stack deliberately hard to remove: the
+    database refuses deletion and keeps a final snapshot, the image repository
+    refuses to be deleted while it holds images, and deleted secrets sit behind
+    a 30-day recovery window.
+
+    False is for throwaway and demo stamps, where all three of those turn a
+    `terraform destroy` into manual cleanup. It also makes a destroy/re-stamp
+    cycle repeatable: the secret names are derived from the stack name, so a
+    pending-deletion secret would otherwise collide with the next apply.
+  EOT
   type        = bool
   default     = true
 }
