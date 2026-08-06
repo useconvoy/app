@@ -1,0 +1,17 @@
+# Supply-chain policy: never resolve a package published within the last
+# day. A freshly published version is the window in which a compromised
+# release is most likely to still be live, and a day is long enough for the
+# registry and downstream tooling to pull a bad one. Installs and lockfile
+# updates both honor this, so a lockfile committed from here stays
+# installable for anyone enforcing the same floor. Enforcement during
+# resolution needs pnpm 11 or newer; older clients read the setting but
+# still resolve to the newest match, which is why the override below exists.
+minimumReleaseAge: 1440
+
+overrides:
+  # browserslist floats this browser-data package on a caret range, so a
+  # release inside the age window above lands in the lockfile whenever one
+  # is fresh. The cap holds it to the newest release that predates the
+  # window. Safe to remove once every client resolving this lockfile
+  # enforces minimumReleaseAge on its own.
+  electron-to-chromium: "<=1.5.400"

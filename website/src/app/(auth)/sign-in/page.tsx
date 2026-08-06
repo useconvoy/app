@@ -2,19 +2,19 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { completeSignIn } from "@/lib/auth/sign-in";
-import { workosEnabled } from "@/lib/auth/workos";
+import { localSignInAllowed, workosEnabled } from "@/lib/auth/workos";
 import { isEmail, normalizeEmail } from "@/lib/orgs/validation";
 
 export const metadata: Metadata = { title: "Sign in" };
 
 /**
- * Local dev provider: an explicit email + name sign-in used only when
- * WorkOS is not configured. The action re-checks the configuration so the
- * form cannot be replayed against a WorkOS-enabled deployment.
+ * The unverified email + name sign-in, for a laptop or CI only. The action
+ * re-checks that it is permitted, so it cannot be replayed against a
+ * deployment or against one that has since gained hosted sign-in.
  */
 async function devSignIn(formData: FormData) {
   "use server";
-  if (workosEnabled()) redirect("/sign-in");
+  if (!localSignInAllowed()) redirect("/sign-in");
   const email = normalizeEmail(String(formData.get("email") ?? ""));
   const name = String(formData.get("name") ?? "").trim();
   if (!isEmail(email) || name.length === 0) redirect("/sign-in?error=invalid");
@@ -29,6 +29,7 @@ export default async function SignInPage({
 }) {
   const { error } = await searchParams;
   const hosted = workosEnabled();
+  const local = localSignInAllowed();
   return (
     <div className="rounded-md border border-line bg-card p-8">
       <h1 className="font-display text-3xl text-ink">Convoy</h1>
@@ -47,6 +48,10 @@ export default async function SignInPage({
         >
           Continue
         </a>
+      ) : !local ? (
+        <div className="mt-6 rounded-sm border border-hold bg-hold-soft px-3 py-2 text-sm text-ink">
+          Sign-in is not available yet. Hosted sign-in has not been set up for this site.
+        </div>
       ) : (
         <form action={devSignIn} className="mt-6 space-y-4">
           <p className="border-t border-line-soft pt-4 text-xs font-medium uppercase tracking-wide text-muted">
