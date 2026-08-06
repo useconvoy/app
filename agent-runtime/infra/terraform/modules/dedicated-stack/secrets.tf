@@ -1,7 +1,7 @@
 # Per-stack secrets. Values are generated here (never hardcoded) and live in
 # Secrets Manager under the stack KMS key. NOTE: generated values also exist
-# in Terraform state — the stamping runbook requires an encrypted S3+KMS
-# backend for state (see infra/README.md).
+# in Terraform state, so this module must only ever be applied against an
+# encrypted S3 backend with a KMS key, never with local state.
 
 # --- Temporal payload-codec key --------------------------------------------
 

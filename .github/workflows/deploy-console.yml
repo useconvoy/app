@@ -11,7 +11,7 @@ name: deploy-console
 # merge would be unrecoverable. Run this workflow manually with
 # run_migrations = true when a release needs them.
 #
-# Setup (once) — see stacks/demo/README.md:
+# Setup, once, on the repository:
 #   vars.AWS_DEPLOY_ROLE_ARN  role created by the demo stack, assumed via OIDC
 #   vars.DEPLOY_HOST          instance IP (terraform output -raw static_ip)
 #   vars.DEPLOY_HOST_KEY      ssh-keyscan line for that host; strict checking
@@ -59,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "::warning::deploy-console is not configured; skipping. See website/infra/terraform/stacks/demo/README.md"
+          echo "::warning::deploy-console is not configured; skipping. Set the repository variables and secret listed in the job summary."
           {
             echo "### deploy-console is not configured"
             echo

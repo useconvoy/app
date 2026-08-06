@@ -38,8 +38,6 @@ import {
   worldFileName,
 } from './trial-utils.ts';
 
-// Sibling components (written concurrently — see RUNNER.NOTES.md for the
-// assumed call shapes; import errors here are expected until they land):
 import { createSandboxService } from '../sandbox/index.ts';
 import { createScriptedRuntimeFactory, executors } from '../executors/index.ts';
 import { gradeTrial } from '../graders/index.ts';

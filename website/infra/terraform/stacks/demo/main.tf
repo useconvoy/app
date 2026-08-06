@@ -8,7 +8,8 @@
 # 4f1919a rather than beside this one, so there is one obvious way to deploy.
 #
 # Everything portable survives the swap: the same image, the same migrations,
-# the same environment contract. See README.md for the road back.
+# the same environment contract, so moving back to managed infrastructure is a
+# change of hosting rather than a rewrite.
 
 locals {
   name_prefix = "convoy-console-${var.stack_name}"

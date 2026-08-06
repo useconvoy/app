@@ -2,8 +2,9 @@
  * The co-signed runtime seam.
  *
  * These are the ONLY things agent-evals asks of agent-runtime. Everything else
- * the harness needs it gets by reading the event log directly. Keep this file
- * in sync with CONTRACTS.md — changes here need both founders' sign-off.
+ * the harness needs it gets by reading the event log directly. This seam is
+ * co-signed: widening it changes what agent-runtime must guarantee, so changes
+ * here need sign-off from both owning teams.
  *
  * Design rule that makes the whole sandbox work: DOMAIN TIME (event ts, gate
  * deadlines, durable-timer fire_at, retry backoff, the "today is..." string in

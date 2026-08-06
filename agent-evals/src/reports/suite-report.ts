@@ -5,8 +5,9 @@
  * summary ($ per verified item).
  *
  * SuiteResult does not carry the eval-set thresholds, so the chart's item
- * floor comes in via opts (the CLI passes config.thresholds.itemFloor);
- * without it the threshold line defaults to 0.5 — flagged in RUNNER.NOTES.md.
+ * floor comes in via opts (the CLI passes config.thresholds.itemFloor).
+ * Without it the threshold line falls back to 0.5, which is a display default
+ * and not a value any eval set declared.
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';

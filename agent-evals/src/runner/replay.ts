@@ -36,7 +36,6 @@ import {
 } from './trial-utils.ts';
 import type { ConvoyEvent } from '../runtime/events.ts';
 
-// Sibling components (see RUNNER.NOTES.md for assumed call shapes):
 import { gradeTrial } from '../graders/index.ts';
 import { bundleQuery } from './world-query-shim.ts';
 import { buildScenarioVerdict, buildSuiteResult, buildTrialResult } from '../scoring/index.ts';

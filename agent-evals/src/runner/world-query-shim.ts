@@ -1,8 +1,8 @@
 /**
- * world-query-shim.ts — the contract names `bundleQuery` as the export of
- * src/graders/world-query.ts, but the graders component currently ships it as
- * `makeBundleQuery` (flagged in RUNNER.NOTES.md). This shim accepts either
- * name so the runner keeps working whichever way the mismatch is resolved.
+ * world-query-shim.ts — the runtime seam names `bundleQuery` as the export of
+ * src/graders/world-query.ts, but the graders component ships it as
+ * `makeBundleQuery`. This shim accepts either name so the runner keeps working
+ * whichever way the mismatch is resolved.
  */
 
 import * as worldQueryModule from '../graders/world-query.ts';

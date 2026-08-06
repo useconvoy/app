@@ -418,12 +418,11 @@ def verdicts_file_name(scenario_id: str, trial_idx: int) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Call-shape adapters for the concurrently-written scoring/graders siblings.
-# The TS reference landed with positional signatures plus an equivalent
-# single-object form (see RUNNER.NOTES.md); these adapters accept either
-# Python port of that shape so the runner keeps working regardless of which
-# form the sibling chose. They take the target function as an argument, so
-# this module still imports without the siblings present.
+# Call-shape adapters for the scoring and grader entry points. The TypeScript
+# reference exposes both positional signatures and an equivalent single-object
+# form; these adapters accept either Python port of that shape, so the runner
+# works against whichever form is present. They take the target function as an
+# argument, so this module still imports when those components are absent.
 # ---------------------------------------------------------------------------
 
 
