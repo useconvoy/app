@@ -8,10 +8,15 @@ import { RouteMark } from "@/components/brand/route-mark";
  * an element that starts transparent is not counted as an LCP candidate until
  * it becomes visible.
  *
- * Node states come from the design system: done is a filled node with a
- * check, active is an open node with the one pulse in the interface, held
- * carries the hold colors and a pause glyph, queued is a line-colored outline
- * with its content at 55%.
+ * The nodes are small and read the way the mark reads: solid behind you, open
+ * ahead of you. Glyphs inside a node this size would only be noise, so the
+ * state is carried by the row's own label as well as its color, never by
+ * color alone.
+ *
+ * The strand between two steps is a row of its own with something to say. A
+ * list of five steps says the routine has five steps; a list of five steps
+ * with the time and the output of each gap says the routine has been running
+ * for two days, which is the claim the page is actually making.
  */
 type StepState = "done" | "active" | "held" | "queued";
 
@@ -20,6 +25,8 @@ interface RunStep {
   detail: string;
   meta: string;
   state: StepState;
+  /** What happened between this step and the next one. */
+  gap?: string;
 }
 
 const STEPS: RunStep[] = [
@@ -28,24 +35,28 @@ const STEPS: RunStep[] = [
     detail: "Okta · Google Workspace · AWS IAM",
     meta: "34 FILES",
     state: "done",
+    gap: "3 systems read · 12m",
   },
   {
     title: "Reconcile against the HR roster",
     detail: "Cross-checked 1,204 people",
     meta: "3 EXCEPTIONS",
     state: "done",
+    gap: "1,204 records · 41m",
   },
   {
     title: "Draft exception memos",
     detail: "2 of 3 drafted, citing source records",
     meta: "IN PROGRESS",
     state: "active",
+    gap: "running · 6m",
   },
   {
     title: "Checkpoint: your sign-off on memos",
     detail: "The run holds here until you respond",
     meta: "HELD FOR YOU",
     state: "held",
+    gap: "waiting on you",
   },
   {
     title: "File evidence to the audit binder",
@@ -55,135 +66,148 @@ const STEPS: RunStep[] = [
   },
 ];
 
-function Check() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-      <path
-        d="M2 6.2 5 9l5-6"
-        className="stroke-card"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
+const NODE: Record<StepState, string> = {
+  done: "bg-pass",
+  active: "border-[2.5px] border-pass bg-card",
+  held: "border-[2.5px] border-hold bg-hold-soft",
+  queued: "border border-line bg-card",
+};
 
-function Pause() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-      <rect x="4.2" y="2" width="1.6" height="8" rx="0.8" className="fill-hold" />
-      <rect x="7.2" y="2" width="1.6" height="8" rx="0.8" className="fill-hold" />
-    </svg>
-  );
-}
+const META: Record<StepState, string> = {
+  done: "text-muted",
+  active: "font-semibold text-pass-text",
+  held: "font-semibold text-hold-text",
+  queued: "text-muted opacity-60",
+};
 
-function Node({ state }: { state: StepState }) {
-  const base =
-    "relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2";
-  if (state === "done")
-    return (
-      <span className={`${base} border-pass bg-pass`}>
-        <Check />
-      </span>
-    );
-  if (state === "active")
-    return (
-      <span className={`${base} border-pass bg-card`}>
-        <span className="pulse-live h-2.5 w-2.5 rounded-full bg-pass" />
-      </span>
-    );
-  if (state === "held")
-    return (
-      <span className={`${base} border-hold bg-hold-soft`}>
-        <Pause />
-      </span>
-    );
-  return <span className={`${base} border-line bg-card`} />;
-}
+/* The strand leaving a step. Behind the front of the run it is a solid stroke
+ * that has been walked; ahead of it, a dotted one that has not. */
+const STRAND: Record<StepState, string> = {
+  done: "border-l-2 border-pass opacity-45",
+  active: "border-l-2 border-dotted border-pass opacity-60",
+  held: "border-l-2 border-dotted border-hold",
+  queued: "border-l border-dotted border-line",
+};
 
 export function RunCard() {
   return (
-    <aside
-      aria-label="An access review part way through a run"
-      className="rounded-[18px] border border-line bg-card p-5 shadow-[0_1px_0_rgba(24,36,32,.04),0_32px_64px_-40px_rgba(21,59,46,.35)] sm:p-6"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="font-mono text-[11.5px] tracking-[0.1em] text-muted">
-            DAY 2 OF 4
-          </p>
-          <p className="mt-1.5 font-display text-xl font-semibold text-ink">
-            Q3 user access review
-          </p>
-        </div>
-        <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-pass-soft px-2.5 py-1.5 font-mono text-[11px] font-semibold tracking-[0.09em] text-pass-text">
-          <span className="pulse-live h-[7px] w-[7px] rounded-full bg-pass" />
-          RUNNING
-        </span>
-      </div>
+    <div className="relative">
+      {/* The sheet underneath. A run is a document, and documents come in
+          stacks. No shadow of its own: the offset is the whole effect. */}
+      <span
+        aria-hidden="true"
+        className="absolute inset-0 -rotate-[1.1deg] rounded-[14px] border border-line bg-card"
+      />
 
-      {/* The stamp. Rotated a degree off true so it reads as applied to the
-          page rather than set on it. */}
-      <span className="mt-2 mb-4 inline-block -rotate-[1.2deg] rounded-md border-[1.5px] border-fail px-2 py-1 font-mono text-[10.5px] font-semibold tracking-[0.12em] text-fail">
-        PLAN APPROVED · J. DOE
-      </span>
-
-      <ol className="relative mb-5">
-        {/* The connector the checkpoints sit on. */}
-        <span
-          aria-hidden="true"
-          className="absolute top-3.5 bottom-3.5 left-[13px] w-0.5 rounded bg-line"
-        />
-        {STEPS.map((step) => (
-          <li
-            key={step.title}
-            className={`relative grid grid-cols-[28px_1fr_auto] items-start gap-x-3.5 py-2.5 ${
-              step.state === "held"
-                ? "-mx-2.5 rounded-[10px] bg-hold-soft px-2.5"
-                : ""
-            }`}
-          >
-            <Node state={step.state} />
-            <div className={step.state === "queued" ? "opacity-55" : undefined}>
-              <p className="pt-0.5 text-[14.5px] leading-snug font-semibold text-ink">
-                {step.title}
-              </p>
-              <p className="text-[13px] leading-snug text-muted">{step.detail}</p>
-            </div>
-            <span
-              className={`pt-1.5 font-mono text-[11px] tracking-[0.06em] whitespace-nowrap ${
-                step.state === "held"
-                  ? "font-semibold text-hold-text"
-                  : step.state === "queued"
-                    ? "text-muted opacity-55"
-                    : "text-muted"
-              }`}
-            >
-              {step.meta}
-            </span>
-          </li>
-        ))}
-      </ol>
-
-      <div className="border-t border-line-soft pt-4">
-        <div className="flex items-baseline justify-between">
-          <span className="font-mono text-[11px] tracking-[0.1em] text-muted">
-            RUN BUDGET
+      {/* tick-corners: the four marks an auditor puts on a document under
+          review. They cost one pseudo-element and they are the difference
+          between a panel and an exhibit. */}
+      <aside
+        aria-label="An access review part way through a run"
+        className="tick-corners relative rounded-[14px] border border-line bg-card shadow-[0_1px_0_rgba(24,36,32,.03),0_24px_44px_-34px_rgba(21,59,46,.32)]"
+      >
+        {/* Title bar. The instrument's own chrome, ruled off from its
+            contents the way a report header is. */}
+        <div className="flex items-start justify-between gap-3 border-b border-line-soft px-5 py-4">
+          <div className="min-w-0">
+            <p className="font-display text-[19px] leading-tight font-semibold text-ink">
+              Q3 user access review
+            </p>
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10.5px] tracking-[0.1em] text-muted">
+              <span className="tabular-nums">DAY 2 OF 4</span>
+              {/* The stamp, off true by a degree so it reads as applied to the
+                  page rather than set on it. */}
+              <span className="inline-block -rotate-[1.2deg] rounded-[3px] border border-fail px-1.5 py-0.5 font-semibold text-fail">
+                PLAN APPROVED · J. DOE
+              </span>
+            </p>
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-pass-soft px-2.5 py-1 font-mono text-[10.5px] font-semibold tracking-[0.09em] text-pass-text">
+            <span className="pulse-live h-[6px] w-[6px] rounded-full bg-pass" />
+            RUNNING
           </span>
-          {/* Tabular figures, so a changing number never shifts the row. */}
-          <b className="font-mono text-[12.5px] font-semibold text-ink tabular-nums">
-            $18.40 / $75.00 CAP
-          </b>
         </div>
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line-soft">
-          <span className="block h-full w-[24.5%] rounded-full bg-pass" />
+
+        <ol className="px-5 py-4">
+          {STEPS.map((step) => (
+            <li key={step.title} className="relative pl-[26px] last:pb-0">
+              {/* The strand runs from under the node to the bottom of the row,
+                  which is where the next node starts. The last step has no
+                  next step, so it has no strand. */}
+              {step.gap ? (
+                <span
+                  aria-hidden="true"
+                  className={`absolute top-[17px] bottom-0 left-[5px] ${STRAND[step.state]}`}
+                />
+              ) : null}
+
+              <span
+                aria-hidden="true"
+                className={`absolute top-1 left-0 h-[11px] w-[11px] rounded-full ${NODE[step.state]}`}
+              >
+                {step.state === "active" ? (
+                  <span className="pulse-live absolute inset-[1px] rounded-full bg-pass" />
+                ) : null}
+              </span>
+
+              <div
+                className={`flex items-baseline justify-between gap-3 ${
+                  step.state === "queued" ? "opacity-60" : ""
+                }`}
+              >
+                <p className="text-[14.5px] leading-snug font-semibold tracking-[-0.005em] text-ink">
+                  {step.title}
+                </p>
+                {/* Tabular figures on a shared baseline: the labels line up
+                    down the right edge instead of drifting with their rows. */}
+                <span
+                  className={`shrink-0 font-mono text-[10.5px] tracking-[0.07em] whitespace-nowrap tabular-nums ${META[step.state]}`}
+                >
+                  {step.meta}
+                </span>
+              </div>
+              <p
+                className={`text-[12.5px] leading-snug text-muted ${
+                  step.state === "queued" ? "opacity-60" : ""
+                }`}
+              >
+                {step.detail}
+              </p>
+
+              {/* The gap. A row with its own height and its own fact. */}
+              {step.gap ? (
+                <p className="py-3 font-mono text-[10.5px] tracking-[0.07em] text-muted tabular-nums">
+                  {step.gap}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+
+        <div className="border-t border-line-soft px-5 py-4">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="font-mono text-[10.5px] tracking-[0.1em] text-muted">
+              RUN BUDGET
+            </span>
+            <b className="font-mono text-[12px] font-semibold text-ink tabular-nums">
+              $18.40 / $75.00 CAP
+            </b>
+          </div>
+          {/* The cap is drawn, not implied: a hatched fill against a redline
+              standing at the number it is not allowed to pass. */}
+          <div className="relative mt-2 h-[7px] rounded-[2px] bg-line-soft">
+            <span className="hatch-pass block h-full w-[24.5%] rounded-l-[2px]" />
+            <span
+              aria-hidden="true"
+              className="absolute inset-y-[-3px] right-0 border-r-2 border-dashed border-fail"
+            />
+          </div>
+          <p className="mt-3.5 flex items-center gap-2 font-mono text-[10.5px] tracking-[0.07em] text-muted">
+            <RouteMark width={20} surface="card" />
+            FIVE STEPS · ONE CHECKPOINT
+          </p>
         </div>
-        <p className="mt-4 flex items-center gap-2 font-mono text-[11px] tracking-[0.06em] text-muted">
-          <RouteMark width={22} surface="card" />
-          FIVE STEPS · ONE CHECKPOINT
-        </p>
-      </div>
-    </aside>
+      </aside>
+    </div>
   );
 }

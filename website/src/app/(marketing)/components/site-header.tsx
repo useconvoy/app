@@ -56,7 +56,9 @@ export function SiteHeader() {
           </Link>
           <Link
             href="/demo"
-            className="inline-flex items-center rounded-[10px] bg-pine px-4 py-2.5 text-[14.5px] font-semibold text-card-alt transition-[background-color] duration-75 hover:bg-pine-deep"
+            /* nowrap: on a narrow phone the label otherwise breaks over two
+               lines and the header grows a row to hold it. */
+            className="inline-flex items-center rounded-[10px] bg-pine px-3 py-2 text-[13.5px] font-semibold whitespace-nowrap text-card-alt transition-[background-color] duration-75 hover:bg-pine-deep sm:px-4 sm:py-2.5 sm:text-[14.5px]"
           >
             Request a demo
           </Link>

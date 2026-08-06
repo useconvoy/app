@@ -27,29 +27,38 @@ export function CtaBand({
   return (
     <section
       aria-labelledby="cta-band-heading"
-      className="border-t border-line bg-card"
+      className="border-t border-line"
     >
-      <div className="mx-auto max-w-3xl px-6 py-16 text-center">
-        <h2
-          id="cta-band-heading"
-          className="font-display text-3xl font-medium text-ink"
-        >
-          {title}
-        </h2>
-        <p className="mx-auto mt-4 max-w-xl text-muted">{body}</p>
-        <div className="mt-8 flex justify-center gap-4">
-          <Link
-            href="/demo"
-            className="inline-flex items-center rounded-md bg-pine px-5 py-2.5 text-sm font-medium text-card hover:bg-pine-deep"
+      <div className="mx-auto max-w-[1160px] px-5 py-16 sm:px-7 sm:py-20">
+        {/* The closing panel is an object on the page rather than another
+            full-bleed stripe: after five bands running edge to edge, one that
+            stops short is what reads as an ending. */}
+        <div className="sheet-shading relative mx-auto max-w-[52rem] rounded-[14px] border border-line bg-card px-6 py-12 text-center sm:px-12">
+          <h2
+            id="cta-band-heading"
+            /* balance: centered text left to itself hangs one or two words on
+               a line of their own, which is the most visible kind of ragged. */
+            className="font-display text-[clamp(26px,3vw,34px)] leading-[1.15] font-medium tracking-[-0.012em] text-balance text-ink"
           >
-            Request a demo
-          </Link>
-          <Link
-            href={secondary.href}
-            className="inline-flex items-center rounded-md border border-line bg-card px-5 py-2.5 text-sm font-medium text-ink hover:border-muted"
-          >
-            {secondary.label}
-          </Link>
+            {title}
+          </h2>
+          <p className="mx-auto mt-4 max-w-[46ch] text-[16.5px] leading-[1.7] text-balance text-muted">
+            {body}
+          </p>
+          <div className="mt-8 flex flex-wrap justify-center gap-3.5">
+            <Link
+              href="/demo"
+              className="inline-flex items-center rounded-[10px] bg-pine px-5 py-3 text-[14.5px] font-semibold text-card-alt transition-[background-color] duration-75 hover:bg-pine-deep"
+            >
+              Request a demo
+            </Link>
+            <Link
+              href={secondary.href}
+              className="inline-flex items-center rounded-[10px] border border-line px-5 py-3 text-[14.5px] font-semibold text-ink transition-[border-color] duration-200 ease-[var(--ease-entrance)] hover:border-muted"
+            >
+              {secondary.label}
+            </Link>
+          </div>
         </div>
       </div>
     </section>

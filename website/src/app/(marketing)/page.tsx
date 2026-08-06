@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { CtaBand } from "./components/cta-band";
 import { Hero } from "./components/hero";
+import { ImprovementLoop } from "./components/improvement-loop";
 import { Reveal } from "./components/reveal";
 
 export const dynamic = "force-static";
@@ -47,6 +48,25 @@ const PHASES = [
   },
 ];
 
+const PLATFORM = [
+  {
+    title: "Durable by construction",
+    body: "Each run is a durable workflow with a complete event history. Multi-day executions checkpoint automatically, and failures resume instead of restarting from zero.",
+  },
+  {
+    title: "Budgets that hold",
+    body: "A per-run dollar cap enforced upstream of every model call. A cap is a cap. Pause, kill, and concurrency limits live in the core loop, not bolted on.",
+  },
+  {
+    title: "Isolated execution",
+    body: "Every run works inside its own sealed environment, holding credentials scoped to one system and one run. How far a mistake can reach is a decision someone made, not an accident.",
+  },
+  {
+    title: "An attributed record",
+    body: "Every step, every call out to another system, and every file produced carries its own history. Each approval, sign-off, and resume is a separate event with a name on it. Replayable end to end.",
+  },
+];
+
 const LEDGER = [
   {
     label: "Sign-off",
@@ -59,9 +79,13 @@ const LEDGER = [
   },
   {
     label: "Records",
-    value: "An event history that cannot be edited; any run replayable step by step",
+    value:
+      "An event history that cannot be edited; any run replayable step by step",
   },
-  { label: "Files", value: "Checksummed, traceable to the step that made them, ready to export" },
+  {
+    label: "Files",
+    value: "Checksummed, traceable to the step that made them, ready to export",
+  },
   {
     label: "Access",
     value: "Per-system, per-run credentials; least privilege by default",
@@ -70,7 +94,10 @@ const LEDGER = [
     label: "Budgets",
     value: "Dollar caps enforced ahead of the work, not counted up afterwards",
   },
-  { label: "Encryption", value: "Run payloads encrypted while the work is in flight" },
+  {
+    label: "Encryption",
+    value: "Run payloads encrypted while the work is in flight",
+  },
   { label: "Deployment", value: "Options to match your data boundary" },
 ];
 
@@ -138,17 +165,26 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* A ruled strip, the way a tally rule separates blocks on a workpaper.
+          Sixteen pixels of it do more for the page's rhythm than another forty
+          of padding would. */}
+      <div aria-hidden="true" className="register-band" />
+
       {/* How a run works: split B, the four phases. */}
       <section
         id="lifecycle"
         aria-labelledby="lifecycle-heading"
-        className="border-t border-line-soft py-16 sm:py-24"
+        className="py-16 sm:py-24"
       >
-        <div className="mx-auto grid max-w-[1160px] gap-9 px-5 sm:px-7 lg:grid-cols-[0.7fr_1.45fr] lg:gap-[88px]">
-          <Reveal>
+        <div className="mx-auto grid max-w-[1160px] items-start gap-9 px-5 sm:px-7 lg:grid-cols-[0.7fr_1.45fr] lg:gap-[88px]">
+          {/* The heading travels with the column it belongs to. A short title
+              beside a tall list otherwise leaves several hundred pixels of
+              nothing, and the reader loses what they are reading about. */}
+          <Reveal className="lg:sticky lg:top-24 lg:self-start">
             <Eyebrow>How a run works</Eyebrow>
             <SectionHeading id="lifecycle-heading">
-              Plan. Approve. Execute. <em className="font-medium italic">Learn.</em>
+              Plan. Approve. Execute.{" "}
+              <em className="font-medium italic">Learn.</em>
             </SectionHeading>
           </Reveal>
           <div className="relative">
@@ -177,14 +213,88 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* The platform: a register rather than a third split. Two sections in a
+          row with the same column widths read as one long section, so this one
+          changes shape as well as subject. */}
+      <section
+        id="platform"
+        aria-labelledby="platform-heading"
+        className="border-y border-line bg-card py-16 sm:py-24"
+      >
+        <div className="mx-auto max-w-[1160px] px-5 sm:px-7">
+          <Reveal className="max-w-[40ch]">
+            <Eyebrow>The platform</Eyebrow>
+            <SectionHeading id="platform-heading">
+              Infrastructure for work you can hold accountable.
+            </SectionHeading>
+          </Reveal>
+          {/* The rules between the cells are the gap itself: one pixel of the
+              divider color showing through. Four bordered boxes floating on a
+              fill would be four objects; this is one table. */}
+          <Reveal className="mt-11 grid gap-px border border-line-soft bg-line-soft sm:grid-cols-2">
+            {PLATFORM.map((item, index) => (
+              <div key={item.title} className="bg-card p-6 sm:p-8">
+                <p className="font-mono text-[11.5px] font-semibold tracking-[0.14em] text-rule tabular-nums">
+                  {String(index + 1).padStart(2, "0")}
+                </p>
+                <h3 className="mt-3 font-display text-[21px] font-semibold text-ink">
+                  {item.title}
+                </h3>
+                <p className="mt-2.5 max-w-[46ch] text-[15px] leading-relaxed text-muted">
+                  {item.body}
+                </p>
+              </div>
+            ))}
+          </Reveal>
+        </div>
+      </section>
+
+      {/* The compounding part: the one inverted band on the page. It is the
+          spine. Without it the whole document is a single pale tone from the
+          header to the footer, and nothing tells the eye where it is. */}
+      <section
+        id="compounding"
+        aria-labelledby="compounding-heading"
+        className="bg-pine-deep py-16 text-card-alt sm:py-24"
+      >
+        <div className="mx-auto max-w-[1160px] px-5 sm:px-7">
+          <Reveal className="grid gap-7 lg:grid-cols-[0.85fr_1.15fr] lg:items-end lg:gap-[88px]">
+            <div>
+              <span className="mb-4 block font-mono text-xs font-semibold tracking-[0.17em] text-card-alt/65 uppercase">
+                The compounding part
+              </span>
+              <h2
+                id="compounding-heading"
+                className="font-display text-[clamp(30px,3.5vw,44px)] leading-[1.12] font-medium tracking-[-0.012em]"
+              >
+                Every run <em className="font-medium italic">improves</em> the
+                next.
+              </h2>
+            </div>
+            <p className="max-w-[58ch] text-[17px] leading-[1.7] text-card-alt/80">
+              Most automation works the same on day one and day one hundred.
+              Convoy studies how each run went, tests improvements against real
+              past runs, and ships them only after you approve. The routine gets
+              better at your process the longer you run it.
+            </p>
+          </Reveal>
+          {/* The loop takes the full measure. Squeezed into a column beside the
+              copy, the strands are shorter than the words that ride on them and
+              every caption breaks over four lines. */}
+          <Reveal className="mt-14 sm:mt-16">
+            <ImprovementLoop />
+          </Reveal>
+        </div>
+      </section>
+
       {/* Built for scrutiny: the ledger. */}
       <section
         id="scrutiny"
         aria-labelledby="scrutiny-heading"
-        className="border-t border-line-soft py-16 sm:py-24"
+        className="py-16 sm:py-24"
       >
-        <div className="mx-auto grid max-w-[1160px] gap-9 px-5 sm:px-7 lg:grid-cols-[0.7fr_1.45fr] lg:gap-[88px]">
-          <Reveal>
+        <div className="mx-auto grid max-w-[1160px] items-start gap-9 px-5 sm:px-7 lg:grid-cols-[0.7fr_1.45fr] lg:gap-[88px]">
+          <Reveal className="lg:sticky lg:top-24 lg:self-start">
             <Eyebrow>Built for scrutiny</Eyebrow>
             <SectionHeading id="scrutiny-heading">
               Answers ready before the auditor asks.

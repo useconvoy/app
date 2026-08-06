@@ -22,12 +22,17 @@ const TRUST = [
 export function Hero() {
   return (
     <header className="pt-14 pb-16 sm:pt-20 sm:pb-24">
-      <div className="mx-auto grid max-w-[1160px] grid-cols-[repeat(auto-fit,minmax(min(100%,460px),1fr))] items-center gap-11 px-5 sm:px-7 lg:gap-16">
+      {/* Three percent of ink falling down the measure. One gradient stop, and
+          it is the difference between a flat fill and a sheet of stock. */}
+      <div className="sheet-shading mx-auto grid max-w-[1160px] grid-cols-[repeat(auto-fit,minmax(min(100%,460px),1fr))] items-center gap-11 px-5 sm:px-7 lg:gap-16">
         <div>
           {/* No eyebrow. The headline says it, and a label above a line that
               short only crowds it. */}
           <h1 className="mb-6 font-display text-[clamp(42px,5.4vw,70px)] leading-[1.05] font-medium tracking-[-0.012em] text-ink">
-            Routine work,
+            {/* The space before the break is load-bearing. A <br> contributes
+                nothing to the accessible name, so without it a screen reader
+                announces "Routine work,done carefully." as one word. */}
+            Routine work,{" "}
             <br />
             <em className="font-medium italic">done carefully.</em>
           </h1>
@@ -50,7 +55,10 @@ export function Hero() {
               See how a run works →
             </a>
           </div>
-          <ul className="flex flex-wrap gap-x-6 gap-y-2.5 font-mono text-xs tracking-[0.08em]">
+          {/* Two by two rather than a wrapping row. Four items on one line is
+              a line too long at this measure and the fourth falls to a line of
+              its own, which reads as an accident. A grid cannot orphan. */}
+          <ul className="grid max-w-[30rem] grid-cols-1 gap-x-6 gap-y-3 font-mono text-xs tracking-[0.08em] sm:grid-cols-2">
             {TRUST.map((item) => (
               <li
                 key={item}

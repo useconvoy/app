@@ -25,16 +25,20 @@ describe("marketing pages", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: /routine work, done carefully/i }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: /how a routine earns your trust/i }),
-    ).toBeInTheDocument();
-    for (const step of [
-      /rehearse safely/i,
-      /approve the plan/i,
-      /it holds for your judgment/i,
+    for (const section of [
+      /chat cannot close a workpaper/i,
+      /plan\. approve\. execute\. learn\./i,
+      /infrastructure for work you can hold accountable/i,
+      /every run improves the next/i,
+      /answers ready before the auditor asks/i,
     ]) {
       expect(
-        screen.getByRole("heading", { level: 3, name: step }),
+        screen.getByRole("heading", { level: 2, name: section }),
+      ).toBeInTheDocument();
+    }
+    for (const phase of [/^plan$/i, /^approve$/i, /^execute$/i, /^learn$/i]) {
+      expect(
+        screen.getByRole("heading", { level: 3, name: phase }),
       ).toBeInTheDocument();
     }
 

@@ -36,5 +36,11 @@
   --color-pass-text: #22684b;
   --color-hold-text: #8a6212;
 
+  /* The dark band inverts the page, so the greens tuned for paper go flat on
+   * it: #2e7d5b on #0e2a21 measures 2.48:1, under the 3:1 a non-text glyph
+   * needs. This lighter green measures 4.73:1 there. It is for nodes and
+   * route strokes on the dark fill, never for text on paper. */
+  --color-pass-bright: #4e9e78;
+
   --focus-ring: 2px solid #2e7d5b;
 }

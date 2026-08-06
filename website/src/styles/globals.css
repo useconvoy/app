@@ -18,6 +18,7 @@
   --color-pass-soft: var(--color-pass-soft);
   --color-pass-line: var(--color-pass-line);
   --color-pass-text: var(--color-pass-text);
+  --color-pass-bright: var(--color-pass-bright);
   --color-hold: var(--color-hold);
   --color-hold-soft: var(--color-hold-soft);
   --color-hold-text: var(--color-hold-text);
@@ -44,6 +45,85 @@ body {
   /* A missing weight must not be faked: a synthesized bold on a serif display
    * face is immediately visible as counterfeit. */
   font-synthesis-weight: none;
+}
+
+/* The hatched margin.
+ *
+ * The texture is the edge of the sheet, not the sheet. Nothing is laid over
+ * the reading column: a pattern behind body text is a tax on every word above
+ * it, and the wide empty margins on a large screen are the part of the page
+ * that actually has nothing to do.
+ *
+ * The stroke is --color-line-soft, which already sits about five percent of
+ * the way from the page to the ink. That is the value this move wants, so it
+ * is taken from the token rather than mixed toward it.
+ *
+ * The layer that carries this is position: fixed, so the hatch holds still
+ * while the page moves under it and the browser never repaints the tile. */
+.hatch-margin {
+  background-image: repeating-linear-gradient(
+    315deg,
+    var(--color-line-soft) 0 1px,
+    transparent 0 50%
+  );
+  background-size: 10px 10px;
+  background-position: top left;
+}
+
+/* The register band. A ruled strip between sections, the way a tally rule
+ * separates blocks on a workpaper. Sixteen pixels tall and it does more for
+ * the page's rhythm than another forty of padding would. */
+.register-band {
+  height: 1rem;
+  border-block: 1px solid var(--color-line-soft);
+  background-image: repeating-linear-gradient(
+    -60deg,
+    var(--color-rule) 0 1px,
+    transparent 1px 6px
+  );
+}
+
+/* Tick marks at the corners of an exhibit. Four 8px masks, one element, no
+ * extra markup: the notation an auditor puts on a document under review. */
+.tick-corners::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 10;
+  pointer-events: none;
+  background-color: var(--color-rule);
+  mask-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='9' fill='none'%3E%3Cpath d='M9 0v1.4H4A2.6 2.6 0 0 0 1.4 4v5H0V0h9Z' fill='black'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='9' fill='none'%3E%3Cpath d='M9 9v-1.4H4A2.6 2.6 0 0 1 1.4 5V0H0v9h9Z' fill='black'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='9' fill='none'%3E%3Cpath d='M0 9v-1.4h5A2.6 2.6 0 0 0 7.6 5V0H9v9H0Z' fill='black'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='9' fill='none'%3E%3Cpath d='M0 0v1.4h5A2.6 2.6 0 0 1 7.6 4v5H9V0H0Z' fill='black'/%3E%3C/svg%3E");
+  mask-position:
+    top left,
+    bottom left,
+    bottom right,
+    top right;
+  mask-size: 9px 9px;
+  mask-repeat: no-repeat;
+}
+
+/* The budget meter reads as measured rather than painted: a fill that shows
+ * its own texture the way a hatched bar on a plan does. */
+.hatch-pass {
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--color-pass) 0 3px,
+    var(--color-pass-line) 3px 6px
+  );
+}
+
+/* Three percent of ink, falling down the sheet. One gradient stop, no tile to
+ * terminate, and it is the difference between a flat fill and stock. */
+.sheet-shading {
+  background-image: linear-gradient(
+    180deg,
+    transparent,
+    color-mix(in srgb, var(--color-ink) 3%, transparent)
+  );
 }
 
 ::selection {
