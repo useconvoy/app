@@ -51,7 +51,32 @@ env:
   STACK_NAME: demo
 
 jobs:
+  # Until the repository carries the role and host below, there is nothing to
+  # deploy to. Say so once, plainly, instead of failing every push on an
+  # empty role ARN.
+  setup-required:
+    if: vars.AWS_DEPLOY_ROLE_ARN == '' || vars.DEPLOY_HOST == ''
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::warning::deploy-console is not configured; skipping. See website/infra/terraform/stacks/demo/README.md"
+          {
+            echo "### deploy-console is not configured"
+            echo
+            echo "No deploy ran. Set these on the repository:"
+            echo
+            echo '| kind | name | value |'
+            echo '|---|---|---|'
+            echo '| variable | `AWS_DEPLOY_ROLE_ARN` | `terraform output -raw github_deploy_role_arn` |'
+            echo '| variable | `DEPLOY_HOST` | `terraform output -raw static_ip` |'
+            echo '| variable | `DEPLOY_HOST_KEY` | `ssh-keyscan <host>` (optional, recommended) |'
+            echo '| secret | `DEPLOY_SSH_KEY` | private key for `ubuntu@` on the instance |'
+            echo
+            echo 'The role does not exist until the demo stack is applied.'
+          } >>"$GITHUB_STEP_SUMMARY"
+
   deploy:
+    if: vars.AWS_DEPLOY_ROLE_ARN != '' && vars.DEPLOY_HOST != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
