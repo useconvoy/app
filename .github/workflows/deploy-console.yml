@@ -51,29 +51,42 @@ env:
   STACK_NAME: demo
 
 jobs:
-  # Until the repository carries the role and host below, there is nothing to
-  # deploy to. Say so once, plainly, instead of failing every push on an
-  # empty role ARN.
+  # An unconfigured deploy fails the run rather than warning through it.
+  #
+  # This job used to emit a warning and exit zero, on the reasoning that there
+  # was nothing to deploy to until the stack existed and a red badge on every
+  # push would be noise. The cost of that turned out to be worse than the
+  # noise: a skipped job does not fail a run, so the workflow reported success
+  # while shipping nothing, and five commits reached main behind a green deploy
+  # badge before anyone noticed the site had not moved.
+  #
+  # A push that is meant to release and cannot is a broken deploy. It should
+  # look like one.
   setup-required:
     if: vars.AWS_DEPLOY_ROLE_ARN == '' || vars.DEPLOY_HOST == ''
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "::warning::deploy-console is not configured; skipping. Set the repository variables and secret listed in the job summary."
+          echo "::error::deploy-console is not configured, so this commit did NOT ship. Set the repository variables and secret listed in the job summary."
           {
             echo "### deploy-console is not configured"
             echo
-            echo "No deploy ran. Set these on the repository:"
+            echo "**No deploy ran, and this commit is not live.**"
             echo
-            echo '| kind | name | value |'
+            echo "Set these on the repository, under Settings then"
+            echo "Secrets and variables then Actions:"
+            echo
+            echo '| kind | name | where the value comes from |'
             echo '|---|---|---|'
             echo '| variable | `AWS_DEPLOY_ROLE_ARN` | `terraform output -raw github_deploy_role_arn` |'
             echo '| variable | `DEPLOY_HOST` | `terraform output -raw static_ip` |'
             echo '| variable | `DEPLOY_HOST_KEY` | `ssh-keyscan <host>` (optional, recommended) |'
             echo '| secret | `DEPLOY_SSH_KEY` | private key for `ubuntu@` on the instance |'
             echo
-            echo 'The role does not exist until the demo stack is applied.'
+            echo 'Run the terraform commands from `website/infra/terraform/stacks/demo`.'
+            echo 'Re-run this workflow once they are set; the commit will deploy then.'
           } >>"$GITHUB_STEP_SUMMARY"
+          exit 1
 
   deploy:
     if: vars.AWS_DEPLOY_ROLE_ARN != '' && vars.DEPLOY_HOST != ''
