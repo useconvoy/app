@@ -115,3 +115,28 @@ variable "github_deploy_branch" {
   type        = string
   default     = "main"
 }
+
+variable "github_org_id" {
+  description = <<-EOT
+    Numeric GitHub organization ID, or empty.
+
+    GitHub can be configured to put immutable numeric IDs in the OIDC subject
+    claim instead of names, which produces
+    repo:owner@<org-id>/name@<repo-id>:ref:... rather than
+    repo:owner/name:ref:.... This organization has that enabled. The IDs are
+    better to trust than the names, because renaming an organization or a
+    repository cannot silently move the trust to whoever claims the old name.
+
+    Leave both this and github_repo_id empty for the default name-based
+    subject. Read them from the claim the workflow prints before it assumes
+    the role, or from the GitHub API.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "github_repo_id" {
+  description = "Numeric GitHub repository ID. See github_org_id."
+  type        = string
+  default     = ""
+}

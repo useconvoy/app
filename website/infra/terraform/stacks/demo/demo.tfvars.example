@@ -22,3 +22,11 @@ workos_api_key   = "sk_test_..."
 workos_client_id = "client_01KZA115MPR4WX9QTWC0JSCA0B"
 
 image_tag = "bootstrap"
+
+# Set these when the GitHub organization puts immutable numeric IDs in the
+# OIDC subject claim, which produces
+# repo:owner@<org-id>/name@<repo-id>:ref:... instead of repo:owner/name:ref:....
+# Read them from the claim the deploy workflow prints before it assumes the
+# role. Leave empty for the default name-based subject; both are trusted.
+# github_org_id  = ""
+# github_repo_id = ""

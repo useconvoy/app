@@ -326,6 +326,28 @@ resource "aws_iam_openid_connect_provider" "github" {
   tags = merge(local.tags, { Name = "github-actions-oidc" })
 }
 
+locals {
+  # The two shapes a GitHub OIDC subject can take for this repository and
+  # branch. Which one arrives depends on whether the organization has
+  # immutable IDs enabled in the subject claim, which is an organization
+  # setting rather than anything this stack controls, so both are trusted and
+  # a change to that setting cannot break the deploy.
+  #
+  # Neither entry widens what may assume this role: both pin the repository
+  # and the branch, and the ID-qualified form is the stricter of the two.
+  github_deploy_subjects = compact([
+    "repo:${var.github_repository}:ref:refs/heads/${var.github_deploy_branch}",
+    var.github_org_id != "" && var.github_repo_id != "" ? format(
+      "repo:%s@%s/%s@%s:ref:refs/heads/%s",
+      split("/", var.github_repository)[0],
+      var.github_org_id,
+      split("/", var.github_repository)[1],
+      var.github_repo_id,
+      var.github_deploy_branch,
+    ) : "",
+  ])
+}
+
 resource "aws_iam_role" "github_deploy" {
   name = "${local.name_prefix}-github-deploy"
 
@@ -339,7 +361,9 @@ resource "aws_iam_role" "github_deploy" {
         Condition = {
           StringEquals = {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-            "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:ref:refs/heads/${var.github_deploy_branch}"
+            # A list here is an exact match against each entry, not a
+            # wildcard: the subject must equal one of these two strings.
+            "token.actions.githubusercontent.com:sub" = local.github_deploy_subjects
           }
         }
       },
