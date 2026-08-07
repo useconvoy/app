@@ -98,6 +98,28 @@ jobs:
         id: meta
         run: echo "tag=$(git rev-parse --short=12 HEAD)" >>"$GITHUB_OUTPUT"
 
+      # The identity being presented, printed before it is used.
+      #
+      # "Not authorized to perform sts:AssumeRoleWithWebIdentity" is the same
+      # message for a role that does not exist, a role whose trust policy does
+      # not match, and a typo in the ARN, which leaves nothing to go on. The
+      # subject, audience and role ARN are not secrets; the token itself is
+      # never printed. Two lines here turn that error into a fact.
+      - name: Show the identity this run will present
+        run: |
+          set -euo pipefail
+          echo "role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}"
+          TOKEN=$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" | jq -r .value)
+          python3 - "${TOKEN}" <<'CLAIMS'
+          import base64, json, sys
+          body = sys.argv[1].split(".")[1]
+          body += "=" * (-len(body) % 4)
+          claims = json.loads(base64.urlsafe_b64decode(body))
+          for key in ("sub", "aud", "repository", "ref", "workflow_ref"):
+              print(f"{key}: {claims.get(key)}")
+          CLAIMS
+
       - name: Assume the deploy role
         uses: aws-actions/configure-aws-credentials@v4
         with:
