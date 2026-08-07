@@ -169,6 +169,23 @@ jobs:
 
           sudo docker compose up -d
           sudo docker compose ps
+
+          # A release is not the restart, it is the container still being up
+          # afterwards. Without this the workflow reports success for a deploy
+          # that pulled a broken image and left the service crash-looping.
+          # `web` is the same service name the migration step above runs in.
+          for attempt in $(seq 1 20); do
+            if sudo docker compose ps --status running --services | grep -qx web; then
+              echo "web is running after ${attempt} check(s)"
+              exit 0
+            fi
+            sleep 3
+          done
+
+          echo "web is not running 60s after the restart; the last 60 lines follow"
+          sudo docker compose ps
+          sudo docker compose logs --tail 60 web
+          exit 1
           REMOTE
 
       - name: Summarize
