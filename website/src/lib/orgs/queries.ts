@@ -217,6 +217,38 @@ export async function listAuditEntries(
   });
 }
 
+export interface PendingInvite {
+  orgId: string;
+  orgName: string;
+  role: Role;
+  token: string;
+  expiresAt: Date;
+}
+
+/**
+ * The invitations waiting for this user, found by their own address rather
+ * than by a link they may never have received.
+ *
+ * Visibility comes from the own-email policy in migration 0005, so this can
+ * only ever return rows addressed to this user. Expiry is compared in the
+ * database so a clock skew between app and database cannot offer an invite
+ * that acceptInvite will then refuse.
+ */
+export async function listPendingInvitesForUser(userId: string): Promise<PendingInvite[]> {
+  return withUserContext(userId, async (client) => {
+    const { rows } = await client.query<PendingInvite>(
+      `SELECT i.org_id AS "orgId", o.name AS "orgName", i.role, i.token,
+              i.expires_at AS "expiresAt"
+         FROM invites i
+         JOIN organizations o ON o.id = i.org_id
+        WHERE i.status = 'pending'
+          AND i.expires_at > now()
+        ORDER BY i.created_at DESC`,
+    );
+    return rows;
+  });
+}
+
 /**
  * Resolve an invite link for the signed-in user, before membership exists.
  * Visibility is scoped to the presented token via the transaction-local

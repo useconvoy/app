@@ -58,6 +58,9 @@ async function removeMemberAction(formData: FormData) {
 
 export default async function MembersPage() {
   const { session } = await requireAdminPage();
+  // APP_URL is the deployment's public origin; without it the admin still
+  // gets a working path, just one they have to put a host in front of.
+  const inviteBase = (process.env.APP_URL ?? "").trim().replace(/\/+$/, "");
   const [members, invites] = await Promise.all([
     listMembers(session.orgId),
     listInvites(session.orgId),
@@ -124,9 +127,16 @@ export default async function MembersPage() {
                 <span className="font-mono text-xs text-muted">
                   EXPIRES {friendlyDate(invite.expiresAt)}
                 </span>
-                <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted">
-                  /invite/{invite.token}
-                </span>
+                {/* The whole link, because sending it is a manual step:
+                    nothing emails an invite today, so what the admin needs
+                    here is something they can select and paste, not a path
+                    they have to reassemble a host in front of. */}
+                <input
+                  readOnly
+                  aria-label={`Invite link for ${invite.email}`}
+                  value={`${inviteBase}/invite/${invite.token}`}
+                  className="min-w-0 flex-1 truncate rounded-sm border border-line-soft bg-field px-2 py-1 font-mono text-xs text-muted"
+                />
                 <form action={revokeInviteAction}>
                   <input type="hidden" name="inviteId" value={invite.id} />
                   <button
