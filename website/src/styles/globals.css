@@ -140,6 +140,10 @@ body {
  * own once it lands. Two different mechanisms, both required. */
 html {
   scroll-padding-top: 88px;
+  /* The parts of a form the platform still owns outright, like a select's
+   * options panel, follow the OS theme unless told otherwise. This page is
+   * paper; a charcoal dropdown under it was the OS talking, not us. */
+  color-scheme: light;
 }
 
 [id] {

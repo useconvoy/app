@@ -10,6 +10,8 @@
 import { useRef, useState } from "react";
 
 import { Button } from "@/components/Button";
+import { Radio } from "@/components/ui/choice";
+import { Textarea } from "@/components/ui/text-field";
 import { feedbackCopy, feedbackKindLabels, ratingLabels, type FeedbackKind } from "@/lexicon";
 
 export interface FeedbackComposerProps {
@@ -60,21 +62,19 @@ export function FeedbackComposer({ action, disabledNote, attachNote }: FeedbackC
         <legend className="text-xs font-medium uppercase tracking-wide text-muted">
           {feedbackCopy.kindLegend}
         </legend>
-        <div className="mt-2 flex flex-wrap gap-3">
+        <div className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
           {(Object.keys(feedbackKindLabels) as FeedbackKind[]).map((value) => (
-            <label key={value} className="flex items-center gap-1.5 text-sm text-ink">
-              <input
-                type="radio"
-                name="kind"
-                value={value}
-                checked={kind === value}
-                onChange={() => {
-                  setKind(value);
-                  setError(null);
-                }}
-              />
-              {feedbackKindLabels[value]}
-            </label>
+            <Radio
+              key={value}
+              name="kind"
+              value={value}
+              checked={kind === value}
+              onChange={() => {
+                setKind(value);
+                setError(null);
+              }}
+              label={feedbackKindLabels[value]}
+            />
           ))}
         </div>
       </fieldset>
@@ -84,24 +84,24 @@ export function FeedbackComposer({ action, disabledNote, attachNote }: FeedbackC
           <legend className="text-xs font-medium uppercase tracking-wide text-muted">
             {feedbackCopy.ratingLegend}
           </legend>
-          <div className="mt-2 flex flex-wrap gap-3">
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
             {[1, 2, 3, 4, 5].map((value) => (
-              <label key={value} className="flex items-center gap-1.5 text-sm text-ink">
-                <input
-                  type="radio"
-                  name="rating"
-                  value={value}
-                  checked={rating === value}
-                  onChange={() => {
-                    setRating(value);
-                    setError(null);
-                  }}
-                  aria-label={`${value} ${value === 1 ? "star" : "stars"}: ${ratingLabels[value]}`}
-                />
-                <span aria-hidden="true" className="font-mono text-xs">
-                  {value}
-                </span>
-              </label>
+              <Radio
+                key={value}
+                name="rating"
+                value={value}
+                checked={rating === value}
+                onChange={() => {
+                  setRating(value);
+                  setError(null);
+                }}
+                aria-label={`${value} ${value === 1 ? "star" : "stars"}: ${ratingLabels[value]}`}
+                label={
+                  <span aria-hidden="true" className="font-mono text-xs tabular-nums">
+                    {value}
+                  </span>
+                }
+              />
             ))}
           </div>
           {rating !== null && <p className="mt-1 text-xs text-muted">{ratingLabels[rating]}</p>}
@@ -112,7 +112,7 @@ export function FeedbackComposer({ action, disabledNote, attachNote }: FeedbackC
         <label htmlFor="feedback-body" className="text-xs font-medium uppercase tracking-wide text-muted">
           {feedbackCopy.bodyLabel}
         </label>
-        <textarea
+        <Textarea
           id="feedback-body"
           name="body"
           rows={3}
@@ -122,7 +122,7 @@ export function FeedbackComposer({ action, disabledNote, attachNote }: FeedbackC
               ? feedbackCopy.bodyPlaceholderCorrection
               : feedbackCopy.bodyPlaceholderComment
           }
-          className="mt-1 w-full rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink disabled:opacity-50"
+          className="mt-1"
         />
       </div>
 

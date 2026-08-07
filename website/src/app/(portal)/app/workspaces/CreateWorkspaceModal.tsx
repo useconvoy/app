@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import type { CreateWorkspacePayload } from "@/lib/workspaces/actions";
 import { copy, grantLabels } from "@/lexicon";
+import { Select } from "@/components/ui/select";
 
 export interface SystemOption {
   id: string;
@@ -172,7 +173,7 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
                           {choice.included && (
                             <label className="flex items-center gap-2 text-xs text-muted">
                               Access
-                              <select
+                              <Select
                                 value={choice.scope}
                                 onChange={(event) =>
                                   updateChoice(system.id, {
@@ -183,7 +184,7 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
                               >
                                 <option value="read">{grantLabels.read}</option>
                                 <option value="write">{grantLabels.write}</option>
-                              </select>
+                              </Select>
                             </label>
                           )}
                         </div>

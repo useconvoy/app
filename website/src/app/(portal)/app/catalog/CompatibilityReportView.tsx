@@ -8,6 +8,7 @@
 import type { CompatibilityReport } from "@/lib/api/environments";
 import { Chip } from "@/components/Chip";
 import { catalogCopy } from "@/lexicon";
+import { Select } from "@/components/ui/select";
 
 export interface CompatibilityReportViewProps {
   report: CompatibilityReport;
@@ -41,17 +42,16 @@ export function CompatibilityReportView({ report, systemNames }: CompatibilityRe
         <div key={choice.systemId} className="rounded-md border border-line bg-field p-3">
           <label className="block text-sm text-ink">
             {catalogCopy.needsMapping(name(choice.systemId))}
-            <select
+            <Select
               name={`mapping-${choice.systemId}`}
               defaultValue={choice.options[0]}
-              className="mt-2 block rounded-sm border border-line bg-card px-3 py-2 text-sm"
             >
               {choice.options.map((option) => (
                 <option key={option} value={option}>
                   {name(option)}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         </div>
       ))}

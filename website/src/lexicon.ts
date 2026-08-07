@@ -436,10 +436,10 @@ export const adminCopy = {
   noticeBelowCap: "The spend notice should not be below the per-run cap",
   apiAccessTitle: "API access",
   apiAccessIntro: "How this organization reaches the Convoy platform.",
-  apiAccessPhase1:
-    "During phase 1, access to the platform is managed by Convoy. Every call your organization makes travels through Convoy's bridge identity, so there are no keys to create, copy, or rotate here.",
+  apiAccessManaged:
+    "Access to the platform is managed by Convoy. Every call your organization makes travels through Convoy's bridge identity, so there are no keys to create, copy, or rotate here.",
   apiAccessNoKeys: "No key material is ever shown or stored on this site.",
-  apiAccessSelfServe: "Self-serve keys arrive when sign-in reaches the platform edge directly.",
+  apiAccessSelfServe: "Need direct API access? Write to your Convoy contact and we will set it up with you.",
   controlPlaneUrlLabel: "Platform address",
   notificationDefaultsTitle: "Notification defaults",
   notificationDefaultsIntro:

@@ -24,6 +24,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { copy, dueInLabel } from "@/lexicon";
 import type { CheckpointItem } from "@/lib/checkpoints/data";
 import { failureSentence, type CommandResult } from "@/lib/runs/command-types";
+import { Textarea } from "@/components/ui/text-field";
 
 export interface InboxCommands {
   resumeRun: (runId: string) => Promise<CommandResult>;
@@ -308,10 +309,9 @@ function InboxCard({
       {item.kind === "blocked_on_human" && (
         <label className="mt-2 block text-sm text-muted">
           {copy.responseLabel}
-          <textarea
+          <Textarea
             ref={registerAnswerField}
             rows={2}
-            className="mt-1 w-full rounded-md border border-line bg-card px-3 py-2 text-sm text-ink"
           />
         </label>
       )}

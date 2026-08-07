@@ -1,4 +1,8 @@
 import type { Metadata } from "next";
+import { Checkbox } from "@/components/ui/choice";
+import { Field } from "@/components/ui/field";
+import { Select } from "@/components/ui/select";
+import { TextField } from "@/components/ui/text-field";
 import Link from "next/link";
 
 import { friendlyDate } from "@/lib/format";
@@ -83,29 +87,18 @@ export default async function MembersPage() {
       <section className="rounded-md border border-line bg-card p-6">
         <h2 className="text-base font-medium text-ink">Invite someone</h2>
         <form action={inviteAction} className="mt-4 flex flex-wrap items-end gap-3">
-          <label className="block text-sm text-ink">
-            Email
-            <input
-              type="email"
-              name="email"
-              required
-              className="mt-1 block w-64 rounded-sm border border-line bg-card px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="block text-sm text-ink">
-            Role
-            <select
-              name="role"
-              defaultValue="member"
-              className="mt-1 block rounded-sm border border-line bg-card px-3 py-2 text-sm"
-            >
+          <Field label="Email">
+            <TextField type="email" name="email" required className="w-64" />
+          </Field>
+          <Field label="Role">
+            <Select name="role" defaultValue="member">
               {ROLES.map((role) => (
                 <option key={role} value={role}>
                   {ROLE_LABELS[role]}
                 </option>
               ))}
-            </select>
-          </label>
+            </Select>
+          </Field>
           <button
             type="submit"
             className="rounded-sm bg-pine px-4 py-2 text-sm font-medium text-card hover:bg-pine-deep"
@@ -184,17 +177,17 @@ export default async function MembersPage() {
                       ) : (
                         <form action={updateRoleAction} className="flex items-center gap-2">
                           <input type="hidden" name="userId" value={member.userId} />
-                          <select
+                          <Select
                             name="role"
                             defaultValue={member.role}
-                            className="rounded-sm border border-line bg-card px-2 py-1 text-xs"
+                            className="w-auto py-1 text-xs"
                           >
                             {ROLES.map((role) => (
                               <option key={role} value={role}>
                                 {ROLE_LABELS[role]}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                           <button
                             type="submit"
                             className="rounded-sm border border-line px-2 py-1 text-xs text-ink hover:border-pine"
@@ -208,15 +201,15 @@ export default async function MembersPage() {
                       <form action={updateCapabilitiesAction} className="flex flex-wrap items-center gap-2">
                         <input type="hidden" name="userId" value={member.userId} />
                         {CAPABILITIES.map((capability) => (
-                          <label key={capability} className="flex items-center gap-1 text-xs text-ink">
-                            <input
-                              type="checkbox"
-                              name="capabilities"
-                              value={capability}
-                              defaultChecked={member.capabilities.includes(capability)}
-                            />
-                            {CAPABILITY_LABELS[capability]}
-                          </label>
+                          <Checkbox
+                            key={capability}
+                            name="capabilities"
+                            value={capability}
+                            defaultChecked={member.capabilities.includes(capability)}
+                            label={
+                              <span className="text-xs">{CAPABILITY_LABELS[capability]}</span>
+                            }
+                          />
                         ))}
                         <button
                           type="submit"

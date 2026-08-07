@@ -7,6 +7,7 @@ import { getOrgSettings } from "@/lib/orgs/settings";
 import { updateNotificationDefaults } from "@/lib/orgs/settings-actions";
 import { NOTIFICATION_CLASSES } from "@/notifier/rules";
 import { adminCopy, notificationClassLabels, notificationSettingsCopy } from "@/lexicon";
+import { Checkbox } from "@/components/ui/choice";
 
 export const metadata: Metadata = { title: "Notification defaults" };
 
@@ -42,10 +43,13 @@ export default async function NotificationDefaultsPage() {
                 <p className="text-sm text-ink">{notificationClassLabels[notificationClass]}</p>
                 <p className="mt-0.5 text-xs text-muted">{notificationSettingsCopy.otherChannels}</p>
               </div>
-              <label className="flex shrink-0 items-center gap-2 text-sm text-muted">
-                <input type="checkbox" checked disabled readOnly className="h-4 w-4 accent-pine" />
-                {adminCopy.inAppFixedOn}
-              </label>
+              <Checkbox
+                className="shrink-0"
+                checked
+                disabled
+                readOnly
+                label={<span className="text-muted">{adminCopy.inAppFixedOn}</span>}
+              />
             </li>
           ))}
         </ul>

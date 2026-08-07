@@ -24,6 +24,7 @@ import type { RoutineRunSummary } from "@/lib/routines/data";
 import type { ApproverAssignment } from "@/lib/routines/queries";
 import type { RoutineTriggers } from "@/lib/routines/triggers";
 import { copy, feedbackCopy, improveCopy, triggerKindLabels } from "@/lexicon";
+import { Select } from "@/components/ui/select";
 
 type FormAction = (formData: FormData) => void | Promise<void>;
 
@@ -180,10 +181,9 @@ export function RoutineDetail({
                 <label htmlFor="assignee-picker" className="text-sm text-muted">
                   Assign
                 </label>
-                <select
+                <Select
                   id="assignee-picker"
                   name="assignee"
-                  className="rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink"
                 >
                   <optgroup label="People">
                     {assignablePeople.map((person) => (
@@ -199,7 +199,7 @@ export function RoutineDetail({
                       </option>
                     ))}
                   </optgroup>
-                </select>
+                </Select>
                 <Button type="submit" variant="secondary">
                   Assign approver
                 </Button>
