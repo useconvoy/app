@@ -169,35 +169,36 @@ jobs:
           fi
 
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking="${STRICT}" \
-            "ubuntu@${DEPLOY_HOST}" TAG="${TAG}" RUN_MIGRATIONS="${RUN_MIGRATIONS}" bash -euo pipefail -s <<'REMOTE'
+            "ubuntu@${DEPLOY_HOST}" \
+            sudo -n TAG="${TAG}" RUN_MIGRATIONS="${RUN_MIGRATIONS}" bash -euo pipefail -s <<'REMOTE'
           cd /opt/convoy
 
           # Only the console's own image lines. A blanket "replace the tag on
           # every image line" also rewrites postgres:16-alpine and
           # caddy:2-alpine, which breaks the next pull.
-          sudo sed -i -E "s#(image: [0-9]+\.dkr\.ecr\.[^:]*/website):.*#\1:${TAG}#" compose.yaml
+          sed -i -E "s#(image: [0-9]+\.dkr\.ecr\.[^:]*/website):.*#\1:${TAG}#" compose.yaml
           grep -c "website:${TAG}" compose.yaml
 
-          sudo docker compose pull
+          docker compose pull
 
           if [ "${RUN_MIGRATIONS}" = "true" ]; then
             # Both halves, in this order: the schema, then the app-role
             # password sync that retires the password committed in
             # 0001_init.sql. Skipping the second leaves the console on a
             # published password.
-            sudo docker compose run --rm -T web sh -c \
+            docker compose run --rm -T web sh -c \
               'npm run db:migrate && node infra/db/sync-app-role.mjs'
           fi
 
-          sudo docker compose up -d
-          sudo docker compose ps
+          docker compose up -d
+          docker compose ps
 
           # A release is not the restart, it is the container still being up
           # afterwards. Without this the workflow reports success for a deploy
           # that pulled a broken image and left the service crash-looping.
           # `web` is the same service name the migration step above runs in.
           for attempt in $(seq 1 20); do
-            if sudo docker compose ps --status running --services | grep -qx web; then
+            if docker compose ps --status running --services | grep -qx web; then
               echo "web is running after ${attempt} check(s)"
               exit 0
             fi
@@ -205,8 +206,8 @@ jobs:
           done
 
           echo "web is not running 60s after the restart; the last 60 lines follow"
-          sudo docker compose ps
-          sudo docker compose logs --tail 60 web
+          docker compose ps
+          docker compose logs --tail 60 web
           exit 1
           REMOTE
 
