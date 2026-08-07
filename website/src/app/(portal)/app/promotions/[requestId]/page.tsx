@@ -64,8 +64,8 @@ export default async function PromotionReviewPage({
                 className={[
                   "rounded-full border px-2 py-0.5 font-mono text-xs uppercase tracking-wide",
                   request.status === "promoted"
-                    ? "border-pass-soft bg-pass-soft text-pass"
-                    : "border-hold-soft bg-hold-soft text-hold",
+                    ? "border-pass-soft bg-pass-soft text-pass-text"
+                    : "border-hold-soft bg-hold-soft text-hold-text",
                 ].join(" ")}
               >
                 {promotionStatusLabels[request.status]}

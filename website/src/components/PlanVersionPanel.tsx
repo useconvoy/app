@@ -146,7 +146,7 @@ export function PlanVersionPanel({
         {stale && (
           <div
             role="status"
-            className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-hold-soft bg-hold-soft p-3 text-sm text-hold"
+            className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-hold-soft bg-hold-soft p-3 text-sm text-hold-text"
           >
             <span>{copy.planMoved}</span>
             <Button variant="secondary" onClick={() => onReviewNewer?.(newerVersion)}>

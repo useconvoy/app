@@ -161,6 +161,31 @@ html {
   animation: pulse-live 1.8s ease-in-out infinite;
 }
 
+/* The busy spinner on a button.
+ *
+ * It mounts the moment the action fires but stays invisible for 200ms, so a
+ * round trip that finishes quickly never flashes a spinner at all. The delay
+ * is an animation-delay rather than a timer, which keeps Button a server
+ * component. */
+@keyframes spinner-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spinner-arrive {
+  to {
+    opacity: 0.6;
+  }
+}
+
+.spinner-delayed {
+  opacity: 0;
+  animation:
+    spinner-turn 620ms linear infinite,
+    spinner-arrive 1ms linear 200ms forwards;
+}
+
 /* Scroll reveal. The element is always in the server HTML and always occupies
  * its final box; only transform and opacity move, so a reveal can never shift
  * layout. Fires once. */
@@ -194,6 +219,14 @@ html {
 
   .pulse-live {
     animation: none;
+  }
+
+  /* The spinner starts transparent and is brought in by an animation, so
+   * switching its animation off without restoring the opacity would leave a
+   * busy button with no busy indicator at all. Hold it still, and visible. */
+  .spinner-delayed {
+    animation: none;
+    opacity: 0.6;
   }
 
   html {

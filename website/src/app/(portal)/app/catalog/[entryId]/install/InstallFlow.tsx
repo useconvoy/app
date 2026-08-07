@@ -91,7 +91,7 @@ export function InstallFlow({ entryId, version, options, systemNames, install }:
             <Button onClick={confirm} disabled={blocked || busy}>
               {catalogCopy.installPinned(version)}
             </Button>
-            {blocked ? <p className="text-xs text-hold">{catalogCopy.installBlocked}</p> : null}
+            {blocked ? <p className="text-xs text-hold-text">{catalogCopy.installBlocked}</p> : null}
           </div>
         </div>
       ) : null}

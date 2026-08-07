@@ -10,7 +10,7 @@ export function DisconnectBanner({ lastEventAt }: DisconnectBannerProps) {
   return (
     <div
       role="alert"
-      className="flex flex-wrap items-center gap-3 rounded-md border border-hold-soft bg-hold-soft px-4 py-2 text-sm text-hold"
+      className="flex flex-wrap items-center gap-3 rounded-md border border-hold-soft bg-hold-soft px-4 py-2 text-sm text-hold-text"
     >
       <span>{copy.disconnected}</span>
       {lastEventAt && (

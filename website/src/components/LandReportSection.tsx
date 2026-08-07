@@ -68,7 +68,7 @@ export function LandReportSection({
             {exceptions === 0 ? (
               <span className="text-muted">{copy.noExceptions}</span>
             ) : (
-              <span className="text-hold">
+              <span className="text-hold-text">
                 {copy.stepsSummary(facts.stepsDone, facts.stepsFailed, facts.stepsSkipped)}
               </span>
             )}

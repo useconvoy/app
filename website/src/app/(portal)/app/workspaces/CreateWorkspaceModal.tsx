@@ -224,7 +224,7 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={submitting}>
+                <Button type="submit" pending={submitting}>
                   Create workspace
                 </Button>
               </div>

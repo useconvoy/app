@@ -150,23 +150,23 @@ function PauseResumeLand({
   return (
     <div id="resume" className="flex flex-wrap items-center gap-2">
       {status === "paused" ? (
-        <Button disabled={pending} onClick={() => void fire(commands?.resumeRun)}>
+        <Button pending={pending} onClick={() => void fire(commands?.resumeRun)}>
           {checkpointKinds.paused.verb}
         </Button>
       ) : (
         <Button
           variant="secondary"
-          disabled={pending}
+          pending={pending}
           onClick={() => void fire(commands?.pauseRun)}
         >
           {copy.pauseAction}
         </Button>
       )}
-      <Button variant="secondary" disabled={pending} onClick={() => void fire(commands?.landRun)}>
+      <Button variant="secondary" pending={pending} onClick={() => void fire(commands?.landRun)}>
         {copy.landAction}
       </Button>
       {message && (
-        <p role="status" className="w-full text-sm text-hold">
+        <p role="status" className="w-full text-sm text-hold-text">
           {message}
         </p>
       )}
@@ -225,7 +225,7 @@ function PlanApproval({
         onReviewNewer={() => router.refresh()}
       />
       {message && (
-        <p role="status" className="mt-2 text-sm text-hold">
+        <p role="status" className="mt-2 text-sm text-hold-text">
           {message}
         </p>
       )}
@@ -319,12 +319,13 @@ function GateRespondForm({
         </div>
       )}
       <div className="mt-3 flex items-center gap-3">
-        <Button disabled={pending || response.trim().length === 0} onClick={() => void send()}>
+        <Button pending={pending}
+          disabled={response.trim().length === 0} onClick={() => void send()}>
           {checkpointKinds.blocked_on_human.verb}
         </Button>
       </div>
       {message && (
-        <p role="status" className="mt-2 text-sm text-hold">
+        <p role="status" className="mt-2 text-sm text-hold-text">
           {message}
         </p>
       )}
@@ -432,7 +433,7 @@ function SteerComposer({
           {sent.map((entry) => (
             <li key={entry.localId} className="flex flex-wrap items-baseline gap-2 text-sm">
               {entry.failed ? (
-                <span role="status" className="text-hold">
+                <span role="status" className="text-hold-text">
                   {entry.failed}
                 </span>
               ) : (
@@ -498,28 +499,28 @@ function AdvanceClock({
         />
         <Button
           variant="secondary"
-          disabled={pending}
+          pending={pending}
           onClick={() => void advance(toIso(value))}
         >
           {copy.advanceClock}
         </Button>
         <Button
           variant="secondary"
-          disabled={pending}
+          pending={pending}
           onClick={() => void advance(plusDays(virtualNow, 1))}
         >
           {copy.plusOneDay}
         </Button>
         <Button
           variant="secondary"
-          disabled={pending}
+          pending={pending}
           onClick={() => void advance(plusDays(virtualNow, 7))}
         >
           {copy.plusOneWeek}
         </Button>
       </div>
       {message && (
-        <p role="status" className="mt-2 text-sm text-hold">
+        <p role="status" className="mt-2 text-sm text-hold-text">
           {message}
         </p>
       )}

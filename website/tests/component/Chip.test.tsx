@@ -6,7 +6,11 @@ import { Chip } from "@/components/Chip";
 describe("Chip", () => {
   it("renders its content in the requested tone", () => {
     render(<Chip tone="hold">Held for you</Chip>);
-    expect(screen.getByText("Held for you")).toHaveClass("text-hold");
+    const chip = screen.getByText("Held for you");
+    // The fill token measures 3.35:1 on its own soft ground, under the 4.5:1
+    // this label needs. The -text variant is the one that carries glyphs.
+    expect(chip).toHaveClass("text-hold-text");
+    expect(chip).not.toHaveClass("text-hold");
   });
 
   it("supports the dashed rehearsal treatment and mono facts", () => {

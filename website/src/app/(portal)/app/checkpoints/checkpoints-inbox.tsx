@@ -253,7 +253,7 @@ function ConflictCard({ item }: { item: CheckpointItem }) {
   return (
     <div
       role="status"
-      className="flex flex-wrap items-center gap-3 rounded-lg border border-hold-soft bg-hold-soft p-4 text-sm text-hold"
+      className="flex flex-wrap items-center gap-3 rounded-lg border border-hold-soft bg-hold-soft p-4 text-sm text-hold-text"
     >
       <span>{copy.planMoved}</span>
       <Link
@@ -301,7 +301,7 @@ function InboxCard({
       onAction={onPrimary}
     >
       {countdown && (
-        <p className="font-mono text-xs uppercase tracking-wide text-hold">
+        <p className="font-mono text-xs uppercase tracking-wide text-hold-text">
           {dueInLabel(minutesLeft)}
         </p>
       )}
@@ -352,7 +352,7 @@ function InboxCard({
         </p>
       )}
       {state.message && !state.sent && (
-        <p role="status" className="text-sm text-hold">
+        <p role="status" className="text-sm text-hold-text">
           {state.message}
         </p>
       )}

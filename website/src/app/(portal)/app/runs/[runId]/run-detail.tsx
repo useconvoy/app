@@ -157,7 +157,7 @@ function PromotionBlock({
           </Link>
         </>
       ) : (
-        <Button disabled={pending} onClick={() => void submit()}>
+        <Button pending={pending} onClick={() => void submit()}>
           {copy.submitForPromotion}
         </Button>
       )}
@@ -255,7 +255,7 @@ export function RunDetail({
         <StatusChip status={status} rehearsal={rehearsal} />
       </header>
       {kind && (
-        <p role="status" className="rounded-md border border-hold-soft bg-hold-soft px-4 py-2 text-sm text-hold">
+        <p role="status" className="rounded-md border border-hold-soft bg-hold-soft px-4 py-2 text-sm text-hold-text">
           {checkpointKinds[kind].description}
         </p>
       )}

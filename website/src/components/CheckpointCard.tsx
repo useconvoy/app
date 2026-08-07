@@ -85,7 +85,7 @@ export function CheckpointCard({
           {heldAgeLabel(heldMinutes)}
         </span>
         {deadline && (
-          <span className="font-mono text-xs uppercase tracking-wide text-hold">
+          <span className="font-mono text-xs uppercase tracking-wide text-hold-text">
             {dueDateLabel(deadline)}
           </span>
         )}

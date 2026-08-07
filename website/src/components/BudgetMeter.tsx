@@ -65,7 +65,7 @@ export function BudgetMeter({ budget }: BudgetMeterProps) {
         </p>
       )}
       {warning && (
-        <p className="mt-1.5 text-sm font-medium text-hold">
+        <p className="mt-1.5 text-sm font-medium text-hold-text">
           {eventLabels.budget_warning ?? "Approaching budget"}
         </p>
       )}

@@ -49,7 +49,7 @@ export function PromotionDecision({ requestId, canPromote, actions }: PromotionD
   return (
     <div id="promote" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Button disabled={pending} onClick={() => void decide(() => actions!.promote(requestId))}>
+        <Button pending={pending} onClick={() => void decide(() => actions!.promote(requestId))}>
           {copy.promoteAction}
         </Button>
       </div>
@@ -65,14 +65,15 @@ export function PromotionDecision({ requestId, canPromote, actions }: PromotionD
       <div>
         <Button
           variant="secondary"
-          disabled={pending || note.trim().length === 0}
+          pending={pending}
+          disabled={note.trim().length === 0}
           onClick={() => void decide(() => actions!.sendBack(requestId, note.trim()))}
         >
           {copy.sendBackAction}
         </Button>
       </div>
       {message && (
-        <p role="status" className="text-sm text-hold">
+        <p role="status" className="text-sm text-hold-text">
           {message}
         </p>
       )}

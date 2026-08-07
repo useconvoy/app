@@ -56,7 +56,7 @@ function HeldForYou({ runs }: { runs: RunView[] }) {
         return (
           <li key={run.run_id}>
             <RunLine run={run}>
-              <span className="text-sm text-hold">{checkpointKinds[kind].description}</span>
+              <span className="text-sm text-hold-text">{checkpointKinds[kind].description}</span>
             </RunLine>
           </li>
         );

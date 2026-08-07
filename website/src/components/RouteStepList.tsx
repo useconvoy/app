@@ -30,7 +30,7 @@ const nodeClasses: Record<RouteStepState, string> = {
 const stateTextClasses: Record<RouteStepState, string> = {
   done: "text-pass",
   active: "text-pass",
-  held: "text-hold",
+  held: "text-hold-text",
   queued: "text-muted",
   failed: "text-fail",
 };
@@ -69,7 +69,7 @@ export function RouteStepList({ steps }: RouteStepListProps) {
                 {stateLabels[step.state]}
               </span>
               {step.checkpoint && (
-                <span className="rounded-full border border-hold-soft bg-hold-soft px-1.5 font-mono text-[11px] uppercase tracking-wide text-hold">
+                <span className="rounded-full border border-hold-soft bg-hold-soft px-1.5 font-mono text-[11px] uppercase tracking-wide text-hold-text">
                   {terms.gate}
                 </span>
               )}

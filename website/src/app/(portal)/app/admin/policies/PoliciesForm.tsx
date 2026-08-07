@@ -111,7 +111,7 @@ export function PoliciesForm({ initial, save }: PoliciesFormProps) {
           {adminCopy.policiesSaved}
         </p>
       ) : null}
-      <Button type="submit" disabled={busy}>
+      <Button type="submit" pending={busy}>
         {adminCopy.savePolicies}
       </Button>
     </form>

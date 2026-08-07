@@ -18,8 +18,8 @@ const toneByStatus: Record<string, Tone> = {
 
 const toneClasses: Record<Tone, string> = {
   neutral: "border-line bg-card text-muted",
-  pass: "border-pass-soft bg-pass-soft text-pass",
-  hold: "border-hold-soft bg-hold-soft text-hold",
+  pass: "border-pass-soft bg-pass-soft text-pass-text",
+  hold: "border-hold-soft bg-hold-soft text-hold-text",
   fail: "border-fail-soft bg-fail-soft text-fail",
 };
 

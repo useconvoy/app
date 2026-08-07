@@ -29,7 +29,10 @@ describe("BudgetMeter", () => {
   it("renders the 80 percent warning moment in hold colors", () => {
     render(<BudgetMeter budget={budgets.warning} />);
     const warning = screen.getByText("Approaching budget");
-    expect(warning).toHaveClass("text-hold");
+    // 3.59:1 on the field background is not enough for the one sentence that
+    // says someone is about to run out of money.
+    expect(warning).toHaveClass("text-hold-text");
+    expect(warning).not.toHaveClass("text-hold");
     expect(screen.queryByText("Out of budget")).not.toBeInTheDocument();
   });
 

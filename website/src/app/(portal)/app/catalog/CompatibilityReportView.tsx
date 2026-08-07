@@ -59,7 +59,7 @@ export function CompatibilityReportView({ report, systemNames }: CompatibilityRe
       {report.connectPrompts.length > 0 ? (
         <ul className="m-0 list-none space-y-1 p-0">
           {report.connectPrompts.map((systemId) => (
-            <li key={systemId} className="flex items-center gap-2 text-sm text-hold">
+            <li key={systemId} className="flex items-center gap-2 text-sm text-hold-text">
               <Chip tone="hold" mono>
                 Missing
               </Chip>

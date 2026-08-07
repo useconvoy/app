@@ -160,7 +160,7 @@ export function PublishForm({ routines, publish }: PublishFormProps) {
           {error}
         </p>
       ) : null}
-      <Button type="submit" disabled={busy}>
+      <Button type="submit" pending={busy}>
         {catalogCopy.publishAction}
       </Button>
     </form>
