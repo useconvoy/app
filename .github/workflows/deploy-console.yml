@@ -170,7 +170,8 @@ jobs:
 
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking="${STRICT}" \
             "ubuntu@${DEPLOY_HOST}" \
-            sudo -n TAG="${TAG}" RUN_MIGRATIONS="${RUN_MIGRATIONS}" bash -euo pipefail -s <<'REMOTE'
+            sudo -n TAG="${TAG}" RUN_MIGRATIONS="${RUN_MIGRATIONS}" \
+            AWS_REGION="${AWS_REGION}" bash -euo pipefail -s <<'REMOTE'
           cd /opt/convoy
 
           # Only the console's own image lines. A blanket "replace the tag on
@@ -178,6 +179,16 @@ jobs:
           # caddy:2-alpine, which breaks the next pull.
           sed -i -E "s#(image: [0-9]+\.dkr\.ecr\.[^:]*/website):.*#\1:${TAG}#" compose.yaml
           grep -c "website:${TAG}" compose.yaml
+
+          # The instance authenticated to ECR once, during bootstrap, and those
+          # tokens last twelve hours. Every deploy after the first day was
+          # therefore going to pull with an expired one. Re-authenticate on each
+          # release; the identity on this box is scoped to pulling this one
+          # repository, so this grants nothing the box did not already have.
+          REGISTRY=$(sed -nE 's#.*image: ([0-9]+\.dkr\.ecr\.[^/]+)/.*#\1#p' compose.yaml | head -1)
+          test -n "${REGISTRY}" || { echo "no ECR registry found in compose.yaml"; exit 1; }
+          aws ecr get-login-password --region "${AWS_REGION}" \
+            | docker login --username AWS --password-stdin "${REGISTRY}"
 
           docker compose pull
 
