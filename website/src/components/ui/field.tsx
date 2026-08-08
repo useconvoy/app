@@ -46,6 +46,8 @@ export function Field({
  */
 export const CONTROL =
   "w-full rounded-md border border-line bg-card px-3 py-2 text-sm text-ink " +
+  // Taller taps on touch widths; desktop keeps its density.
+  "max-md:py-2.5 " +
   "placeholder:text-muted/70 " +
   "focus:outline-2 focus:outline-offset-[-1px] focus:outline-pass " +
   "disabled:cursor-not-allowed disabled:opacity-50";

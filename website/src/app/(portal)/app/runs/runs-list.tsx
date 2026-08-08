@@ -33,7 +33,8 @@ type ContextFilter = "production" | "rehearsals" | null;
 const GROUPS: GroupFilter[] = ["all", "held", "running", "failed", "landed"];
 
 function chipClass(active: boolean, rehearsalChip = false): string {
-  const base = "rounded-full border px-3 py-1 text-sm";
+  // Taller taps on touch widths; desktop keeps its density.
+  const base = "rounded-full border px-3 py-1 text-sm max-md:py-2";
   if (!active) return `${base} border-line bg-card text-muted hover:text-ink`;
   if (rehearsalChip) return `${base} border-dashed border-graphite bg-graphite-soft text-graphite`;
   return `${base} border-pine bg-pine text-card`;
@@ -115,13 +116,15 @@ export function RunsList({
           onChange={(event) => setQuery(event.target.value)}
           placeholder={copy.searchRuns}
           aria-label={copy.searchRuns}
-          className="ml-auto w-56 rounded-md border border-line bg-card px-3 py-1.5 text-sm text-ink placeholder:text-muted"
+          className="ml-auto w-56 rounded-md border border-line bg-card px-3 py-1.5 text-sm text-ink placeholder:text-muted max-md:w-full max-md:py-2.5"
         />
       </div>
 
       {visible.length === 0 ? (
         <EmptyState title="No runs match" body="Loosen the filters or clear the search." />
       ) : (
+        /* The table scrolls inside its own box; the page never scrolls sideways. */
+        <div className="overflow-x-auto">
         <table className="w-full border-separate border-spacing-0 rounded-lg border border-line bg-card text-sm">
           <thead>
             <tr className="text-left font-mono text-xs uppercase tracking-wide text-muted">
@@ -157,6 +160,7 @@ export function RunsList({
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

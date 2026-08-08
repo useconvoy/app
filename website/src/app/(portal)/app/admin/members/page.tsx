@@ -86,9 +86,10 @@ export default async function MembersPage() {
 
       <section className="rounded-md border border-line bg-card p-6">
         <h2 className="text-base font-medium text-ink">Invite someone</h2>
-        <form action={inviteAction} className="mt-4 flex flex-wrap items-end gap-3">
+        {/* Fields stack full width on phones and sit in a row from md up. */}
+        <form action={inviteAction} className="mt-4 flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end">
           <Field label="Email">
-            <TextField type="email" name="email" required className="w-64" />
+            <TextField type="email" name="email" required className="md:w-64" />
           </Field>
           <Field label="Role">
             <Select name="role" defaultValue="member">
@@ -101,7 +102,7 @@ export default async function MembersPage() {
           </Field>
           <button
             type="submit"
-            className="rounded-sm bg-pine px-4 py-2 text-sm font-medium text-card hover:bg-pine-deep"
+            className="rounded-sm bg-pine px-4 py-2 text-sm font-medium text-card hover:bg-pine-deep max-md:w-full max-md:py-2.5"
           >
             Send invite
           </button>
@@ -128,7 +129,7 @@ export default async function MembersPage() {
                   readOnly
                   aria-label={`Invite link for ${invite.email}`}
                   value={`${inviteBase}/invite/${invite.token}`}
-                  className="min-w-0 flex-1 truncate rounded-sm border border-line-soft bg-field px-2 py-1 font-mono text-xs text-muted"
+                  className="min-w-0 flex-1 truncate rounded-sm border border-line-soft bg-field px-2 py-1 font-mono text-xs text-muted max-md:basis-full"
                 />
                 <form action={revokeInviteAction}>
                   <input type="hidden" name="inviteId" value={invite.id} />
@@ -147,7 +148,9 @@ export default async function MembersPage() {
 
       <section className="rounded-md border border-line bg-card p-6">
         <h2 className="text-base font-medium text-ink">People</h2>
-        <div className="mt-4 overflow-x-auto">
+        {/* relative so the sr-only header (absolutely positioned) is clipped
+            with the table instead of widening the page. */}
+        <div className="relative mt-4 overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-line text-xs uppercase text-muted">

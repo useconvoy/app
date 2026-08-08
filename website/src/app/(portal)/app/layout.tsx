@@ -6,6 +6,7 @@ import { BellButton } from "@/components/shell/BellButton";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { NavItems } from "@/components/shell/NavItems";
 import { OrgSwitcher } from "@/components/shell/OrgSwitcher";
+import { PortalNavDrawer } from "@/components/shell/PortalNavDrawer";
 import { routesForRole } from "@/components/shell/nav";
 import { NoActiveOrgError, requireOrgSession, UnauthenticatedError } from "@/lib/auth/session";
 import { getMembership, listUserOrgs } from "@/lib/orgs/queries";
@@ -33,23 +34,38 @@ export default async function PortalLayout({ children }: { children: React.React
   if (!membership) redirect("/onboarding");
 
   const role = membership.role;
+  const orgOptions = orgs.map((org) => ({ id: org.id, name: org.name }));
 
   return (
     <div className="flex min-h-screen bg-field">
-      <aside className="flex w-60 shrink-0 flex-col gap-8 border-r border-line bg-card px-3 py-6">
+      {/* The fixed rail is a desktop shape; below md the drawer replaces it. */}
+      <aside className="hidden w-60 shrink-0 flex-col gap-8 border-r border-line bg-card px-3 py-6 md:flex">
         <Link href="/app" className="px-3 font-display text-xl text-ink">
           Convoy
         </Link>
         <NavItems role={role} />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-4 border-b border-line bg-card px-6 py-3">
-          <OrgSwitcher
-            orgs={orgs.map((org) => ({ id: org.id, name: org.name }))}
-            currentOrgId={session.orgId}
-          />
-          <div className="flex items-center gap-3">
-            <CommandPalette routes={routesForRole(role)} />
+        <header className="flex items-center justify-between gap-3 border-b border-line bg-card px-4 py-2 md:gap-4 md:px-6 md:py-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <PortalNavDrawer>
+              <div className="border-b border-line-soft pb-4">
+                <OrgSwitcher orgs={orgOptions} currentOrgId={session.orgId} />
+              </div>
+              <NavItems role={role} />
+            </PortalNavDrawer>
+            <Link href="/app" className="font-display text-lg text-ink md:hidden">
+              Convoy
+            </Link>
+            <div className="hidden min-w-0 md:block">
+              <OrgSwitcher orgs={orgOptions} currentOrgId={session.orgId} />
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            {/* The command-K jump is a keyboard affordance; on touch it is noise. */}
+            <div className="hidden md:block">
+              <CommandPalette routes={routesForRole(role)} />
+            </div>
             <BellButton />
             <AccountMenu name={session.name} />
           </div>
@@ -59,7 +75,7 @@ export default async function PortalLayout({ children }: { children: React.React
             RehearsalBanner today; this slot exists so the shell can take
             that over once rehearsal context is known at layout level. */}
         <div data-slot="rehearsal-banner" />
-        <main className="flex-1 bg-field px-8 py-10">{children}</main>
+        <main className="flex-1 bg-field px-4 py-6 md:px-8 md:py-10">{children}</main>
       </div>
     </div>
   );

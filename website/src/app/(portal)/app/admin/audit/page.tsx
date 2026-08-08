@@ -50,7 +50,12 @@ export default async function AuditPage({
         <p className="mt-1 text-sm text-muted">{adminCopy.auditIntro}</p>
       </header>
 
-      <form action="/app/admin/audit" method="get" className="flex flex-wrap items-end gap-3">
+      {/* Fields stack full width on phones and sit in a row from md up. */}
+      <form
+        action="/app/admin/audit"
+        method="get"
+        className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end"
+      >
         <label className="block text-sm text-ink">
           {adminCopy.auditFilterLabel}
           <input
@@ -58,12 +63,12 @@ export default async function AuditPage({
             name="action"
             defaultValue={actionPrefix}
             placeholder={adminCopy.auditFilterHint}
-            className="mt-1 block w-64 rounded-sm border border-line bg-card px-3 py-2 text-sm"
+            className="mt-1 block w-full rounded-sm border border-line bg-card px-3 py-2 text-sm md:w-64"
           />
         </label>
         <button
           type="submit"
-          className="rounded-sm border border-line px-3 py-2 text-sm text-ink hover:border-pine"
+          className="rounded-sm border border-line px-3 py-2 text-sm text-ink hover:border-pine max-md:w-full max-md:py-2.5"
         >
           {adminCopy.auditApplyFilter}
         </button>

@@ -390,8 +390,8 @@ export function RunDetail({
               <dl className="mt-2 space-y-2 text-xs">
                 <div>
                   <dt className="text-muted">Run id</dt>
-                  <dd className="mt-0.5 flex items-center gap-2">
-                    <span className="font-mono text-ink">{initial.run_id}</span>
+                  <dd className="mt-0.5 flex flex-wrap items-center gap-2">
+                    <span className="break-all font-mono text-ink">{initial.run_id}</span>
                     <button
                       type="button"
                       className="rounded border border-line px-1.5 py-0.5 text-muted hover:text-ink"
@@ -404,7 +404,7 @@ export function RunDetail({
                 {workspaceId && (
                   <div>
                     <dt className="text-muted">Workspace</dt>
-                    <dd className="mt-0.5 font-mono text-ink">{workspaceId}</dd>
+                    <dd className="mt-0.5 break-all font-mono text-ink">{workspaceId}</dd>
                   </div>
                 )}
                 {version !== null && (
