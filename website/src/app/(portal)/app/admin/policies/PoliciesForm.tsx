@@ -10,6 +10,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/Button";
+import { Checkbox } from "@/components/ui/choice";
+import { Field } from "@/components/ui/field";
+import { NumberField } from "@/components/ui/text-field";
 import { adminCopy } from "@/lexicon";
 
 export interface PoliciesFormValues {
@@ -64,43 +67,31 @@ export function PoliciesForm({ initial, save }: PoliciesFormProps) {
     // bubbles would preempt them (and say less).
     <form action={submit} noValidate className="space-y-4 rounded-md border border-line bg-card p-6">
       <div className="flex flex-wrap gap-6">
-        <label className="block text-sm text-ink">
-          {adminCopy.defaultRunBudgetCap}
-          <input
-            type="number"
+        <Field label={adminCopy.defaultRunBudgetCap} hint={adminCopy.defaultRunBudgetCapHint}>
+          <NumberField
             name="defaultRunBudgetCapUsd"
             min={1}
             step={1}
             defaultValue={initial.defaultRunBudgetCapUsd}
-            className="mt-1 block w-32 rounded-sm border border-line bg-card px-3 py-2 text-sm"
+            className="w-32"
           />
-          <span className="mt-1 block text-xs text-muted">{adminCopy.defaultRunBudgetCapHint}</span>
-        </label>
-        <label className="block text-sm text-ink">
-          {adminCopy.monthlySpendNotice}
-          <input
-            type="number"
+        </Field>
+        <Field label={adminCopy.monthlySpendNotice} hint={adminCopy.monthlySpendNoticeHint}>
+          <NumberField
             name="monthlySpendNoticeUsd"
             min={1}
             step={1}
             defaultValue={initial.monthlySpendNoticeUsd}
-            className="mt-1 block w-32 rounded-sm border border-line bg-card px-3 py-2 text-sm"
+            className="w-32"
           />
-          <span className="mt-1 block text-xs text-muted">{adminCopy.monthlySpendNoticeHint}</span>
-        </label>
+        </Field>
       </div>
-      <label className="flex items-start gap-2 text-sm text-ink">
-        <input
-          type="checkbox"
-          name="viewerEvidenceExport"
-          defaultChecked={initial.viewerEvidenceExport}
-          className="mt-0.5 h-4 w-4 accent-pine"
-        />
-        <span>
-          {adminCopy.viewerEvidenceExport}
-          <span className="mt-0.5 block text-xs text-muted">{adminCopy.viewerEvidenceExportHint}</span>
-        </span>
-      </label>
+      <Checkbox
+        name="viewerEvidenceExport"
+        defaultChecked={initial.viewerEvidenceExport}
+        label={adminCopy.viewerEvidenceExport}
+        hint={adminCopy.viewerEvidenceExportHint}
+      />
       {error ? (
         <p role="alert" className="text-sm text-fail">
           {error}

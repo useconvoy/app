@@ -1,22 +1,19 @@
 /**
- * The typed client interface for the agent-evals service (scenario suites,
- * test-score trends, per-run scorecards, scored-run trajectories). The
- * service is not built yet, so the only implementation is a fixture adapter
- * over `lib/fixtures/evals`, mirroring the environments seam.
+ * Reads and appends for routine test scores. The full evaluation service
+ * (scenario suites, per-run scorecards, scored-run trajectories) is not
+ * built yet; what exists today is the append-only routine_eval_scores
+ * table, read through withOrgContext so RLS bounds every query. A fresh
+ * organization has no scores and every consuming surface renders an
+ * honest empty state.
  *
- * TODO(evals): replace the fixture adapter with real calls behind the
- * single authenticated edge and delete `lib/fixtures/evals`.
+ * TODO(evals): the service will own scorecards and trajectories; their
+ * types stay here so the components that render them keep one home.
  */
 import "server-only";
 
-import {
-  fixtureScorecards,
-  fixtureSuites,
-  fixtureTrajectories,
-  fixtureTrends,
-} from "@/lib/fixtures/evals";
+import { withOrgContext } from "@/lib/db";
 
-/** A scenario suite attached to one routine. */
+/** A scenario suite attached to one routine; service-side, not stored here. */
 export interface EvalSuite {
   id: string;
   routineId: string;
@@ -28,6 +25,13 @@ export interface EvalSuite {
 export interface TestScorePoint {
   at: string;
   score: number;
+}
+
+/** One scored run with its reference, for the scored-run history list. */
+export interface ScoredRun {
+  runRef: string;
+  score: number;
+  recordedAt: string;
 }
 
 /** Per-run scorecard: the criteria behind one run's test score. */
@@ -45,32 +49,60 @@ export interface Trajectory {
   headline: string;
 }
 
-export interface EvalsClient {
-  listSuites(routineId: string): Promise<EvalSuite[]>;
-  scoreTrend(routineId: string): Promise<TestScorePoint[]>;
-  scorecard(runId: string): Promise<RunScorecard | null>;
-  trajectories(routineId: string): Promise<Trajectory[]>;
+/** The score trend for one routine, oldest first, ready to chart. */
+export async function scoreTrend(orgId: string, routineId: string): Promise<TestScorePoint[]> {
+  return withOrgContext({ orgId }, async (client) => {
+    const { rows } = await client.query<{ score: number; recordedAt: Date }>(
+      `SELECT score, recorded_at AS "recordedAt"
+         FROM routine_eval_scores
+        WHERE org_id = $1 AND routine_id = $2
+        ORDER BY recorded_at, id`,
+      [orgId, routineId],
+    );
+    return rows.map((row) => ({ at: row.recordedAt.toISOString(), score: row.score }));
+  });
 }
 
-class FixtureEvalsClient implements EvalsClient {
-  async listSuites(routineId: string): Promise<EvalSuite[]> {
-    return fixtureSuites.filter((suite) => suite.routineId === routineId);
-  }
-
-  async scoreTrend(routineId: string): Promise<TestScorePoint[]> {
-    return fixtureTrends[routineId] ?? [];
-  }
-
-  async scorecard(runId: string): Promise<RunScorecard | null> {
-    return fixtureScorecards[runId] ?? null;
-  }
-
-  async trajectories(routineId: string): Promise<Trajectory[]> {
-    return fixtureTrajectories[routineId] ?? [];
-  }
+/** Recent scored runs for one routine, newest first. */
+export async function scoredRuns(
+  orgId: string,
+  routineId: string,
+  limit = 50,
+): Promise<ScoredRun[]> {
+  return withOrgContext({ orgId }, async (client) => {
+    const { rows } = await client.query<{ runRef: string; score: number; recordedAt: Date }>(
+      `SELECT run_ref AS "runRef", score, recorded_at AS "recordedAt"
+         FROM routine_eval_scores
+        WHERE org_id = $1 AND routine_id = $2
+        ORDER BY recorded_at DESC, id DESC
+        LIMIT $3`,
+      [orgId, routineId, limit],
+    );
+    return rows.map((row) => ({
+      runRef: row.runRef,
+      score: row.score,
+      recordedAt: row.recordedAt.toISOString(),
+    }));
+  });
 }
 
-/** The one evals client. TODO(evals): real adapter. */
-export function evalsClient(): EvalsClient {
-  return new FixtureEvalsClient();
+/**
+ * Append one score to a routine's history. The history is append-only:
+ * a re-scored run gets a new row, and the trend shows what was known
+ * when. Rows stay narrow by design; anything wide belongs to the
+ * evaluation service when it lands.
+ */
+export async function recordScore(
+  orgId: string,
+  routineId: string,
+  runRef: string,
+  score: number,
+): Promise<void> {
+  await withOrgContext({ orgId }, (client) =>
+    client.query(
+      `INSERT INTO routine_eval_scores (org_id, routine_id, run_ref, score)
+       VALUES ($1, $2, $3, $4)`,
+      [orgId, routineId, runRef, score],
+    ),
+  );
 }

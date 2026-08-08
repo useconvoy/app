@@ -174,6 +174,14 @@ export const clockModeDescriptions = {
 
 export type ClockMode = keyof typeof clockModeLabels;
 
+/** Membership roles as users see them. Keys are the memberships values. */
+export const roleLabels: Record<string, string> = {
+  admin: "Admin",
+  operator: "Operator",
+  member: "Member",
+  viewer: "Viewer",
+};
+
 /** Runs list filter chips: All plus the four status groups. */
 export const runFilterLabels = {
   all: "All",
@@ -210,6 +218,11 @@ export const copy = {
   productionFilter: "Production",
   rehearsalsFilter: "Rehearsals",
   runsEmptyBody: "Runs appear here as soon as a routine starts working.",
+  myRunsTitle: "My runs",
+  myRunsIntro: "Runs you started, newest first.",
+  myRunsEmptyBody: "Runs you start will appear here.",
+  showAllRuns: "Show all runs",
+  startRun: "Start a run",
   helperRuns: "Helper runs",
   operatorDetails: "Details for operators",
   copyRunId: "Copy run id",
@@ -219,6 +232,15 @@ export const copy = {
     "Run now starts a rehearsal in this workspace's rehearsal copy. Nothing touches live systems.",
   runNowProductionNote: "Run now starts a live run in this workspace, within this routine's budget.",
   noRunsYet: "No runs yet",
+  routinesEmptyTitle: "No routines yet",
+  routinesEmptyBody:
+    "Routines are the jobs this organization hands over. Install one from the catalog to get started.",
+  planEmptyNote: "No plan recorded yet. The plan appears with this routine's first run.",
+  checkpointsUnknownNote:
+    "Checkpoints appear here when this routine's plan holds for a person.",
+  workspacesEmptyTitle: "No workspaces yet",
+  workspacesEmptyBody:
+    "A workspace connects the systems routines may touch. Create one to give routines somewhere to run.",
   rehearsalCopyAutoNote: "A rehearsal copy is created automatically.",
   rehearsalCopyExplainer:
     "Every workspace carries a rehearsal copy. Rehearsal runs use stand-ins for anything that would touch the outside world.",
@@ -396,13 +418,17 @@ export const catalogCopy = {
   fullyPortable: "Fully portable across vendors",
   installPinned: (version: number) => `Install pinned to v${version}`,
   installBlocked: "Connect the missing systems before installing.",
-  installedNote:
-    "Installed. This routine appears on the routines list once its workspace wiring lands.",
+  installedNote: "Installed. This routine is now on the routines list.",
+  viewInstalledRoutine: "Open the routines list",
+  installNeedsWorkspace:
+    "Create a workspace first, so this routine has somewhere to run.",
+  goToWorkspaces: "Go to workspaces",
   changelogTitle: "Changelog",
   versionChip: (version: number) => `v${version}`,
   publishedBy: (publisher: string) => `Published by ${publisher}`,
-  emptyTitle: "Nothing on the storefront yet",
-  emptyBody: "Published routines appear here for every organization to install.",
+  emptyTitle: "No routines are available to install yet",
+  emptyBody:
+    "Routines published to the catalog appear here, ready to install into a workspace. Your Convoy contact can help you get the first one published.",
 } as const;
 
 /** Billing copy; billing is invoice-first Stripe. */
@@ -436,10 +462,10 @@ export const adminCopy = {
   noticeBelowCap: "The spend notice should not be below the per-run cap",
   apiAccessTitle: "API access",
   apiAccessIntro: "How this organization reaches the Convoy platform.",
-  apiAccessPhase1:
-    "During phase 1, access to the platform is managed by Convoy. Every call your organization makes travels through Convoy's bridge identity, so there are no keys to create, copy, or rotate here.",
+  apiAccessManaged:
+    "Access to the platform is managed by Convoy. Every call your organization makes travels through Convoy's bridge identity, so there are no keys to create, copy, or rotate here.",
   apiAccessNoKeys: "No key material is ever shown or stored on this site.",
-  apiAccessSelfServe: "Self-serve keys arrive when sign-in reaches the platform edge directly.",
+  apiAccessSelfServe: "Need direct API access? Write to your Convoy contact and we will set it up with you.",
   controlPlaneUrlLabel: "Platform address",
   notificationDefaultsTitle: "Notification defaults",
   notificationDefaultsIntro:
@@ -544,6 +570,9 @@ export const feedbackCopy = {
 export const improveCopy = {
   evaluationTitle: "Routine evaluation",
   evaluationIntro: "How each routine scores in rehearsal, and the runs behind the numbers.",
+  evaluationEmptyTitle: "Nothing to evaluate yet",
+  evaluationEmptyBody:
+    "Once this organization has routines, their test scores chart here run by run.",
   suitesTitle: "Scenario groups",
   scenarioCount: (count: number) => `${count} ${count === 1 ? "scenario" : "scenarios"}`,
   trendTitle: "Test score trend",
@@ -551,6 +580,11 @@ export const improveCopy = {
   noScoresBody: "Rehearsal results will chart here once this routine has been scored.",
   scorecardsTitle: "Run scorecards",
   trajectoriesTitle: "Recent scored runs",
+  scoredRunsTitle: "Scored runs",
+  scoredRunsEmptyBody: "Runs of this routine appear here once they are scored.",
+  scoreColumn: "Score",
+  scoredAtColumn: "When",
+  runColumn: "Run",
   learningTitle: "Learning",
   learningIntro: "What the routines have learned, waiting for a person to approve it.",
   queueTitle: "Improvements to review",
@@ -561,8 +595,62 @@ export const improveCopy = {
   changelogTitle: "Routine changelog",
   changelogEmpty: "No changes yet",
   changelogEmptyBody: "Changes shipped to this routine will appear here.",
+  changelogNoRoutines: "Changes appear here once this organization has routines.",
+  changelogInstalledNote: "Installed from the catalog",
+  changelogCreatedNote: "Added to this organization",
   feedbackReviewTitle: "Recent feedback",
   readOnlyQueueNote: "You can read this queue. Approving and shipping need an operator.",
+} as const;
+
+/** Copy for the start-a-run picker. */
+export const startRunCopy = {
+  title: "Start a run",
+  intro: "Pick a routine and start it now.",
+  pickRoutine: "Choose a routine",
+  planTitle: "What it will do",
+  noRoutinesTitle: "Nothing to run yet",
+  noRoutinesBody: "This organization has no routines. Install one from the catalog first.",
+  browseCatalog: "Browse the catalog",
+  startRehearsal: "Start a rehearsal run",
+  startProduction: "Start a live run",
+  noWorkspaceNote:
+    "No workspace connects the systems this routine needs, so it cannot run yet.",
+  viewersCannotStart: "Viewers cannot start runs.",
+} as const;
+
+/** Copy for the account surfaces and the account menu. */
+export const accountCopy = {
+  menuLabel: "Account menu",
+  profileItem: "Profile",
+  organizationItem: "Organization",
+  myRunsItem: "My runs",
+  settingsItem: "Settings",
+  signOutItem: "Sign out",
+  profileTitle: "Account",
+  profileIntro: "Who you are on this site, and the organizations you belong to.",
+  nameLabel: "Name",
+  emailLabel: "Email",
+  signInLabel: "Sign-in",
+  ssoLinked: "Connected to single sign-on",
+  ssoNotLinked: "Signed in with email",
+  membershipsTitle: "Your organizations",
+  currentOrgChip: "Current",
+  organizationTitle: "Organization",
+  organizationIntro: "The organization you are working in right now.",
+  yourRoleLabel: "Your role",
+  memberCountLabel: "Members",
+  createdLabel: "Created",
+  peopleCount: (count: number) => `${count} ${count === 1 ? "person" : "people"}`,
+  adminLink: "Open the admin area",
+  settingsTitle: "Settings",
+  notificationSettingsLink: "Notification preferences",
+} as const;
+
+/** Copy for the portal's own page-not-found state. */
+export const portalNotFoundCopy = {
+  title: "This page does not exist",
+  body: "The address may be old or mistyped. Nothing ran and nothing was recorded.",
+  backToOverview: "Back to Overview",
 } as const;
 
 /** Shared copy for the logs surface. */

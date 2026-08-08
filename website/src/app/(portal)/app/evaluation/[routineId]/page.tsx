@@ -2,21 +2,22 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { ScorecardTable } from "@/components/ScorecardTable";
-import { TrajectoryList } from "@/components/TrajectoryList";
+import { EmptyState } from "@/components/EmptyState";
 import { TrendLine } from "@/components/TrendLine";
-import { evalsClient } from "@/lib/api/evals";
-import { routines } from "@/lib/fixtures/world";
+import { scoredRuns, scoreTrend } from "@/lib/api/evals";
+import { friendlyDateTime } from "@/lib/format";
 import { requireRoutinesPage } from "@/lib/routines/gate";
+import { getRoutine } from "@/lib/routines/queries";
 import { improveCopy } from "@/lexicon";
 
 export const metadata: Metadata = { title: "Routine evaluation" };
+export const dynamic = "force-dynamic";
 
 /**
- * Per-routine evaluation detail: the trend large, per-run scorecards with
- * labeled pass/fail criteria, and the trajectories behind them with
- * rehearsal rows in the graphite dashed pencil treatment. All reads go through the
- * typed evals client. TODO(evals).
+ * Per-routine evaluation detail: the trend large over the routine's real
+ * score history, and the scored runs behind it, newest first. Scorecards
+ * with per-criterion detail arrive with the evaluation service; until
+ * then this page shows only what is actually recorded.
  */
 export default async function EvaluationDetailPage({
   params,
@@ -24,23 +25,14 @@ export default async function EvaluationDetailPage({
   params: Promise<{ routineId: string }>;
 }) {
   const { routineId } = await params;
-  await requireRoutinesPage();
-  const routine = routines.find((candidate) => candidate.id === routineId);
+  const { session } = await requireRoutinesPage();
+  const routine = await getRoutine(session.orgId, routineId);
   if (!routine) notFound();
 
-  const client = evalsClient();
-  const [trend, trajectories] = await Promise.all([
-    client.scoreTrend(routineId),
-    client.trajectories(routineId),
+  const [trend, scored] = await Promise.all([
+    scoreTrend(session.orgId, routineId),
+    scoredRuns(session.orgId, routineId),
   ]);
-  const scorecards = (
-    await Promise.all(
-      trajectories.map(async (trajectory) => ({
-        trajectory,
-        scorecard: await client.scorecard(trajectory.runId),
-      })),
-    )
-  ).filter((entry) => entry.scorecard !== null);
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -61,25 +53,51 @@ export default async function EvaluationDetailPage({
         </div>
       </section>
 
-      <section aria-label={improveCopy.trajectoriesTitle}>
-        <h2 className="font-display text-lg text-ink">{improveCopy.trajectoriesTitle}</h2>
+      <section aria-label={improveCopy.scoredRunsTitle}>
+        <h2 className="font-display text-lg text-ink">{improveCopy.scoredRunsTitle}</h2>
         <div className="mt-3">
-          <TrajectoryList items={trajectories} />
-        </div>
-      </section>
-
-      <section aria-label={improveCopy.scorecardsTitle}>
-        <h2 className="font-display text-lg text-ink">{improveCopy.scorecardsTitle}</h2>
-        <div className="mt-3 space-y-4">
-          {scorecards.map(({ trajectory, scorecard }) => (
-            <ScorecardTable
-              key={trajectory.runId}
-              scorecard={scorecard!}
-              headline={trajectory.headline}
-              at={trajectory.at}
-              rehearsal={trajectory.sandbox}
+          {scored.length > 0 ? (
+            <table className="w-full border-separate border-spacing-0 rounded-lg border border-line bg-card text-sm">
+              <thead>
+                <tr className="text-left font-mono text-xs uppercase tracking-wide text-muted">
+                  <th className="border-b border-line px-4 py-2 font-medium">
+                    {improveCopy.runColumn}
+                  </th>
+                  <th className="border-b border-line px-4 py-2 font-medium">
+                    {improveCopy.scoreColumn}
+                  </th>
+                  <th className="border-b border-line px-4 py-2 font-medium">
+                    {improveCopy.scoredAtColumn}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {scored.map((run) => (
+                  <tr key={`${run.runRef}:${run.recordedAt}`}>
+                    <td className="border-b border-line-soft px-4 py-3">
+                      <Link
+                        href={`/app/runs/${run.runRef}`}
+                        className="text-ink underline-offset-2 hover:underline"
+                      >
+                        {routine.name}
+                      </Link>
+                    </td>
+                    <td className="border-b border-line-soft px-4 py-3 font-mono text-xs text-ink">
+                      {run.score}
+                    </td>
+                    <td className="border-b border-line-soft px-4 py-3 font-mono text-xs text-muted">
+                      {friendlyDateTime(run.recordedAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <EmptyState
+              title={improveCopy.noScoresYet}
+              body={improveCopy.scoredRunsEmptyBody}
             />
-          ))}
+          )}
         </div>
       </section>
     </div>

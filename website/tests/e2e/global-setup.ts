@@ -10,8 +10,83 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { chromium, type FullConfig } from "@playwright/test";
+import pg from "pg";
 
 const ROOT = join(__dirname, "..", "..");
+
+/**
+ * Give the fresh org one workspace and one routine so the specs have
+ * something real to run: the same rows the catalog install flow writes,
+ * bound to the local stub registry so on-demand runs actually execute.
+ */
+async function seedRoutine(adminDsn: string, orgName: string): Promise<void> {
+  const client = new pg.Client({ connectionString: adminDsn });
+  await client.connect();
+  try {
+    const { rows } = await client.query<{ id: string }>(
+      "SELECT id FROM organizations WHERE name = $1",
+      [orgName],
+    );
+    const orgId = rows[0]?.id;
+    if (!orgId) throw new Error(`org not found for seeding: ${orgName}`);
+    const systems = JSON.stringify([
+      {
+        systemId: "identity_provider",
+        displayName: "Identity provider",
+        scope: "read",
+        sideEffecting: false,
+      },
+      { systemId: "hris", displayName: "HR system", scope: "read", sideEffecting: false },
+      {
+        systemId: "document_store",
+        displayName: "Document store",
+        scope: "write",
+        sideEffecting: false,
+      },
+      {
+        systemId: "messaging",
+        displayName: "Messaging",
+        scope: "write",
+        sideEffecting: true,
+        standIn: {
+          note: "Stand-in for Messaging: messages are held in the outbox instead of being sent.",
+        },
+      },
+    ]);
+    const versions = JSON.stringify([
+      { version: 1, note: "Created", createdAt: new Date().toISOString() },
+    ]);
+    const workspace = await client.query<{ id: string }>(
+      `INSERT INTO workspaces
+         (org_id, name, purpose, environment_id, rehearsal_environment_id, systems, clock_mode, versions)
+       VALUES ($1, 'Compliance workspace', 'Access reviews run here.',
+               'prod-local', 'stub-local', $2, 'wall', $3)
+       RETURNING id`,
+      [orgId, systems, versions],
+    );
+    await client.query(
+      `INSERT INTO routines
+         (org_id, workspace_id, name, descriptor, systems, budget_cap_usd, plan_steps)
+       VALUES ($1, $2, 'Quarterly user access review',
+               'Looks up people and their access, reconciles differences, and chases sign-offs.',
+               $3, 75, $4)`,
+      [
+        orgId,
+        workspace.rows[0]!.id,
+        ["identity_provider", "hris", "document_store", "messaging"],
+        JSON.stringify([
+          "Pull the current list of people and their access",
+          "Compare against the HR system and note differences",
+          "Write an exception memo for each difference",
+          "Chase anyone who has not responded",
+          "Assemble the final review packet",
+        ]),
+      ],
+    );
+  } finally {
+    await client.end();
+  }
+}
 
 export default async function globalSetup(config: FullConfig): Promise<void> {
   const adminDsn =
@@ -51,4 +126,6 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
   } finally {
     await browser.close();
   }
+
+  await seedRoutine(adminDsn, orgName);
 }

@@ -24,6 +24,7 @@ import type { RoutineRunSummary } from "@/lib/routines/data";
 import type { ApproverAssignment } from "@/lib/routines/queries";
 import type { RoutineTriggers } from "@/lib/routines/triggers";
 import { copy, feedbackCopy, improveCopy, triggerKindLabels } from "@/lexicon";
+import { Select } from "@/components/ui/select";
 
 type FormAction = (formData: FormData) => void | Promise<void>;
 
@@ -32,7 +33,8 @@ export interface RoutineDetailProps {
     id: string;
     name: string;
     descriptor: string;
-    budgetCapUsd: number;
+    /** Dollar cap, as a number or the database's numeric string. */
+    budgetCapUsd: number | string;
     planSteps: string[];
   };
   workspace: { id: string; name: string } | null;
@@ -124,13 +126,17 @@ export function RoutineDetail({
 
       <Section title="The plan">
         <div className="rounded-lg border border-line bg-card p-5">
-          <RouteStepList
-            steps={routine.planSteps.map((sentence, index) => ({
-              id: `${routine.id}-step-${index}`,
-              sentence,
-              state: "queued",
-            }))}
-          />
+          {routine.planSteps.length > 0 ? (
+            <RouteStepList
+              steps={routine.planSteps.map((sentence, index) => ({
+                id: `${routine.id}-step-${index}`,
+                sentence,
+                state: "queued",
+              }))}
+            />
+          ) : (
+            <p className="text-sm text-muted">{copy.planEmptyNote}</p>
+          )}
         </div>
       </Section>
 
@@ -146,7 +152,7 @@ export function RoutineDetail({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-muted">This routine runs without holding for anyone.</p>
+            <p className="text-sm text-muted">{copy.checkpointsUnknownNote}</p>
           )}
           <div>
             <h3 className="text-xs font-medium uppercase tracking-wide text-muted">Approvers</h3>
@@ -180,10 +186,9 @@ export function RoutineDetail({
                 <label htmlFor="assignee-picker" className="text-sm text-muted">
                   Assign
                 </label>
-                <select
+                <Select
                   id="assignee-picker"
                   name="assignee"
-                  className="rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink"
                 >
                   <optgroup label="People">
                     {assignablePeople.map((person) => (
@@ -199,7 +204,7 @@ export function RoutineDetail({
                       </option>
                     ))}
                   </optgroup>
-                </select>
+                </Select>
                 <Button type="submit" variant="secondary">
                   Assign approver
                 </Button>

@@ -11,6 +11,8 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/Button";
 import { catalogCopy } from "@/lexicon";
+import { Select } from "@/components/ui/select";
+import { NumberField, Textarea } from "@/components/ui/text-field";
 
 export interface PublishRoutineOption {
   id: string;
@@ -84,22 +86,21 @@ export function PublishForm({ routines, publish }: PublishFormProps) {
     <form action={submit} className="space-y-4 rounded-md border border-line bg-card p-6">
       <label className="block text-sm text-ink">
         Routine
-        <select
+        <Select
           name="routineId"
-          className="mt-1 block w-full rounded-sm border border-line bg-card px-3 py-2 text-sm"
         >
           {routines.map((routine) => (
             <option key={routine.id} value={routine.id}>
               {routine.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <div className="flex flex-wrap gap-4">
         <label className="block text-sm text-ink">
           Version
-          <input
-            type="number"
+          <NumberField
+            
             name="version"
             min={1}
             step={1}
@@ -109,8 +110,8 @@ export function PublishForm({ routines, publish }: PublishFormProps) {
         </label>
         <label className="block text-sm text-ink">
           {catalogCopy.testScoreFloorLabel}
-          <input
-            type="number"
+          <NumberField
+            
             name="minScore"
             min={0}
             max={100}
@@ -139,11 +140,10 @@ export function PublishForm({ routines, publish }: PublishFormProps) {
       </label>
       <label className="block text-sm text-ink">
         Description
-        <textarea
+        <Textarea
           name="description"
           required
           rows={4}
-          className="mt-1 block w-full rounded-sm border border-line bg-card px-3 py-2 text-sm"
         />
       </label>
       <label className="block text-sm text-ink">

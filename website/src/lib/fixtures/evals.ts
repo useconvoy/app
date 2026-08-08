@@ -1,10 +1,10 @@
 /**
- * Fixture data for the routine evaluation surfaces, part of the canonical
- * fixture world: scenario suites, test-score trends, per-run scorecards,
- * and scored-run trajectories for the three fixture routines. The shapes
- * mirror what the agent-evals service will serve; the FixtureEvalsClient in
- * `lib/api/evals` is the only consumer. TODO(evals): retire this file when
- * the service is live.
+ * Fixture data for the routine evaluation surfaces, used by tests only:
+ * scenario suites, test-score trends, per-run scorecards, and scored-run
+ * trajectories for the three fixture routines. The shapes mirror what the
+ * agent-evals service will serve; production reads real score history from
+ * the routine_eval_scores table and renders the service-owned shapes empty
+ * until the service exists.
  *
  * Trend shapes by design: the access review climbs 72 -> 91 across eight
  * rehearsals, the vendor check holds steady around 85, and the attestation

@@ -39,7 +39,16 @@ function chipClass(active: boolean, rehearsalChip = false): string {
   return `${base} border-pine bg-pine text-card`;
 }
 
-export function RunsList({ rows, startAction }: { rows: RunListRow[]; startAction?: ReactNode }) {
+export function RunsList({
+  rows,
+  startAction,
+  emptyBody,
+}: {
+  rows: RunListRow[];
+  startAction?: ReactNode;
+  /** Overrides the default empty-state body, e.g. for the "my runs" lens. */
+  emptyBody?: string;
+}) {
   const [group, setGroup] = useState<GroupFilter>("all");
   const [context, setContext] = useState<ContextFilter>(null);
   const [query, setQuery] = useState("");
@@ -56,7 +65,13 @@ export function RunsList({ rows, startAction }: { rows: RunListRow[]; startActio
   }, [rows, group, context, query]);
 
   if (rows.length === 0) {
-    return <EmptyState title={copy.noRunsYet} body={copy.runsEmptyBody} action={startAction} />;
+    return (
+      <EmptyState
+        title={copy.noRunsYet}
+        body={emptyBody ?? copy.runsEmptyBody}
+        action={startAction}
+      />
+    );
   }
 
   return (

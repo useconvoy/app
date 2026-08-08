@@ -1,12 +1,15 @@
 /**
  * The routines list, presentational: plain
  * descriptors, health from the latest run, the how-it-fits strip, and no
- * "New routine" button anywhere. Phase 1 routines are set up with the
- * Convoy team; the catalog install flow lives behind the Operator lens.
+ * "New routine" button anywhere. Routines arrive through the catalog
+ * install flow behind the Operator lens; with none installed the list is
+ * an honest empty state pointing there.
  */
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { Chip } from "@/components/Chip";
+import { EmptyState } from "@/components/EmptyState";
 import { HowItFitsStrip } from "@/components/HowItFitsStrip";
 import { StatusChip } from "@/components/StatusChip";
 import { copy } from "@/lexicon";
@@ -23,9 +26,23 @@ export interface RoutineCard {
 export interface RoutinesListProps {
   routines: RoutineCard[];
   showHowItFits: boolean;
+  /** Rendered inside the empty state, e.g. the install link. */
+  emptyAction?: ReactNode;
 }
 
-export function RoutinesList({ routines, showHowItFits }: RoutinesListProps) {
+export function RoutinesList({ routines, showHowItFits, emptyAction }: RoutinesListProps) {
+  if (routines.length === 0) {
+    return (
+      <div className="space-y-6">
+        <HowItFitsStrip showHowItFits={showHowItFits} />
+        <EmptyState
+          title={copy.routinesEmptyTitle}
+          body={copy.routinesEmptyBody}
+          action={emptyAction}
+        />
+      </div>
+    );
+  }
   return (
     <div className="space-y-6">
       <HowItFitsStrip showHowItFits={showHowItFits} />

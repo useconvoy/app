@@ -1,60 +1,19 @@
 /**
- * Fixture data for the environments service, which is not built yet
- * (TODO(environments-E0): the directory/registry replaces all of this).
- * Shapes follow the typed client interface in `lib/api/environments`; the
- * runnable environment ids ("prod-local", "stub-local", "stub-local-virtual")
- * are the real local runtime's stub registry, so on-demand runs triggered
- * from these workspaces actually execute against `make e2e-up`.
+ * Fixture data for the environments seam, used by tests only. Production
+ * reads workspaces from the org-scoped workspaces table; these two demo
+ * workspaces exist so component and unit suites can render and reason
+ * about fully connected workspaces without a database. The runnable
+ * environment ids ("prod-local", "stub-local", "stub-local-virtual") are
+ * the real local runtime's stub registry, matching what production
+ * bindings use.
  */
 
 import type { SystemGrant, Workspace } from "@/lib/api/environments";
+import { catalogSystem, type SystemDefinition } from "@/lib/workspaces/system-catalog";
 
-/** The system catalog the create-workspace picker offers. */
-export interface FixtureSystem {
-  id: string;
-  displayName: string;
-  /** True when granting write would touch the world outside the org. */
-  sideEffecting: boolean;
-  /** Plain-language stand-in note for side-effecting systems. */
-  standInNote: string | null;
-}
-
-export const systemCatalog: FixtureSystem[] = [
-  {
-    id: "identity_provider",
-    displayName: "Identity provider",
-    sideEffecting: false,
-    standInNote: null,
-  },
-  {
-    id: "hris",
-    displayName: "HR system",
-    sideEffecting: false,
-    standInNote: null,
-  },
-  {
-    id: "document_store",
-    displayName: "Document store",
-    sideEffecting: false,
-    standInNote: null,
-  },
-  {
-    id: "messaging",
-    displayName: "Messaging",
-    sideEffecting: true,
-    standInNote: "Stand-in for Messaging: messages are held in the outbox instead of being sent.",
-  },
-  {
-    id: "crm",
-    displayName: "CRM",
-    sideEffecting: true,
-    standInNote: "Stand-in for CRM: record changes are noted for review instead of being applied.",
-  },
-];
-
-export function catalogSystem(systemId: string): FixtureSystem | undefined {
-  return systemCatalog.find((system) => system.id === systemId);
-}
+/** The shared system catalog, re-exported for suites that assert over it. */
+export { systemCatalog, catalogSystem } from "@/lib/workspaces/system-catalog";
+export type FixtureSystem = SystemDefinition;
 
 /** Build a grant from the catalog; stand-ins ride side-effecting writes. */
 function grant(systemId: string, scope: "read" | "write", withStandIn = false): SystemGrant {

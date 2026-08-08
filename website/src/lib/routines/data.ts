@@ -1,9 +1,10 @@
 /**
- * Routine view assembly: fixture routine definitions (the world) joined
- * with real run history from the run directory, approver assignments from
- * the website DB, workspace grants from the environments fixture adapter,
- * and trigger configuration. Everything a routine surface renders comes
- * through here so the fixture seams stay in one place.
+ * Routine view assembly: the org's stored routine definitions joined with
+ * real run history from the run directory, approver assignments from the
+ * website DB, and workspace grants from the environments adapter.
+ * Everything a routine surface renders comes through here so the data
+ * seams stay in one place. A fresh organization has no routines and every
+ * consumer renders a designed empty state.
  */
 import "server-only";
 
@@ -15,9 +16,13 @@ import {
   type Workspace,
 } from "@/lib/api/environments";
 import { listRuns, routineIdForRun } from "@/lib/api/runs";
-import { routines, type FixtureRoutine } from "@/lib/fixtures/world";
-import { listApprovers, type ApproverAssignment } from "./queries";
-import { getTriggers, type RoutineTriggers } from "./triggers";
+import {
+  getRoutine,
+  listApprovers,
+  type ApproverAssignment,
+  type RoutineRecord,
+} from "./queries";
+import { triggersForRoutine, type RoutineTriggers } from "./triggers";
 
 /**
  * Which lens an on-demand run was started under. RunView carries no
@@ -53,8 +58,8 @@ export interface RoutineRunSummary {
 
 /**
  * Real run history for one routine, newest first. The control plane may
- * be unreachable in fixture-only setups; the surfaces stay up with an
- * empty history rather than failing the whole page.
+ * be unreachable; the surfaces stay up with an empty history rather than
+ * failing the whole page.
  */
 async function runHistory(actor: ActorContext): Promise<Map<string, RoutineRunSummary[]>> {
   const byRoutine = new Map<string, RoutineRunSummary[]>();
@@ -90,8 +95,11 @@ export interface RoutineListItem {
 }
 
 /** The routines list: plain descriptors with health from the latest run. */
-export async function listRoutineViews(actor: ActorContext): Promise<RoutineListItem[]> {
-  const history = await runHistory(actor);
+export async function listRoutineViews(
+  routines: RoutineRecord[],
+  actor: ActorContext,
+): Promise<RoutineListItem[]> {
+  const history = routines.length > 0 ? await runHistory(actor) : new Map<string, RoutineRunSummary[]>();
   return routines.map((routine) => {
     const latest = history.get(routine.id)?.[0];
     return {
@@ -105,40 +113,30 @@ export async function listRoutineViews(actor: ActorContext): Promise<RoutineList
   });
 }
 
-/**
- * Checkpoint placements per routine, as plain sentences. Fixture-side for
- * now: placements live in the plan template the runtime owns.
- */
-const CHECKPOINT_PLACEMENTS: Record<string, Array<{ title: string; behavior: string }>> = {
-  "routine-access-review": [
-    {
-      title: "Exception memos wait for approval before anyone is chased",
-      behavior: "If no one answers in time, the run pauses.",
-    },
-  ],
-  "routine-vendor-check": [
-    {
-      title: "Document requests wait for approval before they go to vendors",
-      behavior: "If no one answers in time, the run pauses.",
-    },
-  ],
-  "routine-attestation-chase": [
-    {
-      title: "The reminder list waits for a look before reminders go out",
-      behavior: "If no one answers in time, this step is skipped.",
-    },
-  ],
-};
-
 export interface RoutineDetailData {
-  routine: FixtureRoutine;
+  routine: RoutineRecord;
   workspace: Workspace | null;
   /** Workspace grants for the systems this routine uses. */
   systems: SystemGrant[];
-  checkpoints: Array<{ title: string; behavior: string }>;
   approvers: ApproverAssignment[];
   triggers: RoutineTriggers;
   runs: RoutineRunSummary[];
+}
+
+/**
+ * Resolve a routine's workspace: the recorded binding wins; a routine
+ * without one falls back to the first workspace covering its systems.
+ */
+export async function resolveWorkspace(
+  orgId: string,
+  routine: RoutineRecord,
+): Promise<Workspace | null> {
+  const client = environmentsClient();
+  if (routine.workspaceId) {
+    return client.getWorkspace(orgId, routine.workspaceId);
+  }
+  const workspaces = await client.listWorkspaces(orgId);
+  return workspaceForRoutine(routine, workspaces);
 }
 
 export async function getRoutineDetail(
@@ -146,14 +144,13 @@ export async function getRoutineDetail(
   actor: ActorContext,
   routineId: string,
 ): Promise<RoutineDetailData | null> {
-  const routine = routines.find((candidate) => candidate.id === routineId);
+  const routine = await getRoutine(orgId, routineId);
   if (!routine) return null;
-  const [workspaces, approvers, history] = await Promise.all([
-    environmentsClient().listWorkspaces(orgId),
+  const [workspace, approvers, history] = await Promise.all([
+    resolveWorkspace(orgId, routine),
     listApprovers(orgId, routineId),
     runHistory(actor),
   ]);
-  const workspace = workspaceForRoutine(routine, workspaces);
   const grants = new Map((workspace?.systems ?? []).map((grant) => [grant.systemId, grant]));
   return {
     routine,
@@ -161,9 +158,8 @@ export async function getRoutineDetail(
     systems: routine.systems
       .map((systemId) => grants.get(systemId))
       .filter((grant): grant is SystemGrant => grant !== undefined),
-    checkpoints: CHECKPOINT_PLACEMENTS[routineId] ?? [],
     approvers,
-    triggers: getTriggers(orgId, routineId),
+    triggers: triggersForRoutine(routine),
     runs: history.get(routineId) ?? [],
   };
 }

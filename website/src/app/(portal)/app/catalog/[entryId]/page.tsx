@@ -7,7 +7,7 @@ import { friendlyDate } from "@/lib/format";
 import { requireCatalogPage } from "@/lib/catalog/gate";
 import { installedRoutines, updateAvailable } from "@/lib/catalog/installs";
 import { getEntry } from "@/lib/catalog/queries";
-import { systemCatalog } from "@/lib/fixtures/environments";
+import { systemCatalog } from "@/lib/workspaces/system-catalog";
 import { catalogCopy, grantLabels } from "@/lexicon";
 
 export const metadata: Metadata = { title: "Catalog" };
@@ -25,10 +25,11 @@ export default async function CatalogEntryPage({
 }) {
   const { entryId } = await params;
   const { session } = await requireCatalogPage();
-  const entry = await getEntry({ orgId: session.orgId, userId: session.userId }, entryId);
+  const ctx = { orgId: session.orgId, userId: session.userId };
+  const entry = await getEntry(ctx, entryId);
   if (!entry) notFound();
 
-  const install = installedRoutines(session.orgId).find((row) => row.entryId === entry.id);
+  const install = (await installedRoutines(ctx)).find((row) => row.entryId === entry.id);
   const hasUpdate = updateAvailable(entry.version, install);
   const systemName = (systemId: string) =>
     systemCatalog.find((system) => system.id === systemId)?.displayName ?? systemId;

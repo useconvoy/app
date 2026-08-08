@@ -19,6 +19,8 @@ interface RunRecord {
   tenantId: string;
   /** Routine the run was triggered from; drives assignment routing. */
   routineId?: string;
+  /** Website user who started the run; drives the "my runs" filter. */
+  startedById?: string;
   createdAt: string;
 }
 
@@ -51,6 +53,15 @@ export function ensureRunRegistered(runId: string, tenantId: string): void {
 
 export function routineIdForRun(runId: string): string | undefined {
   return directory().get(runId)?.routineId;
+}
+
+/**
+ * Who started a run through the console, or undefined for runs first met
+ * at the edge. The "my runs" filter keys on this; a run the console did
+ * not start is honestly nobody's.
+ */
+export function runStartedBy(runId: string): string | undefined {
+  return directory().get(runId)?.startedById;
 }
 
 export function knownRunIds(tenantId: string): string[] {
@@ -90,6 +101,8 @@ export interface CreateRunInput {
   environmentId: string;
   budgetUsd: string;
   routineId?: string;
+  /** Website user starting the run, for the "my runs" filter. */
+  startedById?: string;
   requirePlanApproval?: boolean;
 }
 
@@ -128,6 +141,11 @@ export async function createRun(
   if (error || !data) {
     throw new Error("run creation was not accepted");
   }
-  registerRun({ runId: data.run_id, tenantId: actor.tenantId, routineId: input.routineId });
+  registerRun({
+    runId: data.run_id,
+    tenantId: actor.tenantId,
+    routineId: input.routineId,
+    startedById: input.startedById,
+  });
   return { runId: data.run_id, status: data.status };
 }

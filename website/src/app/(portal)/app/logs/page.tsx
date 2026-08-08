@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 
 import { Button } from "@/components/Button";
+import { Field } from "@/components/ui/field";
+import { Select } from "@/components/ui/select";
 import { CostRollupsPanel } from "@/components/CostRollupsPanel";
 import { LogEventTable } from "@/components/LogEventTable";
 import { listRuns } from "@/lib/api/runs";
@@ -75,33 +77,22 @@ export default async function LogsPage({
       </header>
 
       <form method="get" className="flex flex-wrap items-end gap-3">
-        <div>
-          <label htmlFor="filter-type" className="block text-xs font-medium uppercase tracking-wide text-muted">
-            {logsCopy.filterEventType}
-          </label>
-          <select
-            id="filter-type"
-            name="type"
-            defaultValue={filters.type}
-            className="mt-1 rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink"
-          >
+        <Field label={logsCopy.filterEventType}>
+          <Select id="filter-type" name="type" defaultValue={filters.type}>
             <option value="">{logsCopy.allEvents}</option>
             {Object.entries(eventLabels).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>
             ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="filter-run" className="block text-xs font-medium uppercase tracking-wide text-muted">
-            {logsCopy.filterRun}
-          </label>
-          <select
+          </Select>
+        </Field>
+        <Field label={logsCopy.filterRun}>
+          <Select
             id="filter-run"
             name="run"
             defaultValue={filters.run}
-            className="mt-1 max-w-72 rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink"
+            className="max-w-72"
           >
             <option value="">{logsCopy.allRuns}</option>
             {runs.map((run) => (
@@ -109,23 +100,15 @@ export default async function LogsPage({
                 {run.goal}
               </option>
             ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="filter-lens" className="block text-xs font-medium uppercase tracking-wide text-muted">
-            {logsCopy.filterLens}
-          </label>
-          <select
-            id="filter-lens"
-            name="lens"
-            defaultValue={filters.lens}
-            className="mt-1 rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink"
-          >
+          </Select>
+        </Field>
+        <Field label={logsCopy.filterLens}>
+          <Select id="filter-lens" name="lens" defaultValue={filters.lens}>
             <option value="">{logsCopy.allLenses}</option>
             <option value="production">{copy.productionFilter}</option>
             <option value="rehearsals">{copy.rehearsalsFilter}</option>
-          </select>
-        </div>
+          </Select>
+        </Field>
         <Button type="submit" variant="secondary">
           {logsCopy.apply}
         </Button>

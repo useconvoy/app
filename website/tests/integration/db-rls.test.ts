@@ -257,6 +257,37 @@ describe.skipIf(!ADMIN_DSN)("RLS isolation (real Postgres)", () => {
     expect(wrongToken.rowCount).toBe(0);
   });
 
+  it("a user sees invitations to their own address, and nobody else's", async () => {
+    // orgA invites b1, who is not a member of it and holds no token.
+    const invitee = `b1-${run}@example.com`;
+    await withOrgContext({ orgId: orgA, userId: userA1 }, (client) =>
+      client.query(
+        `INSERT INTO invites (id, org_id, email, role, token, expires_at, invited_by)
+         VALUES ($1, $2, $3, 'member', $4, now() + interval '7 days', $5)`,
+        [randomUUID(), orgA, invitee, newInviteToken(), userA1],
+      ),
+    );
+
+    // The invitee finds it without ever presenting a token, and can name the
+    // organization doing the inviting.
+    const seen = await withUserContext(userB1, async (client) => {
+      const rows = await client.query<{ email: string; orgId: string }>(
+        `SELECT i.email, i.org_id AS "orgId" FROM invites i`,
+      );
+      const org = await client.query("SELECT id FROM organizations WHERE id = $1", [orgA]);
+      return { invites: rows.rows, orgVisible: org.rowCount };
+    });
+    expect(seen.invites).toEqual([{ email: invitee, orgId: orgA }]);
+    expect(seen.orgVisible).toBe(1);
+
+    // Another user in the same organization as the inviter still sees
+    // nothing: the policy keys on the address, not on proximity to it.
+    const other = await withUserContext(userA2, (client) =>
+      client.query("SELECT id FROM invites WHERE email = $1", [invitee]),
+    );
+    expect(other.rowCount).toBe(0);
+  });
+
   it("sync_user_identity upserts by email without any pre-existing context", async () => {
     const email = `sync-${run}@example.com`;
     syncedEmails.push(email);

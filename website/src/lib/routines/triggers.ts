@@ -1,13 +1,16 @@
 /**
- * Trigger configuration per routine: schedule, manual, event; a
- * routine's triggers are properties of the one object. Kept in process
- * over fixture defaults until the scheduler and event sources exist.
+ * Trigger configuration per routine: a routine's triggers are properties
+ * of the one object. The schedule is plain text on the routines row; every
+ * routine can be started on demand in phase 1, and event sources do not
+ * exist yet, so neither needs storage of its own.
  *
  * TODO(environments-E0): event sources are designed with environments/
- * (what besides a human may start a run); the store and its plain
- * descriptions move behind that service when it lands.
+ * (what besides a human may start a run); their descriptions move behind
+ * that service when it lands.
  */
 import "server-only";
+
+import type { RoutineRecord } from "./queries";
 
 export interface RoutineTriggers {
   /** Plain schedule text, e.g. "Mondays at 9am"; absent when unscheduled. */
@@ -18,45 +21,10 @@ export interface RoutineTriggers {
   event?: { description: string };
 }
 
-const FIXTURE_TRIGGERS: Record<string, RoutineTriggers> = {
-  "routine-access-review": {
-    schedule: { description: "First Monday of each quarter at 9am" },
+/** The trigger view of one stored routine. */
+export function triggersForRoutine(routine: RoutineRecord): RoutineTriggers {
+  return {
+    ...(routine.scheduleDescription ? { schedule: { description: routine.scheduleDescription } } : {}),
     manual: true,
-  },
-  "routine-vendor-check": {
-    schedule: { description: "Mondays at 9am" },
-    manual: true,
-  },
-  "routine-attestation-chase": {
-    manual: true,
-    event: { description: "When a new policy version is published" },
-  },
-};
-
-declare global {
-  var __convoyTriggerStore: Map<string, RoutineTriggers> | undefined;
-}
-
-function store(): Map<string, RoutineTriggers> {
-  if (!globalThis.__convoyTriggerStore) {
-    globalThis.__convoyTriggerStore = new Map();
-  }
-  return globalThis.__convoyTriggerStore;
-}
-
-function key(orgId: string, routineId: string): string {
-  return `${orgId}:${routineId}`;
-}
-
-export function getTriggers(orgId: string, routineId: string): RoutineTriggers {
-  return store().get(key(orgId, routineId)) ?? FIXTURE_TRIGGERS[routineId] ?? { manual: true };
-}
-
-/** Overwrite the schedule text; edits are operator-gated by the caller. */
-export function setTriggerSchedule(orgId: string, routineId: string, description: string): void {
-  const current = getTriggers(orgId, routineId);
-  store().set(key(orgId, routineId), {
-    ...current,
-    schedule: description ? { description } : undefined,
-  });
+  };
 }

@@ -167,9 +167,16 @@ test("console surfaces with live work", async ({ page }) => {
 
 test("build and improve surfaces", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
+
+  // The routine detail's address is per-org now, so reach it through the
+  // list instead of a hardcoded id.
+  await page.goto("/app/routines");
+  await page.getByRole("link", { name: "Quarterly user access review" }).first().click();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 30_000 });
+  await shoot(page, "10-routine-detail");
+
   for (const [name, path] of [
     ["09-routines", "/app/routines"],
-    ["10-routine-detail", "/app/routines/routine-access-review"],
     ["11-workspaces", "/app/workspaces"],
     ["12-evaluation", "/app/evaluation"],
     ["13-learning", "/app/learning"],

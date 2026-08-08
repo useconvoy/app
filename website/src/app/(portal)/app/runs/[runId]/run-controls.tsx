@@ -32,6 +32,8 @@ import {
   type SteerMode,
 } from "@/lib/runs/command-types";
 import type { RunStreamEvent } from "@/lib/runs/status";
+import { Checkbox, Radio } from "@/components/ui/choice";
+import { Textarea } from "@/components/ui/text-field";
 
 const TERMINAL_STATUSES = new Set(["completed", "landed", "failed", "budget_exhausted"]);
 
@@ -281,30 +283,27 @@ function GateRespondForm({
       <label htmlFor={`${baseId}-response`} className="mt-3 block text-sm text-muted">
         {copy.responseLabel}
       </label>
-      <textarea
+      <Textarea
         id={`${baseId}-response`}
         value={response}
         onChange={(event) => setResponse(event.target.value)}
         rows={3}
-        className="mt-1 w-full rounded-md border border-line bg-card px-3 py-2 text-sm text-ink"
+        className="mt-1"
       />
       {rehearsal && (
         <div className="mt-2">
-          <label className="flex items-center gap-2 text-sm text-muted">
-            <input
-              type="checkbox"
-              checked={scheduled}
-              onChange={(event) => {
-                setScheduled(event.target.checked);
-                // The form can mount before the stream has delivered the
-                // virtual clock; seed the moment when the toggle opens.
-                if (event.target.checked && atValue === "" && virtualNow) {
-                  setAtValue(localInputValue(virtualNow));
-                }
-              }}
-            />
-            {copy.answerAtVirtual}
-          </label>
+          <Checkbox
+            checked={scheduled}
+            onChange={(event) => {
+              setScheduled(event.target.checked);
+              // The form can mount before the stream has delivered the
+              // virtual clock; seed the moment when the toggle opens.
+              if (event.target.checked && atValue === "" && virtualNow) {
+                setAtValue(localInputValue(virtualNow));
+              }
+            }}
+            label={<span className="text-muted">{copy.answerAtVirtual}</span>}
+          />
           {scheduled && (
             <label className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
               {copy.answerAtVirtualLabel}
@@ -396,32 +395,26 @@ function SteerComposer({
         <legend className="text-sm font-medium text-ink">{copy.steerBodyLabel}</legend>
         <p className="mt-1 text-sm text-muted">{copy.steerExplainer}</p>
         <div className="mt-2 flex gap-4" role="radiogroup" aria-label={copy.steerBodyLabel}>
-          <label className="flex items-center gap-1.5 text-sm text-ink">
-            <input
-              type="radio"
-              name={`${baseId}-mode`}
-              checked={mode === "note"}
-              onChange={() => setMode("note")}
-            />
-            {copy.steerNote}
-          </label>
-          <label className="flex items-center gap-1.5 text-sm text-ink">
-            <input
-              type="radio"
-              name={`${baseId}-mode`}
-              checked={mode === "redirect"}
-              onChange={() => setMode("redirect")}
-            />
-            {copy.steerRedirect}
-          </label>
+          <Radio
+            name={`${baseId}-mode`}
+            checked={mode === "note"}
+            onChange={() => setMode("note")}
+            label={copy.steerNote}
+          />
+          <Radio
+            name={`${baseId}-mode`}
+            checked={mode === "redirect"}
+            onChange={() => setMode("redirect")}
+            label={copy.steerRedirect}
+          />
         </div>
       </fieldset>
-      <textarea
+      <Textarea
         aria-label={copy.steerBodyLabel}
         value={body}
         onChange={(event) => setBody(event.target.value)}
         rows={2}
-        className="mt-2 w-full rounded-md border border-line bg-card px-3 py-2 text-sm text-ink"
+        className="mt-2"
       />
       <div className="mt-2">
         <Button disabled={body.trim().length === 0} onClick={send}>

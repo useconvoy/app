@@ -76,6 +76,28 @@ export async function getMembership(orgId: string, userId: string): Promise<Memb
   });
 }
 
+export interface OrgOverview {
+  name: string;
+  createdAt: Date;
+  /** Active members only; pending and suspended seats do not count. */
+  memberCount: number;
+}
+
+/** The account surface's view of the active org: name, age, and size. */
+export async function getOrgOverview(orgId: string): Promise<OrgOverview | null> {
+  return withOrgContext({ orgId }, async (client) => {
+    const { rows } = await client.query<OrgOverview>(
+      `SELECT o.name, o.created_at AS "createdAt",
+              (SELECT count(*)::int FROM memberships m
+                WHERE m.org_id = o.id AND m.status = 'active') AS "memberCount"
+         FROM organizations o
+        WHERE o.id = $1`,
+      [orgId],
+    );
+    return rows[0] ?? null;
+  });
+}
+
 export interface MemberRow {
   userId: string;
   name: string;
@@ -214,6 +236,38 @@ export async function listAuditEntries(
       [orgId, prefix, limit + 1, offset],
     );
     return { entries: rows.slice(0, limit), hasMore: rows.length > limit };
+  });
+}
+
+export interface PendingInvite {
+  orgId: string;
+  orgName: string;
+  role: Role;
+  token: string;
+  expiresAt: Date;
+}
+
+/**
+ * The invitations waiting for this user, found by their own address rather
+ * than by a link they may never have received.
+ *
+ * Visibility comes from the own-email policy in migration 0005, so this can
+ * only ever return rows addressed to this user. Expiry is compared in the
+ * database so a clock skew between app and database cannot offer an invite
+ * that acceptInvite will then refuse.
+ */
+export async function listPendingInvitesForUser(userId: string): Promise<PendingInvite[]> {
+  return withUserContext(userId, async (client) => {
+    const { rows } = await client.query<PendingInvite>(
+      `SELECT i.org_id AS "orgId", o.name AS "orgName", i.role, i.token,
+              i.expires_at AS "expiresAt"
+         FROM invites i
+         JOIN organizations o ON o.id = i.org_id
+        WHERE i.status = 'pending'
+          AND i.expires_at > now()
+        ORDER BY i.created_at DESC`,
+    );
+    return rows;
   });
 }
 

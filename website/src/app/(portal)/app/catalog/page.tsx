@@ -17,8 +17,11 @@ export const metadata: Metadata = { title: "Catalog" };
  */
 export default async function CatalogPage() {
   const { session, membership } = await requireCatalogPage();
-  const entries = await listCatalog({ orgId: session.orgId, userId: session.userId });
-  const installs = new Map(installedRoutines(session.orgId).map((row) => [row.entryId, row]));
+  const ctx = { orgId: session.orgId, userId: session.userId };
+  const [entries, installs] = await Promise.all([
+    listCatalog(ctx),
+    installedRoutines(ctx).then((rows) => new Map(rows.map((row) => [row.entryId, row]))),
+  ]);
   const showPublish = can("publish_catalog", membership.role, membership.capabilities);
   const cards = entries.map((entry) => {
     const install = installs.get(entry.id);

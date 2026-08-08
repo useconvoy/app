@@ -2,8 +2,8 @@
  * Server actions for the catalog. Org and actor derive from
  * the verified session, the permissions matrix is re-checked server-side,
  * and administrative writes land admin_audit rows. Publishing snapshots
- * into catalog_entries; installing is a shell that pins the version into
- * the in-process installed set (TODO(environments-E0): registry-backed).
+ * into catalog_entries; installing writes a real routines row for the org
+ * with the snapshot version pinned.
  */
 "use server";
 
@@ -14,9 +14,10 @@ import { environmentsClient } from "@/lib/api/environments";
 import { requireOrgSession } from "@/lib/auth/session";
 import { withOrgContext } from "@/lib/db";
 import { getMembership } from "@/lib/orgs/queries";
+import { getOrgSettings } from "@/lib/orgs/settings";
 import { can, type Action } from "@/lib/permissions";
+import { upsertInstalledRoutine } from "@/lib/routines/queries";
 import { computeCompatibility, reportState } from "./compat";
-import { recordInstall } from "./installs";
 import { getEntry, publishEntryCore } from "./queries";
 
 /** Session + matrix gate shared by the catalog actions. */
@@ -74,11 +75,12 @@ export async function publishEntry(input: PublishEntryInput): Promise<{ id: stri
 }
 
 /**
- * The install flow's completion, as a shell: recompute the compatibility
- * report server-side (the client rendering is convenience, not
- * enforcement), refuse while systems are missing, then pin the entry's
- * current version into the in-process installed set. Nothing domain-side
- * is recorded; the admin_audit row attributes the staff-performed install.
+ * The install flow's completion: recompute the compatibility report
+ * server-side (the client rendering is convenience, not enforcement),
+ * refuse while systems are missing, then write the routine into the org's
+ * routines table with the snapshot version pinned and the workspace bound.
+ * The routine's budget starts at the org's default per-run cap; the
+ * admin_audit row attributes the install in the same transaction.
  */
 export async function installEntry(
   entryId: string,
@@ -95,14 +97,18 @@ export async function installEntry(
     throw new Error("Connect the missing systems before installing");
   }
 
-  recordInstall(session.orgId, {
-    entryId: entry.id,
-    routineId: entry.routineId,
-    workspaceId: workspace.id,
-    pinnedVersion: entry.version,
-    installedAt: new Date().toISOString(),
-  });
-  await withOrgContext({ orgId: session.orgId, userId: session.userId }, async (client) => {
+  const settings = await getOrgSettings(session.orgId);
+  const ctx = { orgId: session.orgId, userId: session.userId };
+  await withOrgContext(ctx, async (client) => {
+    await upsertInstalledRoutine(client, ctx, {
+      name: entry.storefront.name,
+      descriptor: entry.storefront.tagline,
+      systems: entry.requirements.systems.map((required) => required.systemId),
+      budgetCapUsd: settings.policies.defaultRunBudgetCapUsd,
+      workspaceId: workspace.id,
+      sourceEntryId: entry.id,
+      sourceVersion: entry.version,
+    });
     await client.query(
       "INSERT INTO admin_audit (org_id, actor_id, action, subject) VALUES ($1, $2, $3, $4)",
       [

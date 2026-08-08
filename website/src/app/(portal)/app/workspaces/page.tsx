@@ -1,22 +1,27 @@
 import type { Metadata } from "next";
 
 import { environmentsClient, routinesUsingWorkspace } from "@/lib/api/environments";
-import { systemCatalog } from "@/lib/fixtures/environments";
-import { routines } from "@/lib/fixtures/world";
+import { listRoutines } from "@/lib/routines/queries";
 import { createWorkspace } from "@/lib/workspaces/actions";
 import { requireWorkspacesPage } from "@/lib/workspaces/gate";
+import { systemCatalog } from "@/lib/workspaces/system-catalog";
 import { CreateWorkspaceModal } from "./CreateWorkspaceModal";
 import { WorkspaceCards } from "./WorkspaceCards";
 
 export const metadata: Metadata = { title: "Workspaces" };
+export const dynamic = "force-dynamic";
 
 /**
  * Workspaces list: Admin/Operator only, server-checked. Cards
- * carry the connects/used-by facts; the create modal hangs off the header.
+ * carry the connects/used-by facts; the create modal hangs off the header,
+ * and a fresh organization sees an honest empty state under it.
  */
 export default async function WorkspacesPage() {
   const { session } = await requireWorkspacesPage();
-  const workspaces = await environmentsClient().listWorkspaces(session.orgId);
+  const [workspaces, routines] = await Promise.all([
+    environmentsClient().listWorkspaces(session.orgId),
+    listRoutines(session.orgId),
+  ]);
   const cards = workspaces.map((workspace) => ({
     id: workspace.id,
     name: workspace.name,

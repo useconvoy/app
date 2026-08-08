@@ -108,8 +108,12 @@ export async function listCatalog(ctx: DbContext): Promise<CatalogEntry[]> {
   });
 }
 
+/** Route params are arbitrary text; only a uuid can be a row id. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** One entry, or null when RLS hides it or it does not exist. */
 export async function getEntry(ctx: DbContext, entryId: string): Promise<CatalogEntry | null> {
+  if (!UUID_PATTERN.test(entryId)) return null;
   return withOrgContext(ctx, async (client) => {
     const { rows } = await client.query<EntryRow>(
       `SELECT ${ENTRY_COLUMNS} FROM catalog_entries WHERE id = $1`,

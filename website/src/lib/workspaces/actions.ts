@@ -3,8 +3,8 @@
  * surface. Org and actor derive from the verified session; the
  * permissions matrix is re-checked server-side; workspace management is
  * administrative, so every mutation writes an admin_audit row with actor
- * attribution. The workspace itself lands in the environments fixture
- * store until the registry exists. TODO(environments-E0).
+ * attribution. The workspace itself lands in the org-scoped workspaces
+ * table until the environments registry exists. TODO(environments-E0).
  */
 "use server";
 
@@ -13,7 +13,7 @@ import { revalidatePath } from "next/cache";
 import { environmentsClient } from "@/lib/api/environments";
 import { requireOrgSession } from "@/lib/auth/session";
 import { withOrgContext } from "@/lib/db";
-import { catalogSystem } from "@/lib/fixtures/environments";
+import { catalogSystem } from "@/lib/workspaces/system-catalog";
 import { copy } from "@/lexicon";
 import { getMembership } from "@/lib/orgs/queries";
 import { can } from "@/lib/permissions";

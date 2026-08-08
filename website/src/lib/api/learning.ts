@@ -1,16 +1,12 @@
 /**
- * The typed client interface for the learning service (the improvements
- * queue and the routine changelog it feeds). The service is not built yet,
- * so the only implementation is a fixture adapter whose in-process store is
- * seeded from `lib/fixtures/learning`; approve and ship mutate the store so
- * state changes render across requests, mirroring the environments seam.
+ * The typed shapes for the learning service (the improvements queue and
+ * the evidence it carries). The service is not built yet and nothing
+ * stands in for it: the learning surfaces render an honest empty queue
+ * until real improvements exist, and the components that will render them
+ * keep their types here.
  *
- * TODO(learning): replace the fixture adapter with real calls behind the
- * single authenticated edge and delete the in-process store.
+ * TODO(learning): real calls behind the single authenticated edge.
  */
-import "server-only";
-
-import { fixtureChangelog, fixtureImprovements } from "@/lib/fixtures/learning";
 
 export interface ImprovementDiffLine {
   kind: "add" | "remove" | "change";
@@ -37,78 +33,4 @@ export interface ChangelogEntry {
   routineId: string;
   at: string;
   note: string;
-}
-
-export interface LearningClient {
-  listImprovements(orgId: string): Promise<Improvement[]>;
-  getImprovement(id: string): Promise<Improvement | null>;
-  approveImprovement(id: string): Promise<Improvement>;
-  shipImprovement(id: string): Promise<Improvement>;
-  /** Baseline changelog plus shipped improvements, newest first. */
-  listChangelog(routineId: string): Promise<ChangelogEntry[]>;
-}
-
-declare global {
-  var __convoyImprovementStore: Map<string, Improvement> | undefined;
-}
-
-/** Improvement state, kept in process until the service exists. */
-function store(): Map<string, Improvement> {
-  if (!globalThis.__convoyImprovementStore) {
-    globalThis.__convoyImprovementStore = new Map(
-      fixtureImprovements.map((improvement) => [improvement.id, { ...improvement }]),
-    );
-  }
-  return globalThis.__convoyImprovementStore;
-}
-
-class FixtureLearningClient implements LearningClient {
-  async listImprovements(): Promise<Improvement[]> {
-    // The fixture world is single-org; the real service scopes by org.
-    return [...store().values()];
-  }
-
-  async getImprovement(id: string): Promise<Improvement | null> {
-    return store().get(id) ?? null;
-  }
-
-  async approveImprovement(id: string): Promise<Improvement> {
-    const improvement = store().get(id);
-    if (!improvement) throw new Error("That improvement no longer exists");
-    if (improvement.status !== "proposed") {
-      throw new Error("Only a proposed improvement can be approved");
-    }
-    improvement.status = "approved";
-    return improvement;
-  }
-
-  async shipImprovement(id: string): Promise<Improvement> {
-    const improvement = store().get(id);
-    if (!improvement) throw new Error("That improvement no longer exists");
-    if (improvement.status !== "approved") {
-      throw new Error("Only an approved improvement can be shipped");
-    }
-    improvement.status = "shipped";
-    improvement.shippedAt = new Date().toISOString();
-    return improvement;
-  }
-
-  async listChangelog(routineId: string): Promise<ChangelogEntry[]> {
-    const baseline: ChangelogEntry[] = fixtureChangelog
-      .filter((entry) => entry.routineId === routineId)
-      .map(({ routineId: id, at, note }) => ({ routineId: id, at, note }));
-    const shipped: ChangelogEntry[] = [...store().values()]
-      .filter((improvement) => improvement.routineId === routineId && improvement.status === "shipped")
-      .map((improvement) => ({
-        routineId: improvement.routineId,
-        at: improvement.shippedAt ?? new Date().toISOString(),
-        note: improvement.title,
-      }));
-    return [...baseline, ...shipped].sort((a, b) => (a.at < b.at ? 1 : -1));
-  }
-}
-
-/** The one learning client. TODO(learning): real adapter. */
-export function learningClient(): LearningClient {
-  return new FixtureLearningClient();
 }

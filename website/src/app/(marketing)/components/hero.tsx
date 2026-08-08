@@ -41,24 +41,31 @@ export function Hero() {
             quarter. It rehearses each one before anything is real, and holds
             for your judgment at every step that matters.
           </p>
-          <div className="mb-9 flex flex-wrap gap-3.5">
+          {/* Full width until there is room for a row.
+              The two labels need 361px side by side, which fits at 402px and
+              nowhere below it, so on every phone narrower than a Pro Max they
+              wrapped into two buttons of different widths with a ragged edge
+              down the right. Stretching them is what every comparable hero
+              does; none ships a stacked pair at differing content widths. */}
+          <div className="mb-6 flex flex-col gap-3 sm:mb-9 sm:flex-row sm:gap-3.5">
             <Link
               href="/demo"
-              className="inline-flex items-center rounded-[10px] bg-pine px-5 py-3 text-[14.5px] font-semibold text-card-alt transition-[background-color] duration-75 hover:bg-pine-deep"
+              className="inline-flex w-full items-center justify-center rounded-[10px] bg-pine px-5 py-3 text-[14.5px] font-semibold text-card-alt transition-[background-color] duration-75 hover:bg-pine-deep sm:w-auto sm:justify-start"
             >
               Request a demo
             </Link>
             <a
               href="#lifecycle"
-              className="inline-flex items-center rounded-[10px] border border-line px-5 py-3 text-[14.5px] font-semibold text-ink transition-[border-color] duration-200 ease-[var(--ease-entrance)] hover:border-muted"
+              className="inline-flex w-full items-center justify-center rounded-[10px] border border-line px-5 py-3 text-[14.5px] font-semibold text-ink transition-[border-color] duration-200 ease-[var(--ease-entrance)] hover:border-muted sm:w-auto sm:justify-start"
             >
               See how a run works →
             </a>
           </div>
-          {/* Two by two rather than a wrapping row. Four items on one line is
-              a line too long at this measure and the fourth falls to a line of
-              its own, which reads as an accident. A grid cannot orphan. */}
-          <ul className="grid max-w-[30rem] grid-cols-1 gap-x-6 gap-y-3 font-mono text-xs tracking-[0.08em] sm:grid-cols-2">
+          {/* Two by two at every width. A wrapping row orphans the fourth
+              item on desktop; a single column on a phone leaves four short
+              lines each sitting in a full-width box, which is most of the
+              void this block used to open up. A grid can do neither. */}
+          <ul className="grid max-w-[30rem] grid-cols-2 gap-x-4 gap-y-3 font-mono text-[11.5px] tracking-[0.06em] sm:gap-x-6 sm:text-xs sm:tracking-[0.08em]">
             {TRUST.map((item) => (
               <li
                 key={item}

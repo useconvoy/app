@@ -1,40 +1,35 @@
 /**
- * Shape stability for the environments fixture adapter: the
- * workspaces the console renders must bind to the local stub registry's
+ * Shape stability for the workspace fixtures and the pure workspace
+ * helpers: the fixture workspaces must bind to the local stub registry's
  * runnable environment ids, side-effecting write grants must carry their
- * stand-ins, and the workspace-to-routine usage mapping must stay put.
+ * stand-ins (both in the fixtures and through grantsFromChoices, which
+ * production workspace creation rides), and the workspace-to-routine
+ * usage mapping must stay put.
  */
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
-  environmentsClient,
   routinesUsingWorkspace,
   workspaceForRoutine,
   type Workspace,
 } from "@/lib/api/environments";
 import { fixtureWorkspaces, systemCatalog } from "@/lib/fixtures/environments";
 import { routines } from "@/lib/fixtures/world";
+import { grantsFromChoices } from "@/lib/workspaces/system-catalog";
 
-const ORG = "org-test";
 const RUNNABLE_REHEARSAL_IDS = ["stub-local", "stub-local-virtual"];
 
-beforeEach(() => {
-  globalThis.__convoyWorkspaceStore = undefined;
-});
-
 describe("fixture workspaces", () => {
-  it("expose runnable production and rehearsal environment ids", async () => {
-    const workspaces = await environmentsClient().listWorkspaces(ORG);
-    expect(workspaces.length).toBeGreaterThanOrEqual(2);
-    for (const workspace of workspaces) {
+  it("expose runnable production and rehearsal environment ids", () => {
+    expect(fixtureWorkspaces.length).toBeGreaterThanOrEqual(2);
+    for (const workspace of fixtureWorkspaces) {
       expect(workspace.environmentId).toBe("prod-local");
       expect(RUNNABLE_REHEARSAL_IDS).toContain(workspace.rehearsalEnvironmentId);
     }
   });
 
-  it("carry a stand-in on every side-effecting write grant", async () => {
-    const workspaces = await environmentsClient().listWorkspaces(ORG);
-    for (const workspace of workspaces) {
+  it("carry a stand-in on every side-effecting write grant", () => {
+    for (const workspace of fixtureWorkspaces) {
       for (const grant of workspace.systems) {
         if (grant.sideEffecting && grant.scope === "write") {
           expect(grant.standIn?.note).toBeTruthy();
@@ -83,45 +78,39 @@ describe("workspace to routine usage mapping", () => {
     const vendor = routinesUsingWorkspace(fixtureWorkspaces[1]!, fixtureWorkspaces, routines);
     expect(vendor.map((routine) => routine.id)).toEqual(["routine-vendor-check"]);
   });
+
+  it("prefers a recorded workspace binding over system coverage", () => {
+    const [compliance, vendor] = fixtureWorkspaces as [Workspace, Workspace];
+    const bound = [{ systems: ["document_store"], workspaceId: vendor.id }];
+    // Coverage alone would pick the compliance workspace (it comes first);
+    // the recorded binding must win.
+    expect(routinesUsingWorkspace(compliance, fixtureWorkspaces, bound)).toHaveLength(0);
+    expect(routinesUsingWorkspace(vendor, fixtureWorkspaces, bound)).toHaveLength(1);
+  });
 });
 
-describe("workspace creation", () => {
-  it("persists an org-created workspace in the adapter store", async () => {
-    const client = environmentsClient();
-    const created = await client.createWorkspace(ORG, {
-      name: "Finance workspace",
-      purpose: "Invoicing checks run here.",
-      systems: [
-        { systemId: "document_store", scope: "write", useStandIn: false },
-        { systemId: "messaging", scope: "write", useStandIn: true },
-      ],
-    });
-    expect(created.rehearsalEnvironmentId).toBe("stub-local");
-    const fetched = await client.getWorkspace(ORG, created.id);
-    expect(fetched?.name).toBe("Finance workspace");
-    const messaging = fetched?.systems.find((grant) => grant.systemId === "messaging");
+describe("grantsFromChoices", () => {
+  it("builds grants with stand-ins riding side-effecting writes", () => {
+    const grants = grantsFromChoices([
+      { systemId: "document_store", scope: "write", useStandIn: false },
+      { systemId: "messaging", scope: "write", useStandIn: true },
+    ]);
+    expect(grants).toHaveLength(2);
+    const messaging = grants.find((grant) => grant.systemId === "messaging");
     expect(messaging?.standIn?.note).toBeTruthy();
-    // Other orgs never see it.
-    expect(await client.getWorkspace("org-other", created.id)).toBeNull();
+    const documents = grants.find((grant) => grant.systemId === "document_store");
+    expect(documents?.standIn).toBeUndefined();
   });
 
-  it("refuses a side-effecting write grant without its stand-in", async () => {
-    await expect(
-      environmentsClient().createWorkspace(ORG, {
-        name: "Careless workspace",
-        purpose: "Should not exist.",
-        systems: [{ systemId: "crm", scope: "write", useStandIn: false }],
-      }),
-    ).rejects.toThrow(/stand-in/);
+  it("refuses a side-effecting write grant without its stand-in", () => {
+    expect(() =>
+      grantsFromChoices([{ systemId: "crm", scope: "write", useStandIn: false }]),
+    ).toThrow(/stand-in/);
   });
 
-  it("keeps read grants on side-effecting systems stand-in free", async () => {
-    const created = await environmentsClient().createWorkspace(ORG, {
-      name: "Read only workspace",
-      purpose: "Lookups only.",
-      systems: [{ systemId: "crm", scope: "read", useStandIn: false }],
-    });
-    expect(created.systems[0]?.standIn).toBeUndefined();
+  it("keeps read grants on side-effecting systems stand-in free", () => {
+    const grants = grantsFromChoices([{ systemId: "crm", scope: "read", useStandIn: false }]);
+    expect(grants[0]?.standIn).toBeUndefined();
   });
 });
 

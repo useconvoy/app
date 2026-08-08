@@ -6,6 +6,7 @@ import { requireOrgSession } from "@/lib/auth/session";
 import { saveNotificationPrefs } from "@/lib/notifications/actions";
 import { listPrefs } from "@/lib/notifications/queries";
 import { NOTIFICATION_CLASSES } from "@/notifier/rules";
+import { Checkbox } from "@/components/ui/choice";
 
 export const metadata: Metadata = { title: "Notifications" };
 
@@ -38,15 +39,12 @@ export default async function NotificationSettingsPage() {
                   <p className="text-sm text-ink">{notificationClassLabels[notificationClass]}</p>
                   <p className="mt-0.5 text-xs text-muted">{notificationSettingsCopy.otherChannels}</p>
                 </div>
-                <label className="flex shrink-0 items-center gap-2 text-sm text-ink">
-                  <input
-                    type="checkbox"
-                    name={notificationClass}
-                    defaultChecked={inApp}
-                    className="h-4 w-4 accent-pine"
-                  />
-                  {notificationSettingsCopy.inAppLabel}
-                </label>
+                <Checkbox
+                  className="shrink-0"
+                  name={notificationClass}
+                  defaultChecked={inApp}
+                  label={notificationSettingsCopy.inAppLabel}
+                />
               </li>
             );
           })}

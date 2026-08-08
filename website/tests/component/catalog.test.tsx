@@ -80,7 +80,7 @@ describe("CatalogCards", () => {
 
   it("renders the empty storefront state", () => {
     render(<CatalogCards entries={[]} />);
-    expect(screen.getByText("Nothing on the storefront yet")).toBeInTheDocument();
+    expect(screen.getByText("No routines are available to install yet")).toBeInTheDocument();
   });
 });
 

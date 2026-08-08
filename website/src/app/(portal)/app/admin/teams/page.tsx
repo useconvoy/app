@@ -4,6 +4,7 @@ import Link from "next/link";
 import { requireAdminPage } from "@/lib/orgs/admin-gate";
 import { addTeamMember, createTeam, deleteTeam, removeTeamMember } from "@/lib/orgs/actions";
 import { listMembers, listTeamMembers, listTeams } from "@/lib/orgs/queries";
+import { Select } from "@/components/ui/select";
 
 export const metadata: Metadata = { title: "Teams" };
 
@@ -128,17 +129,16 @@ export default async function TeamsPage() {
                   <label className="text-xs text-muted" htmlFor={`add-${team.id}`}>
                     Add someone
                   </label>
-                  <select
+                  <Select
                     id={`add-${team.id}`}
                     name="userId"
-                    className="rounded-sm border border-line bg-card px-2 py-1 text-xs"
                   >
                     {addable.map((member) => (
                       <option key={member.userId} value={member.userId}>
                         {member.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                   <button
                     type="submit"
                     className="rounded-sm border border-line px-2 py-1 text-xs text-ink hover:border-pine"

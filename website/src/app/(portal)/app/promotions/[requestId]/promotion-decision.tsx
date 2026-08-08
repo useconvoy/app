@@ -13,6 +13,7 @@ import { useState } from "react";
 import { Button } from "@/components/Button";
 import { copy } from "@/lexicon";
 import type { PromotionDecisionResult } from "@/lib/promotions/actions";
+import { Textarea } from "@/components/ui/text-field";
 
 export interface PromotionDecisionProps {
   requestId: string;
@@ -55,7 +56,7 @@ export function PromotionDecision({ requestId, canPromote, actions }: PromotionD
       </div>
       <label className="flex flex-col gap-1 text-sm text-muted">
         {copy.sendBackNoteLabel}
-        <textarea
+        <Textarea
           value={note}
           onChange={(event) => setNote(event.target.value)}
           rows={2}

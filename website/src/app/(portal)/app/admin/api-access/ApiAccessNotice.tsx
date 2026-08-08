@@ -18,7 +18,7 @@ export function ApiAccessNotice({ controlPlaneUrl }: ApiAccessNoticeProps) {
   return (
     <div className="space-y-6">
       <section className="rounded-md border border-line bg-card p-6">
-        <p className="text-sm text-ink">{adminCopy.apiAccessPhase1}</p>
+        <p className="text-sm text-ink">{adminCopy.apiAccessManaged}</p>
         <p className="mt-3 text-sm text-muted">{adminCopy.apiAccessNoKeys}</p>
         <p className="mt-1 text-sm text-muted">{adminCopy.apiAccessSelfServe}</p>
       </section>

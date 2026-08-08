@@ -7,7 +7,7 @@ import { getRun } from "@/lib/api/runs";
 import { can } from "@/lib/permissions";
 import { promoteRequest, sendBackRequest } from "@/lib/promotions/actions";
 import { getPromotionRequest } from "@/lib/promotions/store";
-import { routines } from "@/lib/fixtures/world";
+import { getRoutine } from "@/lib/routines/queries";
 import { requireRunPage } from "@/lib/runs/context";
 import { PromotionDecision } from "./promotion-decision";
 
@@ -34,7 +34,7 @@ export default async function PromotionReviewPage({
   const run = await getRun(actor, request.runId);
   if (!run) notFound();
 
-  const routine = routines.find((candidate) => candidate.id === request.routineId);
+  const routine = await getRoutine(session.orgId, request.routineId);
   const report = (run.land_report as Record<string, unknown> | null) ?? null;
   const canPromote = can("promote", membership.role, membership.capabilities);
   const settled = request.status !== "requested";

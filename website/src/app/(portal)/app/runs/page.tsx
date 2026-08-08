@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
-import { Button } from "@/components/Button";
 import { ErrorBlock } from "@/components/ErrorBlock";
 import { copy } from "@/lexicon";
-import { listRuns } from "@/lib/api/runs";
+import { listRuns, runStartedBy } from "@/lib/api/runs";
 import { can } from "@/lib/permissions";
-import { startFixtureRun } from "@/lib/runs/actions";
 import { requireRunPage } from "@/lib/runs/context";
 import { progress } from "@/lib/runs/status";
 import { isRehearsalRun } from "@/lib/routines/data";
@@ -15,54 +14,70 @@ export const metadata: Metadata = { title: "Runs" };
 export const dynamic = "force-dynamic";
 
 /**
- * On-demand run start for demos and E2E. TODO(website): the Routines
- * surface now owns on-demand triggers (runRoutineNow); drop this direct
- * seam once demos and E2E drive runs through it.
+ * The runs list. Starting a run lives on its own picker page so the
+ * routine, its plan, and the start affordance are seen together; the
+ * header link leads there. ?mine=1 narrows the list to runs this person
+ * started, which is how the account menu's "My runs" arrives here.
  */
-async function startDemoRun(): Promise<void> {
-  "use server";
-  await startFixtureRun("routine-access-review");
-}
-
-export default async function RunsPage() {
-  const { membership, actor } = await requireRunPage();
+export default async function RunsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mine?: string }>;
+}) {
+  const { session, membership, actor } = await requireRunPage();
+  const { mine } = await searchParams;
+  const mineOnly = mine === "1";
   const canStart = can("trigger_production_run", membership.role, membership.capabilities);
 
   let rows: RunListRow[] | null = null;
   try {
     const views = await listRuns(actor);
-    rows = views.map((view) => {
-      const { done, total } = progress(view.steps ?? []);
-      return {
-        id: view.run_id,
-        goal: view.goal,
-        status: view.status,
-        done,
-        total,
-        spentUsd: view.budget?.spent_usd ?? null,
-        rehearsal: isRehearsalRun(view.run_id),
-      };
-    });
+    rows = views
+      .filter((view) => !mineOnly || runStartedBy(view.run_id) === session.userId)
+      .map((view) => {
+        const { done, total } = progress(view.steps ?? []);
+        return {
+          id: view.run_id,
+          goal: view.goal,
+          status: view.status,
+          done,
+          total,
+          spentUsd: view.budget?.spent_usd ?? null,
+          rehearsal: isRehearsalRun(view.run_id),
+        };
+      });
   } catch {
     rows = null;
   }
 
-  const startForm = canStart ? (
-    <form action={startDemoRun}>
-      <Button type="submit" variant="secondary">
-        {copy.startRehearsalRun}
-      </Button>
-    </form>
+  const startLink = canStart ? (
+    <Link
+      href="/app/runs/new"
+      className="rounded-md border border-line bg-card px-3 py-1.5 text-sm font-medium text-ink hover:border-pine"
+    >
+      {copy.startRun}
+    </Link>
   ) : undefined;
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="font-display text-3xl text-ink">Runs</h1>
-          <p className="mt-1 text-sm text-muted">Everything your routines are doing, live.</p>
+          <h1 className="font-display text-3xl text-ink">
+            {mineOnly ? copy.myRunsTitle : "Runs"}
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            {mineOnly ? copy.myRunsIntro : "Everything your routines are doing, live."}
+          </p>
+          {mineOnly ? (
+            <p className="mt-1 text-sm">
+              <Link href="/app/runs" className="text-muted underline hover:text-ink">
+                {copy.showAllRuns}
+              </Link>
+            </p>
+          ) : null}
         </div>
-        {startForm}
+        {startLink}
       </header>
       {rows === null ? (
         <ErrorBlock
@@ -70,7 +85,11 @@ export default async function RunsPage() {
           whatToDo="Try again in a moment."
         />
       ) : (
-        <RunsList rows={rows} startAction={startForm} />
+        <RunsList
+          rows={rows}
+          startAction={startLink}
+          emptyBody={mineOnly ? copy.myRunsEmptyBody : undefined}
+        />
       )}
     </div>
   );

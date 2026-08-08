@@ -1,20 +1,18 @@
 /**
  * The typed client interface for the environments service (registry of
  * workspaces, their system grants, and their rehearsal bindings). The
- * service is not built yet, so the only implementation is a fixture
- * adapter over `lib/fixtures/environments` plus an in-process store for
- * org-created workspaces, mirroring the run directory's seam.
+ * service is not built yet, so the implementation reads and writes the
+ * org-scoped workspaces table through withOrgContext; every organization
+ * sees only the workspaces it created, and a fresh organization has none.
  *
- * TODO(environments-E0): replace the fixture adapter with real calls to
- * the environments directory behind the single authenticated edge and
- * delete the in-process store.
+ * TODO(environments-E0): replace the table-backed adapter with real calls
+ * to the environments directory behind the single authenticated edge; the
+ * table then becomes a cache of the registry or retires entirely.
  */
 import "server-only";
 
-import { randomUUID } from "node:crypto";
-
-import type { FixtureRoutine } from "@/lib/fixtures/world";
-import { catalogSystem, fixtureWorkspaces } from "@/lib/fixtures/environments";
+import { withOrgContext } from "@/lib/db";
+import { grantsFromChoices } from "@/lib/workspaces/system-catalog";
 
 export interface StandIn {
   /** Plain-language note shown wherever the stand-in appears. */
@@ -77,82 +75,97 @@ export interface EnvironmentsClient {
   createWorkspace(orgId: string, input: CreateWorkspaceInput): Promise<Workspace>;
 }
 
-declare global {
-  var __convoyWorkspaceStore: Map<string, Workspace[]> | undefined;
+interface WorkspaceRow {
+  id: string;
+  name: string;
+  purpose: string;
+  environmentId: string;
+  rehearsalEnvironmentId: string;
+  systems: unknown;
+  clockMode: string;
+  versions: unknown;
+  createdAt: Date;
 }
 
-/** Org-created workspaces, kept in process until the registry exists. */
-function createdStore(): Map<string, Workspace[]> {
-  if (!globalThis.__convoyWorkspaceStore) {
-    globalThis.__convoyWorkspaceStore = new Map();
-  }
-  return globalThis.__convoyWorkspaceStore;
+const WORKSPACE_COLUMNS = `id, name, purpose,
+       environment_id AS "environmentId",
+       rehearsal_environment_id AS "rehearsalEnvironmentId",
+       systems, clock_mode AS "clockMode", versions,
+       created_at AS "createdAt"`;
+
+/** Hydrate a stored row into the typed shape, tolerating older rows. */
+function toWorkspace(row: WorkspaceRow): Workspace {
+  return {
+    id: row.id,
+    name: row.name,
+    purpose: row.purpose,
+    environmentId: row.environmentId,
+    rehearsalEnvironmentId: row.rehearsalEnvironmentId,
+    systems: Array.isArray(row.systems) ? (row.systems as SystemGrant[]) : [],
+    clockMode: row.clockMode === "virtual" ? "virtual" : "wall",
+    versions: Array.isArray(row.versions) ? (row.versions as WorkspaceVersion[]) : [],
+    createdAt: row.createdAt.toISOString(),
+  };
 }
 
-class FixtureEnvironmentsClient implements EnvironmentsClient {
+/** Route params are arbitrary text; only a uuid can be a row id. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+class DbEnvironmentsClient implements EnvironmentsClient {
   async listWorkspaces(orgId: string): Promise<Workspace[]> {
-    return [...fixtureWorkspaces, ...(createdStore().get(orgId) ?? [])];
+    return withOrgContext({ orgId }, async (client) => {
+      const { rows } = await client.query<WorkspaceRow>(
+        `SELECT ${WORKSPACE_COLUMNS} FROM workspaces WHERE org_id = $1 ORDER BY created_at`,
+        [orgId],
+      );
+      return rows.map(toWorkspace);
+    });
   }
 
   async getWorkspace(orgId: string, workspaceId: string): Promise<Workspace | null> {
-    const all = await this.listWorkspaces(orgId);
-    return all.find((workspace) => workspace.id === workspaceId) ?? null;
+    if (!UUID_PATTERN.test(workspaceId)) return null;
+    return withOrgContext({ orgId }, async (client) => {
+      const { rows } = await client.query<WorkspaceRow>(
+        `SELECT ${WORKSPACE_COLUMNS} FROM workspaces WHERE org_id = $1 AND id = $2`,
+        [orgId, workspaceId],
+      );
+      return rows[0] ? toWorkspace(rows[0]) : null;
+    });
   }
 
   async createWorkspace(orgId: string, input: CreateWorkspaceInput): Promise<Workspace> {
-    const systems = input.systems.map((choice) => {
-      const system = catalogSystem(choice.systemId);
-      if (!system) throw new Error(`unknown system: ${choice.systemId}`);
-      const needsStandIn = system.sideEffecting && choice.scope === "write";
-      if (needsStandIn && !choice.useStandIn) {
-        // The create modal blocks this client-side; the adapter holds the
-        // same line so no caller can slip a live side-effecting grant in.
-        throw new Error(`a stand-in is required for ${system.displayName}`);
-      }
-      const grant: SystemGrant = {
-        systemId: system.id,
-        displayName: system.displayName,
-        scope: choice.scope,
-        sideEffecting: system.sideEffecting,
-      };
-      if (needsStandIn && system.standInNote) {
-        grant.standIn = { note: system.standInNote };
-      }
-      return grant;
-    });
+    const systems = grantsFromChoices(input.systems);
     const now = new Date().toISOString();
-    const workspace: Workspace = {
-      id: `workspace-${randomUUID()}`,
-      name: input.name,
-      purpose: input.purpose,
-      // Created workspaces bind to the local stub registry so their runs
-      // execute for real. TODO(environments-E0): real bindings.
-      environmentId: "prod-local",
-      rehearsalEnvironmentId: "stub-local",
-      systems,
-      clockMode: "wall",
-      versions: [{ version: 1, note: "Created", createdAt: now }],
-      createdAt: now,
-    };
-    const existing = createdStore().get(orgId) ?? [];
-    createdStore().set(orgId, [...existing, workspace]);
-    return workspace;
+    const versions: WorkspaceVersion[] = [{ version: 1, note: "Created", createdAt: now }];
+    return withOrgContext({ orgId }, async (client) => {
+      const { rows } = await client.query<WorkspaceRow>(
+        // Created workspaces bind to the local stub registry so their runs
+        // execute for real. TODO(environments-E0): real bindings.
+        `INSERT INTO workspaces
+           (org_id, name, purpose, environment_id, rehearsal_environment_id,
+            systems, clock_mode, versions)
+         VALUES ($1, $2, $3, 'prod-local', 'stub-local', $4, 'wall', $5)
+         RETURNING ${WORKSPACE_COLUMNS}`,
+        [orgId, input.name, input.purpose, JSON.stringify(systems), JSON.stringify(versions)],
+      );
+      return toWorkspace(rows[0]!);
+    });
   }
 }
 
 /** The one environments client. TODO(environments-E0): real adapter. */
 export function environmentsClient(): EnvironmentsClient {
-  return new FixtureEnvironmentsClient();
+  return new DbEnvironmentsClient();
 }
 
 /**
- * Which workspace a routine runs in. Until the registry records real
- * bindings, the first workspace whose grants cover every system the
- * routine needs wins; workspace order is the fixture/creation order.
- * TODO(environments-E0): replace with recorded routine-to-workspace bindings.
+ * Which workspace a routine runs in when it carries no recorded binding:
+ * the first workspace whose grants cover every system the routine needs.
+ * Routines installed from the catalog record their workspace directly;
+ * this fallback serves anything older or unbound.
  */
 export function workspaceForRoutine(
-  routine: Pick<FixtureRoutine, "systems">,
+  routine: { systems: string[] },
   workspaces: Workspace[],
 ): Workspace | null {
   return (
@@ -164,10 +177,14 @@ export function workspaceForRoutine(
 }
 
 /** The inverse mapping, for "used by M routines" workspace cards. */
-export function routinesUsingWorkspace(
+export function routinesUsingWorkspace<R extends { systems: string[]; workspaceId?: string | null }>(
   workspace: Workspace,
   workspaces: Workspace[],
-  routines: ReadonlyArray<FixtureRoutine>,
-): FixtureRoutine[] {
-  return routines.filter((routine) => workspaceForRoutine(routine, workspaces)?.id === workspace.id);
+  routines: ReadonlyArray<R>,
+): R[] {
+  return routines.filter((routine) =>
+    routine.workspaceId
+      ? routine.workspaceId === workspace.id
+      : workspaceForRoutine(routine, workspaces)?.id === workspace.id,
+  );
 }
