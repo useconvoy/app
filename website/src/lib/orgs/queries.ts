@@ -98,6 +98,34 @@ export async function getOrgOverview(orgId: string): Promise<OrgOverview | null>
   });
 }
 
+/**
+ * The environments registry organization backing this org, written at
+ * provisioning time (migration 0007). Null for orgs created while the
+ * registry adapter was off, or whose provisioning call failed; the
+ * adapter treats those orgs as table-backed. Only the adapter's remote
+ * paths call this, so a database that has not applied 0007 is never
+ * asked for the column while the adapter is off.
+ */
+export async function getEnvironmentsOrgId(orgId: string): Promise<string | null> {
+  return withOrgContext({ orgId }, async (client) => {
+    const { rows } = await client.query<{ environmentsOrgId: string | null }>(
+      `SELECT environments_org_id AS "environmentsOrgId" FROM organizations WHERE id = $1`,
+      [orgId],
+    );
+    return rows[0]?.environmentsOrgId ?? null;
+  });
+}
+
+/** Record the registry organization id once provisioning succeeds. */
+export async function setEnvironmentsOrgId(orgId: string, environmentsOrgId: string): Promise<void> {
+  await withOrgContext({ orgId }, async (client) => {
+    await client.query("UPDATE organizations SET environments_org_id = $1 WHERE id = $2", [
+      environmentsOrgId,
+      orgId,
+    ]);
+  });
+}
+
 export interface MemberRow {
   userId: string;
   name: string;

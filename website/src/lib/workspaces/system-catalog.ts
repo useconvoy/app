@@ -6,11 +6,40 @@
  * the catalog install screens read it, and grantsFromChoices turns a
  * picker submission into stored grants while holding the stand-in line.
  *
- * TODO(environments-E0): the environments directory becomes the source of
- * truth for connectable systems; this module then reads from it.
+ * Since environments-E0 each system also carries its registry connection
+ * mapping (provider plus declared tool manifest) when the environments
+ * service has a provider for it; the adapter in lib/api/environments uses
+ * that to ensure connections and translate grant scopes to allowlists.
+ * The registry eventually becomes the source of truth for this whole
+ * catalog; until then this module is where it lives.
  */
 
 import type { SystemGrant } from "@/lib/api/environments";
+
+/**
+ * One tool a system's registry connection declares. Mirrors the registry's
+ * per-tool vocabulary: "inline" tools are read-only and run inside a turn;
+ * "promoted" tools mutate and run as their own retry-safe activity. A
+ * grant scoped "read" allowlists only the inline read tools; "write"
+ * allowlists everything.
+ */
+export interface SystemToolDeclaration {
+  name: string;
+  execution: "inline" | "promoted";
+  sideEffecting: boolean;
+}
+
+/**
+ * How a system materializes in the environments registry: the provider a
+ * managed connection is created under, and the declared tool manifest for
+ * that connection. Only systems whose provider the registry actually
+ * serves carry one; the tool names here mirror that provider's real
+ * manifest exactly so a later credentialed refresh agrees with them.
+ */
+export interface SystemConnectionSpec {
+  provider: string;
+  tools: SystemToolDeclaration[];
+}
 
 export interface SystemDefinition {
   id: string;
@@ -19,6 +48,8 @@ export interface SystemDefinition {
   sideEffecting: boolean;
   /** Plain-language stand-in note for side-effecting systems. */
   standInNote: string | null;
+  /** Registry connection mapping; null while no provider serves this system. */
+  connection: SystemConnectionSpec | null;
 }
 
 export const systemCatalog: SystemDefinition[] = [
@@ -27,30 +58,51 @@ export const systemCatalog: SystemDefinition[] = [
     displayName: "Identity provider",
     sideEffecting: false,
     standInNote: null,
+    connection: null,
   },
   {
     id: "hris",
     displayName: "HR system",
     sideEffecting: false,
     standInNote: null,
+    connection: null,
   },
   {
     id: "document_store",
     displayName: "Document store",
     sideEffecting: false,
     standInNote: null,
+    connection: {
+      provider: "google",
+      tools: [
+        { name: "google.drive_list_files", execution: "inline", sideEffecting: false },
+        { name: "google.sheets_read_range", execution: "inline", sideEffecting: false },
+        // Mutating, so promoted and flagged in the registry's conservative
+        // vocabulary even though a write here stays inside the org.
+        { name: "google.sheets_append_row", execution: "promoted", sideEffecting: true },
+      ],
+    },
   },
   {
     id: "messaging",
     displayName: "Messaging",
     sideEffecting: true,
     standInNote: "Stand-in for Messaging: messages are held in the outbox instead of being sent.",
+    connection: {
+      provider: "slack",
+      tools: [
+        { name: "slack.list_channels", execution: "inline", sideEffecting: false },
+        { name: "slack.read_messages", execution: "inline", sideEffecting: false },
+        { name: "slack.post_message", execution: "promoted", sideEffecting: true },
+      ],
+    },
   },
   {
     id: "crm",
     displayName: "CRM",
     sideEffecting: true,
     standInNote: "Stand-in for CRM: record changes are noted for review instead of being applied.",
+    connection: null,
   },
 ];
 
