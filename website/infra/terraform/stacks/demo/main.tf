@@ -41,10 +41,24 @@ locals {
     NOTIFIER_INTERVAL_MS       = tostring(var.notifier_interval_ms)
     WORKOS_API_KEY             = coalesce(var.workos_api_key, "")
     WORKOS_CLIENT_ID           = coalesce(var.workos_client_id, "")
+    CONVOY_KEY_ENCRYPTION_KEY  = random_bytes.model_kek.hex
+    # Not a secret, but the secret is the one channel that reaches a running
+    # box without re-stamping it: the deploy workflow re-syncs .env from this
+    # secret on every release. The bootstrap also writes APP_URL statically
+    # for fresh instances; the deploy sync deduplicates.
+    APP_URL = "https://${var.domain_name}"
   }
 }
 
 # --- Generated credentials --------------------------------------------------
+
+# Seals customer model keys at rest (AES-256-GCM in the application). Held
+# here and delivered through the runtime secret so it follows the same rule
+# as every other credential: never templated into user_data, never in the
+# repository, rotated by bumping the keeper below and re-encrypting rows.
+resource "random_bytes" "model_kek" {
+  length = 32
+}
 
 resource "random_password" "session_secret" {
   length  = 64
