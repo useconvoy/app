@@ -9,6 +9,8 @@ Spec: `convoy-environments-spec.md` (Desktop, v0.1 + settled decisions). Contrac
 
 ## Concepts
 
+> **Vocabulary.** The deployed website's words win on user-facing surfaces: the tenant is an **organization** (our db `workspaces` table, wire `tenant_id`) and a bundle of system grants with production + rehearsal bindings is a **workspace** (our db `environments` table, wire `environment_id`). The console API speaks that language (`/organizations/{org}/workspaces/...`); the machine seam (`EnvironmentBinding`, `GET /environments/{id}`, `/internal/*`, `/data-plane/*`, `/mcp/*`) is frozen and keeps its names. The concepts below use the code's names.
+
 - **Connection** (admin-owned, workspace-level): an authenticated link to one external system — Slack/Notion/GitHub token, a remote MCP server, a browser login. Carries a tool **manifest** with per-tool `execution` (`inline` | `promoted`) and `sideEffecting` flags, hashed as `manifest_hash`.
 - **Environment** (builder-owned, versioned-immutable): a policy bundle subsetting connections — explicit tool allowlists, promote escalations, browser domain allowlist, sandbox template, data namespace. `policy_hash` feeds the certified tuple; edits create a new version, so certification is voided explicitly, never silently. Runs pin `(environment_id, version)` via the binding.
 - **Tool flags** (runtime DESIGN §5 vocabulary; the trust obligation is ours): `execution="inline"` + `sideEffecting=False` → one collapsed `tool_call` event, safe to re-run inside `run_turn`; `execution="promoted"` / side-effecting → `tool_intent → tool_executed → tool_result` deduped on the runtime's idempotency key `hash(run_id, step_id, turn, call_index)` (errored results never dedupe). `promoteOverrides` escalate per environment; nothing ever downgrades. Budgets and human gates are runtime-owned (workflow `BudgetState` + plan-step `HumanGate`) — this layer meters nothing and parks nothing.
@@ -22,7 +24,7 @@ Spec: `convoy-environments-spec.md` (Desktop, v0.1 + settled decisions). Contrac
 | `secrets/` | write-only secrets service; builtin envelope-encryption backend (1Password/KMS slots later) |
 | `connectors/` | slack, notion, github (token-based), google (service-account JWT grant: Drive list, Sheets read/append) + `mcp_custom` (BYO remote MCP; unannotated tools default to promoted + side-effecting) |
 | `gateway/` | per-run JWTs, policy engine (fail-closed on manifest drift), GatewayService, MCP termination, binding registry, credential leases |
-| `console_api/` | workspaces, connections, versioned environments, grants (viewer/operator/env_admin) |
+| `console_api/` | the website-vocabulary surface: organizations (tenants), memberships, connections, versioned workspaces (= the runtime's environments; `workspaceId == environmentId`), grants (viewer/operator/env_admin) |
 | `devbox/` | `convoy-egress-proxy` (in-sandbox, secret-free) + `convoy-fill-sidecar` (trusted stack service) |
 
 ## Quickstart
@@ -51,9 +53,11 @@ export CONVOY_INTERNAL_TOKEN=$(openssl rand -hex 32)
 
 **How someone logs in.** The website signs people in with WorkOS (company SSO / email login). On every console request, the website forwards that login token; the console checks the token is genuinely from WorkOS (cryptographic signature, not trust) and then looks the person up in its own user list. The first time someone signs in with an email an admin has invited, their WorkOS identity gets connected to that user automatically — after that they're recognized by identity alone. If nobody invited them, they're turned away with a note to ask an admin: **logging in never creates an account by itself.** For local development with no WorkOS configured, the old `X-Convoy-User` header keeps working; the moment WorkOS is configured, headers stop being accepted.
 
-**How teammates get added.** A workspace admin invites people by email with a role attached (`admin` — manages connections, secrets, and people; `builder` — creates environments; `member` — baseline). The invite is just a row in our database — no email is sent from this layer (the website owns notifications) — and it takes effect the moment the person first signs in with that email. Re-inviting the same email changes their role rather than creating a duplicate. Everyone can see the member list; only admins can change it.
+**How the website's server calls us.** Besides forwarding the person's own WorkOS token, the website's backend can act on a signed-in user's behalf service-to-service: `X-Convoy-Internal` (the same internal/provisioning shared secret the gateway uses) plus `X-Convoy-Acts-For: <email>`. The email must belong to an already-invited user — a bad token is a 401, an unknown email a 403, and this path never creates accounts.
 
-**How a workspace gets created.** Not self-serve, on purpose. A workspace is a customer: creating one goes hand in hand with provisioning that customer's infrastructure stack, so `POST /workspaces` requires a provisioning secret only the founders/deploy tooling hold. If the secret isn't configured at all, workspace creation is simply off.
+**How teammates get added.** An organization admin invites people by email with a role attached (`admin` — manages connections, secrets, and people; `builder` — creates workspaces; `member` — baseline). The invite is just a row in our database — no email is sent from this layer (the website owns notifications) — and it takes effect the moment the person first signs in with that email. Re-inviting the same email changes their role rather than creating a duplicate. Everyone can see the member list; only admins can change it.
+
+**How an organization gets created.** Not self-serve, on purpose. An organization is a customer: creating one goes hand in hand with provisioning that customer's infrastructure stack, so `POST /organizations` requires a provisioning secret only the founders/deploy tooling hold. If the secret isn't configured at all, organization creation is simply off.
 
 ## Deliberately not here (runtime-owned per DESIGN v1)
 

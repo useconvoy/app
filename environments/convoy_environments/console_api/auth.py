@@ -12,6 +12,14 @@ WorkOS's JWKS (RS256) and resolve the claims to a `users` row:
      NO auto-provisioning of users from tokens.
   3. Neither → 403.
 
+Service-to-service (the website's server calling on behalf of its signed-in
+user): `X-Convoy-Internal: <internal token>` + `X-Convoy-Acts-For: <email>`.
+The internal token is the same provisioning/internal shared secret the
+gateway's internal surface uses (build_console_app wires it in); the email
+must resolve to an EXISTING user — 401 on a bad token, 403 on an unknown
+email. Acts-for NEVER creates users; provisioning stays with the
+organization-creation endpoint and invitations.
+
 `X-Convoy-User` header auth survives only behind an explicit dev flag
 (CONVOY_CONSOLE_ALLOW_HEADER_AUTH=1) for the founder CLI and compose — it is
 never valid when a bearer token is present and must be off anywhere real.
@@ -37,7 +45,8 @@ KeyResolver = Callable[[str], "jwt.PyJWK | str"]  # token → verification key
 class ConsoleAuth:
     def __init__(self, jwks_url: str = "", issuer: str = "",
                  key_resolver: Optional[KeyResolver] = None,
-                 allow_header_auth: Optional[bool] = None) -> None:
+                 allow_header_auth: Optional[bool] = None,
+                 internal_token: Optional[str] = None) -> None:
         self._jwks_url = jwks_url or os.environ.get("CONVOY_WORKOS_JWKS_URL", "")
         self._issuer = issuer or os.environ.get("CONVOY_WORKOS_ISSUER", "")
         self._resolver = key_resolver
@@ -45,6 +54,12 @@ class ConsoleAuth:
         if allow_header_auth is None:
             allow_header_auth = os.environ.get("CONVOY_CONSOLE_ALLOW_HEADER_AUTH", "") == "1"
         self.allow_header_auth = allow_header_auth
+        # Shared secret for the service-to-service acts-for mode. Empty means
+        # the mode is off; build_console_app fills it with its provisioning
+        # token when the constructor didn't set one, so there is exactly one
+        # internal token per deployment.
+        self.internal_token = internal_token if internal_token is not None else os.environ.get(
+            "CONVOY_INTERNAL_TOKEN", "")
 
     @property
     def bearer_configured(self) -> bool:
@@ -67,8 +82,20 @@ class ConsoleAuth:
         except jwt.PyJWTError as err:
             raise HTTPException(401, "invalid session token: %s" % err)
 
-    def resolve_user(self, session, authorization: str, x_convoy_user: str) -> str:
+    def resolve_user(self, session, authorization: str, x_convoy_user: str,
+                     x_convoy_internal: str = "", x_convoy_acts_for: str = "") -> str:
         """→ user_id for this request, per the module docstring's ladder."""
+        if x_convoy_acts_for:
+            # Service-to-service: the website's server acting for its
+            # signed-in user. Fail closed when no internal token is
+            # configured; never provision a user from this path.
+            if not self.internal_token or x_convoy_internal != self.internal_token:
+                raise HTTPException(401, "acts-for requires a valid internal token")
+            user = session.query(User).filter_by(email=x_convoy_acts_for).one_or_none()
+            if user is None:
+                raise HTTPException(403, "no Convoy user with email %s — acts-for never "
+                                         "creates users; invite them first" % x_convoy_acts_for)
+            return user.id
         if authorization.startswith("Bearer ") and self.bearer_configured:
             claims = self._verify(authorization[len("Bearer "):])
             subject = claims.get("sub", "")

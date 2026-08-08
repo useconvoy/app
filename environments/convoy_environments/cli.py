@@ -41,7 +41,7 @@ def main() -> None:
         log = SqlEventLog(session_factory)
         app = FastAPI(title="convoy-environments")
         app.mount("/gateway", build_gateway_app(GatewayService(session_factory, secrets, event_log=log)))
-        app.mount("/console", build_console_app(session_factory, secrets, event_log=log))
+        app.mount("/console", build_console_app(session_factory, secrets))
         uvicorn.run(app, host="0.0.0.0", port=args.port)
     else:
         parser.print_help()
