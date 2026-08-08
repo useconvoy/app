@@ -6,7 +6,7 @@ import { money } from "@/lib/format";
 import { requireAdminPage } from "@/lib/orgs/admin-gate";
 import { listInvites, listMembers, listTeams } from "@/lib/orgs/queries";
 import { getOrgSettings } from "@/lib/orgs/settings";
-import { adminCopy, billingCopy } from "@/lexicon";
+import { adminCopy, billingCopy, modelAccessCopy } from "@/lexicon";
 
 export const metadata: Metadata = { title: "Admin" };
 
@@ -60,6 +60,12 @@ export default async function AdminPage() {
       title: adminCopy.apiAccessTitle,
       description: adminCopy.apiAccessIntro,
       fact: "Managed by Convoy",
+    },
+    {
+      href: "/app/admin/model-access",
+      title: modelAccessCopy.title,
+      description: modelAccessCopy.intro,
+      fact: "Sealed, never shown",
     },
     {
       href: "/app/admin/audit",

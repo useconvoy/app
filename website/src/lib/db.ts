@@ -54,6 +54,31 @@ export async function withOrgContext<T>(
 }
 
 /**
+ * No-person context for service paths that legitimately run with neither a
+ * user nor an org present: the notifier iterating organizations, and the
+ * runtime issuance read that hands a run its organization's model key. Both
+ * org and user GUCs are left empty, so RLS-scoped tables show nothing at all;
+ * the only rows reachable here are the ones a SECURITY DEFINER function
+ * chooses to expose (the 0003 and 0008 precedents). Never open a session-
+ * derived query through this; it exists solely to call those functions.
+ */
+export async function withSystemContext<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool().connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('app.org_id', '', true), set_config('app.user_id', '', true)");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Pre-org context for the narrow flows that legitimately run before an
  * active org exists: identity sync at sign-in, org creation, listing the
  * user's own memberships for the switcher. User context only; RLS still

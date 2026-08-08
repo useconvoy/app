@@ -483,6 +483,64 @@ export const adminCopy = {
   auditOlder: "Older",
 } as const;
 
+/** Model provider display names. Keys are the code-facing provider ids. */
+export const modelProviderLabels: Record<string, string> = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+};
+
+/**
+ * Copy for the model access admin surface, where an organization configures
+ * its own model provider keys. The security model is stated in the empty
+ * state on purpose: a key is verified, sealed, and can never be read back.
+ * Only the last four characters are ever shown.
+ */
+export const modelAccessCopy = {
+  title: "Model access",
+  intro:
+    "Set your organization's own Anthropic or OpenAI keys. When a key is set, your runs authenticate to that provider with your key.",
+  emptyState:
+    "No key is set. When you add one, it is verified with the provider, sealed, and stored so it can never be read back. Only the last four characters are ever shown.",
+  keyFieldLabel: "API key",
+  keyFieldHint: (provider: string, prefix: string) =>
+    `Starts with ${prefix}. It is verified with ${provider} before it is saved.`,
+  verifyAndSave: "Verify and save",
+  rotate: "Rotate",
+  rotateIntro:
+    "Enter a new key. The key in use stays in place until the new one is verified and saved.",
+  cancel: "Cancel",
+  verify: "Verify",
+  remove: "Remove",
+  removeConfirmLabel: (provider: string) => `Type ${provider} to confirm`,
+  removeConfirmHint: "Removing the key fails any run that is using it right now.",
+  keyEnding: (last4: string) => `Key ending ····${last4}`,
+  setByOn: (name: string, date: string) => `Set by ${name} on ${date}`,
+  setOn: (date: string) => `Set on ${date}`,
+  lastVerified: (date: string) => `Last verified ${date}`,
+  notVerifiedYet: "Not verified yet",
+  saved: (last4: string) => `Saved. Your runs now use the key ending ····${last4}.`,
+  removed: "The key was removed.",
+  verifiedOk: "Verified. The provider accepted this key.",
+  /** The key prefix hint per provider; the value is code-facing, not a noun. */
+  keyPrefix: { anthropic: "sk-ant-", openai: "sk-" } as Record<string, string>,
+  /** Recorded verification outcomes, keyed by the stored status code. */
+  verifyStatusLabel: {
+    ok: "Verified",
+    rejected: "The provider rejected this key",
+    unreachable: "Could not reach the provider",
+    malformed: "This does not look like a valid key",
+  } as Record<string, string>,
+  /** Action failure reasons, keyed by the reason code the action returns. */
+  reasonMessage: {
+    unknown_provider: "That is not a model provider we can store a key for.",
+    malformed: "This does not look like a valid key. Check it and try again.",
+    rejected: "The provider rejected this key. Check it and try again.",
+    unreachable: "Could not reach the provider. Try again in a moment.",
+    not_configured: "There is no key to act on.",
+    confirm_mismatch: "The name did not match. Type it exactly to confirm removal.",
+  } as Record<string, string>,
+} as const;
+
 /** Feedback kinds as users pick them in the composer. */
 export const feedbackKindLabels = {
   rating: "Helpful",

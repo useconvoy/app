@@ -150,6 +150,7 @@ jobs:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_HOST_KEY: ${{ vars.DEPLOY_HOST_KEY }}
           TAG: ${{ steps.meta.outputs.tag }}
+          SECRET_ID: convoy/console/${{ env.STACK_NAME }}/runtime-env
           RUN_MIGRATIONS: ${{ github.event_name == 'workflow_dispatch' && inputs.run_migrations || false }}
         run: |
           set -euo pipefail
@@ -171,7 +172,7 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking="${STRICT}" \
             "ubuntu@${DEPLOY_HOST}" \
             sudo -n TAG="${TAG}" RUN_MIGRATIONS="${RUN_MIGRATIONS}" \
-            AWS_REGION="${AWS_REGION}" bash -euo pipefail -s <<'REMOTE'
+            AWS_REGION="${AWS_REGION}" SECRET_ID="${SECRET_ID}" bash -euo pipefail -s <<'REMOTE'
           cd /opt/convoy
 
           # Only the console's own image lines. A blanket "replace the tag on
@@ -189,6 +190,31 @@ jobs:
           test -n "${REGISTRY}" || { echo "no ECR registry found in compose.yaml"; exit 1; }
           aws ecr get-login-password --region "${AWS_REGION}" \
             | docker login --username AWS --password-stdin "${REGISTRY}"
+
+          # The box reads its environment from Secrets Manager exactly once, at
+          # bootstrap, so a secret change (a key added, a value rotated) never
+          # reached a running instance without re-stamping it, and re-stamping
+          # destroys the on-instance database. Re-sync .env from the secret on
+          # every release instead: secret values win, static lines the
+          # bootstrap appended (NODE_ENV, ports) survive, and later duplicates
+          # are dropped so a stale bootstrap line cannot shadow a synced one.
+          umask 077
+          aws secretsmanager get-secret-value --secret-id "${SECRET_ID}" \
+            --region "${AWS_REGION}" --query SecretString --output text \
+            | jq -r 'to_entries[] | "\(.key)=\(.value)"' > .env.secret
+          test -s .env.secret
+          awk -F= '
+            NR==FNR { sec[$1] = substr($0, index($0, "=") + 1); next }
+            {
+              key = $1
+              if (seen[key]++) next
+              if (key in sec) { print key "=" sec[key]; delete sec[key] }
+              else print
+            }
+            END { for (k in sec) print k "=" sec[k] }
+          ' .env.secret .env > .env.next
+          rm -f .env.secret
+          mv .env.next .env
 
           docker compose pull
 
