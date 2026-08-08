@@ -18,15 +18,17 @@ const ADMIN_DSN =
 
 test.use({ storageState: join(ROOT, "test-results", "auth.json") });
 
-test("start a fixture run, watch it appear, stream live, and land", async ({ page }) => {
+test("start a run from the picker, stream live, and land", async ({ page }) => {
   await page.goto("/app/runs");
-  await page.getByRole("button", { name: "Start a rehearsal run" }).first().click();
+  await page.getByRole("link", { name: "Start a run" }).first().click();
+  await page.waitForURL("**/app/runs/new");
 
-  // 202-and-events discipline: the run shows up from the re-fetched list.
-  const runLink = page.getByRole("link", { name: "Quarterly user access review" }).first();
-  await expect(runLink).toBeVisible({ timeout: 20_000 });
+  // Pick the seeded routine; its plan and the start affordance appear.
+  await page.getByRole("link", { name: "Quarterly user access review" }).first().click();
+  await expect(page.getByText("Pull the current list of people and their access")).toBeVisible();
+  await page.getByRole("button", { name: "Start a rehearsal run" }).click();
 
-  await runLink.click();
+  // The action redirects straight to the run's detail page.
   await expect(
     page.getByRole("heading", { name: "Quarterly user access review" }),
   ).toBeVisible({ timeout: 20_000 });

@@ -76,6 +76,28 @@ export async function getMembership(orgId: string, userId: string): Promise<Memb
   });
 }
 
+export interface OrgOverview {
+  name: string;
+  createdAt: Date;
+  /** Active members only; pending and suspended seats do not count. */
+  memberCount: number;
+}
+
+/** The account surface's view of the active org: name, age, and size. */
+export async function getOrgOverview(orgId: string): Promise<OrgOverview | null> {
+  return withOrgContext({ orgId }, async (client) => {
+    const { rows } = await client.query<OrgOverview>(
+      `SELECT o.name, o.created_at AS "createdAt",
+              (SELECT count(*)::int FROM memberships m
+                WHERE m.org_id = o.id AND m.status = 'active') AS "memberCount"
+         FROM organizations o
+        WHERE o.id = $1`,
+      [orgId],
+    );
+    return rows[0] ?? null;
+  });
+}
+
 export interface MemberRow {
   userId: string;
   name: string;

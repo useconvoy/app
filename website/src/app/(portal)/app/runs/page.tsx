@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { ErrorBlock } from "@/components/ErrorBlock";
-import { listRuns } from "@/lib/api/runs";
+import { copy } from "@/lexicon";
+import { listRuns, runStartedBy } from "@/lib/api/runs";
+import { can } from "@/lib/permissions";
 import { requireRunPage } from "@/lib/runs/context";
 import { progress } from "@/lib/runs/status";
 import { isRehearsalRun } from "@/lib/routines/data";
@@ -11,36 +14,70 @@ export const metadata: Metadata = { title: "Runs" };
 export const dynamic = "force-dynamic";
 
 /**
- * The runs list. On-demand starts live on the routine surfaces (Run now),
- * where the routine's plan and budget are in view.
+ * The runs list. Starting a run lives on its own picker page so the
+ * routine, its plan, and the start affordance are seen together; the
+ * header link leads there. ?mine=1 narrows the list to runs this person
+ * started, which is how the account menu's "My runs" arrives here.
  */
-export default async function RunsPage() {
-  const { actor } = await requireRunPage();
+export default async function RunsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mine?: string }>;
+}) {
+  const { session, membership, actor } = await requireRunPage();
+  const { mine } = await searchParams;
+  const mineOnly = mine === "1";
+  const canStart = can("trigger_production_run", membership.role, membership.capabilities);
 
   let rows: RunListRow[] | null = null;
   try {
     const views = await listRuns(actor);
-    rows = views.map((view) => {
-      const { done, total } = progress(view.steps ?? []);
-      return {
-        id: view.run_id,
-        goal: view.goal,
-        status: view.status,
-        done,
-        total,
-        spentUsd: view.budget?.spent_usd ?? null,
-        rehearsal: isRehearsalRun(view.run_id),
-      };
-    });
+    rows = views
+      .filter((view) => !mineOnly || runStartedBy(view.run_id) === session.userId)
+      .map((view) => {
+        const { done, total } = progress(view.steps ?? []);
+        return {
+          id: view.run_id,
+          goal: view.goal,
+          status: view.status,
+          done,
+          total,
+          spentUsd: view.budget?.spent_usd ?? null,
+          rehearsal: isRehearsalRun(view.run_id),
+        };
+      });
   } catch {
     rows = null;
   }
 
+  const startLink = canStart ? (
+    <Link
+      href="/app/runs/new"
+      className="rounded-md border border-line bg-card px-3 py-1.5 text-sm font-medium text-ink hover:border-pine"
+    >
+      {copy.startRun}
+    </Link>
+  ) : undefined;
+
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
-      <header>
-        <h1 className="font-display text-3xl text-ink">Runs</h1>
-        <p className="mt-1 text-sm text-muted">Everything your routines are doing, live.</p>
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-3xl text-ink">
+            {mineOnly ? copy.myRunsTitle : "Runs"}
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            {mineOnly ? copy.myRunsIntro : "Everything your routines are doing, live."}
+          </p>
+          {mineOnly ? (
+            <p className="mt-1 text-sm">
+              <Link href="/app/runs" className="text-muted underline hover:text-ink">
+                {copy.showAllRuns}
+              </Link>
+            </p>
+          ) : null}
+        </div>
+        {startLink}
       </header>
       {rows === null ? (
         <ErrorBlock
@@ -48,7 +85,11 @@ export default async function RunsPage() {
           whatToDo="Try again in a moment."
         />
       ) : (
-        <RunsList rows={rows} />
+        <RunsList
+          rows={rows}
+          startAction={startLink}
+          emptyBody={mineOnly ? copy.myRunsEmptyBody : undefined}
+        />
       )}
     </div>
   );

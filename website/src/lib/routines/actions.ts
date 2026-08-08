@@ -149,6 +149,7 @@ export async function runRoutineNow(routineId: string): Promise<RunNowResult> {
       environmentId: production ? workspace.environmentId : workspace.rehearsalEnvironmentId,
       budgetUsd: routine.budgetCapUsd,
       routineId: routine.id,
+      startedById: session.userId,
     },
   );
   const target = production ? "production" : "rehearsal";

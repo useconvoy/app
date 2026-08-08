@@ -220,13 +220,15 @@ test("gate flow: scripted answer at a rehearsal moment, clock advance, land repo
   await expect(report.locator("tbody tr").first()).toBeVisible();
 
   // Promotion rides a run started through the console's own seam, which
-  // knows the routine. Submit, review, promote.
+  // knows the routine. Submit, review, promote. The promoter grant lands
+  // after the run starts so the start goes to the rehearsal copy.
+  await page.goto("/app/runs/new");
+  await page.getByRole("link", { name: "Quarterly user access review" }).first().click();
+  await page.getByRole("button", { name: "Start a rehearsal run" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Quarterly user access review" }),
+  ).toBeVisible({ timeout: 20_000 });
   await grantPromoter();
-  await page.goto("/app/runs");
-  await page.getByRole("button", { name: "Start a rehearsal run" }).first().click();
-  const runLink = page.getByRole("link", { name: "Quarterly user access review" }).first();
-  await expect(runLink).toBeVisible({ timeout: 20_000 });
-  await runLink.click();
   await expect(page.getByText("Landed").first()).toBeVisible({ timeout: 60_000 });
   await expect(page.getByRole("region", { name: "Land report" })).toBeVisible({
     timeout: 20_000,

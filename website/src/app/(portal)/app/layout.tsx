@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { AccountMenu } from "@/components/shell/AccountMenu";
 import { BellButton } from "@/components/shell/BellButton";
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { NavItems } from "@/components/shell/NavItems";
@@ -50,6 +51,7 @@ export default async function PortalLayout({ children }: { children: React.React
           <div className="flex items-center gap-3">
             <CommandPalette routes={routesForRole(role)} />
             <BellButton />
+            <AccountMenu name={session.name} />
           </div>
         </header>
         {/* TODO(website): shell-level rehearsal framing. Pages that know

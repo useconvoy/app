@@ -174,6 +174,14 @@ export const clockModeDescriptions = {
 
 export type ClockMode = keyof typeof clockModeLabels;
 
+/** Membership roles as users see them. Keys are the memberships values. */
+export const roleLabels: Record<string, string> = {
+  admin: "Admin",
+  operator: "Operator",
+  member: "Member",
+  viewer: "Viewer",
+};
+
 /** Runs list filter chips: All plus the four status groups. */
 export const runFilterLabels = {
   all: "All",
@@ -210,6 +218,11 @@ export const copy = {
   productionFilter: "Production",
   rehearsalsFilter: "Rehearsals",
   runsEmptyBody: "Runs appear here as soon as a routine starts working.",
+  myRunsTitle: "My runs",
+  myRunsIntro: "Runs you started, newest first.",
+  myRunsEmptyBody: "Runs you start will appear here.",
+  showAllRuns: "Show all runs",
+  startRun: "Start a run",
   helperRuns: "Helper runs",
   operatorDetails: "Details for operators",
   copyRunId: "Copy run id",
@@ -587,6 +600,57 @@ export const improveCopy = {
   changelogCreatedNote: "Added to this organization",
   feedbackReviewTitle: "Recent feedback",
   readOnlyQueueNote: "You can read this queue. Approving and shipping need an operator.",
+} as const;
+
+/** Copy for the start-a-run picker. */
+export const startRunCopy = {
+  title: "Start a run",
+  intro: "Pick a routine and start it now.",
+  pickRoutine: "Choose a routine",
+  planTitle: "What it will do",
+  noRoutinesTitle: "Nothing to run yet",
+  noRoutinesBody: "This organization has no routines. Install one from the catalog first.",
+  browseCatalog: "Browse the catalog",
+  startRehearsal: "Start a rehearsal run",
+  startProduction: "Start a live run",
+  noWorkspaceNote:
+    "No workspace connects the systems this routine needs, so it cannot run yet.",
+  viewersCannotStart: "Viewers cannot start runs.",
+} as const;
+
+/** Copy for the account surfaces and the account menu. */
+export const accountCopy = {
+  menuLabel: "Account menu",
+  profileItem: "Profile",
+  organizationItem: "Organization",
+  myRunsItem: "My runs",
+  settingsItem: "Settings",
+  signOutItem: "Sign out",
+  profileTitle: "Account",
+  profileIntro: "Who you are on this site, and the organizations you belong to.",
+  nameLabel: "Name",
+  emailLabel: "Email",
+  signInLabel: "Sign-in",
+  ssoLinked: "Connected to single sign-on",
+  ssoNotLinked: "Signed in with email",
+  membershipsTitle: "Your organizations",
+  currentOrgChip: "Current",
+  organizationTitle: "Organization",
+  organizationIntro: "The organization you are working in right now.",
+  yourRoleLabel: "Your role",
+  memberCountLabel: "Members",
+  createdLabel: "Created",
+  peopleCount: (count: number) => `${count} ${count === 1 ? "person" : "people"}`,
+  adminLink: "Open the admin area",
+  settingsTitle: "Settings",
+  notificationSettingsLink: "Notification preferences",
+} as const;
+
+/** Copy for the portal's own page-not-found state. */
+export const portalNotFoundCopy = {
+  title: "This page does not exist",
+  body: "The address may be old or mistyped. Nothing ran and nothing was recorded.",
+  backToOverview: "Back to Overview",
 } as const;
 
 /** Shared copy for the logs surface. */
