@@ -57,41 +57,44 @@ export default async function EvaluationDetailPage({
         <h2 className="font-display text-lg text-ink">{improveCopy.scoredRunsTitle}</h2>
         <div className="mt-3">
           {scored.length > 0 ? (
-            <table className="w-full border-separate border-spacing-0 rounded-lg border border-line bg-card text-sm">
-              <thead>
-                <tr className="text-left font-mono text-xs uppercase tracking-wide text-muted">
-                  <th className="border-b border-line px-4 py-2 font-medium">
-                    {improveCopy.runColumn}
-                  </th>
-                  <th className="border-b border-line px-4 py-2 font-medium">
-                    {improveCopy.scoreColumn}
-                  </th>
-                  <th className="border-b border-line px-4 py-2 font-medium">
-                    {improveCopy.scoredAtColumn}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {scored.map((run) => (
-                  <tr key={`${run.runRef}:${run.recordedAt}`}>
-                    <td className="border-b border-line-soft px-4 py-3">
-                      <Link
-                        href={`/app/runs/${run.runRef}`}
-                        className="text-ink underline-offset-2 hover:underline"
-                      >
-                        {routine.name}
-                      </Link>
-                    </td>
-                    <td className="border-b border-line-soft px-4 py-3 font-mono text-xs text-ink">
-                      {run.score}
-                    </td>
-                    <td className="border-b border-line-soft px-4 py-3 font-mono text-xs text-muted">
-                      {friendlyDateTime(run.recordedAt)}
-                    </td>
+            /* The table scrolls inside its own box; the page never scrolls sideways. */
+            <div className="overflow-x-auto">
+              <table className="w-full border-separate border-spacing-0 rounded-lg border border-line bg-card text-sm">
+                <thead>
+                  <tr className="text-left font-mono text-xs uppercase tracking-wide text-muted">
+                    <th className="border-b border-line px-4 py-2 font-medium">
+                      {improveCopy.runColumn}
+                    </th>
+                    <th className="border-b border-line px-4 py-2 font-medium">
+                      {improveCopy.scoreColumn}
+                    </th>
+                    <th className="border-b border-line px-4 py-2 font-medium">
+                      {improveCopy.scoredAtColumn}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {scored.map((run) => (
+                    <tr key={`${run.runRef}:${run.recordedAt}`}>
+                      <td className="border-b border-line-soft px-4 py-3">
+                        <Link
+                          href={`/app/runs/${run.runRef}`}
+                          className="text-ink underline-offset-2 hover:underline"
+                        >
+                          {routine.name}
+                        </Link>
+                      </td>
+                      <td className="border-b border-line-soft px-4 py-3 font-mono text-xs text-ink">
+                        {run.score}
+                      </td>
+                      <td className="border-b border-line-soft px-4 py-3 font-mono text-xs text-muted">
+                        {friendlyDateTime(run.recordedAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <EmptyState
               title={improveCopy.noScoresYet}

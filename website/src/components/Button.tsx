@@ -46,7 +46,8 @@ export function Button({
       disabled={disabled || pending}
       aria-busy={pending || undefined}
       className={[
-        "relative inline-flex items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium",
+        // On touch widths the taps get taller; desktop keeps its density.
+        "relative inline-flex items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium max-md:py-2.5",
         "disabled:cursor-not-allowed disabled:opacity-50",
         pending ? "cursor-progress disabled:opacity-100" : "",
         variantClasses[variant],

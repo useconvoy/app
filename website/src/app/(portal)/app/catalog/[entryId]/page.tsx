@@ -74,7 +74,7 @@ export default async function CatalogEntryPage({
         <h2 className="text-base font-medium text-ink">{catalogCopy.whatItNeeds}</h2>
         <ul className="mt-3 m-0 list-none space-y-2 p-0">
           {entry.requirements.systems.map((required) => (
-            <li key={required.systemId} className="flex items-center gap-2 text-sm text-ink">
+            <li key={required.systemId} className="flex flex-wrap items-center gap-2 text-sm text-ink">
               {systemName(required.systemId)}
               <Chip mono>{grantLabels[required.scope]}</Chip>
             </li>
@@ -89,7 +89,7 @@ export default async function CatalogEntryPage({
         <h2 className="text-base font-medium text-ink">{catalogCopy.changelogTitle}</h2>
         <ul className="mt-3 m-0 list-none space-y-2 p-0">
           {[...entry.changelog].reverse().map((item) => (
-            <li key={item.version} className="flex items-center gap-3 text-sm text-ink">
+            <li key={item.version} className="flex flex-wrap items-center gap-3 text-sm text-ink">
               <Chip mono>{catalogCopy.versionChip(item.version)}</Chip>
               <span>{item.note}</span>
               <span className="font-mono text-xs text-muted">{friendlyDate(item.at)}</span>

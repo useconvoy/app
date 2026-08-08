@@ -76,7 +76,8 @@ export default async function LogsPage({
         <p className="mt-2 text-sm text-muted">{logsCopy.intro}</p>
       </header>
 
-      <form method="get" className="flex flex-wrap items-end gap-3">
+      {/* Filters stack full width on phones and sit in a row from md up. */}
+      <form method="get" className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end">
         <Field label={logsCopy.filterEventType}>
           <Select id="filter-type" name="type" defaultValue={filters.type}>
             <option value="">{logsCopy.allEvents}</option>
@@ -92,7 +93,7 @@ export default async function LogsPage({
             id="filter-run"
             name="run"
             defaultValue={filters.run}
-            className="max-w-72"
+            className="md:max-w-72"
           >
             <option value="">{logsCopy.allRuns}</option>
             {runs.map((run) => (
@@ -109,7 +110,7 @@ export default async function LogsPage({
             <option value="rehearsals">{copy.rehearsalsFilter}</option>
           </Select>
         </Field>
-        <Button type="submit" variant="secondary">
+        <Button type="submit" variant="secondary" className="max-md:w-full">
           {logsCopy.apply}
         </Button>
       </form>

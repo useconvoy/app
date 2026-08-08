@@ -24,7 +24,7 @@ export function ApiAccessNotice({ controlPlaneUrl }: ApiAccessNoticeProps) {
       </section>
       <section className="rounded-md border border-line bg-card p-6">
         <p className="text-xs uppercase text-muted">{adminCopy.controlPlaneUrlLabel}</p>
-        <p className="mt-1 font-mono text-sm text-ink">{controlPlaneUrl}</p>
+        <p className="mt-1 break-all font-mono text-sm text-ink">{controlPlaneUrl}</p>
       </section>
     </div>
   );

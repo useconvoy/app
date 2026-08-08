@@ -19,6 +19,7 @@ vi.mock("next/navigation", () => ({
 import { CommandPalette } from "@/components/shell/CommandPalette";
 import { NavItems } from "@/components/shell/NavItems";
 import { NavLink } from "@/components/shell/NavLink";
+import { PortalNavDrawer } from "@/components/shell/PortalNavDrawer";
 
 const routes = [
   { href: "/app", label: "Overview" },
@@ -112,6 +113,38 @@ describe("NavLink", () => {
     navigation.pathname = "/app/runs";
     render(<NavLink href="/app" label="Overview" />);
     expect(screen.getByRole("link", { name: "Overview" })).not.toHaveAttribute("aria-current");
+  });
+});
+
+describe("PortalNavDrawer", () => {
+  it("opens, moves focus in, and closes on escape with focus returned", () => {
+    render(
+      <PortalNavDrawer>
+        <a href="#overview">Overview</a>
+      </PortalNavDrawer>,
+    );
+    expect(screen.queryByRole("link", { name: "Overview" })).not.toBeInTheDocument();
+
+    const button = screen.getByRole("button", { name: "Open menu" });
+    fireEvent.click(button);
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    expect(button).toHaveAttribute("aria-controls", "portal-nav-drawer");
+    expect(screen.getByRole("link", { name: "Overview" })).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("link", { name: "Overview" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open menu" })).toHaveFocus();
+  });
+
+  it("closes when a link inside it is followed", () => {
+    render(
+      <PortalNavDrawer>
+        <a href="#runs">Runs</a>
+      </PortalNavDrawer>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+    fireEvent.click(screen.getByRole("link", { name: "Runs" }));
+    expect(screen.queryByRole("link", { name: "Runs" })).not.toBeInTheDocument();
   });
 });
 

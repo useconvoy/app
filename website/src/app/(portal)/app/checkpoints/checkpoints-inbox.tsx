@@ -323,7 +323,7 @@ function InboxCard({
               autoFocus
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              className="rounded-md border border-line bg-card px-2 py-1 text-sm text-ink"
+              className="min-w-0 flex-1 rounded-md border border-line bg-card px-2 py-1 text-sm text-ink"
             />
           </label>
           <button
