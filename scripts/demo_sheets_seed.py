@@ -8,9 +8,12 @@ then append its result to 100 Google Sheets in a Drive folder"):
                  for an access token (OAuth2 JWT-bearer grant, same pattern as
                  convoy_environments.connectors.google) and create the missing
                  sheet-001..sheet-NNN spreadsheets in a Drive folder.
-  provision      Talk to the console API: workspace -> google connection ->
-                 "sheets-demo" environment allowlisting exactly the three
-                 google tools, with a sandboxTemplate set.
+  provision      Talk to the console API: organization -> google connection ->
+                 "sheets-demo" workspace allowlisting exactly the three
+                 google tools, with a sandboxTemplate set. (Console
+                 vocabulary: an organization is the tenant — db/wire
+                 workspace_id/tenant_id; a console workspace is the runtime's
+                 environment, so workspaceId == environmentId.)
   start-run      Talk to the agent runtime's control plane: POST /runs with a
                  valid CreateRunRequest and print the run id + SSE events URL.
 
@@ -23,7 +26,8 @@ control plane / console, and the smallest honest choice made for each):
 1. Control-plane auth (agent-runtime/src/convoy_runtime/control_plane/auth.py)
    is the v0 static scheme: `Authorization: Bearer <CONVOY_DEV_TOKEN>` plus
    `x-actor-id` / `x-tenant-id` headers. We default the token to "dev-token"
-   (the RuntimeConfig default) and use the workspace id as the tenant id.
+   (the RuntimeConfig default) and use the organization id as the tenant id
+   (the machine seam keeps the name tenant_id).
 2. `prompt_ref` is NOT a client-side field. CreateRunRequest has no prompt
    input; the control plane itself writes runs/{id}/prompts/root.json with a
    canned root prompt at creation. The external knobs are `goal` and
@@ -38,18 +42,19 @@ control plane / console, and the smallest honest choice made for each):
    Every other RunPolicy field keeps its schema default (linear_fanout,
    pause on budget exhausted, max_parallel 5) — the right shape for fanning
    out over ~100 sheets.
-5. `tools` requests sandbox_exec plus the three google tools. The environment
+5. `tools` requests sandbox_exec plus the three google tools. The workspace
    allowlists ONLY the google tools; sandbox_exec is auto-granted into the
-   binding's tool registry from the environment's sandboxTemplate (behavior
+   binding's tool registry from the workspace's sandboxTemplate (behavior
    from branch demo-sandbox-grant). Until that lands in the deployment, the
    control plane will 422 the sandbox_exec request.
 6. `budget_usd` is a Decimal on the wire; we send it as a JSON string.
-7. environment ids resolve through the control plane's environments registry
-   seam (CONVOY_STUB_ENV_URL) — the environment must be visible there.
-8. Console auth: workspace creation needs X-Convoy-Internal (the provisioning
-   token); every later call authenticates as the created user via
-   X-Convoy-User, which works whenever no WorkOS verifier is configured or
-   CONVOY_CONSOLE_ALLOW_HEADER_AUTH=1.
+7. environment ids (== console workspace ids) resolve through the control
+   plane's environments registry seam (CONVOY_STUB_ENV_URL) — the workspace
+   must be visible there.
+8. Console auth: organization creation needs X-Convoy-Internal (the
+   provisioning token); every later call authenticates as the created user
+   via X-Convoy-User, which works whenever no WorkOS verifier is configured
+   or CONVOY_CONSOLE_ALLOW_HEADER_AUTH=1.
 9. Connection registration normally lets the console build the manifest via
    its google connector; --manifest-json (or the `manifest=` argument of
    provision()) supplies an explicit declared manifest instead, for hermetic
@@ -173,26 +178,26 @@ def cmd_create_sheets(args: argparse.Namespace) -> None:
     }, indent=2))
 
 
-# -- console: workspace -> connection -> environment -------------------------
+# -- console: organization -> connection -> workspace -------------------------
 
 async def provision(client: httpx.AsyncClient, *, provisioning_token: str,
-                    workspace_name: str, creator_email: str, sa_key_value: str,
+                    organization_name: str, creator_email: str, sa_key_value: str,
                     sandbox_template: str,
                     manifest: Optional[Dict[str, Any]] = None,
                     display_name: str = "Google Drive+Sheets",
-                    environment_name: str = "sheets-demo") -> Dict[str, Any]:
+                    workspace_name: str = "sheets-demo") -> Dict[str, Any]:
     """Drive the console API end to end. `client` is any httpx.AsyncClient
     pointed at the console (a real base_url, or an ASGITransport in smokes).
 
-    NOTE: the environment allowlists EXACTLY the three google tools. Do not
+    NOTE: the workspace allowlists EXACTLY the three google tools. Do not
     add sandbox_exec here — the runtime binding auto-grants it from
     sandboxTemplate (branch demo-sandbox-grant)."""
-    ws = _check(await client.post(
-        "/workspaces",
+    org = _check(await client.post(
+        "/organizations",
         headers={"X-Convoy-Internal": provisioning_token},
-        json={"name": workspace_name, "creatorEmail": creator_email},
-    ), "create workspace").json()
-    workspace_id, user_id = ws["workspaceId"], ws["userId"]
+        json={"name": organization_name, "creatorEmail": creator_email},
+    ), "create organization").json()
+    organization_id, user_id = org["organizationId"], org["userId"]
     as_user = {"X-Convoy-User": user_id}
 
     connection_req: Dict[str, Any] = {
@@ -204,34 +209,35 @@ async def provision(client: httpx.AsyncClient, *, provisioning_token: str,
     if manifest is not None:
         connection_req["manifest"] = manifest
     conn = _check(await client.post(
-        "/workspaces/%s/connections" % workspace_id,
+        "/organizations/%s/connections" % organization_id,
         headers=as_user, json=connection_req,
     ), "create connection").json()
 
-    env = _check(await client.post(
-        "/workspaces/%s/environments" % workspace_id,
+    ws = _check(await client.post(
+        "/organizations/%s/workspaces" % organization_id,
         headers=as_user,
         json={
-            "name": environment_name,
-            "description": "Sheets demo: sandbox script + append to Drive spreadsheets.",
-            "backingType": "live",
+            "name": workspace_name,
+            "purpose": "Sheets demo: sandbox script + append to Drive spreadsheets.",
             "sandboxTemplate": sandbox_template,
             "connections": [{
                 "connectionId": conn["connectionId"],
                 "toolAllowlist": list(GOOGLE_TOOLS),
             }],
         },
-    ), "create environment").json()
+    ), "create workspace").json()
 
     return {
-        "workspaceId": workspace_id,
+        "organizationId": organization_id,
         "userId": user_id,
         "connectionId": conn["connectionId"],
         "manifestHash": conn["manifestHash"],
         "connectionTools": conn["tools"],
-        "environmentId": env["environmentId"],
-        "environmentVersion": env["version"],
-        "policyHash": env["policyHash"],
+        "workspaceId": ws["workspaceId"],
+        "workspaceVersion": ws["version"],
+        "policyHash": ws["policyHash"],
+        # same id, machine-seam name — what start-run's --environment takes
+        "environmentId": ws["environmentId"],
     }
 
 
@@ -248,7 +254,7 @@ def cmd_provision(args: argparse.Namespace) -> None:
             return await provision(
                 client,
                 provisioning_token=args.provisioning_token,
-                workspace_name=args.workspace_name,
+                organization_name=args.organization_name,
                 creator_email=args.creator_email,
                 sa_key_value=sa_key_value,
                 sandbox_template=args.sandbox_template,
@@ -320,15 +326,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_create_sheets)
 
     p = sub.add_parser("provision",
-                       help="console: workspace + google connection + sheets-demo environment")
+                       help="console: organization + google connection + sheets-demo workspace")
     p.add_argument("--console", required=True, help="console API base URL")
     p.add_argument("--provisioning-token", required=True,
-                   help="X-Convoy-Internal shared secret for workspace creation")
+                   help="X-Convoy-Internal shared secret for organization creation")
     p.add_argument("--sa-key", required=True,
                    help="path to the Google service-account JSON key (stored as the connection secret)")
     p.add_argument("--sandbox-template", default="demo-sbx",
-                   help="sandbox template ref for the environment (default demo-sbx)")
-    p.add_argument("--workspace-name", default="sheets-demo")
+                   help="sandbox template ref for the workspace (default demo-sbx)")
+    p.add_argument("--organization-name", default="sheets-demo")
     p.add_argument("--creator-email", default="demo@useconvoy.dev")
     p.add_argument("--manifest-json", default="",
                    help="optional path to an explicit declared connection manifest "
@@ -338,8 +344,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("start-run", help="control plane: POST /runs and print the SSE URL")
     p.add_argument("--control-plane", required=True, help="control-plane base URL")
     p.add_argument("--workspace", required=True,
-                   help="workspace id (used as x-tenant-id)")
-    p.add_argument("--environment", required=True, help="environment id")
+                   help="organization id (sent as x-tenant-id; the machine seam keeps that name)")
+    p.add_argument("--environment", required=True,
+                   help="environment id (== the console workspaceId)")
     p.add_argument("--goal", required=True, help="the run's goal text")
     p.add_argument("--criteria", action="append", default=[],
                    help="success criterion (repeatable; a demo default is used if omitted)")
