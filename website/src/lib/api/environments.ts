@@ -194,6 +194,14 @@ interface RegistryConfig {
   token: string;
 }
 
+// Every workspace gets a rehearsal copy that can actually run code: a
+// non-empty sandbox_template is what makes the registry grant `sandbox_exec`
+// and compile a runnable rehearsal binding (an empty template yields a hollow
+// rehearsal that can read connectors but never execute the routine's own
+// steps). This default is a placeholder image ref until the
+// environments-as-content pipeline lets an org pick per-workspace images.
+const DEFAULT_SANDBOX_TEMPLATE = "convoy-devbox-python";
+
 /** Both env vars or nothing: a half-configured flag stays off. */
 function registryConfig(): RegistryConfig | null {
   const baseUrl = process.env.CONVOY_ENVIRONMENTS_URL;
@@ -390,7 +398,12 @@ class RegistryEnvironmentsClient implements EnvironmentsClient {
       `/organizations/${ctx.registryOrgId}/workspaces`,
       {
         method: "POST",
-        body: { name: input.name, purpose: input.purpose, connections },
+        body: {
+          name: input.name,
+          purpose: input.purpose,
+          connections,
+          sandboxTemplate: DEFAULT_SANDBOX_TEMPLATE,
+        },
         actsFor: ctx.actsFor,
       },
     );
