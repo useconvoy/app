@@ -56,6 +56,18 @@ export function routineIdForRun(runId: string): string | undefined {
 }
 
 /**
+ * The runtime tenant a run belongs to, or undefined for a run this process
+ * never registered. Model-key issuance resolves a run's organization through
+ * this. The limitation rides with the directory (TODO(runtime-D8)): a run
+ * created at the edge that the console never met has no entry here, so
+ * issuance for it returns not-found until the runtime exposes the run list
+ * and this seam retires.
+ */
+export function tenantForRun(runId: string): string | undefined {
+  return directory().get(runId)?.tenantId;
+}
+
+/**
  * Who started a run through the console, or undefined for runs first met
  * at the edge. The "my runs" filter keys on this; a run the console did
  * not start is honestly nobody's.
