@@ -144,6 +144,7 @@ def build_console_app(session_factory, secrets: SecretsService,
                 user = User(id=_id("usr"), email=req.creatorEmail)
                 s.add(user)
             s.add(org)
+            s.flush()  # org + user rows must precede the membership FK on Postgres
             s.add(Membership(workspace_id=org.id, user_id=user.id, role="admin"))
             _audit(s, org.id, user.id, "workspace.create", "workspace", org.id)
             s.commit()
@@ -164,6 +165,7 @@ def build_console_app(session_factory, secrets: SecretsService,
             if invitee is None:
                 invitee = User(id=_id("usr"), email=req.email)
                 s.add(invitee)
+                s.flush()  # user row must precede the membership FK on Postgres
             existing = s.get(Membership, (org_id, invitee.id))
             if existing is not None:
                 existing.role = req.role
