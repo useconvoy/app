@@ -3,8 +3,9 @@
  * surface. Org and actor derive from the verified session; the
  * permissions matrix is re-checked server-side; workspace management is
  * administrative, so every mutation writes an admin_audit row with actor
- * attribution. The workspace itself lands in the org-scoped workspaces
- * table until the environments registry exists. TODO(environments-E0).
+ * attribution. The workspace itself goes through the environments adapter
+ * (lib/api/environments): the real registry when the E0 flag is set, the
+ * org-scoped workspaces table otherwise.
  */
 "use server";
 

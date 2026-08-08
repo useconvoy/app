@@ -1,3 +1,11 @@
+# Build-script approvals (pnpm 11 fails closed on postinstall scripts).
+# esbuild and unrs-resolver link their platform binaries in postinstall and
+# are broken without it; msw's postinstall is a support notice, skipped.
+allowBuilds:
+  esbuild: true
+  msw: false
+  unrs-resolver: true
+
 # Supply-chain policy: never resolve a package published within the last
 # day. A freshly published version is the window in which a compromised
 # release is most likely to still be live, and a day is long enough for the

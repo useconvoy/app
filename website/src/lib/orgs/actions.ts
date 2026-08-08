@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { revalidatePath } from "next/cache";
 
+import { provisionEnvironmentsOrg, syncInviteToEnvironments } from "@/lib/api/environments";
 import { requireOrgSession, requireSession, setActiveOrg } from "@/lib/auth/session";
 import { withOrgContext, withUserContext } from "@/lib/db";
 import { can } from "@/lib/permissions";
@@ -85,6 +86,11 @@ export async function createOrganization(name: string): Promise<{ id: string }> 
     );
     await audit(client, orgId, session.userId, "organization.created", orgId);
   });
+  // Mirror the org into the environments registry when the E0 adapter is
+  // switched on; the stored id keys every later registry call. Best-effort
+  // inside: a registry failure leaves this org table-backed, never blocks
+  // creation.
+  await provisionEnvironmentsOrg({ orgId, name: trimmed, creatorEmail: session.email });
   await setActiveOrg(orgId);
   return { id: orgId };
 }
@@ -119,6 +125,16 @@ export async function inviteMember(email: string, role: string): Promise<{ id: s
       [id, session.orgId, normalized, role, newInviteToken(), inviteExpiry(), session.userId],
     );
     await audit(client, session.orgId, session.userId, "invite.created", id);
+  });
+  // Mirror the invite into the environments registry as a membership, at
+  // creation time rather than acceptance; syncInviteToEnvironments
+  // documents why creation is the definitive point. No-op with the E0
+  // adapter off, best-effort with it on.
+  await syncInviteToEnvironments({
+    orgId: session.orgId,
+    actorEmail: session.email,
+    email: normalized,
+    role,
   });
   revalidateAdmin();
   return { id };
