@@ -25,7 +25,7 @@ def main() -> None:
 
         engine = make_engine(args.url)
         Base.metadata.create_all(engine)
-        print("created tables on %s" % engine.url)
+        print("created tables on %s" % (engine.url,))  # URL is a NamedTuple — wrap it
     elif args.command == "serve":
         import uvicorn
         from fastapi import FastAPI
