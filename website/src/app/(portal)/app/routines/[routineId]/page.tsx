@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { evalsClient } from "@/lib/api/evals";
-import { learningClient } from "@/lib/api/learning";
+import { scoreTrend } from "@/lib/api/evals";
+import type { ChangelogEntry } from "@/lib/api/learning";
 import { submitFeedbackForm } from "@/lib/feedback/actions";
 import { listFeedbackForRoutine } from "@/lib/feedback/queries";
 import { listMembers, listTeams } from "@/lib/orgs/queries";
@@ -16,9 +16,11 @@ import {
 import { getRoutineDetail } from "@/lib/routines/data";
 import { requireRoutinesPage } from "@/lib/routines/gate";
 import { orgTenantId } from "@/lib/routines/queries";
+import { improveCopy } from "@/lexicon";
 import { RoutineDetail } from "./RoutineDetail";
 
 export const metadata: Metadata = { title: "Routine" };
+export const dynamic = "force-dynamic";
 
 /**
  * Routine detail: everything about the routine today, read
@@ -48,13 +50,22 @@ export default async function RoutineDetailPage({
     ? await Promise.all([listMembers(session.orgId), listTeams(session.orgId)])
     : [[], []];
 
-  // Test-score trend and changelog come from the fixture adapters
-  // (TODO(evals), TODO(learning)); the feedback stream is real.
-  const [trend, changelog, feedback] = await Promise.all([
-    evalsClient().scoreTrend(routineId),
-    learningClient().listChangelog(routineId),
+  // The trend is real score history; the changelog's baseline entry is the
+  // routine's own arrival. Shipped improvements will append here once the
+  // learning service exists.
+  const [trend, feedback] = await Promise.all([
+    scoreTrend(session.orgId, routineId),
     listFeedbackForRoutine(session.orgId, routineId),
   ]);
+  const changelog: ChangelogEntry[] = [
+    {
+      routineId: data.routine.id,
+      at: data.routine.createdAt.toISOString(),
+      note: data.routine.sourceEntryId
+        ? improveCopy.changelogInstalledNote
+        : improveCopy.changelogCreatedNote,
+    },
+  ];
 
   // Feedback composed on the routine page attaches to the latest run;
   // without any runs the composer renders disabled with a plain note.
@@ -89,7 +100,7 @@ export default async function RoutineDetailPage({
       routine={data.routine}
       workspace={data.workspace ? { id: data.workspace.id, name: data.workspace.name } : null}
       systems={data.systems}
-      checkpoints={data.checkpoints}
+      checkpoints={[]}
       approvers={data.approvers}
       triggers={data.triggers}
       runs={data.runs}

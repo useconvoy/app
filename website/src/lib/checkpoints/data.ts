@@ -14,10 +14,9 @@ import type { ActorContext, RunView } from "@/lib/api/client";
 import { listRuns, routineIdForRun } from "@/lib/api/runs";
 import { withOrgContext } from "@/lib/db";
 import { minutesSince } from "@/lib/format";
-import { routines } from "@/lib/fixtures/world";
 import { listPromotionRequests } from "@/lib/promotions/store";
 import { isRehearsalRun } from "@/lib/routines/data";
-import { listApprovers, type ApproverAssignment } from "@/lib/routines/queries";
+import { getRoutine, listApprovers, type ApproverAssignment } from "@/lib/routines/queries";
 import { heldKind } from "@/lib/runs/status";
 
 export type CheckpointItemKind =
@@ -216,7 +215,12 @@ export async function gatherCheckpointItems(
   // Promotion reviews: rehearsal results waiting before anything goes live.
   for (const request of listPromotionRequests(orgId)) {
     if (request.status !== "requested") continue;
-    const routine = routines.find((candidate) => candidate.id === request.routineId);
+    let routine = null;
+    try {
+      routine = await getRoutine(orgId, request.routineId);
+    } catch {
+      routine = null;
+    }
     items.push({
       key: `promotion:${request.id}`,
       kind: "promotion",

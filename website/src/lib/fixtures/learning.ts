@@ -1,9 +1,8 @@
 /**
- * Fixture data for the learning surfaces, part of the canonical fixture
- * world: proposed improvements with diffs and test-score evidence, plus
- * baseline changelog entries per routine. The FixtureLearningClient in
- * `lib/api/learning` seeds its in-process store from here. TODO(learning):
- * retire this file when the service is live.
+ * Fixture data for the learning surfaces, used by tests only: proposed
+ * improvements with diffs and test-score evidence, plus baseline changelog
+ * entries per routine. The shapes mirror what the learning service will
+ * serve; production renders the queue empty until the service exists.
  */
 import type { Improvement } from "@/lib/api/learning";
 

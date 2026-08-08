@@ -11,16 +11,19 @@
 
 import { revalidatePath } from "next/cache";
 
-import { environmentsClient, workspaceForRoutine } from "@/lib/api/environments";
 import { createRun } from "@/lib/api/runs";
 import { requireOrgSession } from "@/lib/auth/session";
 import { withOrgContext } from "@/lib/db";
-import { routines } from "@/lib/fixtures/world";
 import { getMembership } from "@/lib/orgs/queries";
 import { can } from "@/lib/permissions";
-import { recordRunTarget } from "./data";
-import { isAssignedToRoutine, orgTenantId } from "./queries";
-import { setTriggerSchedule as writeTriggerSchedule } from "./triggers";
+import { recordRunTarget, resolveWorkspace } from "./data";
+import {
+  getRoutine,
+  isAssignedToRoutine,
+  orgTenantId,
+  setRoutineSchedule,
+  type RoutineRecord,
+} from "./queries";
 
 /** Session + active membership, for every routine action. */
 async function requireActor() {
@@ -32,8 +35,8 @@ async function requireActor() {
   return { session, membership };
 }
 
-function requireRoutine(routineId: string) {
-  const routine = routines.find((candidate) => candidate.id === routineId);
+async function requireRoutine(orgId: string, routineId: string): Promise<RoutineRecord> {
+  const routine = await getRoutine(orgId, routineId);
   if (!routine) throw new Error("That routine does not exist");
   return routine;
 }
@@ -52,7 +55,7 @@ export async function assignApprover(
   if (!can("edit_routines_rehearsal", membership.role, membership.capabilities)) {
     throw new Error("You cannot change approvers");
   }
-  requireRoutine(routineId);
+  await requireRoutine(session.orgId, routineId);
   if (assigneeType !== "user" && assigneeType !== "team") {
     throw new Error("Unknown assignee kind");
   }
@@ -104,10 +107,10 @@ export async function updateTriggerSchedule(routineId: string, description: stri
   if (!can("promote", membership.role, membership.capabilities)) {
     throw new Error("You cannot edit triggers of a live routine");
   }
-  requireRoutine(routineId);
+  await requireRoutine(session.orgId, routineId);
   const trimmed = description.trim();
   if (trimmed.length > 200) throw new Error("Keep the schedule under 200 characters");
-  writeTriggerSchedule(session.orgId, routineId, trimmed);
+  await setRoutineSchedule(session.orgId, routineId, trimmed);
   revalidatePath(detailPath(routineId));
 }
 
@@ -127,9 +130,8 @@ export async function runRoutineNow(routineId: string): Promise<RunNowResult> {
   if (!can("trigger_production_run", membership.role, membership.capabilities)) {
     throw new Error("You cannot start runs");
   }
-  const routine = requireRoutine(routineId);
-  const workspaces = await environmentsClient().listWorkspaces(session.orgId);
-  const workspace = workspaceForRoutine(routine, workspaces);
+  const routine = await requireRoutine(session.orgId, routineId);
+  const workspace = await resolveWorkspace(session.orgId, routine);
   if (!workspace) {
     throw new Error("No workspace connects the systems this routine needs");
   }
@@ -143,9 +145,9 @@ export async function runRoutineNow(routineId: string): Promise<RunNowResult> {
   const { runId } = await createRun(
     { actorId: session.userId, tenantId },
     {
-      goal: `${routine.name}: ${routine.descriptor}`,
+      goal: routine.descriptor ? `${routine.name}: ${routine.descriptor}` : routine.name,
       environmentId: production ? workspace.environmentId : workspace.rehearsalEnvironmentId,
-      budgetUsd: String(routine.budgetCapUsd),
+      budgetUsd: routine.budgetCapUsd,
       routineId: routine.id,
     },
   );

@@ -7,6 +7,7 @@
  * the server action re-checks the same line. Completion records nothing
  * domain-side (see lib/catalog/installs).
  */
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -56,9 +57,12 @@ export function InstallFlow({ entryId, version, options, systemNames, install }:
 
   if (installed) {
     return (
-      <p role="status" className="rounded-md border border-line bg-card p-4 text-sm text-ink">
-        {catalogCopy.installedNote}
-      </p>
+      <div role="status" className="rounded-md border border-line bg-card p-4 text-sm text-ink">
+        <p>{catalogCopy.installedNote}</p>
+        <Link href="/app/routines" className="mt-2 inline-block text-sm text-ink underline">
+          {catalogCopy.viewInstalledRoutine}
+        </Link>
+      </div>
     );
   }
 

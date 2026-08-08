@@ -1,44 +1,45 @@
 /**
- * The install shell's landing spot. An install pins the catalog entry's
- * snapshot version into this in-process set and records nothing
- * domain-side; the routine "arrives" when the routines list starts
- * consuming this set alongside the run directory.
- *
- * TODO(environments-E0): installs become registry facts (routine bound
- * into a workspace with a pinned template version) and this store is
- * deleted; the routines list then reads the registry instead of this map.
+ * Installed-routine lookups for the storefront. An install is a real
+ * routines row carrying its catalog provenance (source_entry_id plus the
+ * snapshot version pinned at install time), so "installed" and "update
+ * available" are read straight from the org's routines under RLS. Every
+ * query runs through withOrgContext; org ids arrive from the verified
+ * session.
  */
 import "server-only";
 
+import { withOrgContext, type DbContext } from "@/lib/db";
+
 export interface InstalledRoutine {
   entryId: string;
+  /** The routines row the install produced. */
   routineId: string;
-  workspaceId: string;
+  workspaceId: string | null;
   /** Snapshot version pinned at install time; template updates never move it silently. */
   pinnedVersion: number;
   installedAt: string;
 }
 
-declare global {
-  var __convoyInstalledRoutines: Map<string, InstalledRoutine[]> | undefined;
-}
-
-function store(): Map<string, InstalledRoutine[]> {
-  if (!globalThis.__convoyInstalledRoutines) {
-    globalThis.__convoyInstalledRoutines = new Map();
-  }
-  return globalThis.__convoyInstalledRoutines;
-}
-
 /** Installs recorded for an org, install order preserved. */
-export function installedRoutines(orgId: string): InstalledRoutine[] {
-  return [...(store().get(orgId) ?? [])];
-}
-
-/** Record an install; a reinstall of the same entry re-pins its version. */
-export function recordInstall(orgId: string, install: InstalledRoutine): void {
-  const existing = (store().get(orgId) ?? []).filter((row) => row.entryId !== install.entryId);
-  store().set(orgId, [...existing, install]);
+export async function installedRoutines(ctx: DbContext): Promise<InstalledRoutine[]> {
+  return withOrgContext(ctx, async (client) => {
+    const { rows } = await client.query<{
+      entryId: string;
+      routineId: string;
+      workspaceId: string | null;
+      pinnedVersion: number;
+      installedAt: Date;
+    }>(
+      `SELECT source_entry_id AS "entryId", id AS "routineId",
+              workspace_id AS "workspaceId", source_version AS "pinnedVersion",
+              created_at AS "installedAt"
+         FROM routines
+        WHERE org_id = $1 AND source_entry_id IS NOT NULL
+        ORDER BY created_at, id`,
+      [ctx.orgId],
+    );
+    return rows.map((row) => ({ ...row, installedAt: row.installedAt.toISOString() }));
+  });
 }
 
 /**

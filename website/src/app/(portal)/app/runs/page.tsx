@@ -1,11 +1,7 @@
 import type { Metadata } from "next";
 
-import { Button } from "@/components/Button";
 import { ErrorBlock } from "@/components/ErrorBlock";
-import { copy } from "@/lexicon";
 import { listRuns } from "@/lib/api/runs";
-import { can } from "@/lib/permissions";
-import { startFixtureRun } from "@/lib/runs/actions";
 import { requireRunPage } from "@/lib/runs/context";
 import { progress } from "@/lib/runs/status";
 import { isRehearsalRun } from "@/lib/routines/data";
@@ -15,18 +11,11 @@ export const metadata: Metadata = { title: "Runs" };
 export const dynamic = "force-dynamic";
 
 /**
- * On-demand run start for demos and E2E. TODO(website): the Routines
- * surface now owns on-demand triggers (runRoutineNow); drop this direct
- * seam once demos and E2E drive runs through it.
+ * The runs list. On-demand starts live on the routine surfaces (Run now),
+ * where the routine's plan and budget are in view.
  */
-async function startDemoRun(): Promise<void> {
-  "use server";
-  await startFixtureRun("routine-access-review");
-}
-
 export default async function RunsPage() {
-  const { membership, actor } = await requireRunPage();
-  const canStart = can("trigger_production_run", membership.role, membership.capabilities);
+  const { actor } = await requireRunPage();
 
   let rows: RunListRow[] | null = null;
   try {
@@ -47,22 +36,11 @@ export default async function RunsPage() {
     rows = null;
   }
 
-  const startForm = canStart ? (
-    <form action={startDemoRun}>
-      <Button type="submit" variant="secondary">
-        {copy.startRehearsalRun}
-      </Button>
-    </form>
-  ) : undefined;
-
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-3xl text-ink">Runs</h1>
-          <p className="mt-1 text-sm text-muted">Everything your routines are doing, live.</p>
-        </div>
-        {startForm}
+      <header>
+        <h1 className="font-display text-3xl text-ink">Runs</h1>
+        <p className="mt-1 text-sm text-muted">Everything your routines are doing, live.</p>
       </header>
       {rows === null ? (
         <ErrorBlock
@@ -70,7 +48,7 @@ export default async function RunsPage() {
           whatToDo="Try again in a moment."
         />
       ) : (
-        <RunsList rows={rows} startAction={startForm} />
+        <RunsList rows={rows} />
       )}
     </div>
   );

@@ -33,7 +33,8 @@ export interface RoutineDetailProps {
     id: string;
     name: string;
     descriptor: string;
-    budgetCapUsd: number;
+    /** Dollar cap, as a number or the database's numeric string. */
+    budgetCapUsd: number | string;
     planSteps: string[];
   };
   workspace: { id: string; name: string } | null;
@@ -125,13 +126,17 @@ export function RoutineDetail({
 
       <Section title="The plan">
         <div className="rounded-lg border border-line bg-card p-5">
-          <RouteStepList
-            steps={routine.planSteps.map((sentence, index) => ({
-              id: `${routine.id}-step-${index}`,
-              sentence,
-              state: "queued",
-            }))}
-          />
+          {routine.planSteps.length > 0 ? (
+            <RouteStepList
+              steps={routine.planSteps.map((sentence, index) => ({
+                id: `${routine.id}-step-${index}`,
+                sentence,
+                state: "queued",
+              }))}
+            />
+          ) : (
+            <p className="text-sm text-muted">{copy.planEmptyNote}</p>
+          )}
         </div>
       </Section>
 
@@ -147,7 +152,7 @@ export function RoutineDetail({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-muted">This routine runs without holding for anyone.</p>
+            <p className="text-sm text-muted">{copy.checkpointsUnknownNote}</p>
           )}
           <div>
             <h3 className="text-xs font-medium uppercase tracking-wide text-muted">Approvers</h3>

@@ -219,6 +219,15 @@ export const copy = {
     "Run now starts a rehearsal in this workspace's rehearsal copy. Nothing touches live systems.",
   runNowProductionNote: "Run now starts a live run in this workspace, within this routine's budget.",
   noRunsYet: "No runs yet",
+  routinesEmptyTitle: "No routines yet",
+  routinesEmptyBody:
+    "Routines are the jobs this organization hands over. Install one from the catalog to get started.",
+  planEmptyNote: "No plan recorded yet. The plan appears with this routine's first run.",
+  checkpointsUnknownNote:
+    "Checkpoints appear here when this routine's plan holds for a person.",
+  workspacesEmptyTitle: "No workspaces yet",
+  workspacesEmptyBody:
+    "A workspace connects the systems routines may touch. Create one to give routines somewhere to run.",
   rehearsalCopyAutoNote: "A rehearsal copy is created automatically.",
   rehearsalCopyExplainer:
     "Every workspace carries a rehearsal copy. Rehearsal runs use stand-ins for anything that would touch the outside world.",
@@ -396,13 +405,17 @@ export const catalogCopy = {
   fullyPortable: "Fully portable across vendors",
   installPinned: (version: number) => `Install pinned to v${version}`,
   installBlocked: "Connect the missing systems before installing.",
-  installedNote:
-    "Installed. This routine appears on the routines list once its workspace wiring lands.",
+  installedNote: "Installed. This routine is now on the routines list.",
+  viewInstalledRoutine: "Open the routines list",
+  installNeedsWorkspace:
+    "Create a workspace first, so this routine has somewhere to run.",
+  goToWorkspaces: "Go to workspaces",
   changelogTitle: "Changelog",
   versionChip: (version: number) => `v${version}`,
   publishedBy: (publisher: string) => `Published by ${publisher}`,
-  emptyTitle: "Nothing on the storefront yet",
-  emptyBody: "Published routines appear here for every organization to install.",
+  emptyTitle: "No routines are available to install yet",
+  emptyBody:
+    "Routines published to the catalog appear here, ready to install into a workspace. Your Convoy contact can help you get the first one published.",
 } as const;
 
 /** Billing copy; billing is invoice-first Stripe. */
@@ -544,6 +557,9 @@ export const feedbackCopy = {
 export const improveCopy = {
   evaluationTitle: "Routine evaluation",
   evaluationIntro: "How each routine scores in rehearsal, and the runs behind the numbers.",
+  evaluationEmptyTitle: "Nothing to evaluate yet",
+  evaluationEmptyBody:
+    "Once this organization has routines, their test scores chart here run by run.",
   suitesTitle: "Scenario groups",
   scenarioCount: (count: number) => `${count} ${count === 1 ? "scenario" : "scenarios"}`,
   trendTitle: "Test score trend",
@@ -551,6 +567,11 @@ export const improveCopy = {
   noScoresBody: "Rehearsal results will chart here once this routine has been scored.",
   scorecardsTitle: "Run scorecards",
   trajectoriesTitle: "Recent scored runs",
+  scoredRunsTitle: "Scored runs",
+  scoredRunsEmptyBody: "Runs of this routine appear here once they are scored.",
+  scoreColumn: "Score",
+  scoredAtColumn: "When",
+  runColumn: "Run",
   learningTitle: "Learning",
   learningIntro: "What the routines have learned, waiting for a person to approve it.",
   queueTitle: "Improvements to review",
@@ -561,6 +582,9 @@ export const improveCopy = {
   changelogTitle: "Routine changelog",
   changelogEmpty: "No changes yet",
   changelogEmptyBody: "Changes shipped to this routine will appear here.",
+  changelogNoRoutines: "Changes appear here once this organization has routines.",
+  changelogInstalledNote: "Installed from the catalog",
+  changelogCreatedNote: "Added to this organization",
   feedbackReviewTitle: "Recent feedback",
   readOnlyQueueNote: "You can read this queue. Approving and shipping need an operator.",
 } as const;

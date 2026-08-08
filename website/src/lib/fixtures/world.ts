@@ -1,9 +1,9 @@
 /**
- * The canonical fixture world, reused across unit, component, and E2E
- * suites and by the fixture adapters that stand in for services that are
- * not live yet. One world everywhere: the two demo routines plus the
- * attestation chase, generic J. Doe-style people, and the canonical
- * budget shapes ($75 / $40 / $30).
+ * The canonical fixture world, used by tests only. Production surfaces
+ * read per-organization routines from the routines table; these three
+ * demo routines, the generic J. Doe-style people, and the canonical
+ * budget shapes ($75 / $40 / $30) exist so unit and component suites can
+ * render realistic data without a database.
  */
 
 export interface FixturePerson {
