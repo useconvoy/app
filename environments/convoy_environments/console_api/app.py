@@ -126,6 +126,10 @@ def build_console_app(session_factory, secrets: SecretsService,
 
     def _audit(session, org_id: str, actor: str, action: str, subject_type: str, subject_id: str,
                diff: Optional[dict] = None) -> None:
+        # Flush domain rows first: with no relationship() constructs the unit
+        # of work won't order audit_log after workspaces on its own, and
+        # Postgres enforces the FK where SQLite silently didn't.
+        session.flush()
         session.add(AuditLog(workspace_id=org_id, actor_user_id=actor, action=action,
                              subject_type=subject_type, subject_id=subject_id, diff=diff))
 
