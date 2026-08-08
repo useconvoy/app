@@ -10,8 +10,10 @@ Spec: `convoy-environments-spec.md` (Desktop, v0.1 + settled decisions). Contrac
 ## Concepts
 
 - **Connection** (admin-owned, workspace-level): an authenticated link to one external system — Slack/Notion/GitHub token, a remote MCP server, a browser login. Carries a tool **manifest** with per-tool `execution` (`inline` | `promoted`) and `sideEffecting` flags, hashed as `manifest_hash`.
-- **Environment** (builder-owned, versioned-immutable): a policy bundle subsetting connections — explicit tool allowlists, promote escalations, browser domain allowlist, sandbox template, data namespace. `policy_hash` feeds the certified tuple; edits create a new version, so certification is voided explicitly, never silently. Runs pin `(environment_id, version)` via the binding.
+- **Workspace (console term; wire: environment)** (builder-owned, versioned-immutable): a policy bundle subsetting connections — explicit tool allowlists, promote escalations, browser domain allowlist, sandbox template, data namespace. Users see "workspace"; this service and the frozen runtime contract keep calling it an environment (`environment_id`, `EnvironmentBinding`). `policy_hash` feeds the certified tuple; edits create a new version, so certification is voided explicitly, never silently. Runs pin `(environment_id, version)` via the binding.
 - **Tool flags** (runtime DESIGN §5 vocabulary; the trust obligation is ours): `execution="inline"` + `sideEffecting=False` → one collapsed `tool_call` event, safe to re-run inside `run_turn`; `execution="promoted"` / side-effecting → `tool_intent → tool_executed → tool_result` deduped on the runtime's idempotency key `hash(run_id, step_id, turn, call_index)` (errored results never dedupe). `promoteOverrides` escalate per environment; nothing ever downgrades. Budgets and human gates are runtime-owned (workflow `BudgetState` + plan-step `HumanGate`) — this layer meters nothing and parks nothing.
+
+Naming across the console, this service, and the runtime wire is mapped in [docs/LEXICON.md](../docs/LEXICON.md) — the normative table for naming disputes.
 
 ## Layout
 
