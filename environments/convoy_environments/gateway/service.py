@@ -64,7 +64,26 @@ class GatewayService:
         conn = resolution.connection
         credential = self._secrets.reveal(conn.secret_ref) if conn.secret_ref else ""
         connector = get_connector(conn.provider, config=conn.config, transport=self._transport)
-        return await connector.invoke(tool, args, credential)
+        try:
+            return await connector.invoke(tool, args, credential)
+        except ConnectorError as err:
+            if "credential rejected" in str(err):
+                self._flag_needs_reauth(conn.id)  # console surfaces this as "Needs re-auth"
+            raise
+
+    def _flag_needs_reauth(self, connection_id: str) -> None:
+        """Best-effort status flip on a rejected credential; never raises —
+        the caller's ConnectorError is the signal that matters."""
+        try:
+            with self._policy._sf() as session:
+                from ..db.tables import Connection as ConnectionRow
+
+                row = session.get(ConnectionRow, connection_id)
+                if row is not None and row.status == "active":
+                    row.status = "needs_reauth"
+                    session.commit()
+        except Exception:  # noqa: BLE001 — flagging must not mask the tool error
+            pass
 
     # -- API ---------------------------------------------------------------
 

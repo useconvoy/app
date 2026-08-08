@@ -68,6 +68,13 @@ class McpCustomConnector(Connector):
             )
         return ConnectionManifest(tools=tools)
 
+    async def verify_credential(self, credential: str) -> Optional[bool]:
+        """Reachability probe: tools/list with the credential. The result is
+        NOT used to update the stored manifest — hash pinning is the drift
+        defense; this only proves the server answers with this credential."""
+        await self.manifest(credential)
+        return True
+
     async def invoke(self, tool: str, args: Dict[str, Any], credential: str) -> Any:
         async with self._client(headers=self._headers(credential)) as client:
             result = await self._rpc(client, "tools/call", {"name": tool, "arguments": args})

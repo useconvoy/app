@@ -46,6 +46,13 @@ class Connector(abc.ABC):
     @abc.abstractmethod
     async def invoke(self, tool: str, args: Dict[str, Any], credential: str) -> Any: ...
 
+    async def verify_credential(self, credential: str) -> Optional[bool]:
+        """Best-effort, side-effect-free probe of a credential. Returns True
+        on a positive check, raises ConnectorError on a definite failure, and
+        returns None when the provider has no cheap safe probe (the console
+        then reports the credential as stored-but-unverified)."""
+        return None
+
 
 _REGISTRY: Dict[str, Type[Connector]] = {}
 
