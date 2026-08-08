@@ -30,6 +30,8 @@ src/notifier/           the notification worker (events feed -> bell panel)
 db/migrations/          website schema + RLS policies
 ```
 
+How the lexicon's user-facing terms map to backend names across services is tabled in [docs/LEXICON.md](../docs/LEXICON.md).
+
 ## Development
 
 ```bash
