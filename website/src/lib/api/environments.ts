@@ -24,6 +24,7 @@ import { requireSession } from "@/lib/auth/session";
 import { withOrgContext } from "@/lib/db";
 import { getEnvironmentsOrgId, setEnvironmentsOrgId } from "@/lib/orgs/queries";
 import type { Role } from "@/lib/permissions";
+import { firstCoveringWorkspace } from "@/lib/workspaces/fit";
 import { grantsFromChoices } from "@/lib/workspaces/system-catalog";
 import {
   connectionPlanForGrants,
@@ -520,20 +521,17 @@ export async function syncInviteToEnvironments(input: {
 
 /**
  * Which workspace a routine runs in when it carries no recorded binding:
- * the first workspace whose grants cover every system the routine needs.
- * Routines installed from the catalog record their workspace directly;
- * this fallback serves anything older or unbound.
+ * the first workspace whose grants cover every system the routine needs
+ * (coverage itself is defined once, in lib/workspaces/fit). Routines
+ * installed from the catalog record their workspace directly; this
+ * fallback serves anything older or unbound, and full precedence over the
+ * recorded binding lives in lib/routines/data resolveWorkspace.
  */
 export function workspaceForRoutine(
   routine: { systems: string[] },
   workspaces: Workspace[],
 ): Workspace | null {
-  return (
-    workspaces.find((workspace) => {
-      const connected = new Set(workspace.systems.map((grant) => grant.systemId));
-      return routine.systems.every((systemId) => connected.has(systemId));
-    }) ?? null
-  );
+  return firstCoveringWorkspace(routine.systems, workspaces);
 }
 
 /** The inverse mapping, for "used by M routines" workspace cards. */

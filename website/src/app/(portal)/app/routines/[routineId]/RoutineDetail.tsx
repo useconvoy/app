@@ -38,6 +38,16 @@ export interface RoutineDetailProps {
     planSteps: string[];
   };
   workspace: { id: string; name: string } | null;
+  /**
+   * Every workspace the reassignment picker offers. `missing` holds plain
+   * display names of required systems a workspace does not connect; only
+   * an empty `missing` is selectable.
+   */
+  workspaceOptions: Array<{ id: string; name: string; missing: string[] }>;
+  /** Plain warning when the recorded workspace stopped covering the routine. */
+  staleNotice: string | null;
+  canChangeWorkspace: boolean;
+  changeWorkspaceAction: FormAction;
   systems: SystemGrant[];
   checkpoints: Array<{ title: string; behavior: string }>;
   approvers: ApproverAssignment[];
@@ -67,6 +77,10 @@ export interface RoutineDetailProps {
 export function RoutineDetail({
   routine,
   workspace,
+  workspaceOptions,
+  staleNotice,
+  canChangeWorkspace,
+  changeWorkspaceAction,
   systems,
   checkpoints,
   approvers,
@@ -103,6 +117,49 @@ export function RoutineDetail({
           {workspace && <> · {workspace.name}</>}
         </p>
       </header>
+
+      <Section title="Workspace">
+        <div className="rounded-lg border border-line bg-card p-5 space-y-3">
+          {staleNotice && (
+            <p role="alert" className="rounded-md border border-hold-soft bg-hold-soft p-3 text-sm text-hold-text">
+              {staleNotice}
+            </p>
+          )}
+          <p className="text-sm text-ink">
+            {workspace ? (
+              <>
+                Runs use <span className="font-medium">{workspace.name}</span>.
+              </>
+            ) : (
+              "No workspace connects the systems this routine needs yet."
+            )}
+          </p>
+          {canChangeWorkspace && workspaceOptions.length > 0 && (
+            <form action={changeWorkspaceAction} className="flex flex-wrap items-center gap-2">
+              <label className="text-xs text-muted" htmlFor="routine-workspace-select">
+                Move to
+              </label>
+              <Select
+                id="routine-workspace-select"
+                name="workspaceId"
+                defaultValue={workspace?.id ?? ""}
+                className="rounded-md border border-line bg-card px-2 py-1 text-sm text-ink"
+              >
+                {workspaceOptions.map((option) => (
+                  <option key={option.id} value={option.id} disabled={option.missing.length > 0}>
+                    {option.missing.length > 0
+                      ? `${option.name} (missing ${option.missing.join(", ")})`
+                      : option.name}
+                  </option>
+                ))}
+              </Select>
+              <Button type="submit" variant="secondary">
+                Move routine
+              </Button>
+            </form>
+          )}
+        </div>
+      </Section>
 
       <Section title="Systems it uses">
         {systems.length > 0 ? (
