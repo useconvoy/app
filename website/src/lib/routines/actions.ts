@@ -11,11 +11,13 @@
 
 import { revalidatePath } from "next/cache";
 
+import { environmentsClient } from "@/lib/api/environments";
 import { createRun } from "@/lib/api/runs";
 import { requireOrgSession } from "@/lib/auth/session";
 import { withOrgContext } from "@/lib/db";
 import { getMembership } from "@/lib/orgs/queries";
 import { can } from "@/lib/permissions";
+import { missingSystems, systemDisplayNames } from "@/lib/workspaces/fit";
 import { recordRunTarget, resolveWorkspace } from "./data";
 import {
   getRoutine,
@@ -112,6 +114,41 @@ export async function updateTriggerSchedule(routineId: string, description: stri
   if (trimmed.length > 200) throw new Error("Keep the schedule under 200 characters");
   await setRoutineSchedule(session.orgId, routineId, trimmed);
   revalidatePath(detailPath(routineId));
+}
+
+/**
+ * Move a routine to another workspace. Reassignment changes which systems
+ * runs may touch, so it takes the same capability as installing and lands
+ * an admin_audit row; the target must cover every system the routine
+ * needs (the same coverage rule the install picker shows).
+ */
+export async function setRoutineWorkspace(routineId: string, workspaceId: string): Promise<void> {
+  const { session, membership } = await requireActor();
+  if (!can("manage_workspaces", membership.role, membership.capabilities)) {
+    throw new Error("You cannot move routines between workspaces");
+  }
+  const routine = await requireRoutine(session.orgId, routineId);
+  const workspace = await environmentsClient().getWorkspace(session.orgId, workspaceId);
+  if (!workspace) throw new Error("That workspace does not exist");
+  const missing = missingSystems(routine.systems, workspace);
+  if (missing.length > 0) {
+    const names = systemDisplayNames([workspace]);
+    throw new Error(
+      `That workspace does not connect ${missing.map((id) => names[id] ?? id).join(", ")}`,
+    );
+  }
+  await withOrgContext({ orgId: session.orgId, userId: session.userId }, async (client) => {
+    await client.query(
+      "UPDATE routines SET workspace_id = $1 WHERE org_id = $2 AND id = $3",
+      [workspace.id, session.orgId, routineId],
+    );
+    await client.query(
+      "INSERT INTO admin_audit (org_id, actor_id, action, subject) VALUES ($1, $2, $3, $4)",
+      [session.orgId, session.userId, "routine.workspace_changed", `${routineId} into ${workspace.id}`],
+    );
+  });
+  revalidatePath(detailPath(routineId));
+  revalidatePath("/app/routines");
 }
 
 export interface RunNowResult {

@@ -11,11 +11,13 @@ import {
   assignApprover,
   removeApprover,
   runRoutineNow,
+  setRoutineWorkspace,
   updateTriggerSchedule,
 } from "@/lib/routines/actions";
 import { getRoutineDetail } from "@/lib/routines/data";
 import { requireRoutinesPage } from "@/lib/routines/gate";
 import { orgTenantId } from "@/lib/routines/queries";
+import { missingSystems, systemDisplayNames } from "@/lib/workspaces/fit";
 import { improveCopy } from "@/lexicon";
 import { RoutineDetail } from "./RoutineDetail";
 
@@ -95,10 +97,32 @@ export default async function RoutineDetailPage({
     await updateTriggerSchedule(routineId, String(formData.get("schedule") ?? ""));
   }
 
+  async function changeWorkspaceAction(formData: FormData) {
+    "use server";
+    await setRoutineWorkspace(routineId, String(formData.get("workspaceId") ?? ""));
+  }
+
+  const canChangeWorkspace = can("manage_workspaces", membership.role, membership.capabilities);
+  const names = systemDisplayNames(data.workspaces);
+  const workspaceOptions = data.workspaces.map((candidate) => ({
+    id: candidate.id,
+    name: candidate.name,
+    missing: missingSystems(data.routine.systems, candidate).map((id) => names[id] ?? id),
+  }));
+  const staleNotice = data.staleAssignment
+    ? `${data.staleAssignment.workspace.name} no longer connects ${data.staleAssignment.missingSystems
+        .map((id) => names[id] ?? id)
+        .join(", ")}. Runs use ${data.workspace?.name ?? "no workspace"} until this routine is moved.`
+    : null;
+
   return (
     <RoutineDetail
       routine={data.routine}
       workspace={data.workspace ? { id: data.workspace.id, name: data.workspace.name } : null}
+      workspaceOptions={workspaceOptions}
+      staleNotice={staleNotice}
+      canChangeWorkspace={canChangeWorkspace}
+      changeWorkspaceAction={changeWorkspaceAction}
       systems={data.systems}
       checkpoints={[]}
       approvers={data.approvers}

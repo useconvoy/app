@@ -49,6 +49,13 @@ function detailProps() {
   return {
     routine,
     workspace: { id: "workspace-compliance", name: "Compliance workspace" },
+    workspaceOptions: [
+      { id: "workspace-compliance", name: "Compliance workspace", missing: [] },
+      { id: "workspace-slim", name: "Slim workspace", missing: ["Messaging"] },
+    ],
+    staleNotice: null,
+    canChangeWorkspace: true,
+    changeWorkspaceAction: vi.fn(),
     systems: [
       {
         systemId: "identity_provider",

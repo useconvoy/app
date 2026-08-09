@@ -11,11 +11,11 @@ import "server-only";
 import type { ActorContext } from "@/lib/api/client";
 import {
   environmentsClient,
-  workspaceForRoutine,
   type SystemGrant,
   type Workspace,
 } from "@/lib/api/environments";
 import { listRuns, routineIdForRun } from "@/lib/api/runs";
+import { selectWorkspace, type WorkspaceSelection } from "@/lib/workspaces/fit";
 import {
   getRoutine,
   listApprovers,
@@ -115,7 +115,16 @@ export async function listRoutineViews(
 
 export interface RoutineDetailData {
   routine: RoutineRecord;
+  /** The workspace runs use, after the precedence in resolveWorkspaceSelection. */
   workspace: Workspace | null;
+  /**
+   * Set when the routine's recorded workspace no longer covers its
+   * systems; the detail page renders a plain warning from it while runs
+   * fall back to the auto-match in `workspace`.
+   */
+  staleAssignment: { workspace: Workspace; missingSystems: string[] } | null;
+  /** Every workspace of the org, for the reassignment picker. */
+  workspaces: Workspace[];
   /** Workspace grants for the systems this routine uses. */
   systems: SystemGrant[];
   approvers: ApproverAssignment[];
@@ -124,19 +133,26 @@ export interface RoutineDetailData {
 }
 
 /**
- * Resolve a routine's workspace: the recorded binding wins; a routine
- * without one falls back to the first workspace covering its systems.
+ * Resolve a routine's workspace with full detail. Precedence (the pure
+ * rule lives in lib/workspaces/fit selectWorkspace): the recorded binding
+ * wins while it exists and still covers the routine's systems; otherwise
+ * the routine falls back to the first workspace covering them, and a
+ * stale recorded binding is reported so surfaces can warn about it.
  */
+export async function resolveWorkspaceSelection(
+  orgId: string,
+  routine: RoutineRecord,
+): Promise<WorkspaceSelection<Workspace>> {
+  const workspaces = await environmentsClient().listWorkspaces(orgId);
+  return selectWorkspace(routine, workspaces);
+}
+
+/** The workspace a run of this routine would use, or null when none fits. */
 export async function resolveWorkspace(
   orgId: string,
   routine: RoutineRecord,
 ): Promise<Workspace | null> {
-  const client = environmentsClient();
-  if (routine.workspaceId) {
-    return client.getWorkspace(orgId, routine.workspaceId);
-  }
-  const workspaces = await client.listWorkspaces(orgId);
-  return workspaceForRoutine(routine, workspaces);
+  return (await resolveWorkspaceSelection(orgId, routine)).workspace;
 }
 
 export async function getRoutineDetail(
@@ -146,15 +162,18 @@ export async function getRoutineDetail(
 ): Promise<RoutineDetailData | null> {
   const routine = await getRoutine(orgId, routineId);
   if (!routine) return null;
-  const [workspace, approvers, history] = await Promise.all([
-    resolveWorkspace(orgId, routine),
+  const [workspaces, approvers, history] = await Promise.all([
+    environmentsClient().listWorkspaces(orgId),
     listApprovers(orgId, routineId),
     runHistory(actor),
   ]);
+  const { workspace, staleAssignment } = selectWorkspace(routine, workspaces);
   const grants = new Map((workspace?.systems ?? []).map((grant) => [grant.systemId, grant]));
   return {
     routine,
     workspace,
+    staleAssignment,
+    workspaces,
     systems: routine.systems
       .map((systemId) => grants.get(systemId))
       .filter((grant): grant is SystemGrant => grant !== undefined),
