@@ -102,11 +102,13 @@ describe("CreateWorkspaceModal", () => {
     expect(alert).toHaveTextContent("Connect at least one system.");
   });
 
-  it("shows the automatic rehearsal copy note", async () => {
+  it("points to environment setup as the next step", async () => {
     const user = userEvent.setup();
     render(<CreateWorkspaceModal systems={systems} create={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "New workspace" }));
-    expect(screen.getByText("A rehearsal copy is created automatically.")).toBeInTheDocument();
+    expect(
+      screen.getByText("You can add a runtime environment after creating the workspace."),
+    ).toBeInTheDocument();
   });
 });
 
@@ -143,6 +145,7 @@ describe("WorkspaceDetail", () => {
       <WorkspaceDetail
         workspace={fixtureWorkspaces[0]!}
         routineNames={["Quarterly user access review"]}
+        environments={[{ id: "environment-1", name: "Production operations", isDefault: true }]}
       />,
     );
     expect(screen.getAllByText("View only")).toHaveLength(2);
@@ -150,11 +153,11 @@ describe("WorkspaceDetail", () => {
     expect(
       screen.getByText("Stand-in for Messaging: messages are held in the outbox instead of being sent."),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Every workspace carries a rehearsal copy/),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Virtual time")).toBeInTheDocument();
     expect(screen.getByText("Quarterly user access review")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Production operations/ })).toHaveAttribute(
+      "href",
+      "/app/environments/environment-1",
+    );
     expect(screen.getByText("v2")).toBeInTheDocument();
   });
 });

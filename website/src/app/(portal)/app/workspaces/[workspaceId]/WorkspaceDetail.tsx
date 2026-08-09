@@ -1,7 +1,6 @@
 /**
- * Workspace detail, presentational: connected
- * systems with their grants, stand-ins per side-effecting system, the
- * rehearsal copy, the clock, versions, and the activity placeholder.
+ * Workspace detail, presentational: connected systems and grants,
+ * stand-ins, named runtime environments, versions, routines, and activity.
  */
 import Link from "next/link";
 
@@ -10,15 +9,19 @@ import { EmptyState } from "@/components/EmptyState";
 import { SystemRow } from "@/components/SystemRow";
 import type { Workspace } from "@/lib/api/environments";
 import { friendlyDate } from "@/lib/format";
-import { clockModeDescriptions, clockModeLabels, copy, terms } from "@/lexicon";
 
 export interface WorkspaceDetailProps {
   workspace: Workspace;
   /** Names of routines that run in this workspace. */
   routineNames: string[];
+  environments?: Array<{ id: string; name: string; isDefault: boolean }>;
 }
 
-export function WorkspaceDetail({ workspace, routineNames }: WorkspaceDetailProps) {
+export function WorkspaceDetail({
+  workspace,
+  routineNames,
+  environments = [],
+}: WorkspaceDetailProps) {
   const standIns = workspace.systems.filter((grant) => grant.standIn);
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -67,18 +70,31 @@ export function WorkspaceDetail({ workspace, routineNames }: WorkspaceDetailProp
         )}
       </Section>
 
-      <Section title="Rehearsal copy">
-        <aside className="rounded-lg border border-dashed border-graphite bg-graphite-soft p-4">
-          <p className="text-sm text-graphite">{copy.rehearsalCopyExplainer}</p>
-          <p className="mt-2 font-mono text-xs uppercase text-graphite">{terms.sandboxBinding}</p>
-        </aside>
-      </Section>
-
-      <Section title="Clock">
-        <div className="rounded-lg border border-line bg-card p-5">
-          <Chip mono>{clockModeLabels[workspace.clockMode]}</Chip>
-          <p className="mt-2 text-sm text-muted">{clockModeDescriptions[workspace.clockMode]}</p>
-        </div>
+      <Section title="Environments">
+        {environments.length > 0 ? (
+          <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2">
+            {environments.map((environment) => (
+              <li key={environment.id}>
+                <Link
+                  href={`/app/environments/${environment.id}`}
+                  className="block rounded-lg border border-line bg-card p-4 hover:border-pine"
+                >
+                  <span className="text-sm font-medium text-ink">{environment.name}</span>
+                  {environment.isDefault && (
+                    <span className="ml-2 text-xs text-muted">Default</span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="rounded-lg border border-dashed border-line p-4 text-sm text-muted">
+            No named environment yet. Runs use the workspace fallback until you create one.
+          </p>
+        )}
+        <Link href="/app/environments" className="mt-3 inline-block text-sm text-ink underline">
+          Manage environments
+        </Link>
       </Section>
 
       <Section title="Versions">

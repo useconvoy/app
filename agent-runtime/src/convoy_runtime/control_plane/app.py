@@ -121,14 +121,37 @@ async def _resolve_binding(
     (stub-env in the local stack)."""
     config = _config(request)
     http = cast(httpx.AsyncClient, request.app.state.http)
+    registry_environment_id, binding_kind = _environment_registry_target(environment_id)
     response = await http.get(
-        f"{config.stub_env_url}/environments/{environment_id}",
-        params={"tenant_id": tenant_id},
+        f"{config.stub_env_url}/environments/{registry_environment_id}",
+        params={"tenant_id": tenant_id, "kind": binding_kind},
+        headers=(
+            {"X-Convoy-Internal": config.environments_internal_token}
+            if config.environments_internal_token
+            else None
+        ),
     )
     if response.status_code == 404:
         raise HTTPException(status_code=404, detail=f"unknown environment {environment_id!r}")
     response.raise_for_status()
     return EnvironmentBinding.model_validate(response.json())
+
+
+def _environment_registry_target(environment_id: str) -> tuple[str, str]:
+    """Translate a console binding alias into the frozen registry seam.
+
+    The registry selects rehearsal with ``?kind=sandbox`` while the website
+    stores a convenient ``<environment>/sandbox`` reference. Keeping the
+    translation at the control-plane edge means RunState and projections can
+    retain the exact environment target the user selected.
+    """
+
+    suffix = "/sandbox"
+    if environment_id.endswith(suffix):
+        registry_id = environment_id[: -len(suffix)]
+        if registry_id:
+            return registry_id, "sandbox"
+    return environment_id, "production"
 
 
 @app.post("/runs", response_model=CreateRunResponse, status_code=202)

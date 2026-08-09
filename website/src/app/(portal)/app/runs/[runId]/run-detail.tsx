@@ -51,11 +51,58 @@ function planVersion(plan: RunView["plan"]): number | null {
   return typeof version === "number" ? version : null;
 }
 
-function workspaceIdFrom(events: readonly RunStreamEvent[]): string | null {
+function environmentIdFrom(events: readonly RunStreamEvent[]): string | null {
   const started = events.find((event) => event.type === "run_started");
   const id = started?.payload["environment_id"];
   return typeof id === "string" ? id : null;
 }
+
+interface ExecutionRuntime {
+  environmentId: string;
+  status: string;
+  computeId: string | null;
+  generation: number;
+  checkpointId: string | null;
+}
+
+function latestExecutionRuntime(
+  events: readonly RunStreamEvent[],
+  initial: RunView["execution_session"],
+): ExecutionRuntime | null {
+  let current: ExecutionRuntime | null = initial
+    ? {
+        environmentId: initial.environment_id,
+        status: initial.status,
+        computeId: initial.sandbox_id ?? null,
+        generation: initial.generation,
+        checkpointId: initial.latest_checkpoint_id ?? null,
+      }
+    : null;
+  for (const event of events) {
+    if (!event.type.startsWith("environment_")) continue;
+    const generation = event.payload["generation"];
+    const checkpointId = event.payload["checkpoint_id"];
+    const computeId = event.payload["sandbox_id"];
+    const executionStatus = event.payload["execution_status"];
+    current = {
+      environmentId: current?.environmentId ?? environmentIdFrom(events) ?? "",
+      status: typeof executionStatus === "string" ? executionStatus : current?.status ?? "unprovisioned",
+      computeId: typeof computeId === "string" ? computeId : null,
+      generation: typeof generation === "number" ? generation : current?.generation ?? 0,
+      checkpointId:
+        typeof checkpointId === "string" ? checkpointId : current?.checkpointId ?? null,
+    };
+  }
+  return current;
+}
+
+const EXECUTION_STATUS_LABELS: Record<string, string> = {
+  unprovisioned: "Not started",
+  active: "Compute active",
+  checkpointed: "Saving",
+  hibernated: "Paused, compute released",
+  terminated: "Compute released",
+};
 
 /**
  * Steps holding at a checkpoint right now, from confirmed events: opened
@@ -234,7 +281,11 @@ export function RunDetail({
   const blockedSteps = openBlockedSteps(events, initial);
   const kind = heldKind(status);
   const version = planVersion(plan);
-  const workspaceId = workspaceIdFrom(events);
+  const environmentId = environmentIdFrom(events);
+  const executionRuntime = useMemo(
+    () => latestExecutionRuntime(events, initial.execution_session ?? null),
+    [events, initial.execution_session],
+  );
   const deliverables = landReport?.["deliverables"];
   const filesCount = Array.isArray(deliverables) ? deliverables.length : null;
 
@@ -401,10 +452,10 @@ export function RunDetail({
                     </button>
                   </dd>
                 </div>
-                {workspaceId && (
+                {environmentId && (
                   <div>
-                    <dt className="text-muted">Workspace</dt>
-                    <dd className="mt-0.5 break-all font-mono text-ink">{workspaceId}</dd>
+                    <dt className="text-muted">Environment</dt>
+                    <dd className="mt-0.5 break-all font-mono text-ink">{environmentId}</dd>
                   </div>
                 )}
                 {version !== null && (
@@ -425,6 +476,41 @@ export function RunDetail({
               </dl>
             </details>
           </section>
+          {executionRuntime && (
+            <section aria-label="Environment runtime" className={cardClass}>
+              <h2 className="font-display text-lg text-ink">Environment runtime</h2>
+              <dl className="mt-3 space-y-3 text-sm">
+                <div>
+                  <dt className="text-muted">State</dt>
+                  <dd className="mt-1 text-ink">
+                    {EXECUTION_STATUS_LABELS[executionRuntime.status] ?? executionRuntime.status}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted">Compute generation</dt>
+                  <dd className="mt-1 font-mono text-xs text-ink">
+                    {executionRuntime.generation || "Not started"}
+                  </dd>
+                </div>
+                {executionRuntime.checkpointId && (
+                  <div>
+                    <dt className="text-muted">Latest saved state</dt>
+                    <dd className="mt-1 font-mono text-xs text-ink">
+                      {executionRuntime.checkpointId}
+                    </dd>
+                  </div>
+                )}
+                {executionRuntime.computeId && (
+                  <div>
+                    <dt className="text-muted">Compute id</dt>
+                    <dd className="mt-1 break-all font-mono text-xs text-ink">
+                      {executionRuntime.computeId}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            </section>
+          )}
         </aside>
       </div>
     </div>

@@ -18,14 +18,25 @@ export default async function WorkspaceDetailPage({
   const { workspaceId } = await params;
   const { session } = await requireWorkspacesPage();
   const client = environmentsClient();
-  const [workspace, workspaces, routines] = await Promise.all([
+  const [workspace, workspaces, routines, executionEnvironments] = await Promise.all([
     client.getWorkspace(session.orgId, workspaceId),
     client.listWorkspaces(session.orgId),
     listRoutines(session.orgId),
+    client.listExecutionEnvironments(session.orgId, workspaceId),
   ]);
   if (!workspace) notFound();
   const routineNames = routinesUsingWorkspace(workspace, workspaces, routines).map(
     (routine) => routine.name,
   );
-  return <WorkspaceDetail workspace={workspace} routineNames={routineNames} />;
+  return (
+    <WorkspaceDetail
+      workspace={workspace}
+      routineNames={routineNames}
+      environments={executionEnvironments.map((environment) => ({
+        id: environment.id,
+        name: environment.name,
+        isDefault: environment.isDefault,
+      }))}
+    />
+  );
 }

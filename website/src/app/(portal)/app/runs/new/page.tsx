@@ -8,6 +8,7 @@ import { RouteStepList } from "@/components/RouteStepList";
 import { money } from "@/lib/format";
 import { can } from "@/lib/permissions";
 import { runRoutineNow } from "@/lib/routines/actions";
+import { environmentsClient } from "@/lib/api/environments";
 import { resolveWorkspace } from "@/lib/routines/data";
 import { requireRoutinesPage } from "@/lib/routines/gate";
 import { listRoutines } from "@/lib/routines/queries";
@@ -36,11 +37,18 @@ export default async function StartRunPage({
 
   const selected = routines.find((routine) => routine.id === routineParam) ?? null;
   const workspace = selected ? await resolveWorkspace(session.orgId, selected) : null;
+  const executionEnvironments = workspace
+    ? await environmentsClient().listExecutionEnvironments(session.orgId, workspace.id)
+    : [];
 
-  async function startAction() {
+  async function startAction(formData: FormData) {
     "use server";
     if (!selected) return;
-    const { runId } = await runRoutineNow(selected.id);
+    const environmentId = formData.get("environmentId");
+    const { runId } = await runRoutineNow(
+      selected.id,
+      typeof environmentId === "string" && environmentId ? environmentId : undefined,
+    );
     redirect(`/app/runs/${runId}`);
   }
 
@@ -128,6 +136,25 @@ export default async function StartRunPage({
                     <p className="text-sm text-muted">{startRunCopy.noWorkspaceNote}</p>
                   ) : (
                     <form action={startAction}>
+                      {executionEnvironments.length > 0 && (
+                        <label className="mb-3 block text-xs text-muted">
+                          Environment
+                          <select
+                            name="environmentId"
+                            defaultValue={
+                              executionEnvironments.find((environment) => environment.isDefault)?.id ??
+                              executionEnvironments[0]?.id
+                            }
+                            className="mt-1 block w-full rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink"
+                          >
+                            {executionEnvironments.map((environment) => (
+                              <option key={environment.id} value={environment.id}>
+                                {environment.name}{environment.isDefault ? " (default)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
                       <Button type="submit">
                         {production ? startRunCopy.startProduction : startRunCopy.startRehearsal}
                       </Button>
