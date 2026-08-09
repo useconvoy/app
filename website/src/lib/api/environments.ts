@@ -31,6 +31,7 @@ import {
   environmentsRole,
   normalizeClockMode,
   workspaceFromRegistryRow,
+  type DeclaredManifest,
   type RegistryConnectionRow,
   type RegistryWorkspaceRow,
 } from "./environments-mapping";
@@ -84,10 +85,24 @@ export interface CompatibilityReport {
   vendorSpecificToolCount: number;
 }
 
+/** A custom system granted at workspace create: the org's own connection. */
+export interface CustomWorkspaceSystem {
+  /** Grant id, "custom:<connectionId>". */
+  id: string;
+  connectionId: string;
+  displayName: string;
+  sideEffecting: boolean;
+  standInNote: string | null;
+  /** The connection's declared tools, for scope → allowlist mapping. */
+  tools: Array<{ name: string; sideEffecting: boolean }>;
+}
+
 export interface CreateWorkspaceInput {
   name: string;
   purpose: string;
   systems: Array<{ systemId: string; scope: "read" | "write"; useStandIn: boolean }>;
+  /** Definitions for any "custom:" ids in `systems`; supplied server-side. */
+  customSystems?: CustomWorkspaceSystem[];
 }
 
 export interface EnvironmentsClient {
@@ -167,7 +182,7 @@ class DbEnvironmentsClient implements EnvironmentsClient {
   }
 
   async createWorkspace(orgId: string, input: CreateWorkspaceInput): Promise<Workspace> {
-    const systems = grantsFromChoices(input.systems);
+    const systems = grantsFromChoices(input.systems, input.customSystems ?? []);
     const now = new Date().toISOString();
     const versions: WorkspaceVersion[] = [{ version: 1, note: "Created", createdAt: now }];
     return withOrgContext({ orgId }, async (client) => {
@@ -358,7 +373,8 @@ class RegistryEnvironmentsClient implements EnvironmentsClient {
   async createWorkspace(orgId: string, input: CreateWorkspaceInput): Promise<Workspace> {
     const ctx = await this.context(orgId);
     if (!ctx) return this.fallback.createWorkspace(orgId, input);
-    const systems = grantsFromChoices(input.systems);
+    const custom = input.customSystems ?? [];
+    const systems = grantsFromChoices(input.systems, custom);
 
     // Granted systems with a registry provider become connections; ensure
     // one connection per provider exists in the organization first. New
@@ -392,6 +408,22 @@ class RegistryEnvironmentsClient implements EnvironmentsClient {
         connectionId = created.connectionId;
       }
       connections.push({ connectionId, toolAllowlist: plan.toolAllowlist });
+    }
+
+    // Custom systems already ARE connections; the grant maps straight to
+    // an allowlist over the tools the server declared (read stays to the
+    // non-side-effecting ones, write takes them all).
+    const customById = new Map(custom.map((definition) => [definition.id, definition]));
+    for (const choice of input.systems) {
+      const definition = customById.get(choice.systemId);
+      if (!definition) continue;
+      const tools = choice.scope === "write"
+        ? definition.tools
+        : definition.tools.filter((tool) => !tool.sideEffecting);
+      connections.push({
+        connectionId: definition.connectionId,
+        toolAllowlist: tools.map((tool) => tool.name),
+      });
     }
 
     const created = await registryFetch<RegistryWorkspaceCreated>(
@@ -517,6 +549,158 @@ export async function syncInviteToEnvironments(input: {
   } catch (error) {
     console.error(`environments registry membership sync failed for org ${input.orgId}`, error);
   }
+}
+
+// ---------------------------------------------------------------------------
+// The systems surface: the org's registry connections, for the Systems page
+// and the workspace modal's status chips. Everything here returns null (or
+// no-ops) when the registry flag is off or the org was never provisioned —
+// callers render the honest not-linked state instead of failing.
+
+export interface SystemConnection {
+  connectionId: string;
+  kind: string;
+  provider: string;
+  displayName: string;
+  status: "active" | "needs_reauth" | "revoked";
+  hasCredential: boolean;
+  toolCount: number;
+  /** The connection's declared tool surface, with honesty flags. */
+  tools: Array<{ name: string; sideEffecting: boolean }>;
+}
+
+interface RegistryConnectionDetail {
+  connectionId: string;
+  kind: string;
+  provider: string;
+  displayName: string;
+  status: SystemConnection["status"];
+  hasCredential: boolean;
+  tools: Array<{ name: string; execution: string; sideEffecting: boolean }>;
+}
+
+async function systemsContext(orgId: string) {
+  const config = registryConfig();
+  if (!config) return null;
+  const registryOrgId = await getEnvironmentsOrgId(orgId);
+  if (!registryOrgId) return null;
+  const session = await requireSession();
+  return { config, registryOrgId, actsFor: session.email };
+}
+
+/** Every registry connection of the org, with credential + tool facts. */
+export async function listSystemConnections(orgId: string): Promise<SystemConnection[] | null> {
+  const ctx = await systemsContext(orgId);
+  if (!ctx) return null;
+  const rows = await registryFetch<RegistryConnectionRow[]>(
+    ctx.config,
+    `/organizations/${ctx.registryOrgId}/connections`,
+    { actsFor: ctx.actsFor },
+  );
+  const details = await Promise.all(
+    rows.map((row) =>
+      registryFetch<RegistryConnectionDetail>(
+        ctx.config,
+        `/organizations/${ctx.registryOrgId}/connections/${row.connectionId}`,
+        { actsFor: ctx.actsFor },
+      ),
+    ),
+  );
+  return details.map((detail) => ({
+    connectionId: detail.connectionId,
+    kind: detail.kind,
+    provider: detail.provider,
+    displayName: detail.displayName,
+    status: detail.status,
+    hasCredential: detail.hasCredential,
+    toolCount: detail.tools.length,
+    tools: detail.tools.map((tool) => ({ name: tool.name, sideEffecting: tool.sideEffecting })),
+  }));
+}
+
+/**
+ * Ensure a managed connection exists for a catalog system's provider,
+ * attaching the pasted credential. Declared manifests keep registration
+ * offline; the separate credential attach then runs the provider's
+ * verification probe. Returns the surfaced verification state.
+ */
+export async function connectManagedSystem(
+  orgId: string,
+  input: { provider: string; displayName: string; manifest: DeclaredManifest; secretValue: string },
+): Promise<{ connectionId: string; status: string }> {
+  const ctx = await systemsContext(orgId);
+  if (!ctx) throw new Error("This deployment is not linked to the systems registry");
+  const existing = (await listSystemConnections(orgId)) ?? [];
+  let connectionId = existing.find((connection) => connection.provider === input.provider)
+    ?.connectionId;
+  if (!connectionId) {
+    const created = await registryFetch<{ connectionId: string }>(
+      ctx.config,
+      `/organizations/${ctx.registryOrgId}/connections`,
+      {
+        method: "POST",
+        body: {
+          kind: "mcp_managed",
+          provider: input.provider,
+          displayName: input.displayName,
+          manifest: input.manifest,
+        },
+        actsFor: ctx.actsFor,
+      },
+    );
+    connectionId = created.connectionId;
+  }
+  const attached = await registryFetch<{ status: string }>(
+    ctx.config,
+    `/organizations/${ctx.registryOrgId}/connections/${connectionId}/secret`,
+    { method: "POST", body: { secretValue: input.secretValue }, actsFor: ctx.actsFor },
+  );
+  return { connectionId, status: attached.status };
+}
+
+/**
+ * Register a custom system: a remote MCP server the enterprise runs.
+ * Registration without a declared manifest makes the registry fetch the
+ * tool surface live from the server, so a bad URL or rejected token fails
+ * here, not at run time. Returns the tools the server declared.
+ */
+export async function connectCustomSystem(
+  orgId: string,
+  input: { displayName: string; url: string; bearerToken?: string },
+): Promise<{ connectionId: string; tools: string[] }> {
+  const ctx = await systemsContext(orgId);
+  if (!ctx) throw new Error("This deployment is not linked to the systems registry");
+  const created = await registryFetch<{ connectionId: string; tools: string[] }>(
+    ctx.config,
+    `/organizations/${ctx.registryOrgId}/connections`,
+    {
+      method: "POST",
+      body: {
+        kind: "mcp_custom",
+        provider: "mcp_custom",
+        displayName: input.displayName,
+        config: { url: input.url },
+        ...(input.bearerToken ? { secretValue: input.bearerToken } : {}),
+      },
+      actsFor: ctx.actsFor,
+    },
+  );
+  return created;
+}
+
+/** Re-attach a credential on an existing connection (any provider). */
+export async function attachSystemCredential(
+  orgId: string,
+  connectionId: string,
+  secretValue: string,
+): Promise<{ status: string }> {
+  const ctx = await systemsContext(orgId);
+  if (!ctx) throw new Error("This deployment is not linked to the systems registry");
+  return registryFetch<{ status: string }>(
+    ctx.config,
+    `/organizations/${ctx.registryOrgId}/connections/${connectionId}/secret`,
+    { method: "POST", body: { secretValue }, actsFor: ctx.actsFor },
+  );
 }
 
 /**

@@ -119,11 +119,24 @@ export interface GrantChoice {
 /**
  * Picker choices -> stored grants. The create modal blocks a live
  * side-effecting write client-side; this holds the same line so no caller
- * can slip one past the form.
+ * can slip one past the form. Custom systems (an org's own tool servers,
+ * ids "custom:<connection>") resolve through the definitions the caller
+ * supplies, under exactly the same stand-in rule.
  */
-export function grantsFromChoices(choices: GrantChoice[]): SystemGrant[] {
+export interface CustomSystemDefinition {
+  id: string;
+  displayName: string;
+  sideEffecting: boolean;
+  standInNote: string | null;
+}
+
+export function grantsFromChoices(
+  choices: GrantChoice[],
+  customSystems: CustomSystemDefinition[] = [],
+): SystemGrant[] {
+  const customById = new Map(customSystems.map((system) => [system.id, system]));
   return choices.map((choice) => {
-    const system = catalogSystem(choice.systemId);
+    const system = catalogSystem(choice.systemId) ?? customById.get(choice.systemId);
     if (!system) throw new Error(`unknown system: ${choice.systemId}`);
     const needsStandIn = system.sideEffecting && choice.scope === "write";
     if (needsStandIn && !choice.useStandIn) {

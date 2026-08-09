@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 
-import { environmentsClient, routinesUsingWorkspace } from "@/lib/api/environments";
+import {
+  environmentsClient,
+  listSystemConnections,
+  routinesUsingWorkspace,
+} from "@/lib/api/environments";
 import { listRoutines } from "@/lib/routines/queries";
-import { createWorkspace } from "@/lib/workspaces/actions";
+import { createWorkspace, customSystemDefinitions } from "@/lib/workspaces/actions";
 import { requireWorkspacesPage } from "@/lib/workspaces/gate";
 import { systemCatalog } from "@/lib/workspaces/system-catalog";
 import { CreateWorkspaceModal } from "./CreateWorkspaceModal";
@@ -18,10 +22,26 @@ export const dynamic = "force-dynamic";
  */
 export default async function WorkspacesPage() {
   const { session } = await requireWorkspacesPage();
-  const [workspaces, routines] = await Promise.all([
+  const [workspaces, routines, connections, customSystems] = await Promise.all([
     environmentsClient().listWorkspaces(session.orgId),
     listRoutines(session.orgId),
+    listSystemConnections(session.orgId),
+    customSystemDefinitions(session.orgId),
   ]);
+  const byProvider = new Map(
+    (connections ?? []).map((connection) => [connection.provider, connection]),
+  );
+  const byConnectionId = new Map(
+    (connections ?? []).map((connection) => [connection.connectionId, connection]),
+  );
+  const statusOf = (connection?: { status: string; hasCredential: boolean }) =>
+    !connection
+      ? ("not_connected" as const)
+      : connection.status !== "active"
+        ? ("needs_reauth" as const)
+        : connection.hasCredential
+          ? ("connected" as const)
+          : ("credentials_pending" as const);
   const cards = workspaces.map((workspace) => ({
     id: workspace.id,
     name: workspace.name,
@@ -39,12 +59,24 @@ export default async function WorkspacesPage() {
           </p>
         </div>
         <CreateWorkspaceModal
-          systems={systemCatalog.map((system) => ({
-            id: system.id,
-            displayName: system.displayName,
-            sideEffecting: system.sideEffecting,
-            standInNote: system.standInNote,
-          }))}
+          systems={[
+            ...systemCatalog.map((system) => ({
+              id: system.id,
+              displayName: system.displayName,
+              sideEffecting: system.sideEffecting,
+              standInNote: system.standInNote,
+              status: system.connection
+                ? statusOf(byProvider.get(system.connection.provider))
+                : ("no_provider" as const),
+            })),
+            ...customSystems.map((system) => ({
+              id: system.id,
+              displayName: system.displayName,
+              sideEffecting: system.sideEffecting,
+              standInNote: system.standInNote,
+              status: statusOf(byConnectionId.get(system.connectionId)),
+            })),
+          ]}
           create={createWorkspace}
         />
       </header>
