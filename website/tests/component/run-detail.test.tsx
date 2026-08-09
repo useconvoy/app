@@ -193,6 +193,32 @@ describe("RunDetail vitals", () => {
     expect(within(details as HTMLElement).getByText(events[0]!.run_id)).toBeInTheDocument();
     expect(within(details as HTMLElement).getByRole("button", { name: "Copy run id" })).toBeInTheDocument();
   });
+
+  it("shows the durable environment state from the run projection", () => {
+    stream([]);
+    render(
+      <RunDetail
+        initial={initialView([], {
+          execution_session: {
+            environment_id: "environment-1/sandbox",
+            status: "hibernated",
+            sandbox_id: null,
+            sandbox_provider: "local",
+            sandbox_template: "convoy-devbox-python",
+            generation: 2,
+            latest_checkpoint_id: "checkpoint-4",
+            latest_snapshot_ref: { key: "runs/run-1/snapshot-4.tar" },
+            updated_at: "2026-08-09T00:00:00Z",
+          },
+        })}
+      />,
+    );
+
+    const runtime = screen.getByRole("region", { name: "Environment runtime" });
+    expect(runtime).toHaveTextContent("Paused, compute released");
+    expect(runtime).toHaveTextContent("2");
+    expect(runtime).toHaveTextContent("checkpoint-4");
+  });
 });
 
 describe("RunDetail rehearsal variant", () => {

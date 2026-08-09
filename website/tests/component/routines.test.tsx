@@ -155,13 +155,17 @@ describe("RoutineDetail", () => {
     expect(screen.getByText("On a schedule")).toBeInTheDocument();
     expect(screen.getByText("On demand")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run now" })).toBeInTheDocument();
-    expect(screen.getByText(/rehearsal copy\. Nothing touches live systems\./)).toBeInTheDocument();
+    expect(
+      screen.getByText(/default environment\. Nothing touches live systems\./),
+    ).toBeInTheDocument();
   });
 
   it("notes when run now goes live for promoters", () => {
     render(<RoutineDetail {...detailProps()} runTarget="production" />);
     expect(
-      screen.getByText("Run now starts a live run in this workspace, within this routine's budget."),
+      screen.getByText(
+        "Run now starts a live run in this workspace's default environment, within this routine's budget.",
+      ),
     ).toBeInTheDocument();
   });
 

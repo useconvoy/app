@@ -92,6 +92,21 @@ class CreateWorkspaceSpec(BaseModel):
     # budgets are runtime-owned (RunPolicy / BudgetState) — no budget fields here
 
 
+class CreateExecutionEnvironment(BaseModel):
+    """A named runtime configuration derived from one workspace.
+
+    Connector grants come from the workspace and are copied immutably. The
+    environment owns only execution concerns: compute template, browser
+    policy, and its durable data namespace.
+    """
+
+    name: str
+    purpose: str = ""
+    sandboxTemplate: str = "convoy-devbox-python"
+    browserPolicy: Optional[Dict[str, Any]] = None
+    dataNamespace: str = ""
+
+
 class AttachSecret(BaseModel):
     secretValue: str
     secretBackend: str = "builtin"
@@ -301,7 +316,8 @@ def build_console_app(session_factory, secrets: SecretsService,
     # -- workspaces (db: environments) -------------------------------------
 
     def _build_env_rows(s, org_id: str, env_id: str, version: int,
-                        req: CreateWorkspaceSpec, user: str):
+                        req: CreateWorkspaceSpec, user: str,
+                        parent_environment_id: Optional[str] = None):
         conn_rows = []
         for wc in req.connections:
             conn = s.get(ConnectionRow, wc.connectionId)
@@ -327,6 +343,7 @@ def build_console_app(session_factory, secrets: SecretsService,
             data_namespace=namespace,
         )
         env = EnvironmentRow(id=env_id, version=version, workspace_id=org_id,
+                             parent_environment_id=parent_environment_id,
                              name=req.name, backing_type=req.backingType,
                              browser_policy=req.browserPolicy,
                              sandbox_template=req.sandboxTemplate, data_namespace=namespace,
@@ -335,9 +352,12 @@ def build_console_app(session_factory, secrets: SecretsService,
 
     @app.post("/organizations/{org_id}/workspaces")
     async def create_workspace(org_id: str, req: CreateWorkspaceSpec, user: str = Depends(user_dep)):
-        """A workspace IS the environment underneath (LEXICON): one id serves
-        both the console (`workspaceId`) and the frozen runtime registry
-        (`environmentId`), so the response carries it under both keys."""
+        """Create the workspace's compatibility binding.
+
+        Existing callers still receive one registry environment id directly
+        on the workspace. Named execution environments can then be created
+        beneath it without breaking routines that use this fallback binding.
+        """
         with session_factory() as s:
             require_workspace_role(s, org_id, user, "builder")
             env_id = _id("env")
@@ -356,7 +376,8 @@ def build_console_app(session_factory, secrets: SecretsService,
                                        req: CreateWorkspaceSpec, user: str = Depends(user_dep)):
         with session_factory() as s:
             require_env_role(s, org_id, workspace_id, user, "env_admin")
-            latest = (s.query(EnvironmentRow).filter_by(id=workspace_id, workspace_id=org_id)
+            latest = (s.query(EnvironmentRow).filter_by(id=workspace_id, workspace_id=org_id,
+                                                        parent_environment_id=None)
                       .order_by(EnvironmentRow.version.desc()).first())
             if latest is None:
                 raise HTTPException(404, "unknown workspace")
@@ -384,7 +405,8 @@ def build_console_app(session_factory, secrets: SecretsService,
         rehearsal binding and is always "virtual"."""
         with session_factory() as s:
             role = require_workspace_role(s, org_id, user, "member")
-            envs = (s.query(EnvironmentRow).filter_by(workspace_id=org_id)
+            envs = (s.query(EnvironmentRow).filter_by(workspace_id=org_id,
+                                                      parent_environment_id=None)
                     .order_by(EnvironmentRow.id, EnvironmentRow.version).all())
             visible = []
             for env in envs:
@@ -398,6 +420,93 @@ def build_console_app(session_factory, secrets: SecretsService,
                                 "rehearsalEnvironmentId": "%s/sandbox" % env.id,
                                 "clockMode": "wall", "rehearsalClockMode": "virtual"})
             return visible
+
+    def _execution_environment_payload(env: EnvironmentRow) -> Dict[str, Any]:
+        return {
+            "environmentId": env.id,
+            "workspaceId": env.parent_environment_id,
+            "version": env.version,
+            "name": env.name,
+            "purpose": env.description,
+            "policyHash": env.policy_hash,
+            "sandboxTemplate": env.sandbox_template,
+            "browserPolicy": env.browser_policy,
+            "dataNamespace": env.data_namespace,
+            "productionBindingId": env.id,
+            "rehearsalBindingId": "%s/sandbox" % env.id,
+            "createdAt": env.created_at.isoformat(),
+        }
+
+    @app.get("/organizations/{org_id}/workspaces/{workspace_id}/environments")
+    async def list_execution_environments(org_id: str, workspace_id: str,
+                                          user: str = Depends(user_dep)):
+        with session_factory() as s:
+            require_env_role(s, org_id, workspace_id, user, "viewer")
+            rows = (s.query(EnvironmentRow)
+                    .filter_by(workspace_id=org_id, parent_environment_id=workspace_id)
+                    .order_by(EnvironmentRow.id, EnvironmentRow.version.desc()).all())
+            latest: Dict[str, EnvironmentRow] = {}
+            for row in rows:
+                latest.setdefault(row.id, row)
+            return [_execution_environment_payload(row) for row in latest.values()]
+
+    @app.post("/organizations/{org_id}/workspaces/{workspace_id}/environments")
+    async def create_execution_environment(org_id: str, workspace_id: str,
+                                            req: CreateExecutionEnvironment,
+                                            user: str = Depends(user_dep)):
+        with session_factory() as s:
+            require_env_role(s, org_id, workspace_id, user, "env_admin")
+            base = (s.query(EnvironmentRow)
+                    .filter_by(id=workspace_id, workspace_id=org_id,
+                               parent_environment_id=None)
+                    .order_by(EnvironmentRow.version.desc()).first())
+            if base is None:
+                raise HTTPException(404, "unknown workspace")
+            base_connections = (s.query(EnvConnRow)
+                                .filter_by(environment_id=base.id,
+                                           environment_version=base.version).all())
+            env_id = _id("env")
+            spec = CreateWorkspaceSpec(
+                name=req.name,
+                purpose=req.purpose,
+                backingType=base.backing_type,
+                connections=[
+                    WorkspaceConnectionInput(
+                        connectionId=row.connection_id,
+                        toolAllowlist=list(row.tool_allowlist or []),
+                        promoteOverrides=list(row.promote_overrides or []),
+                    )
+                    for row in base_connections
+                ],
+                browserPolicy=req.browserPolicy,
+                sandboxTemplate=req.sandboxTemplate,
+                dataNamespace=req.dataNamespace,
+            )
+            env, connection_rows = _build_env_rows(
+                s, org_id, env_id, 1, spec, user, parent_environment_id=workspace_id
+            )
+            s.add(env)
+            s.add_all(connection_rows)
+            s.add(EnvironmentGrant(environment_id=env_id, user_id=user, role="env_admin"))
+            _audit(s, org_id, user, "execution_environment.create", "environment",
+                   "%s@1" % env_id,
+                   {"workspaceId": workspace_id, "policyHash": env.policy_hash})
+            s.commit()
+            return _execution_environment_payload(env)
+
+    @app.get("/organizations/{org_id}/workspaces/{workspace_id}/environments/{environment_id}")
+    async def execution_environment_detail(org_id: str, workspace_id: str,
+                                           environment_id: str,
+                                           user: str = Depends(user_dep)):
+        with session_factory() as s:
+            require_env_role(s, org_id, workspace_id, user, "viewer")
+            row = (s.query(EnvironmentRow)
+                   .filter_by(id=environment_id, workspace_id=org_id,
+                              parent_environment_id=workspace_id)
+                   .order_by(EnvironmentRow.version.desc()).first())
+            if row is None:
+                raise HTTPException(404, "unknown environment")
+            return _execution_environment_payload(row)
 
     @app.post("/organizations/{org_id}/workspaces/{workspace_id}/grants")
     async def create_grant(org_id: str, workspace_id: str, req: CreateGrant,

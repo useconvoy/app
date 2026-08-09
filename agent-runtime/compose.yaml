@@ -80,6 +80,7 @@ services:
   # promoted-tool activities (activities/promoted.py). Repoint it at the real
   # gateway to switch off the stub — its default is deliberately NOT changed:
   #   host-run worker/control-plane:  CONVOY_STUB_ENV_URL=http://localhost:8780/gateway
+  #                              plus CONVOY_INTERNAL_TOKEN=<real-env token>
   #   inside the compose network:     CONVOY_STUB_ENV_URL=http://real-env:8780/gateway
   # --------------------------------------------------------------------------
   real-env:

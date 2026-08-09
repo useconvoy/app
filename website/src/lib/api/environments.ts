@@ -71,6 +71,31 @@ export interface Workspace {
   createdAt: string;
 }
 
+export interface BrowserPolicy {
+  allowedDomains: string[];
+  persistProfile: boolean;
+}
+
+/** A named runtime target beneath a workspace. */
+export interface ExecutionEnvironment {
+  id: string;
+  workspaceId: string;
+  name: string;
+  purpose: string;
+  /** Registry id for operator detail; null on the local stand-in path. */
+  registryEnvironmentId: string | null;
+  productionBindingId: string;
+  rehearsalBindingId: string;
+  sandboxTemplate: string;
+  browserPolicy: BrowserPolicy | null;
+  /** Workspace files are checkpointed automatically across compute leases. */
+  persistence: "automatic";
+  version: number;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /**
  * Shape of the compatibility report rendered during catalog installs:
  * green checks, mapping choices, and connect prompts.
@@ -105,10 +130,28 @@ export interface CreateWorkspaceInput {
   customSystems?: CustomWorkspaceSystem[];
 }
 
+export interface CreateExecutionEnvironmentInput {
+  workspaceId: string;
+  name: string;
+  purpose: string;
+  sandboxTemplate: string;
+  browserPolicy: BrowserPolicy | null;
+  makeDefault?: boolean;
+}
+
 export interface EnvironmentsClient {
   listWorkspaces(orgId: string): Promise<Workspace[]>;
   getWorkspace(orgId: string, workspaceId: string): Promise<Workspace | null>;
   createWorkspace(orgId: string, input: CreateWorkspaceInput): Promise<Workspace>;
+  listExecutionEnvironments(orgId: string, workspaceId?: string): Promise<ExecutionEnvironment[]>;
+  getExecutionEnvironment(
+    orgId: string,
+    environmentId: string,
+  ): Promise<ExecutionEnvironment | null>;
+  createExecutionEnvironment(
+    orgId: string,
+    input: CreateExecutionEnvironmentInput,
+  ): Promise<ExecutionEnvironment>;
 }
 
 interface WorkspaceRow {
@@ -121,6 +164,60 @@ interface WorkspaceRow {
   clockMode: string;
   versions: unknown;
   createdAt: Date;
+}
+
+interface ExecutionEnvironmentRow {
+  id: string;
+  workspaceId: string;
+  registryEnvironmentId: string | null;
+  name: string;
+  purpose: string;
+  productionBindingId: string;
+  rehearsalBindingId: string;
+  sandboxTemplate: string;
+  browserPolicy: unknown;
+  version: number;
+  isDefault: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const EXECUTION_ENVIRONMENT_COLUMNS = `id, workspace_id AS "workspaceId",
+       registry_environment_id AS "registryEnvironmentId", name, purpose,
+       production_binding_id AS "productionBindingId",
+       rehearsal_binding_id AS "rehearsalBindingId",
+       sandbox_template AS "sandboxTemplate", browser_policy AS "browserPolicy",
+       version, is_default AS "isDefault", created_at AS "createdAt",
+       updated_at AS "updatedAt"`;
+
+function toBrowserPolicy(value: unknown): BrowserPolicy | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as { allowedDomains?: unknown; persistProfile?: unknown };
+  return {
+    allowedDomains: Array.isArray(raw.allowedDomains)
+      ? raw.allowedDomains.filter((domain): domain is string => typeof domain === "string")
+      : [],
+    persistProfile: raw.persistProfile !== false,
+  };
+}
+
+function toExecutionEnvironment(row: ExecutionEnvironmentRow): ExecutionEnvironment {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    name: row.name,
+    purpose: row.purpose,
+    registryEnvironmentId: row.registryEnvironmentId,
+    productionBindingId: row.productionBindingId,
+    rehearsalBindingId: row.rehearsalBindingId,
+    sandboxTemplate: row.sandboxTemplate,
+    browserPolicy: toBrowserPolicy(row.browserPolicy),
+    persistence: "automatic",
+    version: row.version,
+    isDefault: row.isDefault,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
 }
 
 const WORKSPACE_COLUMNS = `id, name, purpose,
@@ -200,6 +297,81 @@ class DbEnvironmentsClient implements EnvironmentsClient {
       return toWorkspace(rows[0]!);
     });
   }
+
+  async listExecutionEnvironments(
+    orgId: string,
+    workspaceId?: string,
+  ): Promise<ExecutionEnvironment[]> {
+    if (workspaceId && !UUID_PATTERN.test(workspaceId)) return [];
+    return withOrgContext({ orgId }, async (client) => {
+      const values: string[] = [orgId];
+      const workspaceFilter = workspaceId ? " AND workspace_id = $2" : "";
+      if (workspaceId) values.push(workspaceId);
+      const { rows } = await client.query<ExecutionEnvironmentRow>(
+        `SELECT ${EXECUTION_ENVIRONMENT_COLUMNS}
+           FROM execution_environments
+          WHERE org_id = $1${workspaceFilter}
+          ORDER BY is_default DESC, created_at`,
+        values,
+      );
+      return rows.map(toExecutionEnvironment);
+    });
+  }
+
+  async getExecutionEnvironment(
+    orgId: string,
+    environmentId: string,
+  ): Promise<ExecutionEnvironment | null> {
+    if (!UUID_PATTERN.test(environmentId)) return null;
+    return withOrgContext({ orgId }, async (client) => {
+      const { rows } = await client.query<ExecutionEnvironmentRow>(
+        `SELECT ${EXECUTION_ENVIRONMENT_COLUMNS}
+           FROM execution_environments WHERE org_id = $1 AND id = $2`,
+        [orgId, environmentId],
+      );
+      return rows[0] ? toExecutionEnvironment(rows[0]) : null;
+    });
+  }
+
+  async createExecutionEnvironment(
+    orgId: string,
+    input: CreateExecutionEnvironmentInput,
+  ): Promise<ExecutionEnvironment> {
+    const workspace = await this.getWorkspace(orgId, input.workspaceId);
+    if (!workspace) throw new Error("That workspace does not exist");
+    return withOrgContext({ orgId }, async (client) => {
+      const existing = await client.query<{ present: boolean }>(
+        "SELECT EXISTS (SELECT 1 FROM execution_environments WHERE org_id = $1 AND workspace_id = $2) AS present",
+        [orgId, input.workspaceId],
+      );
+      const makeDefault = input.makeDefault === true || existing.rows[0]?.present !== true;
+      if (makeDefault) {
+        await client.query(
+          "UPDATE execution_environments SET is_default = false, updated_at = now() WHERE org_id = $1 AND workspace_id = $2",
+          [orgId, input.workspaceId],
+        );
+      }
+      const { rows } = await client.query<ExecutionEnvironmentRow>(
+        `INSERT INTO execution_environments
+           (org_id, workspace_id, name, purpose, production_binding_id,
+            rehearsal_binding_id, sandbox_template, browser_policy, is_default)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING ${EXECUTION_ENVIRONMENT_COLUMNS}`,
+        [
+          orgId,
+          input.workspaceId,
+          input.name,
+          input.purpose,
+          workspace.environmentId,
+          workspace.rehearsalEnvironmentId,
+          input.sandboxTemplate,
+          input.browserPolicy ? JSON.stringify(input.browserPolicy) : null,
+          makeDefault,
+        ],
+      );
+      return toExecutionEnvironment(rows[0]!);
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -261,6 +433,19 @@ interface RegistryWorkspaceCreated {
   version: number;
   policyHash: string;
   environmentId: string;
+}
+
+interface RegistryExecutionEnvironmentRow {
+  environmentId: string;
+  workspaceId: string;
+  version: number;
+  name: string;
+  purpose: string;
+  sandboxTemplate: string;
+  browserPolicy: BrowserPolicy | null;
+  productionBindingId: string;
+  rehearsalBindingId: string;
+  createdAt: string;
 }
 
 class RegistryEnvironmentsClient implements EnvironmentsClient {
@@ -472,6 +657,158 @@ class RegistryEnvironmentsClient implements EnvironmentsClient {
     return registryRow
       ? workspaceFromRegistryRow(registryRow, toWorkspace(cached))
       : toWorkspace(cached);
+  }
+
+  async listExecutionEnvironments(
+    orgId: string,
+    workspaceId?: string,
+  ): Promise<ExecutionEnvironment[]> {
+    if (!workspaceId) {
+      const workspaces = await this.listWorkspaces(orgId);
+      const nested = await Promise.all(
+        workspaces.map((workspace) => this.listExecutionEnvironments(orgId, workspace.id)),
+      );
+      return nested.flat().sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    }
+    const ctx = await this.context(orgId);
+    if (!ctx || !UUID_PATTERN.test(workspaceId)) {
+      return this.fallback.listExecutionEnvironments(orgId, workspaceId);
+    }
+    const cachedWorkspace = await withOrgContext({ orgId }, async (client) => {
+      const { rows } = await client.query<LinkedWorkspaceRow>(
+        `SELECT ${LINKED_WORKSPACE_COLUMNS} FROM workspaces WHERE org_id = $1 AND id = $2`,
+        [orgId, workspaceId],
+      );
+      return rows[0] ?? null;
+    });
+    if (!cachedWorkspace?.environmentsWorkspaceId) {
+      return this.fallback.listExecutionEnvironments(orgId, workspaceId);
+    }
+    const remote = await registryFetch<RegistryExecutionEnvironmentRow[]>(
+      this.config,
+      `/organizations/${ctx.registryOrgId}/workspaces/${cachedWorkspace.environmentsWorkspaceId}/environments`,
+      { actsFor: ctx.actsFor },
+    );
+    return withOrgContext({ orgId }, async (client) => {
+      const existing = await client.query<ExecutionEnvironmentRow>(
+        `SELECT ${EXECUTION_ENVIRONMENT_COLUMNS}
+           FROM execution_environments WHERE org_id = $1 AND workspace_id = $2`,
+        [orgId, workspaceId],
+      );
+      const byRegistryId = new Map(
+        existing.rows
+          .filter((row) => row.registryEnvironmentId)
+          .map((row) => [row.registryEnvironmentId as string, row]),
+      );
+      const hasDefault = existing.rows.some((row) => row.isDefault);
+      const merged: ExecutionEnvironment[] = [];
+      for (const [index, environment] of remote.entries()) {
+        let row = byRegistryId.get(environment.environmentId);
+        if (!row) {
+          const inserted = await client.query<ExecutionEnvironmentRow>(
+            `INSERT INTO execution_environments
+               (org_id, workspace_id, registry_environment_id, name, purpose,
+                production_binding_id, rehearsal_binding_id, sandbox_template,
+                browser_policy, version, is_default)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             RETURNING ${EXECUTION_ENVIRONMENT_COLUMNS}`,
+            [
+              orgId,
+              workspaceId,
+              environment.environmentId,
+              environment.name,
+              environment.purpose,
+              environment.productionBindingId,
+              environment.rehearsalBindingId,
+              environment.sandboxTemplate,
+              environment.browserPolicy ? JSON.stringify(environment.browserPolicy) : null,
+              environment.version,
+              !hasDefault && index === 0,
+            ],
+          );
+          row = inserted.rows[0]!;
+        }
+        merged.push(toExecutionEnvironment(row));
+      }
+      return merged.sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
+    });
+  }
+
+  async getExecutionEnvironment(
+    orgId: string,
+    environmentId: string,
+  ): Promise<ExecutionEnvironment | null> {
+    const cached = await this.fallback.getExecutionEnvironment(orgId, environmentId);
+    if (!cached) return null;
+    const environments = await this.listExecutionEnvironments(orgId, cached.workspaceId);
+    return environments.find((environment) => environment.id === environmentId) ?? cached;
+  }
+
+  async createExecutionEnvironment(
+    orgId: string,
+    input: CreateExecutionEnvironmentInput,
+  ): Promise<ExecutionEnvironment> {
+    const ctx = await this.context(orgId);
+    if (!ctx) return this.fallback.createExecutionEnvironment(orgId, input);
+    const cachedWorkspace = await withOrgContext({ orgId }, async (client) => {
+      const { rows } = await client.query<LinkedWorkspaceRow>(
+        `SELECT ${LINKED_WORKSPACE_COLUMNS} FROM workspaces WHERE org_id = $1 AND id = $2`,
+        [orgId, input.workspaceId],
+      );
+      return rows[0] ?? null;
+    });
+    if (!cachedWorkspace?.environmentsWorkspaceId) {
+      return this.fallback.createExecutionEnvironment(orgId, input);
+    }
+    const created = await registryFetch<RegistryExecutionEnvironmentRow>(
+      this.config,
+      `/organizations/${ctx.registryOrgId}/workspaces/${cachedWorkspace.environmentsWorkspaceId}/environments`,
+      {
+        method: "POST",
+        body: {
+          name: input.name,
+          purpose: input.purpose,
+          sandboxTemplate: input.sandboxTemplate,
+          browserPolicy: input.browserPolicy,
+        },
+        actsFor: ctx.actsFor,
+      },
+    );
+    return withOrgContext({ orgId }, async (client) => {
+      const existing = await client.query<{ present: boolean }>(
+        "SELECT EXISTS (SELECT 1 FROM execution_environments WHERE org_id = $1 AND workspace_id = $2) AS present",
+        [orgId, input.workspaceId],
+      );
+      const makeDefault = input.makeDefault === true || existing.rows[0]?.present !== true;
+      if (makeDefault) {
+        await client.query(
+          "UPDATE execution_environments SET is_default = false, updated_at = now() WHERE org_id = $1 AND workspace_id = $2",
+          [orgId, input.workspaceId],
+        );
+      }
+      const { rows } = await client.query<ExecutionEnvironmentRow>(
+        `INSERT INTO execution_environments
+           (org_id, workspace_id, registry_environment_id, name, purpose,
+            production_binding_id, rehearsal_binding_id, sandbox_template,
+            browser_policy, version, is_default)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         RETURNING ${EXECUTION_ENVIRONMENT_COLUMNS}`,
+        [
+          orgId,
+          input.workspaceId,
+          created.environmentId,
+          created.name,
+          created.purpose,
+          created.productionBindingId,
+          created.rehearsalBindingId,
+          created.sandboxTemplate,
+          created.browserPolicy ? JSON.stringify(created.browserPolicy) : null,
+          created.version,
+          makeDefault,
+        ],
+      );
+      return toExecutionEnvironment(rows[0]!);
+    });
   }
 }
 

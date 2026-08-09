@@ -105,6 +105,13 @@ class Environment(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    # Null for the legacy/base policy bundle attached directly to an
+    # organization. Named execution environments point at that base bundle
+    # and inherit its connector grants while owning runtime configuration
+    # (sandbox template, browser policy, namespace) independently.
+    parent_environment_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
     name: Mapped[str] = mapped_column(String(255))
     backing_type: Mapped[str] = mapped_column(String(16), default="live")  # live | hermetic
     browser_policy: Mapped[dict] = mapped_column(PortableJSON, nullable=True)

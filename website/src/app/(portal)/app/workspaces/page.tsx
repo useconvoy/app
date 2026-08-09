@@ -55,7 +55,7 @@ export default async function WorkspacesPage() {
         <div>
           <h1 className="font-display text-3xl text-ink">Workspaces</h1>
           <p className="mt-2 text-sm text-muted">
-            Where routines run: the systems they may touch and how far each grant goes.
+            Group routines with the systems they may touch and how far each grant goes.
           </p>
         </div>
         <CreateWorkspaceModal

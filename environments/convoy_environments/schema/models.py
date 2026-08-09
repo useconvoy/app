@@ -119,6 +119,7 @@ class Environment(_Model):
 
     environmentId: str
     workspaceId: str
+    parentEnvironmentId: Optional[str] = None
     name: str
     version: int = Field(ge=1)
     backingType: EnvironmentBacking = "live"

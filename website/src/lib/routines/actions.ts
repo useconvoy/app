@@ -162,7 +162,10 @@ export interface RunNowResult {
  * the promote capability, and assigned Members stay within the routine's
  * budget cap either way (the cap rides the create call).
  */
-export async function runRoutineNow(routineId: string): Promise<RunNowResult> {
+export async function runRoutineNow(
+  routineId: string,
+  executionEnvironmentId?: string,
+): Promise<RunNowResult> {
   const { session, membership } = await requireActor();
   if (!can("trigger_production_run", membership.role, membership.capabilities)) {
     throw new Error("You cannot start runs");
@@ -179,11 +182,23 @@ export async function runRoutineNow(routineId: string): Promise<RunNowResult> {
     if (!assigned) throw new Error("You are not assigned to this routine");
   }
   const tenantId = await orgTenantId(session.orgId);
+  const executionEnvironments = await environmentsClient().listExecutionEnvironments(
+    session.orgId,
+    workspace.id,
+  );
+  const executionEnvironment = executionEnvironmentId
+    ? executionEnvironments.find((environment) => environment.id === executionEnvironmentId)
+    : executionEnvironments.find((environment) => environment.isDefault) ?? executionEnvironments[0];
+  if (executionEnvironmentId && !executionEnvironment) {
+    throw new Error("That environment does not belong to this workspace");
+  }
   const { runId } = await createRun(
     { actorId: session.userId, tenantId },
     {
       goal: routine.descriptor ? `${routine.name}: ${routine.descriptor}` : routine.name,
-      environmentId: production ? workspace.environmentId : workspace.rehearsalEnvironmentId,
+      environmentId: production
+        ? executionEnvironment?.productionBindingId ?? workspace.environmentId
+        : executionEnvironment?.rehearsalBindingId ?? workspace.rehearsalEnvironmentId,
       budgetUsd: routine.budgetCapUsd,
       routineId: routine.id,
       startedById: session.userId,

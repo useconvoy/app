@@ -14,7 +14,7 @@
 /** Internal noun -> user-facing term. */
 export const terms = {
   agent: "routine",
-  environment: "workspace",
+  environment: "environment",
   sandbox: "rehearsal",
   sandboxBinding: "rehearsal copy",
   connector: "system",
@@ -129,6 +129,11 @@ export const eventLabels: Record<string, string> = {
   child_spawned: "Helper run started",
   child_landed: "Helper run finished",
   compaction_applied: "Notes tidied",
+  environment_provisioned: "Compute started",
+  environment_checkpointed: "Environment saved",
+  environment_hibernated: "Compute released for pause",
+  environment_restored: "Environment restored",
+  environment_terminated: "Compute released",
   landing_started: "Wrapping up",
   run_completed: "Landed",
   run_failed: "Failed",
@@ -229,8 +234,9 @@ export const copy = {
   pinnedVersion: (version: number) => `Pinned to v${version}`,
   runNow: "Run now",
   runNowRehearsalNote:
-    "Run now starts a rehearsal in this workspace's rehearsal copy. Nothing touches live systems.",
-  runNowProductionNote: "Run now starts a live run in this workspace, within this routine's budget.",
+    "Run now starts a rehearsal in this workspace's default environment. Nothing touches live systems.",
+  runNowProductionNote:
+    "Run now starts a live run in this workspace's default environment, within this routine's budget.",
   noRunsYet: "No runs yet",
   routinesEmptyTitle: "No routines yet",
   routinesEmptyBody:
@@ -241,9 +247,9 @@ export const copy = {
   workspacesEmptyTitle: "No workspaces yet",
   workspacesEmptyBody:
     "A workspace connects the systems routines may touch. Create one to give routines somewhere to run.",
-  rehearsalCopyAutoNote: "A rehearsal copy is created automatically.",
+  rehearsalCopyAutoNote: "You can add a runtime environment after creating the workspace.",
   rehearsalCopyExplainer:
-    "Every workspace carries a rehearsal copy. Rehearsal runs use stand-ins for anything that would touch the outside world.",
+    "Every environment carries a rehearsal copy. Rehearsal runs use stand-ins for anything that would touch the outside world.",
   standInRequired: (system: string) =>
     `${system} makes changes outside this organization. Add a stand-in before creating the workspace.`,
   upToPerRun: (amount: string) => `Up to ${amount} per run`,

@@ -79,6 +79,7 @@ class RuntimeConfig:
     s3_access_key: str
     s3_secret_key: str
     stub_env_url: str
+    environments_internal_token: str
     dev_token: str
     codec_key: bytes
     scripted_turn_delay_seconds: float
@@ -134,6 +135,11 @@ class RuntimeConfig:
             s3_access_key=_env("CONVOY_S3_ACCESS_KEY", "convoy"),
             s3_secret_key=_env("CONVOY_S3_SECRET_KEY", "convoy-secret-key"),
             stub_env_url=_env("CONVOY_STUB_ENV_URL", "http://localhost:8902"),
+            environments_internal_token=_env_first(
+                "CONVOY_ENVIRONMENTS_INTERNAL_TOKEN",
+                "CONVOY_INTERNAL_TOKEN",
+                default="",
+            ),
             # Static bearer token for local auth. TODO: WorkOS OIDC at the
             # edge, with the tenant derived from the verified identity.
             dev_token=_env("CONVOY_DEV_TOKEN", "dev-token"),

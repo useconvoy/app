@@ -9,10 +9,11 @@ Spec: `convoy-environments-spec.md` (Desktop, v0.1 + settled decisions). Contrac
 
 ## Concepts
 
-> **Vocabulary.** The deployed website's words win on user-facing surfaces: the tenant is an **organization** (our db `workspaces` table, wire `tenant_id`) and a bundle of system grants with production + rehearsal bindings is a **workspace** (our db `environments` table, wire `environment_id`). The console API speaks that language (`/organizations/{org}/workspaces/...`); the machine seam (`EnvironmentBinding`, `GET /environments/{id}`, `/internal/*`, `/data-plane/*`, `/mcp/*`) is frozen and keeps its names. The concepts below use the code's names.
+> **Vocabulary.** The deployed website's words win on user-facing surfaces: the tenant is an **organization** (our db `workspaces` table, wire `tenant_id`); a **workspace** groups routines and system grants; and a named **environment** beneath it owns compute, browser, and durable-state policy. The console API speaks that language (`/organizations/{org}/workspaces/{workspace}/environments`); the machine seam (`EnvironmentBinding`, `GET /environments/{id}`, `/internal/*`, `/data-plane/*`, `/mcp/*`) is frozen and keeps its names. The concepts below use the code's names.
 
 - **Connection** (admin-owned, workspace-level): an authenticated link to one external system — Slack/Notion/GitHub token, a remote MCP server, a browser login. Carries a tool **manifest** with per-tool `execution` (`inline` | `promoted`) and `sideEffecting` flags, hashed as `manifest_hash`.
-- **Workspace (console term; wire: environment)** (builder-owned, versioned-immutable): a policy bundle subsetting connections — explicit tool allowlists, promote escalations, browser domain allowlist, sandbox template, data namespace. Users see "workspace"; this service and the frozen runtime contract keep calling it an environment (`environment_id`, `EnvironmentBinding`). `policy_hash` feeds the certified tuple; edits create a new version, so certification is voided explicitly, never silently. Runs pin `(environment_id, version)` via the binding.
+- **Workspace** (builder-owned): a named scope for routines and a policy bundle subsetting connections with explicit tool allowlists and promote escalations. The current schema keeps its compatibility binding as a base row in `environments` (`parent_environment_id IS NULL`).
+- **Environment** (builder-owned, versioned-immutable): a named runtime target beneath a workspace. It copies the workspace's connection grants and owns its sandbox template, browser domain policy, and data namespace. Its row has `parent_environment_id = workspaceId`; `policy_hash` feeds the certified tuple and runs pin `(environment_id, version)` via the compiled binding. Existing workspace bindings remain a fallback for older routines.
 - **Tool flags** (runtime DESIGN §5 vocabulary; the trust obligation is ours): `execution="inline"` + `sideEffecting=False` → one collapsed `tool_call` event, safe to re-run inside `run_turn`; `execution="promoted"` / side-effecting → `tool_intent → tool_executed → tool_result` deduped on the runtime's idempotency key `hash(run_id, step_id, turn, call_index)` (errored results never dedupe). `promoteOverrides` escalate per environment; nothing ever downgrades. Budgets and human gates are runtime-owned (workflow `BudgetState` + plan-step `HumanGate`) — this layer meters nothing and parks nothing.
 
 Naming across the console, this service, and the runtime wire is mapped in [docs/LEXICON.md](../docs/LEXICON.md) — the normative table for naming disputes.
@@ -26,7 +27,7 @@ Naming across the console, this service, and the runtime wire is mapped in [docs
 | `secrets/` | write-only secrets service; builtin envelope-encryption backend (1Password/KMS slots later) |
 | `connectors/` | slack, notion, github (token-based), google (service-account JWT grant: Drive list, Sheets read/append) + `mcp_custom` (BYO remote MCP; unannotated tools default to promoted + side-effecting) |
 | `gateway/` | per-run JWTs, policy engine (fail-closed on manifest drift), GatewayService, MCP termination, binding registry, credential leases |
-| `console_api/` | the website-vocabulary surface: organizations (tenants), memberships, connections, versioned workspaces (= the runtime's environments; `workspaceId == environmentId`), grants (viewer/operator/env_admin) |
+| `console_api/` | the website-vocabulary surface: organizations (tenants), memberships, connections, workspaces (routine/system scope), named environments (runtime configuration), grants (viewer/operator/env_admin) |
 | `devbox/` | `convoy-egress-proxy` (in-sandbox, secret-free) + `convoy-fill-sidecar` (trusted stack service) |
 
 ## Quickstart
@@ -63,7 +64,7 @@ export CONVOY_INTERNAL_TOKEN=$(openssl rand -hex 32)
 
 ## Deliberately not here (runtime-owned per DESIGN v1)
 
-Budgets (workflow `BudgetState` + LiteLLM caps) · human gates and approvals (plan-step `HumanGate`, `human_response` signals; gate UX is website/) · runs/missions state · sandbox lifecycle (`SandboxProvider` impls) · idempotency-key minting (we only honor them).
+Budgets (workflow `BudgetState` + LiteLLM caps) · human gates and approvals (plan-step `HumanGate`, `human_response` signals; gate UX is website/) · runs/missions state · sandbox lifecycle mechanics (`SandboxProvider` implementations, checkpoints, and restore orchestration) · idempotency-key minting (we only honor them). This service owns the environment policy that tells those runtime mechanics what to provision.
 
 ## Deliberately not here (deferred)
 

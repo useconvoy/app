@@ -40,6 +40,7 @@ describe.skipIf(!ADMIN_DSN)("routines and workspaces (real Postgres)", () => {
   let admin: pg.Client;
   let entryId: string;
   let workspaceId: string;
+  let executionEnvironmentId: string;
   let routineId: string;
 
   beforeAll(async () => {
@@ -107,6 +108,21 @@ describe.skipIf(!ADMIN_DSN)("routines and workspaces (real Postgres)", () => {
       ],
     });
     workspaceId = workspace.id;
+    const environment = await environmentsClient().createExecutionEnvironment(orgA, {
+      workspaceId,
+      name: `Production operations ${run}`,
+      purpose: "Runs approved integration routines.",
+      sandboxTemplate: "convoy-devbox-python",
+      browserPolicy: { allowedDomains: ["app.example.com"], persistProfile: true },
+      makeDefault: true,
+    });
+    executionEnvironmentId = environment.id;
+    expect(environment.productionBindingId).toBe(workspace.environmentId);
+    expect(environment.rehearsalBindingId).toBe(workspace.rehearsalEnvironmentId);
+    expect(environment.isDefault).toBe(true);
+    expect(await environmentsClient().listExecutionEnvironments(orgA, workspaceId)).toEqual([
+      environment,
+    ]);
 
     // A catalog entry for the routine to point back at, published under
     // org A's own context exactly as the publish action would.
@@ -177,12 +193,23 @@ describe.skipIf(!ADMIN_DSN)("routines and workspaces (real Postgres)", () => {
     // Direct probes by id from the wrong org context see nothing.
     expect(await getRoutine(orgB, routineId)).toBeNull();
     expect(await environmentsClient().getWorkspace(orgB, workspaceId)).toBeNull();
+    expect(
+      await environmentsClient().getExecutionEnvironment(orgB, executionEnvironmentId),
+    ).toBeNull();
     const probe = await withOrgContext({ orgId: orgB, userId: userB }, async (client) => {
       const routines = await client.query("SELECT id FROM routines WHERE org_id = $1", [orgA]);
       const workspaces = await client.query("SELECT id FROM workspaces WHERE org_id = $1", [orgA]);
-      return { routines: routines.rowCount, workspaces: workspaces.rowCount };
+      const environments = await client.query(
+        "SELECT id FROM execution_environments WHERE org_id = $1",
+        [orgA],
+      );
+      return {
+        routines: routines.rowCount,
+        workspaces: workspaces.rowCount,
+        environments: environments.rowCount,
+      };
     });
-    expect(probe).toEqual({ routines: 0, workspaces: 0 });
+    expect(probe).toEqual({ routines: 0, workspaces: 0, environments: 0 });
   });
 
   it("schedule edits land on the routine row", async () => {
