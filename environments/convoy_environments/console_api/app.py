@@ -92,6 +92,11 @@ class CreateWorkspaceSpec(BaseModel):
     # budgets are runtime-owned (RunPolicy / BudgetState) — no budget fields here
 
 
+class AttachSecret(BaseModel):
+    secretValue: str
+    secretBackend: str = "builtin"
+
+
 class CreateGrant(BaseModel):
     userId: str
     role: Literal["viewer", "operator", "env_admin"]
@@ -227,6 +232,71 @@ def build_console_app(session_factory, secrets: SecretsService,
             return [{"connectionId": r.id, "kind": r.kind, "provider": r.provider,
                      "displayName": r.display_name, "status": r.status,
                      "manifestHash": r.manifest_hash} for r in rows]
+
+    def _connection_or_404(s, org_id: str, connection_id: str) -> ConnectionRow:
+        row = s.get(ConnectionRow, connection_id)
+        if row is None or row.workspace_id != org_id:
+            raise HTTPException(404, "unknown connection %s" % connection_id)
+        return row
+
+    @app.get("/organizations/{org_id}/connections/{connection_id}")
+    async def connection_detail(org_id: str, connection_id: str, user: str = Depends(user_dep)):
+        with session_factory() as s:
+            require_workspace_role(s, org_id, user, "member")
+            row = _connection_or_404(s, org_id, connection_id)
+            manifest = ConnectionManifest.model_validate(row.manifest or {})
+            out = {"connectionId": row.id, "kind": row.kind, "provider": row.provider,
+                   "displayName": row.display_name, "status": row.status,
+                   "manifestHash": row.manifest_hash,
+                   "hasCredential": row.secret_ref is not None,
+                   "config": row.config or {},
+                   "tools": [{"name": t.name, "execution": t.execution,
+                              "sideEffecting": t.sideEffecting, "description": t.description}
+                             for t in manifest.tools]}
+            if manifest.domains:
+                out["domains"] = manifest.domains
+            return out
+
+    @app.post("/organizations/{org_id}/connections/{connection_id}/secret")
+    async def attach_connection_secret(org_id: str, connection_id: str, req: AttachSecret,
+                                       user: str = Depends(user_dep)):
+        """Attach (or replace) a connection's credential — the 'real
+        credentials attached later' half of secretless registration. The
+        value is stored write-only, then probed best-effort per provider
+        (google: token exchange; mcp_custom: live tools/list reachability;
+        others: no cheap safe probe → verified null). A failed probe keeps
+        the stored value but flags the connection needs_reauth so the
+        console can say exactly that."""
+        with session_factory() as s:
+            require_workspace_role(s, org_id, user, "admin")
+            row = _connection_or_404(s, org_id, connection_id)
+            provider, config, secret_ref = row.provider, dict(row.config or {}), row.secret_ref
+        if secret_ref is None:
+            secret_ref = secrets.create(org_id, "%s:%s" % (provider, connection_id),
+                                        req.secretValue, backend=req.secretBackend, created_by=user)
+        else:
+            secrets.rotate(secret_ref, req.secretValue, actor=user)
+
+        verified: Optional[bool] = None
+        failure: Optional[str] = None
+        try:
+            verified = await get_connector(provider, config=config).verify_credential(req.secretValue)
+        except Exception as err:  # noqa: BLE001 — the probe is best-effort by design;
+            # any failure (bad key material, unreachable server, auth reject)
+            # means the same thing to the caller: not verified.
+            verified, failure = False, str(err)
+
+        status = "needs_reauth" if verified is False else "active"
+        with session_factory() as s:
+            row = _connection_or_404(s, org_id, connection_id)
+            row.secret_ref = secret_ref
+            row.status = status
+            _audit(s, org_id, user, "connection.attach_secret", "connection", connection_id,
+                   {"provider": provider, "verified": verified})
+            s.commit()
+        if failure is not None:
+            raise HTTPException(400, "credential stored but verification failed: %s" % failure)
+        return {"connectionId": connection_id, "status": status, "verified": verified}
 
     # -- workspaces (db: environments) -------------------------------------
 

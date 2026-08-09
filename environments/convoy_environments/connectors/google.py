@@ -101,6 +101,13 @@ class GoogleConnector(Connector):
         _token_cache[cache_key] = (token, now + int(body.get("expires_in", 3600)))
         return token
 
+    async def verify_credential(self, credential: str) -> Optional[bool]:
+        """The token exchange is the probe: a bad key or revoked service
+        account fails here without touching any Drive data."""
+        async with self._client() as client:
+            await self._access_token(client, credential)
+        return True
+
     async def invoke(self, tool: str, args: Dict[str, Any], credential: str) -> Any:
         async with self._client() as client:
             token = await self._access_token(client, credential)
