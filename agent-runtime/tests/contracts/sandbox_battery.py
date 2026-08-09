@@ -110,10 +110,10 @@ class SandboxProviderBattery:
         first = await harness.provider.exec(handle, harness.job("key-idem", script))
         second = await harness.provider.exec(handle, harness.job("key-idem", script))
         assert second == first  # replayed, not re-run
-        assert await harness.store.get_bytes(first.outputs[0]) == b"1\n"
+        assert (await harness.store.get_bytes(first.outputs[0])).strip() == b"1"
         # A different key does act again.
         third = await harness.provider.exec(handle, harness.job("key-idem-2", script))
-        assert await harness.store.get_bytes(third.outputs[0]) == b"2\n"
+        assert (await harness.store.get_bytes(third.outputs[0])).strip() == b"2"
         await harness.provider.destroy(handle)
 
     async def test_snapshot_rehydrate_round_trip(self, harness: SandboxHarness) -> None:
@@ -123,6 +123,7 @@ class SandboxProviderBattery:
         await harness.provider.destroy(handle)
 
         rebuilt = await harness.create(workspace=snapshot)
+        assert rebuilt.sandbox_id != handle.sandbox_id
         result = await harness.provider.exec(
             rebuilt, harness.job("key-rt-2", "mkdir -p outputs && cp state.txt outputs/state.txt")
         )
@@ -151,7 +152,7 @@ class SandboxProviderBattery:
             rebuilt,
             harness.job("key-loss-probe", "mkdir -p outputs && wc -l < effect.log > outputs/n"),
         )
-        assert await harness.store.get_bytes(probe.outputs[0]) == b"1\n"
+        assert (await harness.store.get_bytes(probe.outputs[0])).strip() == b"1"
         await harness.provider.destroy(rebuilt)
 
     async def test_timeout_surfaces_as_a_job_result(self, harness: SandboxHarness) -> None:

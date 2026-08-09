@@ -12,7 +12,13 @@ from _support.e2e import PG_APP_DSN, auth_headers
 
 pytestmark = pytest.mark.e2e
 
-TABLES = ("runs", "run_events", "run_steps")
+TABLES = (
+    "runs",
+    "run_events",
+    "run_steps",
+    "run_execution_sessions",
+    "run_checkpoints",
+)
 
 
 def _seed_run(api: httpx.Client) -> str:
@@ -39,6 +45,8 @@ _COUNT_QUERIES: dict[str, LiteralString] = {
     "runs": "SELECT count(*) FROM runs WHERE run_id = %s",
     "run_events": "SELECT count(*) FROM run_events WHERE run_id = %s",
     "run_steps": "SELECT count(*) FROM run_steps WHERE run_id = %s",
+    "run_execution_sessions": ("SELECT count(*) FROM run_execution_sessions WHERE run_id = %s"),
+    "run_checkpoints": "SELECT count(*) FROM run_checkpoints WHERE run_id = %s",
 }
 
 
@@ -70,6 +78,8 @@ def test_right_tenant_sees_the_rows(api: httpx.Client) -> None:
         assert _count(conn, "runs", run_id) == 1
         assert _count(conn, "run_events", run_id) > 0
         assert _count(conn, "run_steps", run_id) == 2
+        assert _count(conn, "run_execution_sessions", run_id) == 1
+        assert _count(conn, "run_checkpoints", run_id) == 0
 
 
 def test_write_without_tenant_context_is_rejected(api: httpx.Client) -> None:

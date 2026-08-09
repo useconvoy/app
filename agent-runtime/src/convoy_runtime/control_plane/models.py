@@ -108,6 +108,20 @@ class StepView(BaseModel):
     updated_at: datetime | None = None
 
 
+class ExecutionSessionView(BaseModel):
+    """Observable cloud compute/checkpoint state for a run."""
+
+    environment_id: str
+    status: str
+    sandbox_id: str | None = None
+    sandbox_provider: str | None = None
+    sandbox_template: str | None = None
+    generation: int = 0
+    latest_checkpoint_id: str | None = None
+    latest_snapshot_ref: dict[str, Any] | None = None
+    updated_at: datetime | None = None
+
+
 class RunView(BaseModel):
     """Served from Postgres projections only — never from Temporal. Subagent
     child runs are rows of their own, linked back by `parent_run_id`."""
@@ -120,4 +134,5 @@ class RunView(BaseModel):
     plan: dict[str, Any] | None = None
     land_report: dict[str, Any] | None = None
     budget: BudgetView | None = None
+    execution_session: ExecutionSessionView | None = None
     steps: list[StepView] = []

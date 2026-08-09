@@ -144,6 +144,8 @@ async def run_worker(config: RuntimeConfig) -> None:
             compact_activities.compact_step,
             promoted_activities.run_promoted_tool,
             sandbox_activities.run_sandbox_job,
+            sandbox_activities.hibernate_sandbox,
+            sandbox_activities.restore_sandbox,
         ],
         # Deploys are pinned to worker build ids: with TEMPORAL_WORKER_BUILD_ID
         # set (the deploy pipeline's contract) the worker polls versioned under

@@ -8,10 +8,11 @@ claim-checked: the activity returns refs, never bodies.
 """
 
 import hashlib
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from convoy_core import ArtifactRef, SandboxJobResult, ToolCallRequest
+from convoy_core import ArtifactRef, SandboxHandle, SandboxJobResult, ToolCallRequest
 
 # The only activities a promoted call may name; the workflow rejects anything
 # else deterministically instead of scheduling an unknown activity. The
@@ -70,6 +71,10 @@ class SandboxJobRequest(BaseModel):
     call: ToolCallRequest
     template: str
     snapshot_ref: ArtifactRef | None = None
+    # The workflow carries the active handle, so a fresh activity worker can
+    # rediscover an existing Fargate task instead of depending on process
+    # memory. Older histories omit it and retain the create-from-snapshot path.
+    handle: SandboxHandle | None = None
 
 
 class SandboxJobOutcome(BaseModel):
@@ -81,4 +86,47 @@ class SandboxJobOutcome(BaseModel):
     result: SandboxJobResult
     result_ref: ArtifactRef
     snapshot_ref: ArtifactRef
+    # Returned on every job and carried durably by the workflow. A handle is
+    # an opaque provider locator, never a credential.
+    handle: SandboxHandle | None = None
     replayed: bool = False
+
+
+SandboxReleaseReason = Literal["pause", "land", "completed", "failed"]
+
+
+class SandboxHibernateRequest(BaseModel):
+    """Checkpoint an active execution session and release its compute.
+
+    `checkpoint_id` is deterministic workflow input. The activity records a
+    completion marker under that id before destroying compute, making retries
+    safe across the snapshot/destroy crash window.
+    """
+
+    run_id: str
+    checkpoint_id: str
+    reason: SandboxReleaseReason
+    handle: SandboxHandle
+    snapshot_ref: ArtifactRef | None = None
+
+
+class SandboxHibernateOutcome(BaseModel):
+    checkpoint_id: str
+    reason: SandboxReleaseReason
+    released_sandbox_id: str
+    snapshot_ref: ArtifactRef | None = None
+
+
+class SandboxRestoreRequest(BaseModel):
+    """Allocate fresh compute and restore the latest workspace checkpoint."""
+
+    run_id: str
+    restore_id: str
+    template: str
+    snapshot_ref: ArtifactRef | None = None
+
+
+class SandboxRestoreOutcome(BaseModel):
+    restore_id: str
+    handle: SandboxHandle
+    snapshot_ref: ArtifactRef | None = None

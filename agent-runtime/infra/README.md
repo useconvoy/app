@@ -241,7 +241,10 @@ module:
    task role's surface). The sandbox image only needs a `python3` on PATH —
    the runtime ships its own runner into the task at create time over an
    integrity-pinned presigned URL. Expect real Fargate startup latency
-   (~1 min per sandbox).
+   (~1 min per sandbox). The battery asserts that snapshot restore allocates
+   a different sandbox id, preserves filesystem state, and replays a prior
+   idempotency key without executing it twice—the provider-level cloud proof
+   required by the runtime's pause/resume lifecycle.
    Also verify the credential-free invariant from inside a sandbox task:
    `aws s3 ls s3://<artifact_bucket>` and any `sts:AssumeRole` must fail
    (explicit deny), and outbound internet must time out (endpoint-only SG) —

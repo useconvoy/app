@@ -61,7 +61,11 @@ Postgres projections ◀── RunEvent outbox ── activities ──▶ run_t
   subprocess provider for development and CI, and an ECS Fargate provider for
   stacks where sandbox tasks are credential-free (data moves only over
   short-lived presigned URLs minted by trusted workers). Workspaces are
-  cache; S3 snapshots are truth.
+  cache; S3 snapshots are truth. Pause checkpoints the active workspace and
+  releases its compute; resume restores the checkpoint onto a fresh sandbox;
+  land, completion, and handled failure paths release compute immediately.
+  Session/checkpoint state is folded into Postgres and returned by
+  `GET /runs/{id}` as `execution_session`.
 
 ## Layout
 
@@ -127,7 +131,8 @@ dev-only `CONVOY_DATA_PLANE_ALLOW_ANON` stop-gap.
 - Workflow code does no I/O, reads no clock or env, and uses no randomness;
   all time goes through `RunClock` (an AST lint test enforces this).
 - Signals validate and enqueue only; the loop drains mailboxes at boundaries.
-  Pause never cancels an in-flight activity.
+  Pause never cancels an in-flight activity; after it settles, active sandbox
+  compute is checkpointed and released before the `paused` event is emitted.
 - Every state change emits a `RunEvent` through the outbox; reads come from
   projections, never Temporal.
 - Side-effecting calls carry `hash(run_id, step_id, turn, call_index)` as an

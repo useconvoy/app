@@ -59,6 +59,43 @@ CREATE TABLE IF NOT EXISTS run_steps (
 
 CREATE INDEX IF NOT EXISTS run_steps_tenant_run_idx ON run_steps (tenant_id, run_id, step_id);
 
+-- One durable execution-session rollup per run. The sandbox_id is only an
+-- opaque provider locator; no credential or capability URL is stored here.
+CREATE TABLE IF NOT EXISTS run_execution_sessions (
+    tenant_id            text        NOT NULL,
+    run_id               text        PRIMARY KEY,
+    environment_id       text        NOT NULL DEFAULT '',
+    status               text        NOT NULL DEFAULT 'unprovisioned',
+    sandbox_id           text,
+    sandbox_provider     text,
+    sandbox_template     text,
+    generation           int         NOT NULL DEFAULT 0,
+    latest_checkpoint_id text,
+    latest_snapshot_ref  jsonb,
+    updated_at           timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS run_execution_sessions_tenant_idx
+    ON run_execution_sessions (tenant_id, run_id);
+
+-- Immutable checkpoint audit rows. Snapshot bytes live in S3; Postgres keeps
+-- only the claim-checked ref and lifecycle metadata needed by operators.
+CREATE TABLE IF NOT EXISTS run_checkpoints (
+    tenant_id            text        NOT NULL,
+    run_id               text        NOT NULL,
+    checkpoint_id        text        NOT NULL,
+    checkpoint_sequence  int         NOT NULL,
+    reason               text        NOT NULL,
+    released_sandbox_id  text,
+    generation           int         NOT NULL DEFAULT 0,
+    snapshot_ref         jsonb,
+    created_at           timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (run_id, checkpoint_id)
+);
+
+CREATE INDEX IF NOT EXISTS run_checkpoints_tenant_run_idx
+    ON run_checkpoints (tenant_id, run_id, checkpoint_sequence);
+
 -- Row-level security: a query without tenant context sees nothing.
 -- FORCE so even the table owner is subject to policy.
 ALTER TABLE runs ENABLE ROW LEVEL SECURITY;
@@ -67,6 +104,10 @@ ALTER TABLE run_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE run_events FORCE ROW LEVEL SECURITY;
 ALTER TABLE run_steps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE run_steps FORCE ROW LEVEL SECURITY;
+ALTER TABLE run_execution_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE run_execution_sessions FORCE ROW LEVEL SECURITY;
+ALTER TABLE run_checkpoints ENABLE ROW LEVEL SECURITY;
+ALTER TABLE run_checkpoints FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS runs_tenant_isolation ON runs;
 CREATE POLICY runs_tenant_isolation ON runs
@@ -83,6 +124,16 @@ CREATE POLICY run_steps_tenant_isolation ON run_steps
     USING (tenant_id = current_setting('app.tenant_id', true))
     WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
 
+DROP POLICY IF EXISTS run_execution_sessions_tenant_isolation ON run_execution_sessions;
+CREATE POLICY run_execution_sessions_tenant_isolation ON run_execution_sessions
+    USING (tenant_id = current_setting('app.tenant_id', true))
+    WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+
+DROP POLICY IF EXISTS run_checkpoints_tenant_isolation ON run_checkpoints;
+CREATE POLICY run_checkpoints_tenant_isolation ON run_checkpoints
+    USING (tenant_id = current_setting('app.tenant_id', true))
+    WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+
 -- Application role: no superuser, no BYPASSRLS - RLS applies to every query.
 DO $$
 BEGIN
@@ -92,4 +143,5 @@ EXCEPTION WHEN duplicate_object THEN
 END $$;
 
 GRANT USAGE ON SCHEMA public TO convoy_app;
-GRANT SELECT, INSERT, UPDATE ON runs, run_events, run_steps TO convoy_app;
+GRANT SELECT, INSERT, UPDATE ON runs, run_events, run_steps,
+    run_execution_sessions, run_checkpoints TO convoy_app;

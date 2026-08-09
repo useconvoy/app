@@ -34,6 +34,7 @@ from convoy_core import (
     PlanPatchOp,
     RunEvent,
     RunState,
+    SandboxHandle,
     SandboxJobResult,
     StepSummaryRef,
     SubagentResult,
@@ -52,8 +53,12 @@ from convoy_runtime.providers.promoted import (
     SANDBOX_TOOL_PREFIX,
     PromotedToolOutcome,
     PromotedToolRequest,
+    SandboxHibernateOutcome,
+    SandboxHibernateRequest,
     SandboxJobOutcome,
     SandboxJobRequest,
+    SandboxRestoreOutcome,
+    SandboxRestoreRequest,
     promoted_call_key,
 )
 from convoy_runtime.providers.turn_executor import SCRIPTED_MODEL, TurnContext
@@ -143,6 +148,9 @@ class FakeRuntime:
         self.journal = SideEffectJournal()
         self.promoted_requests: list[PromotedToolRequest] = []
         self.sandbox_requests: list[SandboxJobRequest] = []
+        self.sandbox_hibernate_requests: list[SandboxHibernateRequest] = []
+        self.sandbox_restore_requests: list[SandboxRestoreRequest] = []
+        self._sandbox_generation = 0
         # Transient-failure injection: the first N promoted-tool executions
         # crash after journaling, so the retry proves single-fire semantics.
         self.fail_promoted_attempts = fail_promoted_attempts
@@ -309,6 +317,14 @@ class FakeRuntime:
         self.sandbox_requests.append(request)
         call = request.call
         _, replayed = self.journal.record(call.tool_id, call.idempotency_key, {})
+        handle = request.handle
+        if handle is None:
+            self._sandbox_generation += 1
+            handle = SandboxHandle(
+                sandbox_id=f"sbx-fake-{self._sandbox_generation}",
+                provider="fake",
+                template=request.template,
+            )
         return SandboxJobOutcome(
             tool_id=call.tool_id,
             idempotency_key=call.idempotency_key,
@@ -317,7 +333,32 @@ class FakeRuntime:
             snapshot_ref=support_ref(
                 f"sandboxes/{request.run_id}/snapshot-{call.idempotency_key}.tar"
             ),
+            handle=handle,
             replayed=replayed,
+        )
+
+    @activity.defn(name=names.HIBERNATE_SANDBOX)
+    async def hibernate_sandbox(self, request: SandboxHibernateRequest) -> SandboxHibernateOutcome:
+        self.sandbox_hibernate_requests.append(request)
+        return SandboxHibernateOutcome(
+            checkpoint_id=request.checkpoint_id,
+            reason=request.reason,
+            released_sandbox_id=request.handle.sandbox_id,
+            snapshot_ref=support_ref(f"sandboxes/{request.run_id}/{request.checkpoint_id}.tar"),
+        )
+
+    @activity.defn(name=names.RESTORE_SANDBOX)
+    async def restore_sandbox(self, request: SandboxRestoreRequest) -> SandboxRestoreOutcome:
+        self.sandbox_restore_requests.append(request)
+        self._sandbox_generation += 1
+        return SandboxRestoreOutcome(
+            restore_id=request.restore_id,
+            handle=SandboxHandle(
+                sandbox_id=f"sbx-fake-{self._sandbox_generation}",
+                provider="fake",
+                template=request.template,
+            ),
+            snapshot_ref=request.snapshot_ref,
         )
 
     @activity.defn(name=names.ASSEMBLE_SUBAGENT_HEADER)
@@ -388,6 +429,8 @@ class FakeRuntime:
             self.compact_step,
             self.run_promoted_tool,
             self.run_sandbox_job,
+            self.hibernate_sandbox,
+            self.restore_sandbox,
             self.assemble_subagent_header,
             self.wrap_subagent_result,
             self.archive_subagent_result,

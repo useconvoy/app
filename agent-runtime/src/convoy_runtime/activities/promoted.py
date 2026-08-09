@@ -21,6 +21,8 @@ import asyncio
 from typing import Any, cast
 
 import httpx
+from botocore.exceptions import ClientError
+from pydantic import BaseModel
 from temporalio import activity
 
 from convoy_core import ArtifactRef, SandboxHandle, SandboxJob
@@ -29,8 +31,12 @@ from convoy_runtime.providers.artifact_store import ArtifactStore
 from convoy_runtime.providers.promoted import (
     PromotedToolOutcome,
     PromotedToolRequest,
+    SandboxHibernateOutcome,
+    SandboxHibernateRequest,
     SandboxJobOutcome,
     SandboxJobRequest,
+    SandboxRestoreOutcome,
+    SandboxRestoreRequest,
 )
 from convoy_runtime.providers.sandbox import SandboxLostError, SandboxProvider
 
@@ -102,10 +108,10 @@ class SandboxJobActivities:
         activity.heartbeat({"tool_id": call.tool_id, "phase": "start"})
         job = await self._build_job(request)
 
-        handle = self._handles.get(request.run_id)
+        handle = request.handle or self._handles.get(request.run_id)
         if handle is None:
             handle = await self._provider.create(request.template, request.snapshot_ref)
-            self._handles[request.run_id] = handle
+        self._handles[request.run_id] = handle
         try:
             result = await self._provider.exec(handle, job)
         except SandboxLostError:
@@ -132,7 +138,85 @@ class SandboxJobActivities:
             result=result,
             result_ref=result_ref,
             snapshot_ref=snapshot_ref,
+            handle=handle,
         )
+
+    @activity.defn(name=names.HIBERNATE_SANDBOX)
+    async def hibernate_sandbox(self, request: SandboxHibernateRequest) -> SandboxHibernateOutcome:
+        """Checkpoint the active workspace and release its compute.
+
+        A marker is written before destroy. If the activity is retried after
+        compute was already stopped, the marker supplies the exact checkpoint
+        outcome and destroy is safely repeated instead of attempting another
+        snapshot from a dead task.
+        """
+
+        marker_key = self._lifecycle_marker(request.run_id, "checkpoints", request.checkpoint_id)
+        recorded = await self._read_marker(marker_key, SandboxHibernateOutcome)
+        if recorded is not None:
+            await self._provider.destroy(request.handle)
+            self._handles.pop(request.run_id, None)
+            return recorded
+
+        try:
+            snapshot_ref = await self._provider.snapshot(request.handle)
+        except SandboxLostError:
+            # A task may disappear immediately before a pause boundary. The
+            # last completed-job snapshot remains authoritative; hibernation
+            # can release the already-lost handle without losing that state.
+            snapshot_ref = request.snapshot_ref
+
+        outcome = SandboxHibernateOutcome(
+            checkpoint_id=request.checkpoint_id,
+            reason=request.reason,
+            released_sandbox_id=request.handle.sandbox_id,
+            snapshot_ref=snapshot_ref,
+        )
+        await self._store.put_json(marker_key, outcome.model_dump(mode="json"))
+        await self._provider.destroy(request.handle)
+        self._handles.pop(request.run_id, None)
+        return outcome
+
+    @activity.defn(name=names.RESTORE_SANDBOX)
+    async def restore_sandbox(self, request: SandboxRestoreRequest) -> SandboxRestoreOutcome:
+        """Allocate a fresh session from the latest checkpoint.
+
+        The completion marker makes normal Temporal activity retries return
+        the same opaque handle. ECS tasks also self-retire on their lease, so
+        the tiny create-before-marker crash window cannot leak indefinitely.
+        """
+
+        marker_key = self._lifecycle_marker(request.run_id, "restores", request.restore_id)
+        recorded = await self._read_marker(marker_key, SandboxRestoreOutcome)
+        if recorded is not None:
+            self._handles[request.run_id] = recorded.handle
+            return recorded
+
+        handle = await self._provider.create(request.template, request.snapshot_ref)
+        outcome = SandboxRestoreOutcome(
+            restore_id=request.restore_id,
+            handle=handle,
+            snapshot_ref=request.snapshot_ref,
+        )
+        await self._store.put_json(marker_key, outcome.model_dump(mode="json"))
+        self._handles[request.run_id] = handle
+        return outcome
+
+    @staticmethod
+    def _lifecycle_marker(run_id: str, kind: str, operation_id: str) -> str:
+        return f"runs/{run_id}/execution/{kind}/{operation_id}.json"
+
+    async def _read_marker[MarkerT: BaseModel](
+        self, key: str, model: type[MarkerT]
+    ) -> MarkerT | None:
+        try:
+            raw = await self._store.get_json_at(key)
+        except ClientError as error:
+            code = str(error.response.get("Error", {}).get("Code", ""))
+            if code in {"404", "NoSuchKey", "NotFound"}:
+                return None
+            raise
+        return model.model_validate(raw)
 
     async def _build_job(self, request: SandboxJobRequest) -> SandboxJob:
         """The job spec comes claim-checked from the promoting turn: command,
