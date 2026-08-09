@@ -212,6 +212,98 @@
         "title": "CreateRunResponse",
         "type": "object"
       },
+      "ExecutionSessionView": {
+        "description": "Observable cloud compute/checkpoint state for a run.",
+        "properties": {
+          "environment_id": {
+            "title": "Environment Id",
+            "type": "string"
+          },
+          "generation": {
+            "default": 0,
+            "title": "Generation",
+            "type": "integer"
+          },
+          "latest_checkpoint_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Checkpoint Id"
+          },
+          "latest_snapshot_ref": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Snapshot Ref"
+          },
+          "sandbox_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sandbox Id"
+          },
+          "sandbox_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sandbox Provider"
+          },
+          "sandbox_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sandbox Template"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "environment_id",
+          "status"
+        ],
+        "title": "ExecutionSessionView",
+        "type": "object"
+      },
       "FanoutFixture": {
         "description": "Fixture-plan fan-out request: a group of `size` subagent members\nbetween the investigate step and the summarize step (which becomes the\njoin). Members carry `budget_slice` as their reservation and are marked\noptional so a tolerated member failure still lands as a valid partial\ncompletion; the join stays required. `child_layer` exists so tests can\ncraft depth-guard violations.",
         "properties": {
@@ -406,6 +498,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/BudgetView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "execution_session": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecutionSessionView"
               },
               {
                 "type": "null"

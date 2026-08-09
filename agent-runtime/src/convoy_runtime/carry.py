@@ -44,6 +44,12 @@ Exactly what rides in the carry, and why:
   the loop drains; anything enqueued but undrained at the hop must carry.
 - `sandbox_snapshot_ref` — the run's last workspace snapshot: the workspace
   is cache, the snapshot is truth, and a rebuilt sandbox starts from it.
+- `sandbox_handle`/`sandbox_status` — the opaque locator of currently leased
+  compute plus its logical lifecycle state. The handle contains no secrets;
+  carrying it lets a fresh worker rediscover and release the Fargate task.
+- `sandbox_checkpoint_seq`/`sandbox_generation`/`sandbox_checkpoint_id` —
+  deterministic lifecycle operation ids and the latest durable checkpoint,
+  so activity retries and continue-as-new never duplicate lifecycle changes.
 - `ratio_real_anchor`, `ratio_virtual_anchor` — the fixed anchors of the
   ratio-clock mapping (virtual = anchor + real elapsed x ratio); a hop must
   not restart the mapping.
@@ -57,7 +63,14 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from convoy_core import ArtifactRef, ClockConfig, HumanGate, SteerMessage, TokenCounts
+from convoy_core import (
+    ArtifactRef,
+    ClockConfig,
+    HumanGate,
+    SandboxHandle,
+    SteerMessage,
+    TokenCounts,
+)
 from convoy_runtime.signals import ClockAdvance, GateResponse, PlanApprovalDecision
 
 # Segment ceiling before the workflow hops via continue_as_new, and the
@@ -143,6 +156,11 @@ class RunCarry(BaseModel):
     scheduled_responses: list[GateResponse] = []
 
     sandbox_snapshot_ref: ArtifactRef | None = None
+    sandbox_handle: SandboxHandle | None = None
+    sandbox_status: Literal["unprovisioned", "active", "hibernated", "terminated"] = "unprovisioned"
+    sandbox_checkpoint_seq: int = Field(default=0, ge=0)
+    sandbox_generation: int = Field(default=0, ge=0)
+    sandbox_checkpoint_id: str | None = None
 
     ratio_real_anchor: datetime | None = None
     ratio_virtual_anchor: datetime | None = None

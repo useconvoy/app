@@ -45,6 +45,7 @@ from convoy_runtime.control_plane.models import (
     ClockAdvanceRequest,
     CreateRunRequest,
     CreateRunResponse,
+    ExecutionSessionView,
     GateRespondRequest,
     RunView,
     SignalResponse,
@@ -238,6 +239,7 @@ async def create_run(
         tenant_id=actor.tenant_id,
         run_id=run_id,
         goal=body.goal,
+        environment_id=body.environment_id,
         status="planning",
         budget_cap_usd=body.budget_usd,
     )
@@ -422,6 +424,11 @@ async def get_run(request: Request, run_id: str, actor: ActorDep) -> RunView:
         plan=run.plan,
         land_report=run.land_report,
         budget=budget,
+        execution_session=(
+            ExecutionSessionView.model_validate(run.execution_session.model_dump())
+            if run.execution_session is not None
+            else None
+        ),
         steps=[
             StepView(
                 step_id=step.step_id,

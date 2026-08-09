@@ -51,6 +51,20 @@ class StepProjection(BaseModel):
     updated_at: datetime
 
 
+class ExecutionSessionProjection(BaseModel):
+    """Latest cloud execution-session and checkpoint state for one run."""
+
+    environment_id: str
+    status: str
+    sandbox_id: str | None = None
+    sandbox_provider: str | None = None
+    sandbox_template: str | None = None
+    generation: int = 0
+    latest_checkpoint_id: str | None = None
+    latest_snapshot_ref: dict[str, Any] | None = None
+    updated_at: datetime
+
+
 class RunProjection(BaseModel):
     """User-facing view of a run, served exclusively from Postgres. A
     subagent child run is a row of its own, linked by `parent_run_id`."""
@@ -65,6 +79,7 @@ class RunProjection(BaseModel):
     budget_cap_usd: Decimal | None = None
     budget_spent_usd: Decimal | None = None
     budget_reserved_usd: Decimal | None = None
+    execution_session: ExecutionSessionProjection | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -79,6 +94,7 @@ class ProjectionStore:
         tenant_id: str,
         run_id: str,
         goal: str,
+        environment_id: str = "",
         status: str = "planning",
         budget_cap_usd: Decimal | None = None,
     ) -> None:
@@ -90,6 +106,15 @@ class ProjectionStore:
                 ON CONFLICT (run_id) DO NOTHING
                 """,
                 (tenant_id, run_id, status, goal, budget_cap_usd),
+            )
+            await conn.execute(
+                """
+                INSERT INTO run_execution_sessions
+                    (tenant_id, run_id, environment_id, status)
+                VALUES (%s, %s, %s, 'unprovisioned')
+                ON CONFLICT (run_id) DO NOTHING
+                """,
+                (tenant_id, run_id, environment_id),
             )
 
     async def record_events(self, events: list[RunEvent]) -> None:
@@ -214,6 +239,97 @@ class ProjectionStore:
                     "status": "blocked_on_human" if event.type == "gate_opened" else "running",
                 },
             )
+        if event.type in ("environment_provisioned", "environment_restored"):
+            await conn.execute(
+                """
+                INSERT INTO run_execution_sessions
+                    (tenant_id, run_id, status, sandbox_id, sandbox_provider,
+                     sandbox_template, generation, latest_checkpoint_id,
+                     latest_snapshot_ref)
+                VALUES (%s, %s, 'active', %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (run_id) DO UPDATE SET
+                    status               = 'active',
+                    sandbox_id           = EXCLUDED.sandbox_id,
+                    sandbox_provider     = EXCLUDED.sandbox_provider,
+                    sandbox_template     = EXCLUDED.sandbox_template,
+                    generation           = EXCLUDED.generation,
+                    latest_checkpoint_id = COALESCE(EXCLUDED.latest_checkpoint_id,
+                                                    run_execution_sessions.latest_checkpoint_id),
+                    latest_snapshot_ref  = COALESCE(EXCLUDED.latest_snapshot_ref,
+                                                    run_execution_sessions.latest_snapshot_ref),
+                    updated_at           = now()
+                """,
+                (
+                    event.tenant_id,
+                    event.run_id,
+                    payload.get("sandbox_id"),
+                    payload.get("sandbox_provider"),
+                    payload.get("sandbox_template"),
+                    payload.get("generation") or 0,
+                    payload.get("checkpoint_id"),
+                    Jsonb(payload.get("snapshot_ref"))
+                    if payload.get("snapshot_ref") is not None
+                    else None,
+                ),
+            )
+        if event.type == "environment_checkpointed":
+            checkpoint_id = payload.get("checkpoint_id")
+            if isinstance(checkpoint_id, str):
+                snapshot_ref = payload.get("snapshot_ref")
+                await conn.execute(
+                    """
+                    INSERT INTO run_checkpoints
+                        (tenant_id, run_id, checkpoint_id, checkpoint_sequence,
+                         reason, released_sandbox_id, generation, snapshot_ref)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (run_id, checkpoint_id) DO NOTHING
+                    """,
+                    (
+                        event.tenant_id,
+                        event.run_id,
+                        checkpoint_id,
+                        payload.get("checkpoint_sequence") or 0,
+                        str(payload.get("reason") or "unknown"),
+                        payload.get("released_sandbox_id"),
+                        payload.get("generation") or 0,
+                        Jsonb(snapshot_ref) if snapshot_ref is not None else None,
+                    ),
+                )
+                await conn.execute(
+                    """
+                    UPDATE run_execution_sessions SET
+                        status = 'checkpointed', sandbox_id = NULL,
+                        latest_checkpoint_id = %s, latest_snapshot_ref = %s,
+                        generation = %s, updated_at = now()
+                    WHERE run_id = %s
+                    """,
+                    (
+                        checkpoint_id,
+                        Jsonb(snapshot_ref) if snapshot_ref is not None else None,
+                        payload.get("generation") or 0,
+                        event.run_id,
+                    ),
+                )
+        if event.type in ("environment_hibernated", "environment_terminated"):
+            await conn.execute(
+                """
+                UPDATE run_execution_sessions SET
+                    status = %s, sandbox_id = NULL,
+                    latest_checkpoint_id = COALESCE(%s, latest_checkpoint_id),
+                    latest_snapshot_ref = COALESCE(%s, latest_snapshot_ref),
+                    generation = %s, updated_at = now()
+                WHERE run_id = %s
+                """,
+                (
+                    payload.get("execution_status"),
+                    payload.get("checkpoint_id"),
+                    Jsonb(payload.get("snapshot_ref"))
+                    if payload.get("snapshot_ref") is not None
+                    else None,
+                    payload.get("generation") or 0,
+                    event.run_id,
+                ),
+            )
 
     @staticmethod
     async def _upsert_step(
@@ -262,9 +378,21 @@ class ProjectionStore:
                 (run_id,),
             )
             row = await cursor.fetchone()
+            session_cursor = await conn.execute(
+                """
+                SELECT environment_id, status, sandbox_id, sandbox_provider,
+                       sandbox_template, generation, latest_checkpoint_id,
+                       latest_snapshot_ref, updated_at
+                FROM run_execution_sessions WHERE run_id = %s
+                """,
+                (run_id,),
+            )
+            session_row = await session_cursor.fetchone()
         if row is None:
             return None
-        return RunProjection.model_validate(dict(row))
+        raw = dict(row)
+        raw["execution_session"] = dict(session_row) if session_row is not None else None
+        return RunProjection.model_validate(raw)
 
     async def get_steps(self, tenant_id: str, run_id: str) -> list[StepProjection]:
         async with self._db.tenant_connection(tenant_id) as conn:

@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import pytest
 from _support.common import TEST_TASK_QUEUE, fixture_run_state, start_time_skipping_env
-from _support.fakes import FakeRuntime
+from _support.fakes import FakeRuntime, ScriptedTurn
 from temporalio.worker import Worker
 
 from convoy_runtime.workflows.agent_run import AgentRunWorkflow
@@ -88,3 +88,78 @@ async def test_pause_mid_run_then_resume() -> None:
     assert resumed.actor == "bob@example.test"
     assert paused.payload["run_status"] == "paused"
     assert resumed.payload["run_status"] == "running"
+
+
+async def test_pause_checkpoints_releases_and_restores_sandbox_on_fresh_compute() -> None:
+    fake = FakeRuntime(
+        gate_first_turn=True,
+        turns=[
+            ScriptedTurn(promote_tool="sandbox_exec"),
+            ScriptedTurn(promote_tool="sandbox_exec"),
+        ],
+    )
+    state = fixture_run_state(run_id="run-pause-sandbox-1")
+    env = await start_time_skipping_env()
+    async with (
+        env,
+        Worker(
+            env.client,
+            task_queue=TEST_TASK_QUEUE,
+            workflows=[AgentRunWorkflow],
+            activities=fake.activities,
+        ),
+    ):
+        handle = await env.client.start_workflow(
+            AgentRunWorkflow.run,
+            args=[state, "alice@example.test"],
+            id=state.run_id,
+            task_queue=TEST_TASK_QUEUE,
+        )
+        async with asyncio.timeout(15):
+            await fake.first_turn_started.wait()
+
+        # Pause is edge-triggered: the in-flight logical turn is allowed to
+        # finish its sandbox job, then the boundary checkpoints and releases.
+        await handle.signal(AgentRunWorkflow.pause, "bob@example.test")
+        fake.release_first_turn.set()
+        await _eventually(lambda: "environment_hibernated" in fake.event_types)
+
+        assert len(fake.sandbox_requests) == 1
+        assert len(fake.sandbox_hibernate_requests) == 1
+        first_handle = fake.sandbox_hibernate_requests[0].handle
+        durability = await handle.query(AgentRunWorkflow.get_durability)
+        assert durability["sandbox_status"] == "hibernated"
+        assert durability["sandbox_id"] is None
+        assert durability["sandbox_checkpoint_id"] == "checkpoint-1"
+
+        await handle.signal(AgentRunWorkflow.resume, "bob@example.test")
+        result = await handle.result()
+
+    assert result.status == "completed"
+    # One activation before the first job, then a second activation from the
+    # pause checkpoint. Both are durable lifecycle activities.
+    assert len(fake.sandbox_restore_requests) == 2
+    assert fake.sandbox_restore_requests[0].snapshot_ref is None
+    assert fake.sandbox_restore_requests[1].snapshot_ref is not None
+    assert len(fake.sandbox_requests) == 2
+    restored_handle = fake.sandbox_requests[1].handle
+    assert restored_handle is not None
+    assert restored_handle.sandbox_id != first_handle.sandbox_id
+    assert fake.sandbox_requests[1].snapshot_ref is not None
+    assert fake.sandbox_requests[1].snapshot_ref.key.endswith("checkpoint-1.tar")
+
+    # Completion takes a final checkpoint and releases the restored task.
+    assert [request.reason for request in fake.sandbox_hibernate_requests] == [
+        "pause",
+        "completed",
+    ]
+    assert fake.sandbox_hibernate_requests[1].handle.sandbox_id == restored_handle.sandbox_id
+    assert fake.event_types.count("environment_checkpointed") == 2
+    assert fake.event_types.count("environment_hibernated") == 1
+    assert fake.event_types.count("environment_restored") == 1
+    assert fake.event_types.count("environment_terminated") == 1
+    assert fake.event_types.index("environment_hibernated") < fake.event_types.index("paused")
+    assert fake.event_types.index("environment_restored") < fake.event_types.index("resumed")
+    assert fake.event_types.index("environment_terminated") < fake.event_types.index(
+        "run_completed"
+    )

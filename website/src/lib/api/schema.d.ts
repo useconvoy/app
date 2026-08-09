@@ -291,6 +291,35 @@ export interface components {
             status: string;
         };
         /**
+         * ExecutionSessionView
+         * @description Observable cloud compute/checkpoint state for a run.
+         */
+        ExecutionSessionView: {
+            /** Environment Id */
+            environment_id: string;
+            /**
+             * Generation
+             * @default 0
+             */
+            generation: number;
+            /** Latest Checkpoint Id */
+            latest_checkpoint_id?: string | null;
+            /** Latest Snapshot Ref */
+            latest_snapshot_ref?: {
+                [key: string]: unknown;
+            } | null;
+            /** Sandbox Id */
+            sandbox_id?: string | null;
+            /** Sandbox Provider */
+            sandbox_provider?: string | null;
+            /** Sandbox Template */
+            sandbox_template?: string | null;
+            /** Status */
+            status: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /**
          * FanoutFixture
          * @description Fixture-plan fan-out request: a group of `size` subagent members
          *     between the investigate step and the summarize step (which becomes the
@@ -399,6 +428,7 @@ export interface components {
          */
         RunView: {
             budget?: components["schemas"]["BudgetView"] | null;
+            execution_session?: components["schemas"]["ExecutionSessionView"] | null;
             /** Goal */
             goal: string;
             /** Land Report */

@@ -71,6 +71,11 @@ def _scripted_environ() -> dict[str, str]:
     # Slow scripted turns slightly so pause/land land mid-run deterministically.
     env["CONVOY_SCRIPTED_TURN_DELAY"] = "0.4"
     env["CONVOY_TURN_EXECUTOR"] = "scripted"
+    # Scripted runs have no model gateway and their model-key activity is a
+    # deliberate no-op. Keeping LiteLLM configured here made this otherwise
+    # independent lane fail whenever the optional proxy image was unavailable.
+    env.pop("LITELLM_BASE_URL", None)
+    env.pop("LITELLM_MASTER_KEY", None)
     return env
 
 

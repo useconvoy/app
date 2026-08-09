@@ -51,6 +51,7 @@ with workflow.unsafe.imports_passed_through():
         RunEventType,
         RunResult,
         RunState,
+        SandboxHandle,
         SteerMessage,
         StepSummaryRef,
         SubagentResult,
@@ -70,8 +71,13 @@ with workflow.unsafe.imports_passed_through():
         PromotedResume,
         PromotedToolOutcome,
         PromotedToolRequest,
+        SandboxHibernateOutcome,
+        SandboxHibernateRequest,
         SandboxJobOutcome,
         SandboxJobRequest,
+        SandboxReleaseReason,
+        SandboxRestoreOutcome,
+        SandboxRestoreRequest,
     )
     from convoy_runtime.providers.turn_executor import TurnContext
     from convoy_runtime.signals import ClockAdvance, GateResponse, PlanApprovalDecision
@@ -84,6 +90,10 @@ BUDGET_WARNING_THRESHOLD = Decimal("0.8")
 # A single turn may promote at most this many calls before the step is
 # treated as runaway and failed.
 MAX_PROMOTED_CALLS_PER_TURN = 8
+
+# Temporal patch id: checked-in and live histories recorded before execution
+# hibernation retain their exact command sequence during replay.
+SANDBOX_LIFECYCLE_PATCH = "sandbox-session-lifecycle-v1"
 
 # Actor recorded when idle auto-advance moves a virtual clock.
 ON_IDLE_ACTOR = "clock:on_idle"
@@ -158,6 +168,14 @@ _SANDBOX_JOB_RETRY = RetryPolicy(
 )
 _SANDBOX_JOB_TIMEOUT = timedelta(seconds=300)
 _SANDBOX_JOB_HEARTBEAT = timedelta(seconds=120)
+
+_SANDBOX_LIFECYCLE_RETRY = RetryPolicy(
+    initial_interval=timedelta(seconds=1),
+    backoff_coefficient=2.0,
+    maximum_interval=timedelta(seconds=30),
+    maximum_attempts=5,
+)
+_SANDBOX_LIFECYCLE_TIMEOUT = timedelta(seconds=300)
 
 _LAND_RUN_RETRY = RetryPolicy(
     initial_interval=timedelta(seconds=1),
@@ -401,6 +419,14 @@ class AgentRunWorkflow:
         self._hops = 0
         self._turns_at_segment_start = 0
         self._sandbox_snapshot_ref: ArtifactRef | None = None
+        self._sandbox_handle: SandboxHandle | None = None
+        self._sandbox_status: Literal["unprovisioned", "active", "hibernated", "terminated"] = (
+            "unprovisioned"
+        )
+        self._sandbox_checkpoint_seq = 0
+        self._sandbox_generation = 0
+        self._sandbox_checkpoint_id: str | None = None
+        self._sandbox_lifecycle_enabled = False
 
     # ------------------------------------------------------------------ run
 
@@ -416,6 +442,7 @@ class AgentRunWorkflow:
         carry = _ensure_model(carry, RunCarry) if carry is not None else None
         self._state = state
         self._restore_carry(carry)
+        self._sandbox_lifecycle_enabled = workflow.patched(SANDBOX_LIFECYCLE_PATCH)
         self._init_clock(state)
         self._rearm_carried_gates()
 
@@ -479,6 +506,7 @@ class AgentRunWorkflow:
             self._drain_clock_requests()
             if await self._enforce_budget() == "abort":
                 state.status = "failed"
+                await self._hibernate_sandbox("failed")
                 await self._emit(
                     "run_failed",
                     payload={
@@ -512,6 +540,7 @@ class AgentRunWorkflow:
                     # No ready, running, or human-blocked step and the plan
                     # is incomplete: fail loudly.
                     state.status = "failed"
+                    await self._hibernate_sandbox("failed")
                     await self._emit(
                         "run_failed",
                         payload={"run_status": "failed", "reason": "plan deadlock"},
@@ -571,6 +600,7 @@ class AgentRunWorkflow:
                 step.status = "failed"
                 state.status = "failed"
                 await self._emit("step_failed", payload={"step_id": step.id})
+                await self._hibernate_sandbox("failed")
                 await self._emit(
                     "run_failed", payload={"run_status": "failed", "reason": "step failed"}
                 )
@@ -628,16 +658,25 @@ class AgentRunWorkflow:
             actor_type=self._land_actor_type,
             payload={"run_status": "landing"},
         )
-        report = cast(
-            LandReport,
-            await workflow.execute_activity(
-                names.LAND_RUN,
-                args=[state, self._tokens],
-                result_type=LandReport,
-                start_to_close_timeout=_LAND_RUN_TIMEOUT,
-                retry_policy=_LAND_RUN_RETRY,
-            ),
-        )
+        try:
+            report = cast(
+                LandReport,
+                await workflow.execute_activity(
+                    names.LAND_RUN,
+                    args=[state, self._tokens],
+                    result_type=LandReport,
+                    start_to_close_timeout=_LAND_RUN_TIMEOUT,
+                    retry_policy=_LAND_RUN_RETRY,
+                ),
+            )
+        except ActivityError:
+            state.status = "failed"
+            await self._hibernate_sandbox("failed")
+            await self._emit(
+                "run_failed", payload={"run_status": "failed", "reason": "landing failed"}
+            )
+            return RunResult(run_id=state.run_id, status="failed", error="landing failed")
+        await self._hibernate_sandbox("land" if self._landing else "completed")
         state.status = "completed"
         await self._emit(
             "run_completed",
@@ -687,6 +726,11 @@ class AgentRunWorkflow:
         self._advance_requests = [*carry.advance_requests, *self._advance_requests]
         self._scheduled_responses = [*carry.scheduled_responses, *self._scheduled_responses]
         self._sandbox_snapshot_ref = carry.sandbox_snapshot_ref
+        self._sandbox_handle = carry.sandbox_handle
+        self._sandbox_status = carry.sandbox_status
+        self._sandbox_checkpoint_seq = carry.sandbox_checkpoint_seq
+        self._sandbox_generation = carry.sandbox_generation
+        self._sandbox_checkpoint_id = carry.sandbox_checkpoint_id
 
     def _snapshot_carry(self, state: RunState) -> RunCarry:
         """Everything runtime-internal the next execution needs, captured at
@@ -729,6 +773,11 @@ class AgentRunWorkflow:
                 "advance_requests": list(self._advance_requests),
                 "scheduled_responses": list(self._scheduled_responses),
                 "sandbox_snapshot_ref": self._sandbox_snapshot_ref,
+                "sandbox_handle": self._sandbox_handle,
+                "sandbox_status": self._sandbox_status,
+                "sandbox_checkpoint_seq": self._sandbox_checkpoint_seq,
+                "sandbox_generation": self._sandbox_generation,
+                "sandbox_checkpoint_id": self._sandbox_checkpoint_id,
             }
         )
 
@@ -879,6 +928,15 @@ class AgentRunWorkflow:
             "clock_kind": self._clock_kind,
             "virtual_now": virtual.isoformat() if virtual else None,
             "step_summaries": len(self._state.step_summaries) if self._state else 0,
+            "sandbox_status": self._sandbox_status,
+            "sandbox_id": self._sandbox_handle.sandbox_id if self._sandbox_handle else None,
+            "sandbox_generation": self._sandbox_generation,
+            "sandbox_checkpoint_id": self._sandbox_checkpoint_id,
+            "sandbox_snapshot_ref": (
+                self._sandbox_snapshot_ref.model_dump(mode="json")
+                if self._sandbox_snapshot_ref
+                else None
+            ),
         }
 
     # -------------------------------------------------- boundaries & waits
@@ -1050,6 +1108,7 @@ class AgentRunWorkflow:
         if not self._paused or self._landing:
             return False
         self._state.status = "paused"
+        await self._hibernate_sandbox("pause")
         await self._emit(
             "paused",
             actor=self._pause_actor,
@@ -1068,6 +1127,10 @@ class AgentRunWorkflow:
             await self._drain_steer_mailbox()
             self._drain_clock_requests()
         if not self._landing:
+            # Runs that never used compute remain unprovisioned across a
+            # pause. Only a session that was actually hibernated is restored.
+            if self._sandbox_status == "hibernated":
+                await self._activate_sandbox()
             self._state.status = self._base_status()
             await self._emit(
                 "resumed",
@@ -1318,6 +1381,7 @@ class AgentRunWorkflow:
                 step.status = "failed"
                 state.status = "failed"
                 await self._emit("step_failed", payload={"step_id": step.id})
+                await self._hibernate_sandbox("failed")
                 await self._emit(
                     "run_failed",
                     payload={"run_status": "failed", "reason": "gate timed out"},
@@ -1474,6 +1538,13 @@ class AgentRunWorkflow:
         chain: each job starts from the last snapshot (truth) and its new
         snapshot is carried forward."""
         if call.activity == SANDBOX_JOB_ACTIVITY:
+            # Provision first as a distinct durable activity so the workflow
+            # owns the handle before any job starts. A job failure can then
+            # still checkpoint/release its compute on the terminal path.
+            if self._sandbox_lifecycle_enabled:
+                await self._activate_sandbox()
+                if self._sandbox_handle is None:
+                    raise ApplicationError("sandbox could not be activated", non_retryable=True)
             outcome = cast(
                 SandboxJobOutcome,
                 await workflow.execute_activity(
@@ -1483,6 +1554,7 @@ class AgentRunWorkflow:
                         call=call,
                         template=self._carry.binding.sandbox_template,
                         snapshot_ref=self._sandbox_snapshot_ref,
+                        handle=self._sandbox_handle,
                     ),
                     result_type=SandboxJobOutcome,
                     start_to_close_timeout=_SANDBOX_JOB_TIMEOUT,
@@ -1490,7 +1562,37 @@ class AgentRunWorkflow:
                     retry_policy=_SANDBOX_JOB_RETRY,
                 ),
             )
+            previous_handle = self._sandbox_handle
+            previous_snapshot = self._sandbox_snapshot_ref
             self._sandbox_snapshot_ref = outcome.snapshot_ref
+            if outcome.handle is not None:
+                self._sandbox_handle = outcome.handle
+                self._sandbox_status = "active"
+            if outcome.handle is not None and (
+                previous_handle is None or previous_handle.sandbox_id != outcome.handle.sandbox_id
+            ):
+                self._sandbox_generation += 1
+                event_type: RunEventType = (
+                    "environment_provisioned"
+                    if previous_handle is None and previous_snapshot is None
+                    else "environment_restored"
+                )
+                await self._emit(
+                    event_type,
+                    payload={
+                        "execution_status": "active",
+                        "sandbox_id": outcome.handle.sandbox_id,
+                        "sandbox_provider": outcome.handle.provider,
+                        "sandbox_template": outcome.handle.template,
+                        "generation": self._sandbox_generation,
+                        "checkpoint_id": self._sandbox_checkpoint_id,
+                        "snapshot_ref": (
+                            previous_snapshot.model_dump(mode="json")
+                            if previous_snapshot is not None
+                            else None
+                        ),
+                    },
+                )
             return outcome.result_ref
         tool_outcome = cast(
             PromotedToolOutcome,
@@ -1504,6 +1606,144 @@ class AgentRunWorkflow:
             ),
         )
         return tool_outcome.result_ref
+
+    async def _hibernate_sandbox(self, reason: SandboxReleaseReason) -> None:
+        """Checkpoint active compute and release it at a workflow boundary.
+
+        The last snapshot and opaque handle both live in durable workflow
+        state. The activity writes its own idempotency marker before destroy,
+        so a Temporal retry cannot lose the checkpoint or double-release.
+        """
+
+        assert self._state is not None
+        if not self._sandbox_lifecycle_enabled:
+            return
+        handle = self._sandbox_handle
+        if handle is None:
+            if reason != "pause" and self._sandbox_status == "hibernated":
+                self._sandbox_status = "terminated"
+                await self._emit(
+                    "environment_terminated",
+                    payload={
+                        "execution_status": "terminated",
+                        "reason": reason,
+                        "sandbox_id": None,
+                        "generation": self._sandbox_generation,
+                        "checkpoint_id": self._sandbox_checkpoint_id,
+                        "snapshot_ref": (
+                            self._sandbox_snapshot_ref.model_dump(mode="json")
+                            if self._sandbox_snapshot_ref is not None
+                            else None
+                        ),
+                    },
+                )
+            return
+
+        self._sandbox_checkpoint_seq += 1
+        checkpoint_id = f"checkpoint-{self._sandbox_checkpoint_seq}"
+        outcome = cast(
+            SandboxHibernateOutcome,
+            await workflow.execute_activity(
+                names.HIBERNATE_SANDBOX,
+                SandboxHibernateRequest(
+                    run_id=self._state.run_id,
+                    checkpoint_id=checkpoint_id,
+                    reason=reason,
+                    handle=handle,
+                    snapshot_ref=self._sandbox_snapshot_ref,
+                ),
+                result_type=SandboxHibernateOutcome,
+                start_to_close_timeout=_SANDBOX_LIFECYCLE_TIMEOUT,
+                retry_policy=_SANDBOX_LIFECYCLE_RETRY,
+            ),
+        )
+        self._sandbox_snapshot_ref = outcome.snapshot_ref
+        self._sandbox_checkpoint_id = outcome.checkpoint_id
+        self._sandbox_handle = None
+        await self._emit(
+            "environment_checkpointed",
+            payload={
+                "execution_status": "checkpointed",
+                "checkpoint_id": outcome.checkpoint_id,
+                "checkpoint_sequence": self._sandbox_checkpoint_seq,
+                "reason": reason,
+                "released_sandbox_id": outcome.released_sandbox_id,
+                "generation": self._sandbox_generation,
+                "snapshot_ref": (
+                    outcome.snapshot_ref.model_dump(mode="json")
+                    if outcome.snapshot_ref is not None
+                    else None
+                ),
+            },
+        )
+        self._sandbox_status = "hibernated" if reason == "pause" else "terminated"
+        await self._emit(
+            "environment_hibernated" if reason == "pause" else "environment_terminated",
+            payload={
+                "execution_status": self._sandbox_status,
+                "reason": reason,
+                "sandbox_id": None,
+                "released_sandbox_id": outcome.released_sandbox_id,
+                "generation": self._sandbox_generation,
+                "checkpoint_id": outcome.checkpoint_id,
+                "snapshot_ref": (
+                    outcome.snapshot_ref.model_dump(mode="json")
+                    if outcome.snapshot_ref is not None
+                    else None
+                ),
+            },
+        )
+
+    async def _activate_sandbox(self) -> None:
+        """Provision first-use compute or restore a hibernated checkpoint."""
+
+        assert self._state is not None
+        if not self._sandbox_lifecycle_enabled:
+            return
+        if self._sandbox_handle is not None or self._sandbox_status == "terminated":
+            return
+        previous_status = self._sandbox_status
+        self._sandbox_generation += 1
+        restore_id = f"restore-{self._sandbox_generation}"
+        outcome = cast(
+            SandboxRestoreOutcome,
+            await workflow.execute_activity(
+                names.RESTORE_SANDBOX,
+                SandboxRestoreRequest(
+                    run_id=self._state.run_id,
+                    restore_id=restore_id,
+                    template=self._carry.binding.sandbox_template,
+                    snapshot_ref=self._sandbox_snapshot_ref,
+                ),
+                result_type=SandboxRestoreOutcome,
+                start_to_close_timeout=_SANDBOX_LIFECYCLE_TIMEOUT,
+                retry_policy=_SANDBOX_LIFECYCLE_RETRY,
+            ),
+        )
+        self._sandbox_handle = outcome.handle
+        self._sandbox_status = "active"
+        event_type: RunEventType = (
+            "environment_provisioned"
+            if previous_status == "unprovisioned" and self._sandbox_snapshot_ref is None
+            else "environment_restored"
+        )
+        await self._emit(
+            event_type,
+            payload={
+                "execution_status": "active",
+                "restore_id": outcome.restore_id,
+                "sandbox_id": outcome.handle.sandbox_id,
+                "sandbox_provider": outcome.handle.provider,
+                "sandbox_template": outcome.handle.template,
+                "generation": self._sandbox_generation,
+                "checkpoint_id": self._sandbox_checkpoint_id,
+                "snapshot_ref": (
+                    outcome.snapshot_ref.model_dump(mode="json")
+                    if outcome.snapshot_ref is not None
+                    else None
+                ),
+            },
+        )
 
     async def _compact_step_end(self, state: RunState, step: PlanStep, result: TurnResult) -> None:
         """Distill the completed step's working transcript into its step
@@ -1649,6 +1889,7 @@ class AgentRunWorkflow:
                     },
                 )
             state.status = "failed"
+            await self._hibernate_sandbox("failed")
             await self._emit(
                 "run_failed",
                 payload={
@@ -1986,6 +2227,7 @@ class AgentRunWorkflow:
         failed_ids = [m.id for m in failures]
         if group.members[0].group_id is None:
             state.status = "failed"
+            await self._hibernate_sandbox("failed")
             await self._emit(
                 "run_failed", payload={"run_status": "failed", "reason": "step failed"}
             )
@@ -2053,6 +2295,7 @@ class AgentRunWorkflow:
                 },
             )
         state.status = "failed"
+        await self._hibernate_sandbox("failed")
         await self._emit(
             "run_failed",
             payload={
