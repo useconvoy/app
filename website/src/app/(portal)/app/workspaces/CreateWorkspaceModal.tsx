@@ -20,7 +20,17 @@ export interface SystemOption {
   displayName: string;
   sideEffecting: boolean;
   standInNote: string | null;
+  /** Connection state chip; absent keeps the pre-systems-page rendering. */
+  status?: "connected" | "credentials_pending" | "needs_reauth" | "not_connected" | "no_provider";
 }
+
+const STATUS_LABEL: Record<NonNullable<SystemOption["status"]>, string> = {
+  connected: "Connected",
+  credentials_pending: "Credentials pending",
+  needs_reauth: "Needs re-auth",
+  not_connected: "Not connected",
+  no_provider: "No provider yet",
+};
 
 interface SystemChoice {
   included: boolean;
@@ -169,6 +179,20 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
                               }
                             />
                             {system.displayName}
+                            {system.status && (
+                              <span
+                                className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                                  system.status === "connected"
+                                    ? "border-pass-soft bg-pass-soft text-pass-text"
+                                    : system.status === "no_provider" ||
+                                        system.status === "not_connected"
+                                      ? "border-line bg-card text-muted"
+                                      : "border-hold-soft bg-hold-soft text-hold-text"
+                                }`}
+                              >
+                                {STATUS_LABEL[system.status]}
+                              </span>
+                            )}
                           </label>
                           {choice.included && (
                             <label className="flex items-center gap-2 text-xs text-muted">

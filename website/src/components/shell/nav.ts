@@ -32,6 +32,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { area: "routines", label: "Routines", href: "/app/routines" },
       { area: "workspaces", label: "Workspaces", href: "/app/workspaces" },
+      { area: "workspaces", label: "Systems", href: "/app/systems" },
     ],
   },
   {
