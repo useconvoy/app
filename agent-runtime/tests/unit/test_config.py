@@ -29,6 +29,10 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "CONVOY_PG_DSN",
         "CONVOY_ARTIFACT_BUCKET",
         "CONVOY_S3_BUCKET",
+        "CONVOY_S3_ENDPOINT",
+        "CONVOY_S3_ACCESS_KEY",
+        "CONVOY_S3_SECRET_KEY",
+        "CONVOY_DATA_ACCESS_ROLE_ARN",
         "CONVOY_CODEC_KEY",
         "CONVOY_CODEC_KEY_B64",
         "CONVOY_MODEL_GATEWAY",
@@ -70,6 +74,20 @@ def test_legacy_names_still_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.temporal_host == "legacy:7233"
     assert config.pg_dsn == "postgresql://legacy@db/convoy"
     assert config.s3_bucket == "legacy-artifacts"
+
+
+def test_cloud_s3_uses_ambient_role_credentials_when_static_values_are_blank(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CONVOY_S3_ENDPOINT", "")
+    monkeypatch.setenv("CONVOY_S3_ACCESS_KEY", "")
+    monkeypatch.setenv("CONVOY_S3_SECRET_KEY", "")
+    monkeypatch.setenv("CONVOY_DATA_ACCESS_ROLE_ARN", "arn:aws:iam::123456789012:role/data")
+    config = RuntimeConfig.from_env()
+    assert config.s3_endpoint_url is None
+    assert config.s3_access_key is None
+    assert config.s3_secret_key is None
+    assert config.data_access_role_arn.endswith(":role/data")
 
 
 def test_codec_key_accepts_legacy_spelling(monkeypatch: pytest.MonkeyPatch) -> None:

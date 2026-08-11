@@ -73,11 +73,12 @@ class RuntimeConfig:
     temporal_namespace: str
     task_queue: str
     pg_dsn: str
-    s3_endpoint_url: str
+    s3_endpoint_url: str | None
     s3_region: str
     s3_bucket: str
-    s3_access_key: str
-    s3_secret_key: str
+    s3_access_key: str | None
+    s3_secret_key: str | None
+    data_access_role_arn: str
     stub_env_url: str
     environments_internal_token: str
     dev_token: str
@@ -127,13 +128,26 @@ class RuntimeConfig:
                 "CONVOY_PG_DSN",
                 default="postgresql://convoy_app:convoy_app@localhost:5433/convoy",
             ),
-            s3_endpoint_url=_env("CONVOY_S3_ENDPOINT", "http://localhost:9000"),
+            s3_endpoint_url=(
+                os.environ.get("CONVOY_S3_ENDPOINT") or None
+                if "CONVOY_S3_ENDPOINT" in os.environ
+                else "http://localhost:9000"
+            ),
             s3_region=_env("CONVOY_S3_REGION", "us-east-1"),
             s3_bucket=_env_first(
                 "CONVOY_ARTIFACT_BUCKET", "CONVOY_S3_BUCKET", default="convoy-artifacts"
             ),
-            s3_access_key=_env("CONVOY_S3_ACCESS_KEY", "convoy"),
-            s3_secret_key=_env("CONVOY_S3_SECRET_KEY", "convoy-secret-key"),
+            s3_access_key=(
+                os.environ.get("CONVOY_S3_ACCESS_KEY") or None
+                if "CONVOY_S3_ACCESS_KEY" in os.environ
+                else "convoy"
+            ),
+            s3_secret_key=(
+                os.environ.get("CONVOY_S3_SECRET_KEY") or None
+                if "CONVOY_S3_SECRET_KEY" in os.environ
+                else "convoy-secret-key"
+            ),
+            data_access_role_arn=_env("CONVOY_DATA_ACCESS_ROLE_ARN", ""),
             stub_env_url=_env("CONVOY_STUB_ENV_URL", "http://localhost:8902"),
             environments_internal_token=_env_first(
                 "CONVOY_ENVIRONMENTS_INTERNAL_TOKEN",

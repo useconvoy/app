@@ -17,6 +17,13 @@ module "stack" {
   temporal_mtls_cert_secret_arn = var.temporal_mtls_cert_secret_arn
   temporal_mtls_key_secret_arn  = var.temporal_mtls_key_secret_arn
 
+  environments_url                       = var.environments_url
+  environments_internal_token_secret_arn = var.environments_internal_token_secret_arn
+  runtime_turn_executor                  = var.runtime_turn_executor
+  runtime_default_model                  = var.runtime_default_model
+  runtime_approved_models                = var.runtime_approved_models
+  runtime_fallback_chains                = var.runtime_fallback_chains
+
   image_tag              = var.image_tag
   model_provider_secrets = var.model_provider_secrets
   langfuse_secret_arn    = var.langfuse_secret_arn

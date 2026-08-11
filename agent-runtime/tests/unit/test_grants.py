@@ -8,6 +8,7 @@ from convoy_core import PermissionScope, ToolGrant
 from convoy_runtime.providers.grants import (
     GrantValidationError,
     effective_inline_tools,
+    effective_tools,
     intersect_grants,
     resolve_requested_tools,
     validate_grants,
@@ -87,6 +88,26 @@ def test_effective_inline_tools_respects_agent_side_declaration() -> None:
     # The agent's own grant marks the tool promoted; it must not run inline.
     agent_tools = [grant("kb_lookup", execution="promoted")]
     assert effective_inline_tools(agent_tools, REGISTRY) == []
+
+
+def test_effective_tools_includes_promoted_with_binding_authoritative() -> None:
+    requested = [
+        ToolGrant(
+            tool_id="delete",
+            scope=PermissionScope(resource="requested", actions=["read"]),
+            execution="inline",
+            side_effecting=False,
+        )
+    ]
+    offered = [
+        ToolGrant(
+            tool_id="delete",
+            scope=PermissionScope(resource="bound", actions=["write"]),
+            execution="promoted",
+            side_effecting=True,
+        )
+    ]
+    assert effective_tools(requested, offered) == offered
 
 
 def test_intersect_grants_drops_tools_the_parent_lacks() -> None:

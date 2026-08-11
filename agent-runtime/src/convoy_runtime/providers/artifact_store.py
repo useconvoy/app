@@ -7,12 +7,14 @@ threads so activities stay non-blocking.
 
 import hashlib
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable, cast
 
 import anyio.to_thread
 import boto3
 from botocore.config import Config as BotoConfig
+from botocore.credentials import AssumeRoleCredentialFetcher, DeferredRefreshableCredentials
 from botocore.exceptions import ClientError
+from botocore.session import get_session
 
 from convoy_core import ArtifactRef
 
@@ -22,6 +24,33 @@ if TYPE_CHECKING:
 
 class ArtifactIntegrityError(RuntimeError):
     """Raised when a fetched blob does not match its ref's sha256."""
+
+
+def _assumed_role_session(role_arn: str, region: str) -> boto3.Session:
+    """A boto3 session whose STS credentials refresh before expiration."""
+
+    source = boto3.Session(region_name=region)
+    source_credentials = source.get_credentials()
+    if source_credentials is None:
+        raise RuntimeError("CONVOY_DATA_ACCESS_ROLE_ARN is set but no source AWS credentials exist")
+
+    def client_creator(service_name: str, **kwargs: Any) -> Any:
+        factory = cast("Callable[..., Any]", getattr(source, "client"))
+        return factory(service_name, **kwargs)
+
+    fetcher = cast("Any", AssumeRoleCredentialFetcher)(
+        client_creator=client_creator,
+        source_credentials=source_credentials,
+        role_arn=role_arn,
+        extra_args={"RoleSessionName": "convoy-runtime"},
+    )
+    botocore_session = get_session()
+    botocore_session._credentials = DeferredRefreshableCredentials(  # type: ignore[attr-defined]
+        method="assume-role",
+        refresh_using=fetcher.fetch_credentials,
+    )
+    botocore_session.set_config_variable("region", region)
+    return boto3.Session(botocore_session=botocore_session)
 
 
 class ArtifactStore:
@@ -35,12 +64,14 @@ class ArtifactStore:
         region: str = "us-east-1",
         access_key: str | None = None,
         secret_key: str | None = None,
+        role_arn: str = "",
     ) -> None:
         self._bucket = bucket
         # SigV4 explicitly: presigned URLs default to the legacy signature
         # otherwise, which real S3 rejects (and KMS-encrypted buckets require
         # v4 unconditionally). MinIO speaks v4 as well.
-        self._client: S3Client = boto3.client(  # pyright: ignore[reportUnknownMemberType]
+        session = _assumed_role_session(role_arn, region) if role_arn else boto3.Session()
+        self._client: S3Client = session.client(  # pyright: ignore[reportUnknownMemberType]
             "s3",
             endpoint_url=endpoint_url,
             region_name=region,
@@ -48,7 +79,6 @@ class ArtifactStore:
             aws_secret_access_key=secret_key,
             config=BotoConfig(signature_version="s3v4", s3={"addressing_style": "path"}),
         )
-
     @property
     def bucket(self) -> str:
         return self._bucket

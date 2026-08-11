@@ -4,7 +4,8 @@ This module is the inside half of the ECS sandbox protocol. The trusted
 worker claim-checks this file's source to the artifact store at sandbox
 creation and boots the Fargate task with a tiny integrity-pinned bootstrap
 that fetches and executes it — so the runtime owns both halves of the
-protocol and the sandbox image only needs a `python3`.
+protocol. The canonical image supplies Python and Chromium; environments
+without browser policy need only the Python interpreter.
 
 It runs credential-free by construction: every byte it moves travels over
 short-lived presigned URLs minted by the trusted worker (a GET-poll mailbox
@@ -34,7 +35,15 @@ import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from convoy_runtime.providers.sandbox_browser import BrowserRuntime
+else:
+    try:
+        from convoy_sandbox_browser import BrowserRuntime  # pyright: ignore[reportMissingImports]
+    except ImportError:  # imported normally by local unit tests
+        from convoy_runtime.providers.sandbox_browser import BrowserRuntime
 
 JOURNAL_DIR = ".convoy/journal"
 INPUTS_DIR = "inputs"
@@ -148,7 +157,9 @@ def _collect_outputs(workspace: Path) -> list[tuple[str, bytes]]:
     ]
 
 
-def run_job(workspace: Path, doc: dict[str, Any]) -> dict[str, Any]:
+def run_job(
+    workspace: Path, doc: dict[str, Any], browser_env: dict[str, str] | None = None
+) -> dict[str, Any]:
     """Execute one job document and return the result payload.
 
     A journaled idempotency key replays the recorded result without touching
@@ -169,7 +180,12 @@ def run_job(workspace: Path, doc: dict[str, Any]) -> dict[str, Any]:
 
     timeout = float(doc.get("timeout_seconds") or DEFAULT_JOB_TIMEOUT_SECONDS)
     cap = int(doc.get("stream_cap_bytes") or DEFAULT_STREAM_CAP_BYTES)
-    env = {**BASE_ENV, "HOME": str(workspace), **{str(k): str(v) for k, v in doc["env"].items()}}
+    env = {
+        **BASE_ENV,
+        "HOME": str(workspace),
+        **{str(k): str(v) for k, v in doc["env"].items()},
+        **(browser_env or {}),
+    }
     try:
         completed = subprocess.run(
             [str(part) for part in doc["command"]],
@@ -217,20 +233,33 @@ def run_job(workspace: Path, doc: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def run_snapshot(workspace: Path, doc: dict[str, Any]) -> dict[str, Any]:
+def run_snapshot(
+    workspace: Path, doc: dict[str, Any], browser: BrowserRuntime | None = None
+) -> dict[str, Any]:
     """Archive the whole workspace (journal included) to the snapshot
     capability and report its integrity facts."""
-    data = _archive(workspace)
+    if browser is not None:
+        browser.stop_browser()
+    try:
+        data = _archive(workspace)
+    finally:
+        if browser is not None:
+            browser.start()
     _put(str(doc["url"]), data, "application/x-tar")
     return {"sha256": hashlib.sha256(data).hexdigest(), "size_bytes": len(data)}
 
 
-def process_document(workspace: Path, doc: dict[str, Any]) -> dict[str, Any]:
+def process_document(
+    workspace: Path, doc: dict[str, Any], browser: BrowserRuntime | None = None
+) -> dict[str, Any]:
     kind = doc.get("kind")
     if kind == "job":
-        return {"doc_id": doc["doc_id"], "result": run_job(workspace, doc)}
+        return {
+            "doc_id": doc["doc_id"],
+            "result": run_job(workspace, doc, browser.job_env if browser is not None else None),
+        }
     if kind == "snapshot":
-        return {"doc_id": doc["doc_id"], **run_snapshot(workspace, doc)}
+        return {"doc_id": doc["doc_id"], **run_snapshot(workspace, doc, browser)}
     raise RuntimeError(f"unknown control document kind {kind!r}")
 
 
@@ -245,23 +274,34 @@ def main() -> None:
     if workspace_url:
         rehydrate(workspace, workspace_url)
 
+    browser_policy = json.loads(os.environ.get("CONVOY_SANDBOX_BROWSER_POLICY", "{}"))
+    browser = BrowserRuntime(workspace, browser_policy)
+    browser.start()
+
     last_doc_id = ""
     last_activity = time.monotonic()
-    while time.monotonic() - last_activity < max_idle:
-        status, body = http_request("GET", mailbox_url)
-        if status == 403:
-            # The mailbox capability expired: the sandbox has outlived its
-            # lease, so it retires itself rather than idling forever.
-            return
-        if status == 200:
-            doc: dict[str, Any] = json.loads(body)
-            if doc.get("doc_id") != last_doc_id:
-                last_doc_id = str(doc["doc_id"])
-                response = process_document(workspace, doc)
-                _put(str(doc["result"]["url"]), json.dumps(response).encode(), "application/json")
-                last_activity = time.monotonic()
-                continue
-        time.sleep(poll_seconds)
+    try:
+        while time.monotonic() - last_activity < max_idle:
+            status, body = http_request("GET", mailbox_url)
+            if status == 403:
+                # The mailbox capability expired: the sandbox has outlived its
+                # lease, so it retires itself rather than idling forever.
+                return
+            if status == 200:
+                doc: dict[str, Any] = json.loads(body)
+                if doc.get("doc_id") != last_doc_id:
+                    last_doc_id = str(doc["doc_id"])
+                    response = process_document(workspace, doc, browser)
+                    _put(
+                        str(doc["result"]["url"]),
+                        json.dumps(response).encode(),
+                        "application/json",
+                    )
+                    last_activity = time.monotonic()
+                    continue
+            time.sleep(poll_seconds)
+    finally:
+        browser.close()
 
 
 if __name__ == "__main__":

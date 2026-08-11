@@ -138,6 +138,18 @@ class ToolResult(_EventBase):
     error: Optional[str] = None
 
 
+class SimulatedEffect(_EventBase):
+    """A rehearsal-only write captured instead of sent to the provider."""
+
+    type: Literal["simulated_effect"]
+    tool: str
+    provider: str
+    connectionId: str
+    idempotencyKey: str
+    args: Any = None
+    result: Any = None
+
+
 class ToolDenied(_EventBase):
     type: Literal["tool_denied"]
     tool: str
@@ -226,6 +238,7 @@ ConvoyEvent = Annotated[
         ToolApproved,
         ToolExecuted,
         ToolResult,
+        SimulatedEffect,
         ToolDenied,
         GateRaised,
         GateResolved,
@@ -249,4 +262,4 @@ class _EventEnvelope(BaseModel):
 
 def parse_event(data: Dict[str, Any]) -> Any:
     """Validate a raw dict into the right event model."""
-    return _EventEnvelope(event=data).event
+    return _EventEnvelope.model_validate({"event": data}).event

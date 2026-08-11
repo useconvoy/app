@@ -21,6 +21,10 @@ def test_two_phase_envelope_roundtrip():
     assert intent.idempotencyKey == "k1"
     _roundtrip({**base, "eventId": "e2", "seq": 1, "type": "tool_executed", "tool": "slack.post_message", "idempotencyKey": "k1"})
     _roundtrip({**base, "eventId": "e3", "seq": 2, "type": "tool_result", "tool": "slack.post_message", "idempotencyKey": "k1", "result": {"ok": True}})
+    _roundtrip({**base, "eventId": "e4", "seq": 3, "type": "simulated_effect",
+                "tool": "slack.post_message", "provider": "slack", "connectionId": "c1",
+                "idempotencyKey": "k1", "args": {"channel": "ops"},
+                "result": {"ok": True, "simulated": True}})
 
 
 def test_collapsed_read_and_gate_roundtrip():

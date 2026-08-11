@@ -84,6 +84,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
         region=config.s3_region,
         access_key=config.s3_access_key,
         secret_key=config.s3_secret_key,
+        role_arn=config.data_access_role_arn,
     )
     db = ProjectionsDB(config.pg_dsn)
     await db.open()
@@ -98,6 +99,11 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 
 app = FastAPI(title="Convoy Agent Runtime", lifespan=_lifespan)
+
+
+@app.get("/healthz")
+async def healthz() -> dict[str, str]:
+    return {"status": "ok"}
 
 ActorDep = Annotated[Actor, Depends(require_actor)]
 
@@ -251,6 +257,10 @@ async def create_run(
             kind=binding.kind,
             clock=binding.clock,
             sandbox_template=binding.sandbox_template,
+            browser=binding.browser,
+            connector_endpoints={
+                name: str(url) for name, url in binding.connector_endpoints.items()
+            },
         ),
         tuning=RunTuning(
             turn_limit=config.turn_limit,

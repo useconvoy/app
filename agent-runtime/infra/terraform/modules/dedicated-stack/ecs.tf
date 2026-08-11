@@ -227,10 +227,22 @@ locals {
     { name = "CONVOY_ENVIRONMENT", value = var.environment },
     { name = "CONVOY_ARTIFACT_BUCKET", value = aws_s3_bucket.artifacts.bucket },
     { name = "CONVOY_DATA_ACCESS_ROLE_ARN", value = aws_iam_role.data_access.arn },
+    { name = "CONVOY_S3_ENDPOINT", value = "" },
+    { name = "CONVOY_S3_REGION", value = local.region },
+    { name = "CONVOY_S3_ACCESS_KEY", value = "" },
+    { name = "CONVOY_S3_SECRET_KEY", value = "" },
     { name = "TEMPORAL_ADDRESS", value = var.temporal_address },
     { name = "TEMPORAL_NAMESPACE", value = var.temporal_namespace },
     { name = "TEMPORAL_TASK_QUEUE", value = var.temporal_task_queue },
     { name = "LITELLM_BASE_URL", value = local.litellm_base_url },
+    { name = "CONVOY_STUB_ENV_URL", value = trimsuffix(var.environments_url, "/") },
+    { name = "CONVOY_TURN_EXECUTOR", value = var.runtime_turn_executor },
+    { name = "CONVOY_DEFAULT_MODEL", value = var.runtime_default_model },
+    { name = "CONVOY_MODEL_GATEWAY", value = jsonencode({
+      endpoints       = {}
+      approved_models = var.runtime_approved_models
+      fallback_chains = var.runtime_fallback_chains
+    }) },
   ]
 
   runtime_secrets = concat(
@@ -240,6 +252,7 @@ locals {
       { name = "LITELLM_MASTER_KEY", valueFrom = aws_secretsmanager_secret.litellm_master_key.arn },
       { name = "TEMPORAL_TLS_CERT_PEM", valueFrom = var.temporal_mtls_cert_secret_arn },
       { name = "TEMPORAL_TLS_KEY_PEM", valueFrom = var.temporal_mtls_key_secret_arn },
+      { name = "CONVOY_ENVIRONMENTS_INTERNAL_TOKEN", valueFrom = var.environments_internal_token_secret_arn },
     ],
     var.langfuse_secret_arn == null ? [] : [
       { name = "LANGFUSE_PUBLIC_KEY", valueFrom = "${var.langfuse_secret_arn}:LANGFUSE_PUBLIC_KEY::" },

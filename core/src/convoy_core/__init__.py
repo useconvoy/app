@@ -17,7 +17,7 @@ from convoy_core.deployment import (
     SandboxProviderConfig,
     TemporalTarget,
 )
-from convoy_core.environment import ClockConfig, EnvironmentBinding
+from convoy_core.environment import BrowserRuntimeConfig, ClockConfig, EnvironmentBinding
 from convoy_core.events import RunEvent, RunEventType
 from convoy_core.land import LandReport
 from convoy_core.plan import (
@@ -39,6 +39,7 @@ __all__ = [
     "AgentSpec",
     "ArtifactRef",
     "BudgetState",
+    "BrowserRuntimeConfig",
     "ClockConfig",
     "DeploymentProfile",
     "EnvironmentBinding",

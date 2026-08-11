@@ -14,6 +14,9 @@ temporal_namespace            = "example-dev.a1b2c"
 temporal_mtls_cert_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:convoy/temporal/example-dev-cert-AbCdEf"
 temporal_mtls_key_secret_arn  = "arn:aws:secretsmanager:us-east-1:123456789012:secret:convoy/temporal/example-dev-key-AbCdEf"
 
+environments_url                       = "https://api.example.com/gateway"
+environments_internal_token_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:convoy/environments/internal-token-AbCdEf"
+
 image_tag = "bootstrap"
 
 model_provider_secrets = {

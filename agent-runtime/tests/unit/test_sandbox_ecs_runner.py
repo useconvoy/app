@@ -276,5 +276,9 @@ def test_runner_source_is_stdlib_only() -> None:
         "typing",
         "urllib",
         "uuid",
+        # Integrity-pinned, stdlib-only sibling source shipped by the worker;
+        # convoy_runtime is the local-test fallback for the same module.
+        "convoy_sandbox_browser",
+        "convoy_runtime",
     }
     assert imported <= stdlib, f"non-stdlib imports in the sandbox runner: {imported - stdlib}"

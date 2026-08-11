@@ -12,8 +12,9 @@ Exactly what rides in the carry, and why:
   replay-deterministic, so limits arrive as recorded input data, never from
   the environment.
 - `binding` — the environment facts the workflow itself branches on (kind,
-  clock config, sandbox template). The full binding snapshot is claim-checked
-  behind `RunState.binding_ref` and workflow code cannot read artifacts.
+  clock config, sandbox template, browser policy, and the immutable promoted
+  data-plane URL). The full binding snapshot is claim-checked behind
+  `RunState.binding_ref` and workflow code cannot read artifacts.
 - `hops`, `turns_at_segment_start` — hop count and the turn count at the last
   hop, so the turn limit measures the current history segment, not the run.
 - `event_seq` — the outbox is idempotent on (run_id, seq); a hop must continue
@@ -65,6 +66,7 @@ from pydantic import BaseModel, Field
 
 from convoy_core import (
     ArtifactRef,
+    BrowserRuntimeConfig,
     ClockConfig,
     HumanGate,
     SandboxHandle,
@@ -102,6 +104,8 @@ class BindingFacts(BaseModel):
     kind: Literal["sandbox", "production"] = "production"
     clock: ClockConfig = ClockConfig()
     sandbox_template: str = ""
+    browser: BrowserRuntimeConfig = BrowserRuntimeConfig()
+    connector_endpoints: dict[str, str] = {}
 
 
 class CarriedGate(BaseModel):

@@ -10,18 +10,41 @@
 #      URLs for one object and one verb, handed in via RunTask overrides and
 #      job documents. Data in, artifacts out; model-generated code never
 #      sees keys.
-#   2. NO NETWORK BEYOND THE SUBSTRATE: the sandbox security group has no
-#      ingress at all and egress only to the stack's VPC endpoints (image
-#      pull via ECR endpoints; the presigned-URL data plane and image layers
-#      via the S3 gateway prefix list; stdout/stderr to the logs endpoint).
-#      No internet, no database, no LiteLLM.
+#   2. BROWSER-ONLY INTERNET SURFACE: the sandbox security group has no
+#      ingress and exposes only HTTP/S egress through the private subnet NAT.
+#      Chromium is pinned to the runtime's per-session allowlist proxy. The SG
+#      provides the underlying HTTP/S route; hard network allowlisting can be
+#      added with a dedicated egress proxy/Network Firewall when required.
+#      Presigned S3 capabilities remain the sandbox's only storage access.
 
 resource "aws_security_group" "sandbox" {
   name        = "${local.name_prefix}-sandbox"
-  description = "Credential-free sandbox tasks: no ingress; egress to VPC endpoints only"
+  description = "Credential-free sandbox tasks: no ingress; HTTP/S browser egress plus VPC endpoints"
   vpc_id      = aws_vpc.this.id
 
   tags = merge(local.tags, { Name = "${local.name_prefix}-sandbox" })
+}
+
+resource "aws_vpc_security_group_egress_rule" "sandbox_browser_http" {
+  security_group_id = aws_security_group.sandbox.id
+  description       = "HTTP substrate for allowlisted browser navigation through the in-task proxy"
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 80
+  to_port           = 80
+  ip_protocol       = "tcp"
+
+  tags = local.tags
+}
+
+resource "aws_vpc_security_group_egress_rule" "sandbox_browser_https" {
+  security_group_id = aws_security_group.sandbox.id
+  description       = "HTTPS substrate for allowlisted browser navigation through the in-task proxy"
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+
+  tags = local.tags
 }
 
 resource "aws_vpc_security_group_egress_rule" "sandbox_to_vpc_endpoints" {

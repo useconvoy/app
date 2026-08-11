@@ -3,8 +3,9 @@ schedules as their own activities.
 
 `run_promoted_tool` executes one data-plane tool through the environment's
 side-effect endpoint, which journals the idempotency key: a retried call with
-the same key returns the recorded result instead of acting twice. The result
-body is claim-checked; only refs ride back through Temporal.
+the same key returns the recorded result instead of acting twice. Production
+result bodies stay claim-checked behind refs; rehearsal stand-ins may also
+return a bounded display result for the audit UI.
 
 `run_sandbox_job` executes one job through the SandboxProvider seam. The
 sandbox is per-run cache keyed by the last workspace snapshot (the truth):
@@ -18,6 +19,8 @@ stays credential-free either way.
 """
 
 import asyncio
+import json
+from pathlib import Path
 from typing import Any, cast
 
 import httpx
@@ -40,6 +43,25 @@ from convoy_runtime.providers.promoted import (
 )
 from convoy_runtime.providers.sandbox import SandboxLostError, SandboxProvider
 
+_BROWSER_CLI_SOURCE = (
+    Path(__file__).parents[1] / "providers" / "sandbox_browser_cli.py"
+).read_text()
+
+_SIMULATED_RESULT_LIMIT = 8_192
+
+
+def _bounded_simulated_result(endpoint: str, result: Any) -> Any | None:
+    """Return small stand-in output for display, never a live connector body."""
+    if "/simulated-data-plane" not in endpoint:
+        return None
+    encoded = json.dumps(result, sort_keys=True, default=str)
+    if len(encoded) <= _SIMULATED_RESULT_LIMIT:
+        return result
+    return {
+        "truncated": True,
+        "preview": encoded[:_SIMULATED_RESULT_LIMIT],
+    }
+
 
 class PromotedToolActivities:
     def __init__(
@@ -47,10 +69,12 @@ class PromotedToolActivities:
         store: ArtifactStore,
         *,
         stub_env_url: str,
+        environments_internal_token: str = "",
         completion_delay_seconds: float = 0.0,
     ) -> None:
         self._store = store
         self._stub_env_url = stub_env_url.rstrip("/")
+        self._environments_internal_token = environments_internal_token
         # Test knob: widens the window between the side effect landing and
         # the activity completing, so chaos suites can kill the worker inside
         # it deterministically. Zero in production paths.
@@ -63,14 +87,20 @@ class PromotedToolActivities:
         args: dict[str, Any] = {}
         if call.args_ref is not None:
             args = await self._store.get_json(call.args_ref)
+        endpoint = request.endpoint_url.rstrip("/") or self._stub_env_url
         async with httpx.AsyncClient(timeout=30.0) as http:
             response = await http.post(
-                f"{self._stub_env_url}/effects/{call.tool_id}",
+                f"{endpoint}/effects/{call.tool_id}",
                 json={
                     "idempotency_key": call.idempotency_key,
                     "run_id": request.run_id,
                     "args": args,
                 },
+                headers=(
+                    {"X-Convoy-Internal": self._environments_internal_token}
+                    if self._environments_internal_token
+                    else None
+                ),
             )
             response.raise_for_status()
             payload: dict[str, Any] = response.json()
@@ -91,6 +121,7 @@ class PromotedToolActivities:
             idempotency_key=call.idempotency_key,
             result_ref=result_ref,
             replayed=bool(payload.get("replayed", False)),
+            simulated_result=_bounded_simulated_result(endpoint, payload.get("result")),
         )
 
 
@@ -110,7 +141,9 @@ class SandboxJobActivities:
 
         handle = request.handle or self._handles.get(request.run_id)
         if handle is None:
-            handle = await self._provider.create(request.template, request.snapshot_ref)
+            handle = await self._provider.create(
+                request.template, request.snapshot_ref, request.browser
+            )
         self._handles[request.run_id] = handle
         try:
             result = await self._provider.exec(handle, job)
@@ -118,7 +151,9 @@ class SandboxJobActivities:
             # The cached sandbox is gone: rebuild from the last snapshot (the
             # truth) and re-run under the same idempotency key. The journal
             # inside the snapshot guarantees no doubled side effect.
-            handle = await self._provider.create(request.template, request.snapshot_ref)
+            handle = await self._provider.create(
+                request.template, request.snapshot_ref, request.browser
+            )
             self._handles[request.run_id] = handle
             result = await self._provider.exec(handle, job)
         activity.heartbeat({"tool_id": call.tool_id, "phase": "executed"})
@@ -192,7 +227,9 @@ class SandboxJobActivities:
             self._handles[request.run_id] = recorded.handle
             return recorded
 
-        handle = await self._provider.create(request.template, request.snapshot_ref)
+        handle = await self._provider.create(
+            request.template, request.snapshot_ref, request.browser
+        )
         outcome = SandboxRestoreOutcome(
             restore_id=request.restore_id,
             handle=handle,
@@ -224,12 +261,15 @@ class SandboxJobActivities:
         spec: dict[str, Any] = {}
         if request.call.args_ref is not None:
             spec = await self._store.get_json(request.call.args_ref)
-        raw_command = spec.get("command")
-        command = (
-            [str(part) for part in cast("list[Any]", raw_command)]
-            if isinstance(raw_command, list)
-            else ["true"]
-        )
+        if request.call.tool_id == "sandbox_browser":
+            command = ["python3", "-c", _BROWSER_CLI_SOURCE, json.dumps(spec, sort_keys=True)]
+        else:
+            raw_command = spec.get("command")
+            command = (
+                [str(part) for part in cast("list[Any]", raw_command)]
+                if isinstance(raw_command, list)
+                else ["true"]
+            )
         raw_env = spec.get("env")
         env = (
             {str(k): str(v) for k, v in cast("dict[Any, Any]", raw_env).items()}

@@ -287,6 +287,10 @@ class ScriptedTurnExecutor:
         """Deterministic promoted-call arguments. Sandbox jobs append a line
         to a workspace log and report its length, so workspace continuity
         across snapshots (and rebuilds after loss) is externally checkable."""
+        if grant.tool_id == "sandbox_browser":
+            # The deterministic lane proves the browser session is usable
+            # without navigating outside the environment's allowlist.
+            return {"action": "snapshot"}
         if grant.tool_id.startswith(SANDBOX_TOOL_PREFIX):
             script = (
                 "mkdir -p outputs && "

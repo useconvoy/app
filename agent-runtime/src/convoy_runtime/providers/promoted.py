@@ -3,16 +3,23 @@
 A promoted call runs as its own activity with its own timeout/retry policy.
 Its idempotency key is a pure hash of (run_id, step_id, turn, call_index),
 so a retry — or a whole workflow replay — reaches the side-effecting system
-with the same key and can never double-fire the effect. Results are
-claim-checked: the activity returns refs, never bodies.
+with the same key and can never double-fire the effect. Production results
+are claim-checked refs; rehearsal results may include a bounded display copy
+for the run's stand-in audit.
 """
 
 import hashlib
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from convoy_core import ArtifactRef, SandboxHandle, SandboxJobResult, ToolCallRequest
+from convoy_core import (
+    ArtifactRef,
+    BrowserRuntimeConfig,
+    SandboxHandle,
+    SandboxJobResult,
+    ToolCallRequest,
+)
 
 # The only activities a promoted call may name; the workflow rejects anything
 # else deterministically instead of scheduling an unknown activity. The
@@ -49,6 +56,9 @@ class PromotedToolRequest(BaseModel):
 
     run_id: str
     call: ToolCallRequest
+    # The immutable binding decides between the real and rehearsal data
+    # planes. Empty preserves compatibility with older workflow histories.
+    endpoint_url: str = ""
 
 
 class PromotedToolOutcome(BaseModel):
@@ -60,6 +70,9 @@ class PromotedToolOutcome(BaseModel):
     idempotency_key: str
     result_ref: ArtifactRef
     replayed: bool = False
+    # Rehearsal data planes may return a bounded, credential-free display
+    # result for the audit UI. Production outcomes remain ref-only.
+    simulated_result: Any | None = None
 
 
 class SandboxJobRequest(BaseModel):
@@ -75,6 +88,7 @@ class SandboxJobRequest(BaseModel):
     # rediscover an existing Fargate task instead of depending on process
     # memory. Older histories omit it and retain the create-from-snapshot path.
     handle: SandboxHandle | None = None
+    browser: BrowserRuntimeConfig = BrowserRuntimeConfig()
 
 
 class SandboxJobOutcome(BaseModel):
@@ -124,6 +138,7 @@ class SandboxRestoreRequest(BaseModel):
     restore_id: str
     template: str
     snapshot_ref: ArtifactRef | None = None
+    browser: BrowserRuntimeConfig = BrowserRuntimeConfig()
 
 
 class SandboxRestoreOutcome(BaseModel):
