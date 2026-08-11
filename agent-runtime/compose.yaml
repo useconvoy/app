@@ -83,6 +83,24 @@ services:
   #                              plus CONVOY_INTERNAL_TOKEN=<real-env token>
   #   inside the compose network:     CONVOY_STUB_ENV_URL=http://real-env:8780/gateway
   # --------------------------------------------------------------------------
+  sandbox:
+    profiles: ["demo"]
+    build:
+      context: ../sandbox
+    environment:
+      PORT: "8790"
+      SANDBOX_RUNTIME_ROOT: /var/lib/convoy-sandbox
+      SANDBOX_ADMIN_TOKEN: ${SANDBOX_ADMIN_TOKEN:-}
+    ports:
+      - "8790:8790"
+    volumes:
+      - connector-sandbox-state:/var/lib/convoy-sandbox
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8790/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
   real-env:
     profiles: ["demo"]
     build:
@@ -105,21 +123,24 @@ services:
       # RUNTIME WORKERS reach it — they run on the host, so this is the
       # mapped port, not the service name.
       CONVOY_GATEWAY_PUBLIC_URL: http://localhost:8780/gateway
-      # !! DEV-ONLY STOP-GAP !! Anonymous data plane exists ONLY until the
-      # runtime attaches run JWTs to its data-plane calls (raised on PR #17).
-      # Remove the moment that lands; never set this outside this profile.
-      CONVOY_DATA_PLANE_ALLOW_ANON: "1"
+      # Rehearsal bindings call provider-shaped stubs through the same Slack,
+      # Google, and GitHub connector code used in production.
+      CONVOY_CONNECTOR_SANDBOX_URL: http://sandbox:8790
+      SANDBOX_ADMIN_TOKEN: ${SANDBOX_ADMIN_TOKEN:-}
+      # Trusted host-run runtime processes authenticate with this same local
+      # internal token. Sandboxes never receive it.
     ports:
       - "8780:8780"
     depends_on:
       postgres:
         condition: service_healthy
+      sandbox:
+        condition: service_healthy
 
   litellm:
-    # Built fully offline from prefetched inputs; run
-    # docker/litellm/prefetch.sh once before `docker compose build`
-    # (`make e2e-up` does this automatically).
-    build: docker/litellm
+    build:
+      context: ..
+      dockerfile: agent-runtime/docker/litellm.Dockerfile
     environment:
       LITELLM_MASTER_KEY: sk-convoy-e2e-master-key
       DATABASE_URL: postgresql://litellm:litellm@postgres:5432/litellm
@@ -145,3 +166,6 @@ services:
         condition: service_healthy
       mock-model:
         condition: service_healthy
+
+volumes:
+  connector-sandbox-state:

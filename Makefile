@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f agent-runtime/compose.yaml
 
-.PHONY: lint fmt typecheck test e2e e2e-up e2e-down chaos live-smoke litellm-prefetch record-history
+.PHONY: lint fmt typecheck test e2e e2e-up e2e-down chaos live-smoke record-history sandbox-up sandbox-down sandbox-test
 
 lint:
 	uv run ruff format --check .
@@ -18,12 +18,7 @@ typecheck:
 test:
 	uv run pytest agent-runtime/tests -m "not e2e and not chaos and not live"
 
-# The litellm image builds fully offline; its inputs (wheels, prisma engines)
-# are prefetched on the host first. Idempotent.
-litellm-prefetch:
-	agent-runtime/docker/litellm/prefetch.sh
-
-e2e-up: litellm-prefetch
+e2e-up:
 	$(COMPOSE) up -d --build --wait
 
 e2e-down:
@@ -63,3 +58,14 @@ live-smoke:
 # message; prefer workflow.patched versioning for live-run compatibility.
 record-history:
 	uv run python agent-runtime/tests/histories/record.py
+
+# Provider-shaped connector stubs. These exercise the production Slack,
+# Google, and GitHub connector implementations against fake local data.
+sandbox-up:
+	docker compose -f sandbox/compose.yaml up -d --build --wait
+
+sandbox-down:
+	docker compose -f sandbox/compose.yaml down
+
+sandbox-test:
+	cd sandbox && npm test

@@ -1,0 +1,24 @@
+name: official-provider-contracts
+
+on:
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  read-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run safe read-only provider contracts
+        working-directory: sandbox
+        env:
+          OFFICIAL_SLACK_BOT_TOKEN: ${{ secrets.OFFICIAL_SLACK_BOT_TOKEN }}
+          OFFICIAL_GITHUB_TOKEN: ${{ secrets.OFFICIAL_GITHUB_TOKEN }}
+          OFFICIAL_GITHUB_REPOSITORY: ${{ vars.OFFICIAL_GITHUB_REPOSITORY }}
+          OFFICIAL_GOOGLE_ACCESS_TOKEN: ${{ secrets.OFFICIAL_GOOGLE_ACCESS_TOKEN }}
+          OFFICIAL_GOOGLE_FOLDER_ID: ${{ vars.OFFICIAL_GOOGLE_FOLDER_ID }}
+        run: node tests/official-contracts.mjs

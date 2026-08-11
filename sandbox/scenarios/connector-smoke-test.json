@@ -1,0 +1,42 @@
+{
+  "id": "connector-smoke-test",
+  "name": "Exercise the sandbox connectors",
+  "description": "Post in Slack, append to Sheets, and create a GitHub issue through the same connector interfaces used in production.",
+  "criteria": [
+    {
+      "id": "slack-write",
+      "label": "Post an operations update",
+      "type": "collection_contains",
+      "provider": "slack",
+      "collection": "messages",
+      "match": { "channel": "C_OPERATIONS", "textIncludes": "Sample task" },
+      "minimum": 2,
+      "weight": 30
+    },
+    {
+      "id": "sheets-write",
+      "label": "Append an operations row",
+      "type": "sheet_contains_row",
+      "spreadsheetId": "sheet-operations",
+      "sheet": "Operations",
+      "values": ["Sample task", "In progress", "Convoy"],
+      "weight": 30
+    },
+    {
+      "id": "github-write",
+      "label": "Open an example-service issue",
+      "type": "github_issue",
+      "repository": "sandbox/example-service",
+      "match": { "titleIncludes": "Sample task" },
+      "weight": 10
+    },
+    {
+      "id": "traceability",
+      "label": "Preserve a complete provider audit trail",
+      "type": "audit_event",
+      "event": "provider.request",
+      "minimum": 3,
+      "weight": 30
+    }
+  ]
+}

@@ -89,7 +89,11 @@ def _post_file(post_url: str, fields: dict[str, str], key: str, data: bytes) -> 
     with the file part last as the form contract requires."""
     boundary = f"convoy-{uuid.uuid4().hex}"
     body = io.BytesIO()
-    for name, value in [*fields.items(), ("key", key)]:
+    # boto3 includes a ``key=<prefix>${filename}`` form field. Replace that
+    # template with the concrete, policy-compliant output key; appending a
+    # second key field makes S3 reject the request as ambiguous.
+    form_fields = {**fields, "key": key}
+    for name, value in form_fields.items():
         body.write(f"--{boundary}\r\n".encode())
         body.write(f'Content-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
     body.write(f"--{boundary}\r\n".encode())
