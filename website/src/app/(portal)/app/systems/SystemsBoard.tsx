@@ -41,7 +41,11 @@ export interface SystemsBoardProps {
   systems: SystemCard[];
   customSystems: CustomSystemCard[];
   connect: (systemId: string, secretValue: string) => Promise<SystemActionResult>;
-  addCustom: (displayName: string, url: string, bearerToken: string) => Promise<SystemActionResult>;
+  addCustom: (
+    displayName: string,
+    url: string,
+    bearerToken: string,
+  ) => Promise<SystemActionResult>;
   reattach: (connectionId: string, secretValue: string) => Promise<SystemActionResult>;
 }
 
@@ -69,7 +73,7 @@ const PROVIDER_HELP: Record<string, { label: string; placeholder: string; steps:
     placeholder: "xoxb-...",
     steps: [
       "Create a Slack app for your workspace and install it.",
-      "Give it the channel read and write scopes your routines need.",
+      "Give it the channel read and write scopes your Agents need.",
       "Paste the bot token that starts with xoxb.",
     ],
   },
@@ -172,7 +176,11 @@ export function SystemsBoard({
 
   function submitCustom() {
     startCustom(async () => {
-      const outcome = await addCustom(customName, customUrl, customToken);
+      const outcome = await addCustom(
+        customName,
+        customUrl,
+        customToken,
+      );
       setCustomResult(outcome);
       if (outcome.ok) {
         setCustomName("");
@@ -201,7 +209,7 @@ export function SystemsBoard({
                       ? `${system.toolCount} ${system.toolCount === 1 ? "tool" : "tools"}`
                       : system.state === "no_provider"
                         ? "Grants for this system stay website-side for now."
-                        : "Routines can use this once it is connected."}
+                        : "Agents can use this once it is connected."}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

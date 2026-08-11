@@ -30,15 +30,38 @@ class ConnectorError(Exception):
 class Connector(abc.ABC):
     provider: str = ""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None, transport: Optional[httpx.AsyncBaseTransport] = None) -> None:
+    def __init__(
+        self,
+        config: Optional[Dict[str, Any]] = None,
+        transport: Optional[httpx.AsyncBaseTransport] = None,
+    ) -> None:
         self.config = config or {}
         self._transport = transport
 
     def _client(self, **kwargs) -> httpx.AsyncClient:
+        # The gateway uses this internal-only hook to pass an idempotency key
+        # through the normal connector transport to a provider-shaped
+        # sandbox. Production connection configuration never needs it.
+        request_headers = self.config.get("_requestHeaders") or {}
+        if request_headers:
+            kwargs["headers"] = {**request_headers, **(kwargs.get("headers") or {})}
         if self._transport is not None:
             kwargs["transport"] = self._transport
         kwargs.setdefault("timeout", 30.0)
         return httpx.AsyncClient(**kwargs)
+
+    def _config_url(self, default: str, *keys: str) -> str:
+        """Resolve an optional provider endpoint override.
+
+        Production connections use the provider default. Hermetic/rehearsal
+        connections can point the same connector implementation at a Convoy
+        sandbox without replacing its transport or tool semantics.
+        """
+        for key in keys:
+            configured = self.config.get(key)
+            if configured:
+                return str(configured).rstrip("/")
+        return default.rstrip("/")
 
     @abc.abstractmethod
     async def manifest(self, credential: Optional[str] = None) -> ConnectionManifest: ...
@@ -62,8 +85,11 @@ def register(cls: Type[Connector]) -> Type[Connector]:
     return cls
 
 
-def get_connector(provider: str, config: Optional[Dict[str, Any]] = None,
-                  transport: Optional[httpx.AsyncBaseTransport] = None) -> Connector:
+def get_connector(
+    provider: str,
+    config: Optional[Dict[str, Any]] = None,
+    transport: Optional[httpx.AsyncBaseTransport] = None,
+) -> Connector:
     try:
         cls = _REGISTRY[provider]
     except KeyError:
@@ -75,6 +101,8 @@ async def raise_for_status(resp: httpx.Response, provider: str) -> None:
     if resp.status_code == 401:
         raise ConnectorError("%s: credential rejected (needs_reauth)" % provider)
     if resp.status_code == 429 or resp.status_code >= 500:
-        raise ConnectorError("%s: upstream unavailable (%d)" % (provider, resp.status_code), retryable=True)
+        raise ConnectorError(
+            "%s: upstream unavailable (%d)" % (provider, resp.status_code), retryable=True
+        )
     if resp.status_code >= 400:
         raise ConnectorError("%s: %d %s" % (provider, resp.status_code, resp.text[:300]))

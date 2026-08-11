@@ -1,10 +1,9 @@
 /**
  * Workspace detail, presentational: connected systems and grants,
- * stand-ins, named runtime environments, versions, routines, and activity.
+ * rehearsal safety, Agents that use it, versions, and activity.
  */
 import Link from "next/link";
 
-import { Chip } from "@/components/Chip";
 import { EmptyState } from "@/components/EmptyState";
 import { SystemRow } from "@/components/SystemRow";
 import type { Workspace } from "@/lib/api/environments";
@@ -12,15 +11,12 @@ import { friendlyDate } from "@/lib/format";
 
 export interface WorkspaceDetailProps {
   workspace: Workspace;
-  /** Names of routines that run in this workspace. */
-  routineNames: string[];
-  environments?: Array<{ id: string; name: string; isDefault: boolean }>;
+  agents?: Array<{ id: string; name: string }>;
 }
 
 export function WorkspaceDetail({
   workspace,
-  routineNames,
-  environments = [],
+  agents = [],
 }: WorkspaceDetailProps) {
   const standIns = workspace.systems.filter((grant) => grant.standIn);
   return (
@@ -70,30 +66,27 @@ export function WorkspaceDetail({
         )}
       </Section>
 
-      <Section title="Environments">
-        {environments.length > 0 ? (
+      <Section title="Agents">
+        {agents.length > 0 ? (
           <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2">
-            {environments.map((environment) => (
-              <li key={environment.id}>
+            {agents.map((agent) => (
+              <li key={agent.id}>
                 <Link
-                  href={`/app/environments/${environment.id}`}
+                  href={`/app/agents/${agent.id}`}
                   className="block rounded-lg border border-line bg-card p-4 hover:border-pine"
                 >
-                  <span className="text-sm font-medium text-ink">{environment.name}</span>
-                  {environment.isDefault && (
-                    <span className="ml-2 text-xs text-muted">Default</span>
-                  )}
+                  <span className="text-sm font-medium text-ink">{agent.name}</span>
                 </Link>
               </li>
             ))}
           </ul>
         ) : (
           <p className="rounded-lg border border-dashed border-line p-4 text-sm text-muted">
-            No named environment yet. Runs use the workspace fallback until you create one.
+            No Agent uses this Workspace yet. Multiple Agents can share these integrations.
           </p>
         )}
-        <Link href="/app/environments" className="mt-3 inline-block text-sm text-ink underline">
-          Manage environments
+        <Link href="/app/agents" className="mt-3 inline-block text-sm text-ink underline">
+          Manage agents
         </Link>
       </Section>
 
@@ -112,20 +105,6 @@ export function WorkspaceDetail({
             </li>
           ))}
         </ul>
-      </Section>
-
-      <Section title="Routines that run here">
-        {routineNames.length > 0 ? (
-          <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
-            {routineNames.map((name) => (
-              <li key={name}>
-                <Chip>{name}</Chip>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-muted">No routines run here yet.</p>
-        )}
       </Section>
 
       {/* TODO(website): wire this activity feed to the cross-run event

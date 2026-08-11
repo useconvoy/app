@@ -41,28 +41,15 @@ async function openModalAndFill(create: (payload: unknown) => Promise<{ id: stri
 }
 
 describe("CreateWorkspaceModal", () => {
-  it("blocks submit with a visible error when a side-effecting system gets Can update without a stand-in", async () => {
+  it("automatically isolates side-effecting writes for rehearsal runs", async () => {
     const create = vi.fn().mockResolvedValue({ id: "workspace-x" });
     const { user, dialog } = await openModalAndFill(create);
 
     await user.click(within(dialog).getByLabelText("Messaging"));
     await user.selectOptions(within(dialog).getByRole("combobox"), "write");
-    await user.click(within(dialog).getByRole("button", { name: "Create workspace" }));
-
-    expect(create).not.toHaveBeenCalled();
-    const alert = screen.getByRole("alert");
-    expect(alert).toHaveTextContent(
-      "Messaging makes changes outside this organization. Add a stand-in before creating the workspace.",
-    );
-  });
-
-  it("submits once the stand-in is taken", async () => {
-    const create = vi.fn().mockResolvedValue({ id: "workspace-x" });
-    const { user, dialog } = await openModalAndFill(create);
-
-    await user.click(within(dialog).getByLabelText("Messaging"));
-    await user.selectOptions(within(dialog).getByRole("combobox"), "write");
-    await user.click(within(dialog).getByLabelText(/Use the stand-in/));
+    expect(
+      within(dialog).getByText(/Rehearsal runs isolate writes automatically/),
+    ).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Create workspace" }));
 
     expect(create).toHaveBeenCalledWith({
@@ -98,16 +85,16 @@ describe("CreateWorkspaceModal", () => {
     expect(create).not.toHaveBeenCalled();
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("Give the workspace a name.");
-    expect(alert).toHaveTextContent("Say in a sentence what runs here.");
+    expect(alert).toHaveTextContent("Say which shared work this workspace supports.");
     expect(alert).toHaveTextContent("Connect at least one system.");
   });
 
-  it("points to environment setup as the next step", async () => {
+  it("points to agent setup as the next step", async () => {
     const user = userEvent.setup();
     render(<CreateWorkspaceModal systems={systems} create={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "New workspace" }));
     expect(
-      screen.getByText("You can add a runtime environment after creating the workspace."),
+      screen.getByText(/Next, create an Agent that uses this shared Workspace/),
     ).toBeInTheDocument();
   });
 });
@@ -122,20 +109,20 @@ describe("WorkspaceCards", () => {
             name: "Compliance workspace",
             purpose: "Access reviews run here.",
             systemCount: 4,
-            routineCount: 2,
+            agentCount: 2,
           },
           {
             id: "workspace-vendor",
             name: "Vendor workspace",
             purpose: "Vendor work runs here.",
             systemCount: 3,
-            routineCount: 1,
+            agentCount: 1,
           },
         ]}
       />,
     );
-    expect(screen.getByText("Connects 4 systems · used by 2 routines")).toBeInTheDocument();
-    expect(screen.getByText("Connects 3 systems · used by 1 routine")).toBeInTheDocument();
+    expect(screen.getByText("Connects 4 systems · used by 2 agents")).toBeInTheDocument();
+    expect(screen.getByText("Connects 3 systems · used by 1 agent")).toBeInTheDocument();
   });
 });
 
@@ -144,8 +131,7 @@ describe("WorkspaceDetail", () => {
     render(
       <WorkspaceDetail
         workspace={fixtureWorkspaces[0]!}
-        routineNames={["Quarterly user access review"]}
-        environments={[{ id: "environment-1", name: "Production operations", isDefault: true }]}
+        agents={[{ id: "agent-1", name: "Production operations" }]}
       />,
     );
     expect(screen.getAllByText("View only")).toHaveLength(2);
@@ -153,10 +139,9 @@ describe("WorkspaceDetail", () => {
     expect(
       screen.getByText("Stand-in for Messaging: messages are held in the outbox instead of being sent."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Quarterly user access review")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Production operations/ })).toHaveAttribute(
       "href",
-      "/app/environments/environment-1",
+      "/app/agents/agent-1",
     );
     expect(screen.getByText("v2")).toBeInTheDocument();
   });

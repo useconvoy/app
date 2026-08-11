@@ -12,10 +12,10 @@ import { systemCatalog } from "@/lib/workspaces/system-catalog";
 import { catalogCopy, copy } from "@/lexicon";
 import { InstallFlow } from "./InstallFlow";
 
-export const metadata: Metadata = { title: "Install a routine" };
+export const metadata: Metadata = { title: "Install an Agent template" };
 
 /**
- * The install screen: the server resolves the entry's
+ * The install screen: the server resolves the Agent template's
  * capability requirements against every workspace up front, so picking a
  * workspace shows its compatibility report instantly; confirming installs
  * with the snapshot version pinned.
@@ -26,12 +26,24 @@ export default async function InstallPage({ params }: { params: Promise<{ entryI
   const entry = await getEntry({ orgId: session.orgId, userId: session.userId }, entryId);
   if (!entry) notFound();
 
-  const workspaces = await environmentsClient().listWorkspaces(session.orgId);
-  const options = workspaces.map((workspace) => ({
-    workspaceId: workspace.id,
-    workspaceName: workspace.name,
-    report: computeCompatibility(entry.requirements, workspace),
-  }));
+  const client = environmentsClient();
+  const [workspaces, agents] = await Promise.all([
+    client.listWorkspaces(session.orgId),
+    client.listAgents(session.orgId),
+  ]);
+  const workspacesById = new Map(workspaces.map((workspace) => [workspace.id, workspace]));
+  const options = agents.flatMap((agent) => {
+    const workspace = workspacesById.get(agent.workspaceId);
+    return workspace
+      ? [{
+          agentId: agent.id,
+          agentName: agent.name,
+          workspaceId: workspace.id,
+          workspaceName: workspace.name,
+          report: computeCompatibility(entry.requirements, workspace),
+        }]
+      : [];
+  });
 
   // Plain names for every id the reports may mention: the shared system
   // catalog plus whatever concrete systems the workspaces connect.
@@ -62,14 +74,16 @@ export default async function InstallPage({ params }: { params: Promise<{ entryI
         />
       ) : (
         <EmptyState
-          title={copy.workspacesEmptyTitle}
-          body={catalogCopy.installNeedsWorkspace}
+          title={agents.length === 0 ? "Create an agent first" : copy.workspacesEmptyTitle}
+          body={agents.length === 0
+            ? "An Agent template needs an Agent already linked to a shared Workspace and runtime setup."
+            : catalogCopy.installNeedsWorkspace}
           action={
             <Link
-              href="/app/workspaces"
+              href={agents.length === 0 ? "/app/agents" : "/app/workspaces"}
               className="rounded-md border border-line bg-card px-3 py-1.5 text-sm font-medium text-ink hover:border-pine"
             >
-              {catalogCopy.goToWorkspaces}
+              {agents.length === 0 ? "Go to agents" : catalogCopy.goToWorkspaces}
             </Link>
           }
         />

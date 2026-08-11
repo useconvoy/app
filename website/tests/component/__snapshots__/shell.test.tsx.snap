@@ -33,26 +33,6 @@ exports[`NavItems > lenses a viewer down to the read-only areas 1`] = `
       <p
         class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted"
       >
-        Build
-      </p>
-      <ul
-        aria-label="Build"
-        class="flex flex-col gap-0.5"
-      >
-        <li>
-          <a
-            class="block rounded-md px-3 py-2 text-sm font-medium transition-colors text-muted hover:bg-field hover:text-ink"
-            href="/app/routines"
-          >
-            Routines
-          </a>
-        </li>
-      </ul>
-    </div>
-    <div>
-      <p
-        class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted"
-      >
         Improve
       </p>
       <ul
@@ -64,7 +44,7 @@ exports[`NavItems > lenses a viewer down to the read-only areas 1`] = `
             class="block rounded-md px-3 py-2 text-sm font-medium transition-colors text-muted hover:bg-field hover:text-ink"
             href="/app/evaluation"
           >
-            Routine evaluation
+            Agent evaluation
           </a>
         </li>
         <li>
@@ -131,9 +111,9 @@ exports[`NavItems > shows every area to an admin 1`] = `
         <li>
           <a
             class="block rounded-md px-3 py-2 text-sm font-medium transition-colors text-muted hover:bg-field hover:text-ink"
-            href="/app/routines"
+            href="/app/agents"
           >
-            Routines
+            Agents
           </a>
         </li>
         <li>
@@ -142,14 +122,6 @@ exports[`NavItems > shows every area to an admin 1`] = `
             href="/app/workspaces"
           >
             Workspaces
-          </a>
-        </li>
-        <li>
-          <a
-            class="block rounded-md px-3 py-2 text-sm font-medium transition-colors text-muted hover:bg-field hover:text-ink"
-            href="/app/environments"
-          >
-            Environments
           </a>
         </li>
         <li>
@@ -177,7 +149,7 @@ exports[`NavItems > shows every area to an admin 1`] = `
             class="block rounded-md px-3 py-2 text-sm font-medium transition-colors text-muted hover:bg-field hover:text-ink"
             href="/app/evaluation"
           >
-            Routine evaluation
+            Agent evaluation
           </a>
         </li>
         <li>

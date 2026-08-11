@@ -387,6 +387,7 @@ export function RunDetail({
                 description: step.sentence,
                 status: step.status,
               }))}
+              events={events}
               rehearsal={rehearsal}
             >
               <div className="flex flex-wrap items-center gap-4">
@@ -454,7 +455,7 @@ export function RunDetail({
                 </div>
                 {environmentId && (
                   <div>
-                    <dt className="text-muted">Environment</dt>
+                    <dt className="text-muted">Runtime binding</dt>
                     <dd className="mt-0.5 break-all font-mono text-ink">{environmentId}</dd>
                   </div>
                 )}
@@ -477,8 +478,8 @@ export function RunDetail({
             </details>
           </section>
           {executionRuntime && (
-            <section aria-label="Environment runtime" className={cardClass}>
-              <h2 className="font-display text-lg text-ink">Environment runtime</h2>
+            <section aria-label="Agent runtime" className={cardClass}>
+              <h2 className="font-display text-lg text-ink">Agent runtime</h2>
               <dl className="mt-3 space-y-3 text-sm">
                 <div>
                   <dt className="text-muted">State</dt>

@@ -1,7 +1,7 @@
 /**
  * Reads and appends for routine test scores. The full evaluation service
  * (scenario suites, per-run scorecards, scored-run trajectories) is not
- * built yet; what exists today is the append-only routine_eval_scores
+ * built yet; what exists today is the append-only agent_eval_scores
  * table, read through withOrgContext so RLS bounds every query. A fresh
  * organization has no scores and every consuming surface renders an
  * honest empty state.
@@ -54,8 +54,8 @@ export async function scoreTrend(orgId: string, routineId: string): Promise<Test
   return withOrgContext({ orgId }, async (client) => {
     const { rows } = await client.query<{ score: number; recordedAt: Date }>(
       `SELECT score, recorded_at AS "recordedAt"
-         FROM routine_eval_scores
-        WHERE org_id = $1 AND routine_id = $2
+         FROM agent_eval_scores
+        WHERE org_id = $1 AND agent_id = $2
         ORDER BY recorded_at, id`,
       [orgId, routineId],
     );
@@ -72,8 +72,8 @@ export async function scoredRuns(
   return withOrgContext({ orgId }, async (client) => {
     const { rows } = await client.query<{ runRef: string; score: number; recordedAt: Date }>(
       `SELECT run_ref AS "runRef", score, recorded_at AS "recordedAt"
-         FROM routine_eval_scores
-        WHERE org_id = $1 AND routine_id = $2
+         FROM agent_eval_scores
+        WHERE org_id = $1 AND agent_id = $2
         ORDER BY recorded_at DESC, id DESC
         LIMIT $3`,
       [orgId, routineId, limit],
@@ -100,7 +100,7 @@ export async function recordScore(
 ): Promise<void> {
   await withOrgContext({ orgId }, (client) =>
     client.query(
-      `INSERT INTO routine_eval_scores (org_id, routine_id, run_ref, score)
+      `INSERT INTO agent_eval_scores (org_id, agent_id, run_ref, score)
        VALUES ($1, $2, $3, $4)`,
       [orgId, routineId, runRef, score],
     ),

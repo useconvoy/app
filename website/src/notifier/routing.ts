@@ -160,10 +160,10 @@ export async function loadRoutingWorld(
   const assignments: AssignmentRow[] = routineId
     ? (
         await client.query<AssignmentRow>(
-          `SELECT routine_id AS "routineId", assignee_type AS "assigneeType",
+          `SELECT agent_id AS "routineId", assignee_type AS "assigneeType",
                   assignee_id AS "assigneeId", relationship
-             FROM routine_assignments
-            WHERE org_id = $1 AND routine_id = $2`,
+             FROM agent_assignments
+            WHERE org_id = $1 AND agent_id = $2`,
           [orgId, routineId],
         )
       ).rows

@@ -155,11 +155,10 @@ describe("NavItems", () => {
       "Overview",
       "Checkpoints",
       "Runs",
-      "Routines",
+      "Agents",
       "Workspaces",
-      "Environments",
       "Systems",
-      "Routine evaluation",
+      "Agent evaluation",
       "Learning",
       "Logs",
       "Admin",
@@ -172,10 +171,10 @@ describe("NavItems", () => {
 
   it("lenses a viewer down to the read-only areas", () => {
     const { container } = render(<NavItems role="viewer" />);
-    for (const label of ["Overview", "Runs", "Routines", "Routine evaluation", "Learning"]) {
+    for (const label of ["Overview", "Runs", "Agent evaluation", "Learning"]) {
       expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
     }
-    for (const label of ["Checkpoints", "Workspaces", "Environments", "Systems", "Logs", "Admin"]) {
+    for (const label of ["Checkpoints", "Agents", "Workspaces", "Systems", "Logs", "Admin"]) {
       expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
     }
     expect(container).toMatchSnapshot();

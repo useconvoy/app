@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { copy } from "@/lexicon";
 import type { BudgetView } from "@/lib/api/client";
 import { money } from "@/lib/format";
+import type { RunStreamEvent } from "@/lib/runs/status";
 import {
   deriveStandInOutbox,
   landReportFacts,
@@ -16,6 +17,8 @@ export interface LandReportSectionProps {
   budget: BudgetView | null;
   /** RunView steps, for deriving the stand-in outbox rows. */
   steps: readonly OutboxStep[];
+  /** Recorded connector stand-in effects from the run's event stream. */
+  events?: readonly RunStreamEvent[];
   /** Rehearsal reports carry the stand-in outbox. */
   rehearsal: boolean;
   /** Action area: export link, promotion submit, or the promote decision. */
@@ -31,12 +34,13 @@ export function LandReportSection({
   report,
   budget,
   steps,
+  events = [],
   rehearsal,
   children,
 }: LandReportSectionProps) {
   const facts = landReportFacts(report);
   const landed = facts.status === "completed" || facts.status === "landed";
-  const outbox = rehearsal ? deriveStandInOutbox(report, steps) : [];
+  const outbox = rehearsal ? deriveStandInOutbox(report, steps, events) : [];
   const exceptions = facts.stepsFailed + facts.stepsSkipped;
 
   return (

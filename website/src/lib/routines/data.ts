@@ -11,6 +11,7 @@ import "server-only";
 import type { ActorContext } from "@/lib/api/client";
 import {
   environmentsClient,
+  type Agent,
   type SystemGrant,
   type Workspace,
 } from "@/lib/api/environments";
@@ -115,6 +116,9 @@ export async function listRoutineViews(
 
 export interface RoutineDetailData {
   routine: RoutineRecord;
+  /** The selected agent and every agent available for reassignment. */
+  agent: Agent | null;
+  agents: Agent[];
   /** The workspace runs use, after the precedence in resolveWorkspaceSelection. */
   workspace: Workspace | null;
   /**
@@ -162,8 +166,9 @@ export async function getRoutineDetail(
 ): Promise<RoutineDetailData | null> {
   const routine = await getRoutine(orgId, routineId);
   if (!routine) return null;
-  const [workspaces, approvers, history] = await Promise.all([
+  const [workspaces, agents, approvers, history] = await Promise.all([
     environmentsClient().listWorkspaces(orgId),
+    environmentsClient().listAgents(orgId),
     listApprovers(orgId, routineId),
     runHistory(actor),
   ]);
@@ -171,6 +176,8 @@ export async function getRoutineDetail(
   const grants = new Map((workspace?.systems ?? []).map((grant) => [grant.systemId, grant]));
   return {
     routine,
+    agent: routine.agentId ? agents.find((agent) => agent.id === routine.agentId) ?? null : null,
+    agents,
     workspace,
     staleAssignment,
     workspaces,

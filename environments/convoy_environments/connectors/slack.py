@@ -37,17 +37,32 @@ class SlackConnector(Connector):
     async def manifest(self, credential: Optional[str] = None) -> ConnectionManifest:
         return ConnectionManifest(tools=list(_TOOLS))
 
+    async def verify_credential(self, credential: str) -> Optional[bool]:
+        """Prove the bot token against Slack without reading or mutating data."""
+        api = self._config_url(_API, "apiBaseUrl", "api_base_url")
+        headers = {"Authorization": "Bearer %s" % credential}
+        async with self._client(headers=headers) as client:
+            resp = await client.post(api + "/auth.test")
+            await raise_for_status(resp, "slack")
+            body = resp.json()
+            if not body.get("ok", False):
+                raise ConnectorError(
+                    "slack: credential rejected (%s)" % body.get("error", "unknown_error")
+                )
+        return True
+
     async def invoke(self, tool: str, args: Dict[str, Any], credential: str) -> Any:
+        api = self._config_url(_API, "apiBaseUrl", "api_base_url")
         headers = {"Authorization": "Bearer %s" % credential}
         async with self._client(headers=headers) as client:
             if tool == "slack.list_channels":
-                resp = await client.get(_API + "/conversations.list",
+                resp = await client.get(api + "/conversations.list",
                                         params={"limit": args.get("limit", 100), "types": "public_channel"})
             elif tool == "slack.read_messages":
-                resp = await client.get(_API + "/conversations.history",
+                resp = await client.get(api + "/conversations.history",
                                         params={"channel": args["channel"], "limit": args.get("limit", 50)})
             elif tool == "slack.post_message":
-                resp = await client.post(_API + "/chat.postMessage",
+                resp = await client.post(api + "/chat.postMessage",
                                          json={"channel": args["channel"], "text": args["text"]})
             else:
                 raise ConnectorError("slack: unknown tool %s" % tool)

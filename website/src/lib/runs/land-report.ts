@@ -4,6 +4,7 @@
  * run detail and the promotion review page; no IO, no server-only imports.
  */
 import { copy } from "@/lexicon";
+import type { RunStreamEvent } from "@/lib/runs/status";
 
 export interface LandReportFacts {
   goal: string;
@@ -64,23 +65,60 @@ export interface OutboxStep {
 const SIDE_EFFECT_PATTERN =
   /\b(send|sends|sent|email|emails|remind|reminds|chase|chases|request|requests|notify|notifies|message|messages|post|posts|update|updates|file|files)\b/i;
 
+function simulatedEffectRows(events: readonly RunStreamEvent[]): OutboxRow[] {
+  const seen = new Set<string>();
+  const rows: OutboxRow[] = [];
+  for (const event of events) {
+    if (event.type !== "simulated_effect") continue;
+    const toolId = event.payload["tool_id"];
+    if (typeof toolId !== "string" || toolId.length === 0) continue;
+    const key = event.payload["idempotency_key"];
+    const dedupeKey = typeof key === "string" && key.length > 0 ? key : event.id;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    const [provider = "System", ...actionParts] = toolId.split(".");
+    const action = actionParts.join(" ").replaceAll("_", " ");
+    const result = event.payload["result"];
+    const record = result && typeof result === "object" ? (result as Record<string, unknown>) : null;
+    const message =
+      record?.["message"] && typeof record["message"] === "object"
+        ? (record["message"] as Record<string, unknown>)
+        : null;
+    const messageText = typeof message?.["text"] === "string" ? message["text"] : null;
+    const channel = typeof record?.["channel"] === "string" ? record["channel"] : null;
+    let serialized = "";
+    try {
+      serialized = JSON.stringify(result);
+    } catch {
+      serialized = String(result ?? "");
+    }
+    rows.push({
+      what: `${provider.charAt(0).toUpperCase()}${provider.slice(1)}: ${action || "record effect"}`,
+      where: channel || copy.outboxOutsideWorld,
+      content: messageText || serialized || copy.outboxContentHeld,
+    });
+  }
+  return rows;
+}
+
 /**
  * The stand-in outbox: everything the routine would have done, in
  * plain language. When the runtime's land report carries an explicit
- * `outbox` list it renders verbatim; the scripted runtime's report does
- * not, so rows derive from the run's own records instead. Each completed
+ * `outbox` list it renders verbatim. Otherwise recorded `simulated_effect`
+ * events are the source of truth. Older runtime histories have neither, so
+ * rows derive from the run's own records instead. Each completed
  * step with a deliverable becomes a row: side-effecting steps (by their
  * own description) are marked as held by the stand-in, the rest as kept
  * with the run's files, and the deliverable stands in for the content.
  *
- * TODO(runtime): the outbox should show the actual email text and the
- * actual record change. The scripted runtime's land report carries neither an outbox
- * list nor deliverable content over the edge; when a real outbox shape
- * lands, render it here and drop the derivation.
+ * The final derivation is deliberately a compatibility fallback and can be
+ * removed once all retained run histories carry explicit effect records.
  */
 export function deriveStandInOutbox(
   report: Record<string, unknown>,
   steps: readonly OutboxStep[],
+  events: readonly RunStreamEvent[] = [],
 ): OutboxRow[] {
   const explicit = report["outbox"];
   if (Array.isArray(explicit)) {
@@ -95,6 +133,9 @@ export function deriveStandInOutbox(
       content: typeof row["content"] === "string" ? (row["content"] as string) : "",
     }));
   }
+
+  const effects = simulatedEffectRows(events);
+  if (effects.length > 0) return effects;
 
   const deliverables = Array.isArray(report["deliverables"])
     ? (report["deliverables"] as Array<Record<string, unknown>>)

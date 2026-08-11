@@ -7,7 +7,7 @@ describe("HowItFitsStrip", () => {
   it("renders the plain-language strip when shown", () => {
     render(<HowItFitsStrip showHowItFits />);
     expect(screen.getByText("How it fits together")).toBeInTheDocument();
-    expect(screen.getByText(/A routine is a job that runs on a schedule/)).toBeInTheDocument();
+    expect(screen.getByText(/An agent owns a goal and runtime setup/)).toBeInTheDocument();
   });
 
   it("renders nothing when hidden", () => {

@@ -60,7 +60,7 @@ export function can(action: Action, role: Role, capabilities: readonly string[] 
 
 /** Nav lens groups per role: which portal areas render at all. */
 export function visibleAreas(role: Role): string[] {
-  const base = ["overview", "runs", "routines", "evaluation", "learning"];
+  const base = ["overview", "runs", "evaluation", "learning"];
   if (role === "viewer") return base;
   const member = [...base, "checkpoints", "workspaces", "logs"];
   if (role === "member" || role === "operator") return member;

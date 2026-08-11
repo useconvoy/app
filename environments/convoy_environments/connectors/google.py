@@ -59,9 +59,9 @@ _TOOLS = [
     ),
 ]
 
-# (client_email, scopes) → (access_token, expires_at). Module-level so the
+# (client_email, scopes, token_url) → (access_token, expires_at). Module-level so the
 # hourly exchange amortizes across the per-call connector instances.
-_token_cache: Dict[Tuple[str, str], Tuple[str, float]] = {}
+_token_cache: Dict[Tuple[str, str, str], Tuple[str, float]] = {}
 
 
 @register
@@ -78,18 +78,19 @@ class GoogleConnector(Connector):
         except (ValueError, KeyError) as err:
             raise ConnectorError("google: secret is not a service-account JSON key (%s)" % err)
 
-        cache_key = (client_email, _SCOPES)
+        token_url = self._config_url(_TOKEN_URL, "tokenUrl", "token_url")
+        cache_key = (client_email, _SCOPES, token_url)
         cached = _token_cache.get(cache_key)
         now = time.time()
         if cached and cached[1] > now + _TOKEN_TTL_SLACK_S:
             return cached[0]
 
         assertion = jwt.encode(
-            {"iss": client_email, "scope": _SCOPES, "aud": _TOKEN_URL,
+            {"iss": client_email, "scope": _SCOPES, "aud": token_url,
              "iat": int(now), "exp": int(now) + 3600},
             private_key, algorithm="RS256",
         )
-        resp = await client.post(_TOKEN_URL, data={
+        resp = await client.post(token_url, data={
             "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
             "assertion": assertion,
         })
@@ -109,6 +110,8 @@ class GoogleConnector(Connector):
         return True
 
     async def invoke(self, tool: str, args: Dict[str, Any], credential: str) -> Any:
+        drive_api = self._config_url(_DRIVE, "driveBaseUrl", "drive_base_url")
+        sheets_api = self._config_url(_SHEETS, "sheetsBaseUrl", "sheets_base_url")
         async with self._client() as client:
             token = await self._access_token(client, credential)
             headers = {"Authorization": "Bearer %s" % token}
@@ -117,16 +120,16 @@ class GoogleConnector(Connector):
                 query = "'%s' in parents and trashed = false" % args["folderId"]
                 if mime:
                     query += " and mimeType = '%s'" % mime
-                resp = await client.get(_DRIVE + "/files", headers=headers,
+                resp = await client.get(drive_api + "/files", headers=headers,
                                         params={"q": query, "pageSize": args.get("pageSize", 200),
                                                 "fields": "files(id,name),nextPageToken"})
             elif tool == "google.sheets_read_range":
                 resp = await client.get(
-                    "%s/spreadsheets/%s/values/%s" % (_SHEETS, args["spreadsheetId"], args["range"]),
+                    "%s/spreadsheets/%s/values/%s" % (sheets_api, args["spreadsheetId"], args["range"]),
                     headers=headers)
             elif tool == "google.sheets_append_row":
                 resp = await client.post(
-                    "%s/spreadsheets/%s/values/%s:append" % (_SHEETS, args["spreadsheetId"],
+                    "%s/spreadsheets/%s/values/%s:append" % (sheets_api, args["spreadsheetId"],
                                                              args.get("range", "A1")),
                     headers=headers,
                     params={"valueInputOption": "USER_ENTERED",

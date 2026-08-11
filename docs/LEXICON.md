@@ -17,22 +17,22 @@ both directions.
 | Console / website term | environments service | runtime wire (frozen) |
 |---|---|---|
 | **organization** — the tenant/customer | db table `workspaces` (legacy name for organizations) + `org_id` in the console API (`/organizations/{org_id}/…`, branch org-vocabulary) | `tenant_id` |
-| **workspace** — a named organizational scope for routines and system grants | a base row in db table `environments` (`parent_environment_id IS NULL`) + `workspaceId` in the console API | compatibility `environment_id` binding while no named environment exists |
-| **environment** — the runtime configuration beneath a workspace: compute template, browser policy, and durable state namespace | a child row in db table `environments` (`parent_environment_id = workspaceId`) + nested `/workspaces/{workspaceId}/environments` API | `environment_id` + `EnvironmentBinding` (DESIGN §5) |
-| **rehearsal copy** | `?kind=sandbox` binding compiled for an environment | `kind="sandbox"` + virtual `ClockConfig` |
+| **workspace** — a shared named scope for system connections and grants; many Agents may use it | a base row in db table `environments` (`parent_environment_id IS NULL`) + `workspaceId` in the console API | connector grants compiled into an `EnvironmentBinding` |
+| **agent** — the goal, instructions, schedule, and runtime setup for one worker; it references one shared workspace | a child row in db table `environments` (`parent_environment_id = workspaceId`) reached through the internal nested `/workspaces/{workspaceId}/environments` API, enriched by the website `agents` row | `AgentSpec` + `environment_id` + immutable `EnvironmentBinding` (DESIGN §5) |
+| **rehearsal copy** | `?kind=sandbox` binding compiled for an agent's runtime setup | `kind="sandbox"` + virtual `ClockConfig` |
 | **system** | connector + connection (an authenticated link to one external system) | `connector_endpoints` entry (a gateway MCP door) |
 | **system grant** | connection + `tool_allowlist` | `ToolGrant` |
-| **stand-in** | mock registry (not yet built; sandbox compilation fails closed until it lands) | `simulated_effects/` outbox |
+| **stand-in** | deterministic connector fixture selected by a sandbox binding | `simulated_effect` audit event + idempotent simulated data plane |
 | **run** | — | `run_id` + `RunState` |
-| **routine** | — | agent (`AgentSpec`) |
 | **checkpoint** | — (gates are runtime-owned) | gate (`HumanGate`, `gate_opened`/`gate_answered` events) |
 
 ## Rules
 
 1. **User-facing surfaces use console vocabulary exclusively.** The website,
    marketing pages, notifications, and anything else a customer reads say
-   organization, workspace, environment, rehearsal copy, system, stand-in,
-   routine, checkpoint — never tenant, sandbox, connector, mock, agent, gate.
+   organization, workspace, agent, rehearsal copy, system, stand-in,
+   checkpoint — never tenant, sandbox, connector, mock, environment,
+   or gate.
    On the website this is build-enforced through
    `website/src/lexicon.ts`.
 2. **Wire names are frozen.** `tenant_id`, `environment_id`,
@@ -43,14 +43,14 @@ both directions.
 3. **When writing docs, qualify ambiguous uses.** The same word can point at
    different objects across layers, so disambiguate inline: "workspace
    (console)" vs "`workspaces` table (legacy name for organizations)";
-   "environment (console runtime configuration)" vs `EnvironmentBinding`
-   (the frozen wire snapshot it compiles into).
+   "agent runtime setup (console)" vs `EnvironmentBinding` (the frozen wire
+   snapshot it compiles into).
 
 ## Compatibility transition
 
-Older routines point directly at the compatibility binding stored on their
-workspace. That remains a valid fallback. As soon as a named environment is
-created, new runs select the workspace's default environment (or an explicit
-environment chosen on the start-run screen). This lets the product introduce
-the organization → workspace → environment hierarchy without invalidating
-existing routine and run records.
+Migration `0011_agents_runtime.sql` renames existing website environment rows
+to agents without changing their ids or immutable registry bindings. Migration
+`0012_agent_automation.sql` folds each former job definition into an Agent and
+removes the `routines` table. A run never presents a separate environment
+picker: it freezes the chosen Agent's rehearsal or production binding plus the
+grants from the shared Workspace that Agent references.

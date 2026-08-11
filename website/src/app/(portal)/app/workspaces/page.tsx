@@ -3,9 +3,7 @@ import type { Metadata } from "next";
 import {
   environmentsClient,
   listSystemConnections,
-  routinesUsingWorkspace,
 } from "@/lib/api/environments";
-import { listRoutines } from "@/lib/routines/queries";
 import { createWorkspace, customSystemDefinitions } from "@/lib/workspaces/actions";
 import { requireWorkspacesPage } from "@/lib/workspaces/gate";
 import { systemCatalog } from "@/lib/workspaces/system-catalog";
@@ -22,9 +20,10 @@ export const dynamic = "force-dynamic";
  */
 export default async function WorkspacesPage() {
   const { session } = await requireWorkspacesPage();
-  const [workspaces, routines, connections, customSystems] = await Promise.all([
-    environmentsClient().listWorkspaces(session.orgId),
-    listRoutines(session.orgId),
+  const client = environmentsClient();
+  const [workspaces, agents, connections, customSystems] = await Promise.all([
+    client.listWorkspaces(session.orgId),
+    client.listAgents(session.orgId),
     listSystemConnections(session.orgId),
     customSystemDefinitions(session.orgId),
   ]);
@@ -34,12 +33,15 @@ export default async function WorkspacesPage() {
   const byConnectionId = new Map(
     (connections ?? []).map((connection) => [connection.connectionId, connection]),
   );
-  const statusOf = (connection?: { status: string; hasCredential: boolean }) =>
+  const statusOf = (
+    connection?: { status: string; hasCredential: boolean },
+    credentialOptional = false,
+  ) =>
     !connection
       ? ("not_connected" as const)
       : connection.status !== "active"
         ? ("needs_reauth" as const)
-        : connection.hasCredential
+        : connection.hasCredential || credentialOptional
           ? ("connected" as const)
           : ("credentials_pending" as const);
   const cards = workspaces.map((workspace) => ({
@@ -47,7 +49,7 @@ export default async function WorkspacesPage() {
     name: workspace.name,
     purpose: workspace.purpose,
     systemCount: workspace.systems.length,
-    routineCount: routinesUsingWorkspace(workspace, workspaces, routines).length,
+    agentCount: agents.filter((agent) => agent.workspaceId === workspace.id).length,
   }));
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -55,7 +57,7 @@ export default async function WorkspacesPage() {
         <div>
           <h1 className="font-display text-3xl text-ink">Workspaces</h1>
           <p className="mt-2 text-sm text-muted">
-            Group routines with the systems they may touch and how far each grant goes.
+            Connect shared systems and spaces once, then let multiple Agents operate through them.
           </p>
         </div>
         <CreateWorkspaceModal
@@ -74,7 +76,7 @@ export default async function WorkspacesPage() {
               displayName: system.displayName,
               sideEffecting: system.sideEffecting,
               standInNote: system.standInNote,
-              status: statusOf(byConnectionId.get(system.connectionId)),
+              status: statusOf(byConnectionId.get(system.connectionId), true),
             })),
           ]}
           create={createWorkspace}

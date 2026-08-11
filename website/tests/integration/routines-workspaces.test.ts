@@ -1,6 +1,6 @@
 // @vitest-environment node
 /**
- * Routines, workspaces, and score history against a real Postgres, through
+ * Agents, shared workspaces, and score history against a real Postgres, through
  * the same production modules the server uses. Requires
  * WEBSITE_PG_ADMIN_DSN (the migration owner) and uses WEBSITE_PG_DSN for
  * the RLS-bound app role; the suite skips cleanly when no database is
@@ -20,6 +20,7 @@ import { newTenantId } from "@/lib/orgs/validation";
 import {
   getRoutine,
   listRoutines,
+  orgTenantId,
   setRoutineSchedule,
   upsertInstalledRoutine,
 } from "@/lib/routines/queries";
@@ -36,11 +37,11 @@ const orgB = randomUUID();
 const userA = randomUUID();
 const userB = randomUUID();
 
-describe.skipIf(!ADMIN_DSN)("routines and workspaces (real Postgres)", () => {
+describe.skipIf(!ADMIN_DSN)("agents and shared workspaces (real Postgres)", () => {
   let admin: pg.Client;
   let entryId: string;
   let workspaceId: string;
-  let executionEnvironmentId: string;
+  let agentId: string;
   let routineId: string;
 
   beforeAll(async () => {
@@ -77,10 +78,10 @@ describe.skipIf(!ADMIN_DSN)("routines and workspaces (real Postgres)", () => {
     globalThis.__convoyWebsitePool = undefined;
     if (!admin) return;
     await admin.query(
-      "DELETE FROM routine_eval_scores WHERE org_id = ANY($1)",
+      "DELETE FROM agent_eval_scores WHERE org_id = ANY($1)",
       [[orgA, orgB]],
     );
-    await admin.query("DELETE FROM routines WHERE org_id = ANY($1)", [[orgA, orgB]]);
+    await admin.query("DELETE FROM agents WHERE org_id = ANY($1)", [[orgA, orgB]]);
     await admin.query("DELETE FROM workspaces WHERE org_id = ANY($1)", [[orgA, orgB]]);
     await admin.query("DELETE FROM catalog_entries WHERE publisher_org_id = ANY($1)", [
       [orgA, orgB],
@@ -92,13 +93,35 @@ describe.skipIf(!ADMIN_DSN)("routines and workspaces (real Postgres)", () => {
     await admin.end();
   });
 
-  it("a fresh organization lists zero routines and zero workspaces", async () => {
+  it("a fresh organization lists zero configured Agents and zero workspaces", async () => {
     expect(await listRoutines(orgA)).toEqual([]);
     expect(await environmentsClient().listWorkspaces(orgA)).toEqual([]);
     expect(await installedRoutines({ orgId: orgA, userId: userA })).toEqual([]);
   });
 
-  it("an install writes a real routine bound to its workspace, and reinstalling re-pins", async () => {
+  it("uses the linked environments organization as the runtime tenant", async () => {
+    const websiteTenant = await orgTenantId(orgA);
+    const registryTenant = `ws-runtime-${run}`;
+    try {
+      await admin.query("UPDATE organizations SET environments_org_id = $1 WHERE id = $2", [
+        registryTenant,
+        orgA,
+      ]);
+      expect(await orgTenantId(orgA)).toBe(registryTenant);
+      const discovered = await admin.query<{ tenant_id: string }>(
+        "SELECT tenant_id FROM list_organizations() WHERE id = $1",
+        [orgA],
+      );
+      expect(discovered.rows[0]?.tenant_id).toBe(registryTenant);
+    } finally {
+      await admin.query("UPDATE organizations SET environments_org_id = NULL WHERE id = $1", [
+        orgA,
+      ]);
+    }
+    expect(await orgTenantId(orgA)).toBe(websiteTenant);
+  });
+
+  it("an install enriches an Agent using a shared workspace, and reinstalling re-pins", async () => {
     const workspace = await environmentsClient().createWorkspace(orgA, {
       name: `Install workspace ${run}`,
       purpose: "Integration installs run here.",
@@ -108,23 +131,27 @@ describe.skipIf(!ADMIN_DSN)("routines and workspaces (real Postgres)", () => {
       ],
     });
     workspaceId = workspace.id;
-    const environment = await environmentsClient().createExecutionEnvironment(orgA, {
+    const agent = await environmentsClient().createAgent(orgA, {
       workspaceId,
       name: `Production operations ${run}`,
-      purpose: "Runs approved integration routines.",
+      purpose: "Owns integration work.",
+      goal: "Read connected systems and post an operations summary.",
+      planSteps: ["Read the systems", "Post the summary"],
+      scheduleDescription: null,
+      budgetCapUsd: 75,
       sandboxTemplate: "convoy-devbox-python",
       browserPolicy: { allowedDomains: ["app.example.com"], persistProfile: true },
       makeDefault: true,
     });
-    executionEnvironmentId = environment.id;
-    expect(environment.productionBindingId).toBe(workspace.environmentId);
-    expect(environment.rehearsalBindingId).toBe(workspace.rehearsalEnvironmentId);
-    expect(environment.isDefault).toBe(true);
-    expect(await environmentsClient().listExecutionEnvironments(orgA, workspaceId)).toEqual([
-      environment,
+    agentId = agent.id;
+    expect(agent.productionBindingId).toBe(workspace.environmentId);
+    expect(agent.rehearsalBindingId).toBe(workspace.rehearsalEnvironmentId);
+    expect(agent.isDefault).toBe(true);
+    expect(await environmentsClient().listAgents(orgA, workspaceId)).toEqual([
+      agent,
     ]);
 
-    // A catalog entry for the routine to point back at, published under
+    // A catalog entry for the Agent to point back at, published under
     // org A's own context exactly as the publish action would.
     entryId = await withOrgContext({ orgId: orgA, userId: userA }, async (client) => {
       const { rows } = await client.query<{ id: string }>(
@@ -146,6 +173,7 @@ describe.skipIf(!ADMIN_DSN)("routines and workspaces (real Postgres)", () => {
           systems: ["messaging", "document_store"],
           budgetCapUsd: 30,
           workspaceId: workspace.id,
+          agentId: agent.id,
           sourceEntryId: entryId,
           sourceVersion: 1,
         },
@@ -157,6 +185,7 @@ describe.skipIf(!ADMIN_DSN)("routines and workspaces (real Postgres)", () => {
     expect(listed).toHaveLength(1);
     expect(listed[0]!.name).toBe("Policy attestation chase");
     expect(listed[0]!.workspaceId).toBe(workspace.id);
+    expect(listed[0]!.agentId).toBe(agent.id);
     expect(listed[0]!.sourceVersion).toBe(1);
 
     // Reinstalling the same entry re-pins the one row instead of stacking
@@ -171,6 +200,7 @@ describe.skipIf(!ADMIN_DSN)("routines and workspaces (real Postgres)", () => {
           systems: ["messaging", "document_store"],
           budgetCapUsd: 30,
           workspaceId: workspace.id,
+          agentId: agent.id,
           sourceEntryId: entryId,
           sourceVersion: 2,
         },
@@ -187,32 +217,30 @@ describe.skipIf(!ADMIN_DSN)("routines and workspaces (real Postgres)", () => {
     ]);
   });
 
-  it("routines and workspaces are org-isolated under RLS", async () => {
+  it("Agents and workspaces are org-isolated under RLS", async () => {
     expect(await listRoutines(orgB)).toEqual([]);
     expect(await environmentsClient().listWorkspaces(orgB)).toEqual([]);
     // Direct probes by id from the wrong org context see nothing.
     expect(await getRoutine(orgB, routineId)).toBeNull();
     expect(await environmentsClient().getWorkspace(orgB, workspaceId)).toBeNull();
     expect(
-      await environmentsClient().getExecutionEnvironment(orgB, executionEnvironmentId),
+      await environmentsClient().getAgent(orgB, agentId),
     ).toBeNull();
     const probe = await withOrgContext({ orgId: orgB, userId: userB }, async (client) => {
-      const routines = await client.query("SELECT id FROM routines WHERE org_id = $1", [orgA]);
       const workspaces = await client.query("SELECT id FROM workspaces WHERE org_id = $1", [orgA]);
-      const environments = await client.query(
-        "SELECT id FROM execution_environments WHERE org_id = $1",
+      const agents = await client.query(
+        "SELECT id FROM agents WHERE org_id = $1",
         [orgA],
       );
       return {
-        routines: routines.rowCount,
         workspaces: workspaces.rowCount,
-        environments: environments.rowCount,
+        agents: agents.rowCount,
       };
     });
-    expect(probe).toEqual({ routines: 0, workspaces: 0, environments: 0 });
+    expect(probe).toEqual({ workspaces: 0, agents: 0 });
   });
 
-  it("schedule edits land on the routine row", async () => {
+  it("schedule edits land on the Agent row", async () => {
     await setRoutineSchedule(orgA, routineId, "Mondays at 9am");
     const routine = await getRoutine(orgA, routineId);
     expect(routine?.scheduleDescription).toBe("Mondays at 9am");
@@ -238,7 +266,7 @@ describe.skipIf(!ADMIN_DSN)("routines and workspaces (real Postgres)", () => {
 
     expect(await scoreTrend(orgB, routineId)).toEqual([]);
     const crossOrg = await withOrgContext({ orgId: orgB, userId: userB }, (client) =>
-      client.query("SELECT id FROM routine_eval_scores WHERE routine_id = $1", [routineId]),
+      client.query("SELECT id FROM agent_eval_scores WHERE agent_id = $1", [routineId]),
     );
     expect(crossOrg.rowCount).toBe(0);
   });

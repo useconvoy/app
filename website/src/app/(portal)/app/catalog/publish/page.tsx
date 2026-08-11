@@ -11,7 +11,7 @@ import { catalogSystem } from "@/lib/workspaces/system-catalog";
 import { catalogCopy, copy } from "@/lexicon";
 import { PublishForm } from "./PublishForm";
 
-export const metadata: Metadata = { title: "Publish a routine" };
+export const metadata: Metadata = { title: "Publish an Agent template" };
 export const dynamic = "force-dynamic";
 
 /**

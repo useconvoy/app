@@ -13,9 +13,10 @@ import {
   workspaceForRoutine,
   type Workspace,
 } from "@/lib/api/environments";
+import { agentRuntimeToolIds } from "@/lib/agents/capabilities";
 import { fixtureWorkspaces, systemCatalog } from "@/lib/fixtures/environments";
 import { routines } from "@/lib/fixtures/world";
-import { grantsFromChoices } from "@/lib/workspaces/system-catalog";
+import { grantsFromChoices, toolIdsForRoutine } from "@/lib/workspaces/system-catalog";
 
 const RUNNABLE_REHEARSAL_IDS = ["stub-local", "stub-local-virtual"];
 
@@ -102,15 +103,97 @@ describe("grantsFromChoices", () => {
     expect(documents?.standIn).toBeUndefined();
   });
 
-  it("refuses a side-effecting write grant without its stand-in", () => {
-    expect(() =>
-      grantsFromChoices([{ systemId: "crm", scope: "write", useStandIn: false }]),
-    ).toThrow(/stand-in/);
+  it("adds rehearsal metadata to a side-effecting write grant automatically", () => {
+    const grants = grantsFromChoices([
+      { systemId: "crm", scope: "write", useStandIn: false },
+    ]);
+    expect(grants[0]?.standIn?.note).toBeTruthy();
   });
 
   it("keeps read grants on side-effecting systems stand-in free", () => {
     const grants = grantsFromChoices([{ systemId: "crm", scope: "read", useStandIn: false }]);
     expect(grants[0]?.standIn).toBeUndefined();
+  });
+
+  it("pins custom connection tools onto the stored grant", () => {
+    const grants = grantsFromChoices(
+      [{ systemId: "custom:ticketing", scope: "write", useStandIn: true }],
+      [
+        {
+          id: "custom:ticketing",
+          displayName: "Ticketing",
+          sideEffecting: true,
+          standInNote: "Recorded intents only.",
+          tools: [
+            { name: "tickets.search", sideEffecting: false },
+            { name: "tickets.create", sideEffecting: true },
+          ],
+        },
+      ],
+    );
+    expect(grants[0]?.tools).toEqual([
+      { name: "tickets.search", sideEffecting: false },
+      { name: "tickets.create", sideEffecting: true },
+    ]);
+  });
+});
+
+describe("toolIdsForRoutine", () => {
+  it("uses only required systems and respects read versus write scope", () => {
+    const grants = grantsFromChoices([
+      { systemId: "document_store", scope: "read", useStandIn: false },
+      { systemId: "messaging", scope: "write", useStandIn: true },
+    ]);
+    expect(toolIdsForRoutine(["document_store", "messaging"], grants)).toEqual([
+      "google.drive_list_files",
+      "google.sheets_read_range",
+      "slack.list_channels",
+      "slack.post_message",
+      "slack.read_messages",
+    ]);
+    expect(toolIdsForRoutine(["document_store"], grants)).not.toContain(
+      "google.sheets_append_row",
+    );
+  });
+
+  it("carries custom tool grants into a run", () => {
+    const grants = grantsFromChoices(
+      [{ systemId: "custom:ticketing", scope: "read", useStandIn: false }],
+      [
+        {
+          id: "custom:ticketing",
+          displayName: "Ticketing",
+          sideEffecting: true,
+          standInNote: "Recorded intents only.",
+          tools: [
+            { name: "tickets.search", sideEffecting: false },
+            { name: "tickets.create", sideEffecting: true },
+          ],
+        },
+      ],
+    );
+    expect(toolIdsForRoutine(["custom:ticketing"], grants)).toEqual(["tickets.search"]);
+  });
+});
+
+describe("agentRuntimeToolIds", () => {
+  it("grants compute and a domain-scoped browser from the selected agent", () => {
+    expect(
+      agentRuntimeToolIds({
+        sandboxTemplate: "convoy-devbox-python",
+        browserPolicy: { allowedDomains: ["app.example.com"], persistProfile: true },
+      }),
+    ).toEqual(["sandbox_exec", "sandbox_browser"]);
+  });
+
+  it("does not invent browser or compute tools absent from the environment", () => {
+    expect(
+      agentRuntimeToolIds({
+        sandboxTemplate: "convoy-devbox-python",
+        browserPolicy: null,
+      }),
+    ).toEqual(["sandbox_exec"]);
+    expect(agentRuntimeToolIds(null)).toEqual([]);
   });
 });
 

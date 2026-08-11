@@ -1,6 +1,6 @@
 /**
  * Workspace cards, presentational: name, purpose, and the connects/used-by
- * fact line ("Connects N systems · used by N routines"). With none, an
+ * fact line ("Connects N systems · used by N Agents"). With none, an
  * honest empty state; the create affordance lives in the page header.
  */
 import Link from "next/link";
@@ -13,7 +13,7 @@ export interface WorkspaceCard {
   name: string;
   purpose: string;
   systemCount: number;
-  routineCount: number;
+  agentCount: number;
 }
 
 export function WorkspaceCards({ workspaces }: { workspaces: WorkspaceCard[] }) {
@@ -31,7 +31,7 @@ export function WorkspaceCards({ workspaces }: { workspaces: WorkspaceCard[] }) 
             <h2 className="text-base font-medium text-ink">{workspace.name}</h2>
             <p className="mt-2 text-sm text-muted">{workspace.purpose}</p>
             <p className="mt-4 font-mono text-xs uppercase text-muted">
-              {copy.workspaceCardFact(workspace.systemCount, workspace.routineCount)}
+              {copy.workspaceCardFact(workspace.systemCount, workspace.agentCount)}
             </p>
           </Link>
         </li>

@@ -194,7 +194,7 @@ describe("RunDetail vitals", () => {
     expect(within(details as HTMLElement).getByRole("button", { name: "Copy run id" })).toBeInTheDocument();
   });
 
-  it("shows the durable environment state from the run projection", () => {
+  it("shows the agent's durable runtime state from the run projection", () => {
     stream([]);
     render(
       <RunDetail
@@ -214,7 +214,7 @@ describe("RunDetail vitals", () => {
       />,
     );
 
-    const runtime = screen.getByRole("region", { name: "Environment runtime" });
+    const runtime = screen.getByRole("region", { name: "Agent runtime" });
     expect(runtime).toHaveTextContent("Paused, compute released");
     expect(runtime).toHaveTextContent("2");
     expect(runtime).toHaveTextContent("checkpoint-4");

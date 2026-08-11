@@ -5,20 +5,20 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/Button";
 import { Select } from "@/components/ui/select";
-import type { CreateExecutionEnvironmentPayload } from "@/lib/environments/actions";
+import type { CreateAgentPayload } from "@/lib/agents/actions";
 
-export interface EnvironmentWorkspaceOption {
+export interface AgentWorkspaceOption {
   id: string;
   name: string;
   systemCount: number;
 }
 
-export function CreateEnvironmentModal({
+export function CreateAgentModal({
   workspaces,
   create,
 }: {
-  workspaces: EnvironmentWorkspaceOption[];
-  create: (payload: CreateExecutionEnvironmentPayload) => Promise<{ id: string }>;
+  workspaces: AgentWorkspaceOption[];
+  create: (payload: CreateAgentPayload) => Promise<{ id: string }>;
 }) {
   const router = useRouter();
   const formId = useId();
@@ -26,11 +26,14 @@ export function CreateEnvironmentModal({
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? "");
   const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
+  const [goal, setGoal] = useState("");
+  const [instructions, setInstructions] = useState("");
+  const [scheduleDescription, setScheduleDescription] = useState("");
+  const [budgetCapUsd, setBudgetCapUsd] = useState("75");
   const [sandboxTemplate, setSandboxTemplate] = useState("convoy-devbox-python");
   const [browserEnabled, setBrowserEnabled] = useState(false);
   const [domains, setDomains] = useState("");
   const [persistBrowserProfile, setPersistBrowserProfile] = useState(true);
-  const [makeDefault, setMakeDefault] = useState(true);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -38,11 +41,14 @@ export function CreateEnvironmentModal({
     setWorkspaceId(workspaces[0]?.id ?? "");
     setName("");
     setPurpose("");
+    setGoal("");
+    setInstructions("");
+    setScheduleDescription("");
+    setBudgetCapUsd("75");
     setSandboxTemplate("convoy-devbox-python");
     setBrowserEnabled(false);
     setDomains("");
     setPersistBrowserProfile(true);
-    setMakeDefault(true);
     setErrors([]);
   }
 
@@ -50,8 +56,11 @@ export function CreateEnvironmentModal({
     event.preventDefault();
     const found: string[] = [];
     if (!workspaceId) found.push("Choose a workspace.");
-    if (name.trim().length < 2) found.push("Give the environment a name.");
-    if (purpose.trim().length < 2) found.push("Describe what runs here.");
+    if (name.trim().length < 2) found.push("Give the agent a name.");
+    if (purpose.trim().length < 2) found.push("Describe what the agent does.");
+    if (goal.trim().length < 2) found.push("Describe the outcome the agent owns.");
+    const parsedBudget = Number(budgetCapUsd);
+    if (!Number.isFinite(parsedBudget) || parsedBudget < 0) found.push("Choose a valid per-run budget.");
     if (sandboxTemplate.trim().length < 2) found.push("Choose a compute template.");
     if (found.length > 0) {
       setErrors(found);
@@ -64,15 +73,19 @@ export function CreateEnvironmentModal({
         workspaceId,
         name: name.trim(),
         purpose: purpose.trim(),
+        goal: goal.trim(),
+        planSteps: instructions.split("\n").map((step) => step.trim()).filter(Boolean),
+        scheduleDescription: scheduleDescription.trim(),
+        budgetCapUsd: parsedBudget,
         sandboxTemplate: sandboxTemplate.trim(),
         browserEnabled,
         allowedDomains: domains.split(/[\n,]/).map((domain) => domain.trim()).filter(Boolean),
         persistBrowserProfile,
-        makeDefault,
+        makeDefault: false,
       });
       setOpen(false);
       reset();
-      router.push(`/app/environments/${result.id}`);
+      router.push(`/app/agents/${result.id}`);
       router.refresh();
     } catch (error) {
       setErrors([error instanceof Error ? error.message : "That did not work. Try again."]);
@@ -84,7 +97,7 @@ export function CreateEnvironmentModal({
   return (
     <>
       <Button onClick={() => setOpen(true)} disabled={workspaces.length === 0}>
-        New environment
+        New agent
       </Button>
       {open && (
         <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-ink/40 p-6">
@@ -95,10 +108,10 @@ export function CreateEnvironmentModal({
             className="w-full max-w-lg rounded-lg border border-line bg-card p-6 shadow-lg"
           >
             <h2 id={`${formId}-title`} className="font-display text-xl text-ink">
-              New environment
+              New agent
             </h2>
             <p className="mt-1 text-sm text-muted">
-              Choose where compute runs and what browser state it may retain.
+              Give the agent its work, connected systems, and runtime in one place.
             </p>
             <form onSubmit={submit} className="mt-5 space-y-4" noValidate>
               {errors.length > 0 && (
@@ -127,7 +140,7 @@ export function CreateEnvironmentModal({
                 <input
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  placeholder="Production operations"
+                  placeholder="Operations agent"
                   className="mt-1 w-full rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink"
                 />
               </label>
@@ -136,10 +149,52 @@ export function CreateEnvironmentModal({
                 <input
                   value={purpose}
                   onChange={(event) => setPurpose(event.target.value)}
-                  placeholder="Runs approved routines against live systems"
+                  placeholder="Owns recurring revenue operations work"
                   className="mt-1 w-full rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink"
                 />
               </label>
+              <label className="block text-sm font-medium text-ink">
+                Goal
+                <textarea
+                  value={goal}
+                  onChange={(event) => setGoal(event.target.value)}
+                  placeholder="Review the shared pipeline sheet, identify at-risk renewals, and post a concise recovery summary to the operations channel."
+                  rows={4}
+                  className="mt-1 w-full rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink"
+                />
+              </label>
+              <label className="block text-sm font-medium text-ink">
+                Instructions <span className="font-normal text-muted">(one step per line)</span>
+                <textarea
+                  value={instructions}
+                  onChange={(event) => setInstructions(event.target.value)}
+                  placeholder={"Read the pipeline sheet\nFlag renewals that need attention\nPost the summary to the operations channel"}
+                  rows={5}
+                  className="mt-1 w-full rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink"
+                />
+              </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-sm font-medium text-ink">
+                  Schedule <span className="font-normal text-muted">(optional)</span>
+                  <input
+                    value={scheduleDescription}
+                    onChange={(event) => setScheduleDescription(event.target.value)}
+                    placeholder="Mondays at 9am"
+                    className="mt-1 w-full rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink"
+                  />
+                </label>
+                <label className="block text-sm font-medium text-ink">
+                  Per-run budget (USD)
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={budgetCapUsd}
+                    onChange={(event) => setBudgetCapUsd(event.target.value)}
+                    className="mt-1 w-full rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink"
+                  />
+                </label>
+              </div>
               <label className="block text-sm font-medium text-ink">
                 Compute template
                 <input
@@ -156,7 +211,7 @@ export function CreateEnvironmentModal({
                     checked={browserEnabled}
                     onChange={(event) => setBrowserEnabled(event.target.checked)}
                   />
-                  Make a browser available to runs
+                  Give this agent browser access
                 </label>
                 {browserEnabled && (
                   <div className="mt-3 space-y-3">
@@ -182,21 +237,13 @@ export function CreateEnvironmentModal({
                 )}
               </fieldset>
               <div className="rounded-md border border-pass-soft bg-pass-soft p-3 text-sm text-pass-text">
-                Workspace files are checkpointed automatically. Pausing releases compute; resuming restores them on fresh compute.
+                This agent&apos;s files and memory are checkpointed automatically. Pausing releases compute; resuming restores them on fresh compute.
               </div>
-              <label className="flex items-center gap-2 text-sm text-ink">
-                <input
-                  type="checkbox"
-                  checked={makeDefault}
-                  onChange={(event) => setMakeDefault(event.target.checked)}
-                />
-                Use this environment by default for the workspace
-              </label>
               <div className="flex justify-end gap-2">
                 <Button variant="secondary" onClick={() => { setOpen(false); reset(); }}>
                   Cancel
                 </Button>
-                <Button type="submit" pending={submitting}>Create environment</Button>
+                <Button type="submit" pending={submitting}>Create agent</Button>
               </div>
             </form>
           </div>

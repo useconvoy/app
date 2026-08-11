@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { environmentsClient, routinesUsingWorkspace } from "@/lib/api/environments";
-import { listRoutines } from "@/lib/routines/queries";
+import { environmentsClient } from "@/lib/api/environments";
 import { requireWorkspacesPage } from "@/lib/workspaces/gate";
 import { WorkspaceDetail } from "./WorkspaceDetail";
 
@@ -18,24 +17,17 @@ export default async function WorkspaceDetailPage({
   const { workspaceId } = await params;
   const { session } = await requireWorkspacesPage();
   const client = environmentsClient();
-  const [workspace, workspaces, routines, executionEnvironments] = await Promise.all([
+  const [workspace, agents] = await Promise.all([
     client.getWorkspace(session.orgId, workspaceId),
-    client.listWorkspaces(session.orgId),
-    listRoutines(session.orgId),
-    client.listExecutionEnvironments(session.orgId, workspaceId),
+    client.listAgents(session.orgId, workspaceId),
   ]);
   if (!workspace) notFound();
-  const routineNames = routinesUsingWorkspace(workspace, workspaces, routines).map(
-    (routine) => routine.name,
-  );
   return (
     <WorkspaceDetail
       workspace={workspace}
-      routineNames={routineNames}
-      environments={executionEnvironments.map((environment) => ({
-        id: environment.id,
-        name: environment.name,
-        isDefault: environment.isDefault,
+      agents={agents.map((agent) => ({
+        id: agent.id,
+        name: agent.name,
       }))}
     />
   );

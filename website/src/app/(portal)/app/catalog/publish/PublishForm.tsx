@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Minimal workshop-org publish form: pick a routine, name the
+ * Minimal workshop-org publish form: pick an Agent, name the
  * snapshot version, write the storefront copy, set the test score floor.
- * Capability requirements ride along per routine, derived by the page;
+ * Capability requirements ride along per Agent, derived by the page;
  * the server action validates everything again with zod.
  */
 import { useState } from "react";
@@ -51,7 +51,7 @@ export function PublishForm({ routines, publish }: PublishFormProps) {
       description: String(formData.get("description") ?? "").trim(),
     };
     if (!routine) {
-      setError("Pick a routine to publish");
+      setError("Pick an Agent to publish");
       return;
     }
     if (!Number.isInteger(version) || version < 1) {
@@ -85,7 +85,7 @@ export function PublishForm({ routines, publish }: PublishFormProps) {
   return (
     <form action={submit} className="space-y-4 rounded-md border border-line bg-card p-6">
       <label className="block text-sm text-ink">
-        Routine
+        Agent
         <Select
           name="routineId"
         >
