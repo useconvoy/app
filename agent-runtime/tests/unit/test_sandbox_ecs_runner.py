@@ -69,7 +69,11 @@ def _job_doc(key: str, command: list[str], **overrides: Any) -> dict[str, Any]:
         "stderr": {"key": f"jobs/{key}/stderr.txt", "url": f"https://put/{key}/stderr"},
         "outputs_post": {
             "url": "https://post",
-            "fields": {"policy": "p", "x-amz-signature": "s"},
+            "fields": {
+                "key": f"jobs/{key}/outputs/${{filename}}",
+                "policy": "p",
+                "x-amz-signature": "s",
+            },
             "key_prefix": f"jobs/{key}/outputs/",
         },
         "result": {"url": f"https://put/{key}/result"},
@@ -117,6 +121,7 @@ def test_inputs_materialize_and_outputs_post_under_the_job_prefix(
     posted = fake_http.uploaded("https://post")
     assert b"q3,1.2M" in posted
     assert b'name="key"' in posted and b"jobs/k2/outputs/sub/copy.csv" in posted
+    assert posted.count(b'name="key"') == 1
     # Signed policy fields ride along, and the file part closes the form.
     assert b'name="policy"' in posted
     assert posted.index(b'name="file"') > posted.index(b'name="policy"')
