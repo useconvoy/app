@@ -10,7 +10,7 @@ import { requireRoutinesPage } from "@/lib/routines/gate";
 import { getRoutine } from "@/lib/routines/queries";
 import { improveCopy } from "@/lexicon";
 
-export const metadata: Metadata = { title: "Routine evaluation" };
+export const metadata: Metadata = { title: "Agent evaluation" };
 export const dynamic = "force-dynamic";
 
 /**

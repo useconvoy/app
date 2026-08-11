@@ -26,26 +26,41 @@ whole approval story is honest flags + idempotent execution.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from typing import Any, Dict, Optional
 
 import httpx
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 from ..connectors import ConnectorError, get_connector
 from ..db import SqlEventLog
 from ..secrets import SecretsService
 from .policy import PolicyDenied, PolicyEngine, ToolResolution
+from .standins import simulate
 from .tokens import RunClaims
 
 
 class GatewayService:
-    def __init__(self, session_factory, secrets: SecretsService,
-                 event_log: Optional[SqlEventLog] = None,
-                 transport: Optional[httpx.AsyncBaseTransport] = None) -> None:
+    def __init__(
+        self,
+        session_factory,
+        secrets: SecretsService,
+        event_log: Optional[SqlEventLog] = None,
+        transport: Optional[httpx.AsyncBaseTransport] = None,
+        sandbox_url: str = "",
+        sandbox_admin_token: str = "",
+    ) -> None:
         self._policy = PolicyEngine(session_factory)
         self._secrets = secrets
         self._log = event_log or SqlEventLog(session_factory)
         self._transport = transport  # test seam for connectors
+        self._sandbox_url = sandbox_url.rstrip("/")
+        self._sandbox_admin_token = sandbox_admin_token
+        self._sandbox_ready: set[str] = set()
+        self._sandbox_google_credential: Optional[str] = None
 
     # -- helpers -----------------------------------------------------------
 
@@ -71,6 +86,100 @@ class GatewayService:
                 self._flag_needs_reauth(conn.id)  # console surfaces this as "Needs re-auth"
             raise
 
+    @staticmethod
+    def _sandbox_id(claims: RunClaims) -> str:
+        """Stable, opaque sandbox identity for one run."""
+        material = "%s:%s:%s" % (
+            claims.workspace_id,
+            claims.environment_id,
+            claims.run_id,
+        )
+        return "run-" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
+
+    async def _ensure_connector_sandbox(self, sandbox_id: str) -> None:
+        if sandbox_id in self._sandbox_ready:
+            return
+        headers = {"content-type": "application/json"}
+        if self._sandbox_admin_token:
+            headers["authorization"] = "Bearer " + self._sandbox_admin_token
+        try:
+            async with httpx.AsyncClient(transport=self._transport, timeout=30.0) as client:
+                response = await client.post(
+                    self._sandbox_url + "/v1/sandboxes",
+                    headers=headers,
+                    json={
+                        "sandboxId": sandbox_id,
+                        "fixtureName": "connector-development",
+                    },
+                )
+        except httpx.HTTPError as err:
+            raise ConnectorError(
+                "connector sandbox unavailable (%s)" % err,
+                retryable=True,
+            ) from err
+        if response.status_code not in (201, 409):
+            raise ConnectorError(
+                "connector sandbox provisioning failed (%d: %s)"
+                % (response.status_code, response.text[:300]),
+                retryable=response.status_code == 429 or response.status_code >= 500,
+            )
+        self._sandbox_ready.add(sandbox_id)
+
+    def _google_sandbox_credential(self) -> str:
+        if self._sandbox_google_credential is None:
+            private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            pem = private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            ).decode("utf-8")
+            self._sandbox_google_credential = json.dumps(
+                {
+                    "client_email": "convoy-agent@sandbox.invalid",
+                    "private_key": pem,
+                }
+            )
+        return self._sandbox_google_credential
+
+    async def _invoke_connector_sandbox(
+        self,
+        claims: RunClaims,
+        resolution: ToolResolution,
+        tool: str,
+        args: Dict[str, Any],
+        idempotency_key: Optional[str] = None,
+    ) -> Any:
+        """Call a provider-shaped stub through the production connector."""
+        sandbox_id = self._sandbox_id(claims)
+        await self._ensure_connector_sandbox(sandbox_id)
+        base = "%s/s/%s" % (self._sandbox_url, sandbox_id)
+        provider = resolution.connection.provider
+        request_headers = {"x-convoy-idempotency-key": idempotency_key} if idempotency_key else {}
+        if provider == "slack":
+            config = {
+                "apiBaseUrl": base + "/slack/api",
+                "_requestHeaders": request_headers,
+            }
+            credential = "xoxb-convoy-sandbox"
+        elif provider == "google":
+            config = {
+                "tokenUrl": base + "/google/oauth2/token",
+                "driveBaseUrl": base + "/google/drive/v3",
+                "sheetsBaseUrl": base + "/google/sheets/v4",
+                "_requestHeaders": request_headers,
+            }
+            credential = self._google_sandbox_credential()
+        elif provider == "github":
+            config = {
+                "apiBaseUrl": base + "/github",
+                "_requestHeaders": request_headers,
+            }
+            credential = "github-convoy-sandbox"
+        else:
+            raise ConnectorError("no connector sandbox for provider %s" % provider)
+        connector = get_connector(provider, config=config, transport=self._transport)
+        return await connector.invoke(tool, args, credential)
+
     def _flag_needs_reauth(self, connection_id: str) -> None:
         """Best-effort status flip on a rejected credential; never raises —
         the caller's ConnectorError is the signal that matters."""
@@ -91,27 +200,44 @@ class GatewayService:
         snapshot = self._policy.load_environment(claims.environment_id, claims.environment_version)
         return self._policy.allowed_tools(snapshot, connection_id=connection_id)
 
-    async def call_tool(self, claims: RunClaims, tool: str, args: Dict[str, Any],
-                        step_id: Optional[str] = None,
-                        idempotency_key: Optional[str] = None,
-                        connection_id: Optional[str] = None) -> Any:
+    async def call_tool(
+        self,
+        claims: RunClaims,
+        tool: str,
+        args: Dict[str, Any],
+        step_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        connection_id: Optional[str] = None,
+    ) -> Any:
         base = self._base(claims, step_id)
         snapshot = self._policy.load_environment(claims.environment_id, claims.environment_version)
         try:
             resolution = self._policy.resolve(snapshot, tool, connection_id=connection_id)
         except PolicyDenied as denial:
-            self._log.append({**base, "type": "tool_denied", "tool": tool, "args": args,
-                              "reason": denial.reason}, workspace_id=claims.workspace_id)
+            self._log.append(
+                {
+                    **base,
+                    "type": "tool_denied",
+                    "tool": tool,
+                    "args": args,
+                    "reason": denial.reason,
+                },
+                workspace_id=claims.workspace_id,
+            )
             raise
 
         if resolution.execution == "inline":
             try:
                 result = await self._invoke(resolution, tool, args)
-                self._log.append({**base, "type": "tool_call", "tool": tool, "args": args,
-                                  "result": result}, workspace_id=claims.workspace_id)
+                self._log.append(
+                    {**base, "type": "tool_call", "tool": tool, "args": args, "result": result},
+                    workspace_id=claims.workspace_id,
+                )
             except ConnectorError as err:
-                self._log.append({**base, "type": "tool_call", "tool": tool, "args": args,
-                                  "error": str(err)}, workspace_id=claims.workspace_id)
+                self._log.append(
+                    {**base, "type": "tool_call", "tool": tool, "args": args, "error": str(err)},
+                    workspace_id=claims.workspace_id,
+                )
                 raise
             return result
 
@@ -121,34 +247,51 @@ class GatewayService:
         if recorded is not None:
             return recorded.result
 
-        self._log.append({**base, "type": "tool_intent", "tool": tool, "args": args,
-                          "idempotencyKey": key}, workspace_id=claims.workspace_id)
-        self._log.append({**base, "type": "tool_executed", "tool": tool, "args": args,
-                          "idempotencyKey": key}, workspace_id=claims.workspace_id)
+        self._log.append(
+            {**base, "type": "tool_intent", "tool": tool, "args": args, "idempotencyKey": key},
+            workspace_id=claims.workspace_id,
+        )
+        self._log.append(
+            {**base, "type": "tool_executed", "tool": tool, "args": args, "idempotencyKey": key},
+            workspace_id=claims.workspace_id,
+        )
         try:
             result = await self._invoke(resolution, tool, args)
         except ConnectorError as err:
             # Errored results are logged but never dedupe: retries re-run.
-            self._log.append({**base, "type": "tool_result", "tool": tool, "idempotencyKey": key,
-                              "error": str(err)}, workspace_id=claims.workspace_id)
+            self._log.append(
+                {
+                    **base,
+                    "type": "tool_result",
+                    "tool": tool,
+                    "idempotencyKey": key,
+                    "error": str(err),
+                },
+                workspace_id=claims.workspace_id,
+            )
             raise
-        self._log.append({**base, "type": "tool_result", "tool": tool, "idempotencyKey": key,
-                          "result": result}, workspace_id=claims.workspace_id)
+        self._log.append(
+            {**base, "type": "tool_result", "tool": tool, "idempotencyKey": key, "result": result},
+            workspace_id=claims.workspace_id,
+        )
         return result
 
     # -- binding registry --------------------------------------------------
 
-    def environment_binding(self, environment_id: str, version: Optional[int] = None,
-                            kind: str = "production", base_url: str = "") -> Any:
+    def environment_binding(
+        self,
+        environment_id: str,
+        version: Optional[int] = None,
+        kind: str = "production",
+        base_url: str = "",
+    ) -> Any:
         """Registry fulfillment of the runtime seam (convoy_core DESIGN §5).
 
         One environment definition compiles into two immutable bindings
         (SERVICE-CONTRACTS §2): `production` (real connectors, real clock) and
-        `sandbox` (mocks, virtual-capable clock). Sandbox compilation is
-        validated: every side-effecting connector tool must resolve to a mock
-        — until the mock registry exists, a sandbox request with
-        side-effecting tools fails closed listing the unmocked tools rather
-        than silently handing production connectors to a rehearsal.
+        `sandbox` (deterministic stand-ins, virtual-capable clock). A sandbox
+        binding never calls a provider: writes become explicit, durable
+        simulated-effect journal entries.
 
         When the environment sets a `sandbox_template`, both binding kinds
         additionally grant `sandbox_exec` (promoted, side-effecting, scoped to
@@ -159,8 +302,9 @@ class GatewayService:
         connector_endpoints carries the reserved `data_plane` key (what the
         runtime's turn executor and promoted-tool activities call today) plus
         one MCP door per connection (the richer surface it can move to)."""
-        from convoy_core import ClockConfig, EnvironmentBinding, PermissionScope, ToolGrant
         from sqlalchemy import select
+
+        from convoy_core import ClockConfig, EnvironmentBinding, PermissionScope, ToolGrant
 
         from ..db.tables import Environment as EnvironmentRow
 
@@ -169,8 +313,10 @@ class GatewayService:
         if version is None:
             with self._policy._sf() as session:
                 version = session.execute(
-                    select(EnvironmentRow.version).where(EnvironmentRow.id == environment_id)
-                    .order_by(EnvironmentRow.version.desc()).limit(1)
+                    select(EnvironmentRow.version)
+                    .where(EnvironmentRow.id == environment_id)
+                    .order_by(EnvironmentRow.version.desc())
+                    .limit(1)
                 ).scalar_one_or_none()
             if version is None:
                 raise PolicyDenied("unknown environment %s" % environment_id)
@@ -179,17 +325,6 @@ class GatewayService:
         grants = self._policy.allowed_tools(snapshot)
 
         if kind == "sandbox":
-            # sandbox_exec (appended below when a template is set) is EXEMPT
-            # from the mock requirement: sandbox jobs execute inside the
-            # sandbox itself with effects journaled in the workspace — they
-            # never reach a production connector, so they are rehearsal-safe
-            # by construction in both binding kinds. Only connector tools
-            # (the `grants` resolutions checked here) need mocks.
-            unmocked = sorted(r.spec.name for r in grants if r.side_effecting)
-            if unmocked:
-                raise PolicyDenied(
-                    "sandbox binding requires mocks for side-effecting tools; unmocked: %s"
-                    % ", ".join(unmocked))
             clock = ClockConfig(mode="virtual", advance="manual")
         else:
             clock = ClockConfig(mode="real")
@@ -199,16 +334,26 @@ class GatewayService:
             # Reserved key the runtime consumes today: plain-HTTP data plane,
             # environment-scoped so unauthenticated compose parity still
             # resolves policy correctly.
-            "data_plane": "%s/data-plane/%s/%d" % (base, environment_id, version),
+            "data_plane": "%s/%s/%s/%d"
+            % (
+                base,
+                "simulated-data-plane" if kind == "sandbox" else "data-plane",
+                environment_id,
+                version,
+            ),
         }
         for r in grants:
             endpoints[r.connection.id] = "%s/mcp/%s" % (base, r.connection.id)
         tool_registry = [
-            ToolGrant(tool_id=r.spec.name,
-                      scope=PermissionScope(
-                          resource="connector:%s" % r.connection.id,
-                          actions=["write"] if r.side_effecting else ["read"]),
-                      execution=r.execution, side_effecting=r.side_effecting)
+            ToolGrant(
+                tool_id=r.spec.name,
+                scope=PermissionScope(
+                    resource="connector:%s" % r.connection.id,
+                    actions=["write"] if r.side_effecting else ["read"],
+                ),
+                execution=r.execution,
+                side_effecting=r.side_effecting,
+            )
             for r in grants
         ]
         if env.sandbox_template:
@@ -216,13 +361,29 @@ class GatewayService:
             # to its own SandboxProvider, so no connector_endpoints entry.
             # This grant derives from the environment's sandbox_template,
             # never from a connection allowlist.
-            tool_registry.append(ToolGrant(
-                tool_id="sandbox_exec",
-                scope=PermissionScope(resource="sandbox:" + env.sandbox_template,
-                                      actions=["execute"]),
-                execution="promoted",
-                side_effecting=True,
-            ))
+            tool_registry.append(
+                ToolGrant(
+                    tool_id="sandbox_exec",
+                    scope=PermissionScope(
+                        resource="sandbox:" + env.sandbox_template, actions=["execute"]
+                    ),
+                    execution="promoted",
+                    side_effecting=True,
+                )
+            )
+        browser_policy = env.browser_policy or {}
+        if env.sandbox_template and browser_policy.get("allowedDomains"):
+            tool_registry.append(
+                ToolGrant(
+                    tool_id="sandbox_browser",
+                    scope=PermissionScope(
+                        resource="browser:" + ",".join(browser_policy["allowedDomains"]),
+                        actions=["navigate", "interact"],
+                    ),
+                    execution="promoted",
+                    side_effecting=True,
+                )
+            )
         return EnvironmentBinding(
             id="%s@%d/%s" % (environment_id, version, kind),
             tenant_id=env.workspace_id,
@@ -233,11 +394,18 @@ class GatewayService:
             data_namespace=env.data_namespace or "%s/%s" % (env.workspace_id, environment_id),
             sandbox_template=env.sandbox_template or "",
             clock=clock,
+            browser=browser_policy,
         )
 
-    async def call_effect(self, claims: RunClaims, tool: str, args: Dict[str, Any],
-                          idempotency_key: str, step_id: Optional[str] = None,
-                          connection_id: Optional[str] = None):
+    async def call_effect(
+        self,
+        claims: RunClaims,
+        tool: str,
+        args: Dict[str, Any],
+        idempotency_key: str,
+        step_id: Optional[str] = None,
+        connection_id: Optional[str] = None,
+    ):
         """Promoted-call entry for the data-plane facade: returns
         (result, replayed) matching the runtime's PromotedToolOutcome
         expectations — replayed=True means the key had already executed and
@@ -245,10 +413,103 @@ class GatewayService:
         recorded = self._recorded_result(claims, idempotency_key)
         if recorded is not None:
             return recorded.result, True
-        result = await self.call_tool(claims, tool, args, step_id=step_id,
-                                      idempotency_key=idempotency_key,
-                                      connection_id=connection_id)
+        result = await self.call_tool(
+            claims,
+            tool,
+            args,
+            step_id=step_id,
+            idempotency_key=idempotency_key,
+            connection_id=connection_id,
+        )
         return result, False
+
+    async def call_simulated_tool(
+        self,
+        claims: RunClaims,
+        tool: str,
+        args: Dict[str, Any],
+        *,
+        step_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> Any:
+        """Run a rehearsal without revealing the production credential.
+
+        Managed Slack, Google, and GitHub calls use the exact production
+        connector against provider-shaped stubs when the connector sandbox is
+        configured. Other providers retain deterministic schema-shaped
+        stand-ins until a provider sandbox is implemented for them.
+        """
+
+        base = self._base(claims, step_id)
+        snapshot = self._policy.load_environment(claims.environment_id, claims.environment_version)
+        try:
+            resolution = self._policy.resolve(snapshot, tool)
+        except PolicyDenied as denial:
+            self._log.append(
+                {
+                    **base,
+                    "type": "tool_denied",
+                    "tool": tool,
+                    "args": args,
+                    "reason": denial.reason,
+                },
+                workspace_id=claims.workspace_id,
+            )
+            raise
+
+        provider_sandbox = bool(
+            self._sandbox_url and resolution.connection.provider in ("slack", "google", "github")
+        )
+
+        if resolution.execution == "inline":
+            result = (
+                await self._invoke_connector_sandbox(claims, resolution, tool, args)
+                if provider_sandbox
+                else simulate(resolution, tool, args)
+            )
+            self._log.append(
+                {**base, "type": "tool_call", "tool": tool, "args": args, "result": result},
+                workspace_id=claims.workspace_id,
+            )
+            return result
+
+        key = idempotency_key or "%s:%s:%s" % (claims.run_id, tool, uuid.uuid4().hex[:12])
+        recorded = self._recorded_result(claims, key)
+        if recorded is not None:
+            return recorded.result
+        self._log.append(
+            {**base, "type": "tool_intent", "tool": tool, "args": args, "idempotencyKey": key},
+            workspace_id=claims.workspace_id,
+        )
+        self._log.append(
+            {**base, "type": "tool_executed", "tool": tool, "args": args, "idempotencyKey": key},
+            workspace_id=claims.workspace_id,
+        )
+        result = (
+            await self._invoke_connector_sandbox(
+                claims, resolution, tool, args, idempotency_key=key
+            )
+            if provider_sandbox
+            else simulate(resolution, tool, args, idempotency_key=key)
+        )
+        self._log.append(
+            {
+                **base,
+                "type": "simulated_effect",
+                "tool": tool,
+                "provider": resolution.connection.provider,
+                "connectionId": resolution.connection.id,
+                "args": args,
+                "idempotencyKey": key,
+                "result": result,
+            },
+            workspace_id=claims.workspace_id,
+        )
+        self._log.append(
+            {**base, "type": "tool_result", "tool": tool, "idempotencyKey": key, "result": result},
+            workspace_id=claims.workspace_id,
+        )
+        return result
 
     # -- browser credential lease (trusted fill service only) --------------
 
@@ -263,14 +524,21 @@ class GatewayService:
         import json as _json
 
         snapshot = self._policy.load_environment(claims.environment_id, claims.environment_version)
-        browser = (snapshot.row.browser_policy or {})
+        browser = snapshot.row.browser_policy or {}
         allowed = browser.get("allowedDomains") or []
         base = self._base(claims, None)
         if domain not in allowed:
             reason = "domain %s is not in the environment browser allowlist" % domain
-            self._log.append({**base, "type": "tool_denied", "tool": "browser.request_login",
-                              "args": {"domain": domain}, "reason": reason},
-                             workspace_id=claims.workspace_id)
+            self._log.append(
+                {
+                    **base,
+                    "type": "tool_denied",
+                    "tool": "browser.request_login",
+                    "args": {"domain": domain},
+                    "reason": reason,
+                },
+                workspace_id=claims.workspace_id,
+            )
             raise PolicyDenied(reason)
         for ec, conn in snapshot.connections:
             if conn.kind != "browser_identity" or conn.status != "active":
@@ -280,14 +548,31 @@ class GatewayService:
             domains = (conn.manifest or {}).get("domains") or []
             if domain in domains and conn.secret_ref:
                 value = _json.loads(self._secrets.reveal(conn.secret_ref))
-                self._log.append({**base, "type": "tool_call", "tool": "browser.request_login",
-                                  "args": {"domain": domain, "connectionId": conn.id},
-                                  "result": {"leased": True}}, workspace_id=claims.workspace_id)
-                return {"domain": domain, "connectionId": conn.id,
-                        "username": value.get("username", ""),
-                        "password": value.get("password", "")}
+                self._log.append(
+                    {
+                        **base,
+                        "type": "tool_call",
+                        "tool": "browser.request_login",
+                        "args": {"domain": domain, "connectionId": conn.id},
+                        "result": {"leased": True},
+                    },
+                    workspace_id=claims.workspace_id,
+                )
+                return {
+                    "domain": domain,
+                    "connectionId": conn.id,
+                    "username": value.get("username", ""),
+                    "password": value.get("password", ""),
+                }
         reason = "no browser identity covers %s in this environment" % domain
-        self._log.append({**base, "type": "tool_denied", "tool": "browser.request_login",
-                          "args": {"domain": domain}, "reason": reason},
-                         workspace_id=claims.workspace_id)
+        self._log.append(
+            {
+                **base,
+                "type": "tool_denied",
+                "tool": "browser.request_login",
+                "args": {"domain": domain},
+                "reason": reason,
+            },
+            workspace_id=claims.workspace_id,
+        )
         raise PolicyDenied(reason)

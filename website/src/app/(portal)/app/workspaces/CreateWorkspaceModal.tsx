@@ -1,9 +1,8 @@
 /**
  * Create-workspace modal: name, purpose, the system picker with View
- * only / Can update grants, and the automatic rehearsal-copy note. One
- * hard rule lives here: any side-effecting system granted Can update
- * must take its stand-in before submit; the server action re-validates
- * the same rule.
+ * only / Can update grants, and the automatic rehearsal-copy note.
+ * Rehearsal isolation is selected when an Agent starts a run, not stored as
+ * a Workspace choice; live runs use the real connections granted here.
  */
 "use client";
 
@@ -35,7 +34,6 @@ const STATUS_LABEL: Record<NonNullable<SystemOption["status"]>, string> = {
 interface SystemChoice {
   included: boolean;
   scope: "read" | "write";
-  useStandIn: boolean;
 }
 
 export interface CreateWorkspaceModalProps {
@@ -43,7 +41,7 @@ export interface CreateWorkspaceModalProps {
   create: (payload: CreateWorkspacePayload) => Promise<{ id: string }>;
 }
 
-const EMPTY_CHOICE: SystemChoice = { included: false, scope: "read", useStandIn: false };
+const EMPTY_CHOICE: SystemChoice = { included: false, scope: "read" };
 
 export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalProps) {
   const router = useRouter();
@@ -78,14 +76,8 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
     const included = systems.filter((system) => choiceFor(system.id).included);
     const found: string[] = [];
     if (name.trim().length < 2) found.push("Give the workspace a name.");
-    if (purpose.trim().length < 2) found.push("Say in a sentence what runs here.");
+    if (purpose.trim().length < 2) found.push("Say which shared work this workspace supports.");
     if (included.length === 0) found.push("Connect at least one system.");
-    for (const system of included) {
-      const choice = choiceFor(system.id);
-      if (system.sideEffecting && choice.scope === "write" && !choice.useStandIn) {
-        found.push(copy.standInRequired(system.displayName));
-      }
-    }
     if (found.length > 0) {
       setErrors(found);
       return;
@@ -98,7 +90,13 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
         purpose: purpose.trim(),
         systems: included.map((system) => {
           const choice = choiceFor(system.id);
-          return { systemId: system.id, scope: choice.scope, useStandIn: choice.useStandIn };
+          return {
+            systemId: system.id,
+            scope: choice.scope,
+            // Internal compatibility field. Rehearsal runs always isolate
+            // writes; production runs still use the real provider.
+            useStandIn: system.sideEffecting && choice.scope === "write",
+          };
         }),
       });
       setOpen(false);
@@ -156,7 +154,7 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
                   type="text"
                   value={purpose}
                   onChange={(event) => setPurpose(event.target.value)}
-                  placeholder="What runs here"
+                  placeholder="Which shared systems and work this supports"
                   className="mt-1 w-full rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink"
                 />
               </div>
@@ -165,7 +163,7 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
                 <ul className="m-0 list-none space-y-3 p-0">
                   {systems.map((system) => {
                     const choice = choiceFor(system.id);
-                    const needsStandIn =
+                    const isolatesWrites =
                       choice.included && system.sideEffecting && choice.scope === "write";
                     return (
                       <li key={system.id} className="border-b border-line-soft pb-3 last:border-b-0 last:pb-0">
@@ -212,23 +210,12 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
                             </label>
                           )}
                         </div>
-                        {needsStandIn && (
+                        {isolatesWrites && (
                           <div className="mt-2 rounded-md border border-dashed border-graphite bg-graphite-soft p-2">
-                            <label className="flex items-start gap-2 text-sm text-graphite">
-                              <input
-                                type="checkbox"
-                                checked={choice.useStandIn}
-                                onChange={(event) =>
-                                  updateChoice(system.id, { useStandIn: event.target.checked })
-                                }
-                              />
-                              <span>
-                                Use the stand-in
-                                {system.standInNote && (
-                                  <span className="mt-0.5 block text-xs">{system.standInNote}</span>
-                                )}
-                              </span>
-                            </label>
+                            <p className="text-xs text-graphite">
+                              Rehearsal runs isolate writes automatically. Live runs use the real
+                              provider connection after you explicitly choose Run live.
+                            </p>
                           </div>
                         )}
                       </li>

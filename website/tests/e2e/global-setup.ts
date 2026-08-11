@@ -15,11 +15,11 @@ import pg from "pg";
 const ROOT = join(__dirname, "..", "..");
 
 /**
- * Give the fresh org one workspace and one routine so the specs have
+ * Give the fresh org one shared workspace and one configured Agent so the specs have
  * something real to run: the same rows the catalog install flow writes,
  * bound to the local stub registry so on-demand runs actually execute.
  */
-async function seedRoutine(adminDsn: string, orgName: string): Promise<void> {
+async function seedAgent(adminDsn: string, orgName: string): Promise<void> {
   const client = new pg.Client({ connectionString: adminDsn });
   await client.connect();
   try {
@@ -65,11 +65,14 @@ async function seedRoutine(adminDsn: string, orgName: string): Promise<void> {
       [orgId, systems, versions],
     );
     await client.query(
-      `INSERT INTO routines
-         (org_id, workspace_id, name, descriptor, systems, budget_cap_usd, plan_steps)
+      `INSERT INTO agents
+         (org_id, workspace_id, name, purpose, production_binding_id,
+          rehearsal_binding_id, sandbox_template, goal, systems,
+          budget_cap_usd, plan_steps, automation_configured)
        VALUES ($1, $2, 'Quarterly user access review',
                'Looks up people and their access, reconciles differences, and chases sign-offs.',
-               $3, 75, $4)`,
+               'prod-local', 'stub-local', 'convoy-devbox-python',
+               'Reconcile access differences and collect sign-offs.', $3, 75, $4, true)`,
       [
         orgId,
         workspace.rows[0]!.id,
@@ -127,5 +130,5 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     await browser.close();
   }
 
-  await seedRoutine(adminDsn, orgName);
+  await seedAgent(adminDsn, orgName);
 }

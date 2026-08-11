@@ -27,11 +27,13 @@ def main() -> None:
         Base.metadata.create_all(engine)
         print("created tables on %s" % (engine.url,))  # URL is a NamedTuple — wrap it
     elif args.command == "serve":
+        import os
+
         import uvicorn
         from fastapi import FastAPI
 
-        from .db import SqlEventLog, make_engine, make_session_factory
         from .console_api import build_console_app
+        from .db import SqlEventLog, make_engine, make_session_factory
         from .gateway import GatewayService
         from .gateway.mcp_server import build_app as build_gateway_app
         from .secrets import BuiltinBackend, MasterKey, SecretsService
@@ -40,7 +42,18 @@ def main() -> None:
         secrets = SecretsService(session_factory, {"builtin": BuiltinBackend(MasterKey())})
         log = SqlEventLog(session_factory)
         app = FastAPI(title="convoy-environments")
-        app.mount("/gateway", build_gateway_app(GatewayService(session_factory, secrets, event_log=log)))
+        app.mount(
+            "/gateway",
+            build_gateway_app(
+                GatewayService(
+                    session_factory,
+                    secrets,
+                    event_log=log,
+                    sandbox_url=os.environ.get("CONVOY_CONNECTOR_SANDBOX_URL", ""),
+                    sandbox_admin_token=os.environ.get("SANDBOX_ADMIN_TOKEN", ""),
+                )
+            ),
+        )
         app.mount("/console", build_console_app(session_factory, secrets))
         uvicorn.run(app, host="0.0.0.0", port=args.port)
     else:

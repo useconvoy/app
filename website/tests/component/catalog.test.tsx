@@ -80,7 +80,7 @@ describe("CatalogCards", () => {
 
   it("renders the empty storefront state", () => {
     render(<CatalogCards entries={[]} />);
-    expect(screen.getByText("No routines are available to install yet")).toBeInTheDocument();
+    expect(screen.getByText("No Agent templates are available yet")).toBeInTheDocument();
   });
 });
 
@@ -93,7 +93,7 @@ describe("CompatibilityReportView", () => {
       />,
     );
     expect(
-      screen.getByText("Everything this routine needs is already connected."),
+      screen.getByText("Everything this Agent needs is already connected."),
     ).toBeInTheDocument();
     expect(screen.getByText("Identity provider is connected")).toBeInTheDocument();
     expect(screen.getByText("Messaging is connected")).toBeInTheDocument();
@@ -110,12 +110,12 @@ describe("CompatibilityReportView", () => {
         systemNames={systemNames}
       />,
     );
-    const picker = screen.getByLabelText("Choose which CRM this routine should use");
+    const picker = screen.getByLabelText("Choose which CRM this Agent should use");
     expect(picker).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Salesforce" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "HubSpot" })).toBeInTheDocument();
     expect(
-      screen.queryByText("Everything this routine needs is already connected."),
+      screen.queryByText("Everything this Agent needs is already connected."),
     ).not.toBeInTheDocument();
   });
 

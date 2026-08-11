@@ -19,7 +19,6 @@ import {
 import { requireOrgSession } from "@/lib/auth/session";
 import { withOrgContext } from "@/lib/db";
 import { catalogSystem } from "@/lib/workspaces/system-catalog";
-import { copy } from "@/lexicon";
 import { getMembership } from "@/lib/orgs/queries";
 import { can } from "@/lib/permissions";
 
@@ -64,7 +63,7 @@ export async function createWorkspace(payload: CreateWorkspacePayload): Promise<
   }
   const purpose = payload.purpose.trim();
   if (purpose.length < 2 || purpose.length > 200) {
-    throw new Error("Say in a sentence what runs here");
+    throw new Error("Say which shared work this workspace supports");
   }
   if (payload.systems.length === 0) {
     throw new Error("Connect at least one system");
@@ -80,10 +79,6 @@ export async function createWorkspace(payload: CreateWorkspacePayload): Promise<
     if (!system) throw new Error("Unknown system");
     if (choice.scope !== "read" && choice.scope !== "write") {
       throw new Error("Unknown grant");
-    }
-    // The modal blocks this before submit; the server holds the same line.
-    if (system.sideEffecting && choice.scope === "write" && !choice.useStandIn) {
-      throw new Error(copy.standInRequired(system.displayName));
     }
   }
 

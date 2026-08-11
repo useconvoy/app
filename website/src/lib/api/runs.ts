@@ -17,7 +17,9 @@ import { controlPlane, type ActorContext, type RunView } from "./client";
 interface RunRecord {
   runId: string;
   tenantId: string;
-  /** Routine the run was triggered from; drives assignment routing. */
+  /** Durable Agent the run was triggered from; drives assignment routing. */
+  agentId?: string;
+  /** @deprecated Frozen compatibility input; normalized into agentId. */
   routineId?: string;
   /** Website user who started the run; drives the "my runs" filter. */
   startedById?: string;
@@ -36,7 +38,11 @@ function directory(): Map<string, RunRecord> {
 }
 
 export function registerRun(record: Omit<RunRecord, "createdAt">): void {
-  directory().set(record.runId, { ...record, createdAt: new Date().toISOString() });
+  directory().set(record.runId, {
+    ...record,
+    agentId: record.agentId ?? record.routineId,
+    createdAt: new Date().toISOString(),
+  });
 }
 
 /**
@@ -51,8 +57,14 @@ export function ensureRunRegistered(runId: string, tenantId: string): void {
   }
 }
 
+export function agentIdForRun(runId: string): string | undefined {
+  const record = directory().get(runId);
+  return record?.agentId ?? record?.routineId;
+}
+
+/** Compatibility for runtime/event modules that have not renamed the wire yet. */
 export function routineIdForRun(runId: string): string | undefined {
-  return directory().get(runId)?.routineId;
+  return agentIdForRun(runId);
 }
 
 /**
@@ -112,6 +124,10 @@ export interface CreateRunInput {
   goal: string;
   environmentId: string;
   budgetUsd: string;
+  /** Connector capabilities requested from the selected immutable binding. */
+  tools?: string[];
+  agentId?: string;
+  /** @deprecated Use agentId. Accepted only at the frozen compatibility seam. */
   routineId?: string;
   /** Website user starting the run, for the "my runs" filter. */
   startedById?: string;
@@ -133,7 +149,7 @@ export async function createRun(
       fixture_gates: {},
       max_children: 5,
       success_criteria: [],
-      tools: [],
+      tools: input.tools ?? [],
       ...(input.requirePlanApproval === undefined
         ? {}
         : {
@@ -156,7 +172,7 @@ export async function createRun(
   registerRun({
     runId: data.run_id,
     tenantId: actor.tenantId,
-    routineId: input.routineId,
+    agentId: input.agentId ?? input.routineId,
     startedById: input.startedById,
   });
   return { runId: data.run_id, status: data.status };

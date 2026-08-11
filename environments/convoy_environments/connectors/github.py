@@ -41,18 +41,19 @@ class GitHubConnector(Connector):
         return ConnectionManifest(tools=list(_TOOLS))
 
     async def invoke(self, tool: str, args: Dict[str, Any], credential: str) -> Any:
+        api = self._config_url(_API, "apiBaseUrl", "api_base_url")
         headers = {"Authorization": "Bearer %s" % credential,
                    "Accept": "application/vnd.github+json"}
         async with self._client(headers=headers) as client:
             if tool == "github.list_issues":
-                resp = await client.get("%s/repos/%s/issues" % (_API, args["repo"]),
+                resp = await client.get("%s/repos/%s/issues" % (api, args["repo"]),
                                         params={"state": args.get("state", "open")})
             elif tool == "github.get_file":
                 params = {"ref": args["ref"]} if args.get("ref") else None
-                resp = await client.get("%s/repos/%s/contents/%s" % (_API, args["repo"], args["path"]),
+                resp = await client.get("%s/repos/%s/contents/%s" % (api, args["repo"], args["path"]),
                                         params=params)
             elif tool == "github.create_issue":
-                resp = await client.post("%s/repos/%s/issues" % (_API, args["repo"]),
+                resp = await client.post("%s/repos/%s/issues" % (api, args["repo"]),
                                          json={"title": args["title"], "body": args.get("body", "")})
             else:
                 raise ConnectorError("github: unknown tool %s" % tool)

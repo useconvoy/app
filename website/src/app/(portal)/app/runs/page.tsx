@@ -67,7 +67,7 @@ export default async function RunsPage({
             {mineOnly ? copy.myRunsTitle : "Runs"}
           </h1>
           <p className="mt-1 text-sm text-muted">
-            {mineOnly ? copy.myRunsIntro : "Everything your routines are doing, live."}
+            {mineOnly ? copy.myRunsIntro : "Everything your Agents are doing, live."}
           </p>
           {mineOnly ? (
             <p className="mt-1 text-sm">

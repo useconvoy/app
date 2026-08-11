@@ -117,17 +117,17 @@ export interface GrantChoice {
 }
 
 /**
- * Picker choices -> stored grants. The create modal blocks a live
- * side-effecting write client-side; this holds the same line so no caller
- * can slip one past the form. Custom systems (an org's own tool servers,
- * ids "custom:<connection>") resolve through the definitions the caller
- * supplies, under exactly the same stand-in rule.
+ * Picker choices -> stored grants. Custom systems (an org's own tool
+ * servers, ids "custom:<connection>") resolve through definitions supplied
+ * by the caller. Write-capable grants carry explanatory rehearsal metadata,
+ * but the production binding still targets the real provider connector.
  */
 export interface CustomSystemDefinition {
   id: string;
   displayName: string;
   sideEffecting: boolean;
   standInNote: string | null;
+  tools?: Array<{ name: string; sideEffecting: boolean }>;
 }
 
 export function grantsFromChoices(
@@ -139,18 +139,48 @@ export function grantsFromChoices(
     const system = catalogSystem(choice.systemId) ?? customById.get(choice.systemId);
     if (!system) throw new Error(`unknown system: ${choice.systemId}`);
     const needsStandIn = system.sideEffecting && choice.scope === "write";
-    if (needsStandIn && !choice.useStandIn) {
-      throw new Error(`a stand-in is required for ${system.displayName}`);
-    }
     const grant: SystemGrant = {
       systemId: system.id,
       displayName: system.displayName,
       scope: choice.scope,
       sideEffecting: system.sideEffecting,
     };
+    const declaredTools =
+      "connection" in system ? system.connection?.tools : system.tools;
+    if (declaredTools && declaredTools.length > 0) {
+      grant.tools = declaredTools.map((tool) => ({
+        name: tool.name,
+        sideEffecting: tool.sideEffecting,
+      }));
+    }
     if (needsStandIn && system.standInNote) {
       grant.standIn = { note: system.standInNote };
     }
     return grant;
   });
+}
+
+/**
+ * Resolve the concrete connector tools a routine may request from its
+ * workspace. The workspace grant is authoritative for scope: read grants
+ * receive only inline/read tools, while write grants receive the full pinned
+ * provider surface. Systems without a registry provider intentionally add no
+ * tools instead of inventing a capability the environment binding cannot
+ * honor.
+ */
+export function toolIdsForRoutine(
+  requiredSystemIds: readonly string[],
+  workspaceGrants: readonly SystemGrant[],
+): string[] {
+  const grants = new Map(workspaceGrants.map((grant) => [grant.systemId, grant]));
+  const tools = new Set<string>();
+  for (const systemId of requiredSystemIds) {
+    const grant = grants.get(systemId);
+    if (!grant) continue;
+    const declaredTools = grant.tools ?? catalogSystem(systemId)?.connection?.tools ?? [];
+    for (const tool of declaredTools) {
+      if (grant.scope === "write" || !tool.sideEffecting) tools.add(tool.name);
+    }
+  }
+  return [...tools].sort();
 }

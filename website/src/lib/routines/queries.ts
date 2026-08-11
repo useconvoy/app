@@ -1,15 +1,18 @@
 /**
- * Server-only data access for routines (website-side routing facts: what a
- * routine is called, which systems it touches, where it runs) and their
- * approver assignments. Every query runs through withOrgContext so RLS
- * bounds it; org ids arrive from the verified session, never from client
- * input.
+ * Compatibility aliases for code paths whose runtime/event vocabulary has
+ * not yet moved from `routine` to `agent`. Product state lives exclusively
+ * on `agents`; there is no routines table after migration 0012.
  */
 import "server-only";
 
 import type { PoolClient } from "pg";
 
 import { withOrgContext, type DbContext } from "@/lib/db";
+import {
+  isAssignedToAgent,
+  listAgentApprovers,
+  orgTenantId as agentOrgTenantId,
+} from "@/lib/agents/queries";
 
 export interface RoutineRecord {
   id: string;
@@ -21,6 +24,8 @@ export interface RoutineRecord {
   budgetCapUsd: string;
   planSteps: string[];
   workspaceId: string | null;
+  /** Compatibility self-reference: the job and runtime are one Agent. */
+  agentId: string | null;
   /** Plain schedule text; null means on demand only. */
   scheduleDescription: string | null;
   /** Catalog provenance: the entry and pinned version of the install. */
@@ -37,16 +42,18 @@ interface RoutineRow {
   budgetCapUsd: string;
   planSteps: unknown;
   workspaceId: string | null;
+  agentId: string | null;
   scheduleDescription: string | null;
   sourceEntryId: string | null;
   sourceVersion: number | null;
   createdAt: Date;
 }
 
-const ROUTINE_COLUMNS = `id, name, descriptor, systems,
+const ROUTINE_COLUMNS = `id, name, goal AS descriptor, systems,
        budget_cap_usd AS "budgetCapUsd",
        plan_steps AS "planSteps",
        workspace_id AS "workspaceId",
+       id AS "agentId",
        schedule_description AS "scheduleDescription",
        source_entry_id AS "sourceEntryId",
        source_version AS "sourceVersion",
@@ -65,23 +72,26 @@ function toRecord(row: RoutineRow): RoutineRecord {
 /** Route params are arbitrary text; only a uuid can be a row id. */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** The org's routines, oldest first so lists keep a stable order. */
+/** Configured Agents, oldest first. Kept under the old name for wire callers. */
 export async function listRoutines(orgId: string): Promise<RoutineRecord[]> {
   return withOrgContext({ orgId }, async (client) => {
     const { rows } = await client.query<RoutineRow>(
-      `SELECT ${ROUTINE_COLUMNS} FROM routines WHERE org_id = $1 ORDER BY created_at, id`,
+      `SELECT ${ROUTINE_COLUMNS} FROM agents
+        WHERE org_id = $1 AND automation_configured
+        ORDER BY created_at, id`,
       [orgId],
     );
     return rows.map(toRecord);
   });
 }
 
-/** One routine, or null when it does not exist in this org. */
+/** One configured Agent, or null when it does not exist in this org. */
 export async function getRoutine(orgId: string, routineId: string): Promise<RoutineRecord | null> {
   if (!UUID_PATTERN.test(routineId)) return null;
   return withOrgContext({ orgId }, async (client) => {
     const { rows } = await client.query<RoutineRow>(
-      `SELECT ${ROUTINE_COLUMNS} FROM routines WHERE org_id = $1 AND id = $2`,
+      `SELECT ${ROUTINE_COLUMNS} FROM agents
+        WHERE org_id = $1 AND id = $2 AND automation_configured`,
       [orgId, routineId],
     );
     return rows[0] ? toRecord(rows[0]) : null;
@@ -94,37 +104,41 @@ export interface InstallRoutineInput {
   systems: string[];
   budgetCapUsd: number;
   workspaceId: string;
+  agentId: string;
   sourceEntryId: string;
   sourceVersion: number;
 }
 
 /**
- * Record a catalog install as a real routine of the org. Installing the
- * same entry again re-pins the existing routine (fresh snapshot fields,
- * possibly a new workspace) instead of stacking duplicates; the partial
- * unique index in migration 0006 is what makes the upsert well-defined.
- * Runs on the caller's client so the install and its audit row share one
- * transaction.
+ * Enrich an Agent from a catalog template. Reinstalling the same entry
+ * re-pins the Agent that already carries it; a first install enriches the
+ * Agent selected by the user. Runs on the caller's transaction.
  */
 export async function upsertInstalledRoutine(
   client: PoolClient,
   ctx: Required<DbContext>,
   input: InstallRoutineInput,
 ): Promise<{ id: string }> {
+  const existing = await client.query<{ id: string }>(
+    `SELECT id FROM agents WHERE org_id = $1 AND source_entry_id = $2`,
+    [ctx.orgId, input.sourceEntryId],
+  );
+  const targetId = existing.rows[0]?.id ?? input.agentId;
   const { rows } = await client.query<{ id: string }>(
-    `INSERT INTO routines
-       (org_id, name, descriptor, systems, budget_cap_usd, plan_steps,
-        workspace_id, source_entry_id, source_version, created_by)
-     VALUES ($1, $2, $3, $4, $5, '[]', $6, $7, $8, $9)
-     ON CONFLICT (org_id, source_entry_id) WHERE source_entry_id IS NOT NULL
-     DO UPDATE SET
-       name = EXCLUDED.name,
-       descriptor = EXCLUDED.descriptor,
-       systems = EXCLUDED.systems,
-       workspace_id = EXCLUDED.workspace_id,
-       source_version = EXCLUDED.source_version,
-       updated_at = now()
-     RETURNING id`,
+    `UPDATE agents
+        SET name = $2,
+            purpose = $3,
+            goal = $3,
+            systems = $4,
+            budget_cap_usd = $5,
+            plan_steps = '[]',
+            workspace_id = $6,
+            source_entry_id = $7,
+            source_version = $8,
+            automation_configured = true,
+            updated_at = now()
+      WHERE org_id = $1 AND id = $9
+      RETURNING id`,
     [
       ctx.orgId,
       input.name,
@@ -134,9 +148,10 @@ export async function upsertInstalledRoutine(
       input.workspaceId,
       input.sourceEntryId,
       input.sourceVersion,
-      ctx.userId,
+      targetId,
     ],
   );
+  if (!rows[0]) throw new Error("That agent no longer exists");
   return { id: rows[0]!.id };
 }
 
@@ -148,7 +163,7 @@ export async function setRoutineSchedule(
 ): Promise<void> {
   await withOrgContext({ orgId }, (client) =>
     client.query(
-      `UPDATE routines SET schedule_description = $3, updated_at = now()
+      `UPDATE agents SET schedule_description = $3, updated_at = now()
         WHERE org_id = $1 AND id = $2`,
       [orgId, routineId, description || null],
     ),
@@ -165,19 +180,7 @@ export interface ApproverAssignment {
 
 /** Approvers assigned to a routine, people and teams together. */
 export async function listApprovers(orgId: string, routineId: string): Promise<ApproverAssignment[]> {
-  return withOrgContext({ orgId }, async (client) => {
-    const { rows } = await client.query<ApproverAssignment>(
-      `SELECT ra.id, ra.assignee_type AS "assigneeType", ra.assignee_id AS "assigneeId",
-              COALESCE(u.name, t.name, 'Removed') AS name
-         FROM routine_assignments ra
-         LEFT JOIN users u ON ra.assignee_type = 'user' AND u.id = ra.assignee_id
-         LEFT JOIN teams t ON ra.assignee_type = 'team' AND t.id = ra.assignee_id
-        WHERE ra.org_id = $1 AND ra.routine_id = $2 AND ra.relationship = 'approver'
-        ORDER BY name`,
-      [orgId, routineId],
-    );
-    return rows;
-  });
+  return listAgentApprovers(orgId, routineId);
 }
 
 /**
@@ -190,32 +193,15 @@ export async function isAssignedToRoutine(
   userId: string,
   routineId: string,
 ): Promise<boolean> {
-  return withOrgContext({ orgId, userId }, async (client) => {
-    const { rows } = await client.query<{ assigned: boolean }>(
-      `SELECT EXISTS (
-         SELECT 1 FROM routine_assignments ra
-          WHERE ra.org_id = $1 AND ra.routine_id = $2
-            AND (
-              (ra.assignee_type = 'user' AND ra.assignee_id = $3)
-              OR (ra.assignee_type = 'team' AND ra.assignee_id IN (
-                    SELECT tm.team_id FROM team_memberships tm WHERE tm.user_id = $3))
-            )
-       ) AS assigned`,
-      [orgId, routineId, userId],
-    );
-    return rows[0]?.assigned ?? false;
-  });
+  return isAssignedToAgent(orgId, userId, routineId);
 }
 
-/** The runtime tenant id for an org, for the actor context on run calls. */
+/**
+ * The runtime tenant id for an org, for the actor context on run calls.
+ * Registry-linked organizations use the registry's organization id because
+ * environment bindings are tenant-checked there. Unlinked deployments keep
+ * the original website tenant id and the table-backed stub behavior.
+ */
 export async function orgTenantId(orgId: string): Promise<string> {
-  return withOrgContext({ orgId }, async (client) => {
-    const { rows } = await client.query<{ tenantId: string }>(
-      `SELECT tenant_id AS "tenantId" FROM organizations WHERE id = $1`,
-      [orgId],
-    );
-    const tenantId = rows[0]?.tenantId;
-    if (!tenantId) throw new Error("organization not found");
-    return tenantId;
-  });
+  return agentOrgTenantId(orgId);
 }

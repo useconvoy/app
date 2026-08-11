@@ -127,7 +127,7 @@ describe.skipIf(!ADMIN_DSN)("notifier (real Postgres)", () => {
         [teamId, approverA, approverB],
       );
       await client.query(
-        `INSERT INTO routine_assignments (org_id, routine_id, assignee_type, assignee_id, relationship)
+        `INSERT INTO agent_assignments (org_id, agent_id, assignee_type, assignee_id, relationship)
          VALUES ($1, $2, 'user', $3, 'owner'),
                 ($1, $2, 'team', $4, 'approver'),
                 ($1, $2, 'user', $5, 'watcher')`,
@@ -152,7 +152,7 @@ describe.skipIf(!ADMIN_DSN)("notifier (real Postgres)", () => {
     await admin.query("DELETE FROM notifier_state WHERE org_id = $1", [orgId]);
     await admin.query("DELETE FROM open_gates WHERE org_id = $1", [orgId]);
     await admin.query("DELETE FROM notification_prefs WHERE org_id = $1", [orgId]);
-    await admin.query("DELETE FROM routine_assignments WHERE org_id = $1", [orgId]);
+    await admin.query("DELETE FROM agent_assignments WHERE org_id = $1", [orgId]);
     await admin.query(
       "DELETE FROM team_memberships tm USING teams t WHERE t.id = tm.team_id AND t.org_id = $1",
       [orgId],

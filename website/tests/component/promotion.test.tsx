@@ -68,13 +68,13 @@ describe("LandReportSection", () => {
     // Spend vs cap through the budget meter (tiny spend rounds to $0).
     expect(screen.getByText("$0 of $40")).toBeInTheDocument();
     // Production reports carry no stand-in outbox.
-    expect(screen.queryByText("What this routine would have done")).not.toBeInTheDocument();
+    expect(screen.queryByText("What this agent would have done")).not.toBeInTheDocument();
   });
 
   it("shows the stand-in outbox on rehearsal reports, one row per recorded step", () => {
     const { report } = landedFixture();
     render(<LandReportSection report={report} budget={null} steps={steps} rehearsal />);
-    expect(screen.getByText("What this routine would have done")).toBeInTheDocument();
+    expect(screen.getByText("What this agent would have done")).toBeInTheDocument();
     const table = screen.getByRole("table");
     expect(within(table).getByText("What")).toBeInTheDocument();
     expect(within(table).getByText("To whom or where")).toBeInTheDocument();
@@ -121,6 +121,40 @@ describe("deriveStandInOutbox", () => {
       { step_id: "step-1", description: "Send everything", status: "failed" },
     ]);
     expect(rows).toEqual([]);
+  });
+
+  it("prefers the connector effect actually recorded by the rehearsal", () => {
+    const rows = deriveStandInOutbox({}, steps, [
+      {
+        id: "run-1:8",
+        run_id: "run-1",
+        tenant_id: "tenant-1",
+        seq: 8,
+        type: "simulated_effect",
+        ts: "2026-08-10T00:00:00Z",
+        virtual_ts: null,
+        sandbox: true,
+        actor: "system",
+        actor_type: "system",
+        payload: {
+          tool_id: "slack.post_message",
+          idempotency_key: "effect-1",
+          result: {
+            ok: true,
+            simulated: true,
+            channel: "C-DEMO",
+            message: { text: "Please confirm your access." },
+          },
+        },
+      },
+    ]);
+    expect(rows).toEqual([
+      {
+        what: "Slack: post message",
+        where: "C-DEMO",
+        content: "Please confirm your access.",
+      },
+    ]);
   });
 });
 

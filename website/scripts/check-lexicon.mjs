@@ -15,8 +15,6 @@ const ROOT = new URL("..", import.meta.url).pathname;
 const SRC = join(ROOT, "src");
 
 const INTERNAL_NOUNS = [
-  "agent",
-  "agents",
   "sandbox",
   "sandboxes",
   "eval",

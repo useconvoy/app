@@ -1,28 +1,19 @@
 /**
- * Server actions for routine surfaces: approver assignment, trigger edits,
- * and the on-demand run. Every action derives org and actor from the
- * verified session and re-checks the permissions matrix server-side; the
- * UI lens hiding a control is convenience only. Routine assignment is
- * routing, not org administration, so it carries no admin_audit row; run
- * triggering is attributed in the runtime's own audit trail via the actor
- * header.
+ * Temporary action aliases for old route/event callers. Product actions now
+ * target the Agent directly; this file can disappear when the frozen wire
+ * vocabulary is renamed.
  */
 "use server";
 
 import { revalidatePath } from "next/cache";
 
-import { environmentsClient } from "@/lib/api/environments";
-import { createRun } from "@/lib/api/runs";
+import { runAgentNow } from "@/lib/agents/run-actions";
 import { requireOrgSession } from "@/lib/auth/session";
 import { withOrgContext } from "@/lib/db";
 import { getMembership } from "@/lib/orgs/queries";
 import { can } from "@/lib/permissions";
-import { missingSystems, systemDisplayNames } from "@/lib/workspaces/fit";
-import { recordRunTarget, resolveWorkspace } from "./data";
 import {
   getRoutine,
-  isAssignedToRoutine,
-  orgTenantId,
   setRoutineSchedule,
   type RoutineRecord,
 } from "./queries";
@@ -39,15 +30,15 @@ async function requireActor() {
 
 async function requireRoutine(orgId: string, routineId: string): Promise<RoutineRecord> {
   const routine = await getRoutine(orgId, routineId);
-  if (!routine) throw new Error("That routine does not exist");
+  if (!routine) throw new Error("That Agent does not exist");
   return routine;
 }
 
 function detailPath(routineId: string): string {
-  return `/app/routines/${routineId}`;
+  return `/app/agents/${routineId}`;
 }
 
-/** Assign a person or team as an approver on a routine. */
+/** Assign a person or team as an approver on an Agent. */
 export async function assignApprover(
   routineId: string,
   assigneeType: string,
@@ -65,7 +56,7 @@ export async function assignApprover(
     // The assignee must exist inside this org; RLS already bounds the
     // lookup, the WHERE makes a bad id a no-op instead of a stray row.
     const result = await client.query(
-      `INSERT INTO routine_assignments (org_id, routine_id, assignee_type, assignee_id, relationship)
+      `INSERT INTO agent_assignments (org_id, agent_id, assignee_type, assignee_id, relationship)
        SELECT $1, $2, $3, $4, 'approver'
         WHERE ($3 = 'user' AND EXISTS (
                 SELECT 1 FROM memberships m
@@ -82,7 +73,7 @@ export async function assignApprover(
   revalidatePath(detailPath(routineId));
 }
 
-/** Remove an approver assignment from a routine. */
+/** Remove an approver assignment from an Agent. */
 export async function removeApprover(routineId: string, assignmentId: string): Promise<void> {
   const { session, membership } = await requireActor();
   if (!can("edit_routines_rehearsal", membership.role, membership.capabilities)) {
@@ -90,8 +81,8 @@ export async function removeApprover(routineId: string, assignmentId: string): P
   }
   await withOrgContext({ orgId: session.orgId, userId: session.userId }, async (client) => {
     const result = await client.query(
-      `DELETE FROM routine_assignments
-        WHERE id = $1 AND org_id = $2 AND routine_id = $3 AND relationship = 'approver'`,
+      `DELETE FROM agent_assignments
+        WHERE id = $1 AND org_id = $2 AND agent_id = $3 AND relationship = 'approver'`,
       [assignmentId, session.orgId, routineId],
     );
     if (result.rowCount === 0) throw new Error("That assignment no longer exists");
@@ -100,14 +91,14 @@ export async function removeApprover(routineId: string, assignmentId: string): P
 }
 
 /**
- * Edit a routine's schedule text. Editing triggers of live routines is
+ * Edit an Agent's schedule text. Editing triggers of live Agents is
  * promoter territory: Operators hold it, Admins and senior
  * Members via the promoter capability.
  */
 export async function updateTriggerSchedule(routineId: string, description: string): Promise<void> {
   const { session, membership } = await requireActor();
   if (!can("promote", membership.role, membership.capabilities)) {
-    throw new Error("You cannot edit triggers of a live routine");
+    throw new Error("You cannot edit triggers of a live agent");
   }
   await requireRoutine(session.orgId, routineId);
   const trimmed = description.trim();
@@ -116,96 +107,22 @@ export async function updateTriggerSchedule(routineId: string, description: stri
   revalidatePath(detailPath(routineId));
 }
 
-/**
- * Move a routine to another workspace. Reassignment changes which systems
- * runs may touch, so it takes the same capability as installing and lands
- * an admin_audit row; the target must cover every system the routine
- * needs (the same coverage rule the install picker shows).
- */
-export async function setRoutineWorkspace(routineId: string, workspaceId: string): Promise<void> {
-  const { session, membership } = await requireActor();
-  if (!can("manage_workspaces", membership.role, membership.capabilities)) {
-    throw new Error("You cannot move routines between workspaces");
-  }
-  const routine = await requireRoutine(session.orgId, routineId);
-  const workspace = await environmentsClient().getWorkspace(session.orgId, workspaceId);
-  if (!workspace) throw new Error("That workspace does not exist");
-  const missing = missingSystems(routine.systems, workspace);
-  if (missing.length > 0) {
-    const names = systemDisplayNames([workspace]);
-    throw new Error(
-      `That workspace does not connect ${missing.map((id) => names[id] ?? id).join(", ")}`,
-    );
-  }
-  await withOrgContext({ orgId: session.orgId, userId: session.userId }, async (client) => {
-    await client.query(
-      "UPDATE routines SET workspace_id = $1 WHERE org_id = $2 AND id = $3",
-      [workspace.id, session.orgId, routineId],
-    );
-    await client.query(
-      "INSERT INTO admin_audit (org_id, actor_id, action, subject) VALUES ($1, $2, $3, $4)",
-      [session.orgId, session.userId, "routine.workspace_changed", `${routineId} into ${workspace.id}`],
-    );
-  });
-  revalidatePath(detailPath(routineId));
-  revalidatePath("/app/routines");
-}
-
 export interface RunNowResult {
   runId: string;
   target: "rehearsal" | "production";
 }
 
+export type RunTarget = RunNowResult["target"];
+
 /**
  * The on-demand run. Anyone who may trigger runs gets the rehearsal
- * copy by default; the live workspace is used only when the caller holds
+ * copy by default; the Agent's live binding is used only when the caller holds
  * the promote capability, and assigned Members stay within the routine's
  * budget cap either way (the cap rides the create call).
  */
 export async function runRoutineNow(
   routineId: string,
-  executionEnvironmentId?: string,
+  target: RunTarget = "rehearsal",
 ): Promise<RunNowResult> {
-  const { session, membership } = await requireActor();
-  if (!can("trigger_production_run", membership.role, membership.capabilities)) {
-    throw new Error("You cannot start runs");
-  }
-  const routine = await requireRoutine(session.orgId, routineId);
-  const workspace = await resolveWorkspace(session.orgId, routine);
-  if (!workspace) {
-    throw new Error("No workspace connects the systems this routine needs");
-  }
-  const production = can("promote", membership.role, membership.capabilities);
-  if (production && membership.role === "member") {
-    // Members trigger live runs only on routines assigned to them.
-    const assigned = await isAssignedToRoutine(session.orgId, session.userId, routineId);
-    if (!assigned) throw new Error("You are not assigned to this routine");
-  }
-  const tenantId = await orgTenantId(session.orgId);
-  const executionEnvironments = await environmentsClient().listExecutionEnvironments(
-    session.orgId,
-    workspace.id,
-  );
-  const executionEnvironment = executionEnvironmentId
-    ? executionEnvironments.find((environment) => environment.id === executionEnvironmentId)
-    : executionEnvironments.find((environment) => environment.isDefault) ?? executionEnvironments[0];
-  if (executionEnvironmentId && !executionEnvironment) {
-    throw new Error("That environment does not belong to this workspace");
-  }
-  const { runId } = await createRun(
-    { actorId: session.userId, tenantId },
-    {
-      goal: routine.descriptor ? `${routine.name}: ${routine.descriptor}` : routine.name,
-      environmentId: production
-        ? executionEnvironment?.productionBindingId ?? workspace.environmentId
-        : executionEnvironment?.rehearsalBindingId ?? workspace.rehearsalEnvironmentId,
-      budgetUsd: routine.budgetCapUsd,
-      routineId: routine.id,
-      startedById: session.userId,
-    },
-  );
-  const target = production ? "production" : "rehearsal";
-  recordRunTarget(runId, target);
-  revalidatePath(detailPath(routineId));
-  return { runId, target };
+  return runAgentNow(routineId, target);
 }

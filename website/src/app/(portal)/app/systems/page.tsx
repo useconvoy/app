@@ -12,7 +12,9 @@ export const dynamic = "force-dynamic";
 function connectionState(connection: SystemConnection | undefined): ConnectionState {
   if (!connection) return "not_connected";
   if (connection.status === "needs_reauth" || connection.status === "revoked") return "needs_reauth";
-  if (!connection.hasCredential) return "credentials_pending";
+  // A custom tool server may intentionally be public. Registration already
+  // called tools/list successfully, so no bearer token is not a pending state.
+  if (!connection.hasCredential && connection.kind !== "mcp_custom") return "credentials_pending";
   return "connected";
 }
 
@@ -56,7 +58,7 @@ export default async function SystemsPage() {
         <h1 className="font-display text-3xl text-ink">Systems</h1>
         <p className="mt-2 text-sm text-muted">
           What this organization can reach, and how each provider authorizes it. Workspaces grant
-          these to routines.
+          these to Agents. More than one Agent can use the same Workspace and its shared systems.
         </p>
       </header>
       <SystemsBoard

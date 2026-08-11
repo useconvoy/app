@@ -1,7 +1,7 @@
 /**
  * The lexicon: the only door between internal vocabulary and rendered copy.
  *
- * Code, APIs, the database, and events keep internal names (agent, sandbox,
+ * Code, APIs, the database, and events keep internal names (sandbox,
  * gate, tenant, artifact, eval). Users see the product vocabulary. Every
  * user-facing string that references a domain concept flows through this
  * module; `npm run check:lexicon` fails the build when an internal noun or
@@ -13,14 +13,14 @@
 
 /** Internal noun -> user-facing term. */
 export const terms = {
-  agent: "routine",
-  environment: "environment",
+  agent: "agent",
+  environment: "runtime binding",
   sandbox: "rehearsal",
   sandboxBinding: "rehearsal copy",
   connector: "system",
   connection: "system",
   capabilityMock: "stand-in",
-  eval: "routine evaluation",
+  eval: "agent evaluation",
   evalScore: "test score",
   telemetry: "logs",
   artifact: "file",
@@ -129,10 +129,11 @@ export const eventLabels: Record<string, string> = {
   child_spawned: "Helper run started",
   child_landed: "Helper run finished",
   compaction_applied: "Notes tidied",
+  simulated_effect: "Simulated connector effect",
   environment_provisioned: "Compute started",
-  environment_checkpointed: "Environment saved",
+  environment_checkpointed: "Agent state saved",
   environment_hibernated: "Compute released for pause",
-  environment_restored: "Environment restored",
+  environment_restored: "Agent state restored",
   environment_terminated: "Compute released",
   landing_started: "Wrapping up",
   run_completed: "Landed",
@@ -207,14 +208,14 @@ export const copy = {
   reviewNewerPlan: (version: number) => `Review v${version}`,
   disconnected: "Connection lost. Reconnecting",
   lastEventAt: (time: string) => `Last update ${time}`,
-  standInOutbox: "What this routine would have done",
+  standInOutbox: "What this agent would have done",
   promoteAction: "Promote",
   sendBackAction: "Send back",
   exportEvidenceBinder: "Export evidence binder",
   setAside: "set aside",
   howItFitsTitle: "How it fits together",
   howItFits:
-    "A routine is a job that runs on a schedule, on demand, or when something happens. It works inside a workspace, through the systems connected there, and holds at a checkpoint when it needs a person.",
+    "An agent owns a goal and runtime setup. It operates through a shared workspace's connected systems, starts on demand or on a schedule, and holds at a checkpoint when it needs a person.",
   answeredBy: (name: string) => `Answered by ${name}`,
   standInFor: (system: string) => `Stand-in for ${system}`,
   actsOnVersion: (version: number) => `Acts on v${version}`,
@@ -222,7 +223,7 @@ export const copy = {
   searchRuns: "Search runs",
   productionFilter: "Production",
   rehearsalsFilter: "Rehearsals",
-  runsEmptyBody: "Runs appear here as soon as a routine starts working.",
+  runsEmptyBody: "Runs appear here as soon as an agent starts working.",
   myRunsTitle: "My runs",
   myRunsIntro: "Runs you started, newest first.",
   myRunsEmptyBody: "Runs you start will appear here.",
@@ -234,28 +235,27 @@ export const copy = {
   pinnedVersion: (version: number) => `Pinned to v${version}`,
   runNow: "Run now",
   runNowRehearsalNote:
-    "Run now starts a rehearsal in this workspace's default environment. Nothing touches live systems.",
+    "A rehearsal starts this agent against the workspace's safe data plane, without changing live systems.",
   runNowProductionNote:
-    "Run now starts a live run in this workspace's default environment, within this routine's budget.",
+    "A live run starts this agent against the workspace's real connected systems, within its budget.",
   noRunsYet: "No runs yet",
-  routinesEmptyTitle: "No routines yet",
+  routinesEmptyTitle: "No agents yet",
   routinesEmptyBody:
-    "Routines are the jobs this organization hands over. Install one from the catalog to get started.",
-  planEmptyNote: "No plan recorded yet. The plan appears with this routine's first run.",
+    "Agents are the durable workers this organization configures. Create one to get started.",
+  planEmptyNote: "No instructions were pinned. The agent can form a live plan when it starts.",
   checkpointsUnknownNote:
-    "Checkpoints appear here when this routine's plan holds for a person.",
+    "Checkpoints appear here when this agent's plan holds for a person.",
   workspacesEmptyTitle: "No workspaces yet",
   workspacesEmptyBody:
-    "A workspace connects the systems routines may touch. Create one to give routines somewhere to run.",
-  rehearsalCopyAutoNote: "You can add a runtime environment after creating the workspace.",
+    "A workspace connects shared systems and spaces. Create one, then link as many agents to it as needed.",
+  rehearsalCopyAutoNote:
+    "Next, create an Agent that uses this shared Workspace. Rehearsals isolate writes; live runs use its real integrations.",
   rehearsalCopyExplainer:
-    "Every environment carries a rehearsal copy. Rehearsal runs use stand-ins for anything that would touch the outside world.",
-  standInRequired: (system: string) =>
-    `${system} makes changes outside this organization. Add a stand-in before creating the workspace.`,
+    "Every agent can rehearse through its workspace. Rehearsal runs use stand-ins for anything that would touch the outside world.",
   upToPerRun: (amount: string) => `Up to ${amount} per run`,
-  workspaceCardFact: (systems: number, routines: number) =>
-    `Connects ${systems} ${systems === 1 ? "system" : "systems"} · used by ${routines} ${
-      routines === 1 ? "routine" : "routines"
+  workspaceCardFact: (systems: number, agents: number) =>
+    `Connects ${systems} ${systems === 1 ? "system" : "systems"} · used by ${agents} ${
+      agents === 1 ? "agent" : "agents"
     }`,
   // Run controls: pause/resume/land, the steer composer, clock.
   pauseAction: "Pause",
@@ -294,7 +294,8 @@ export const copy = {
   outboxWhat: "What",
   outboxWhere: "To whom or where",
   outboxContent: "What would have gone out",
-  outboxDerivedNote: "Worked out from the run's steps and files.",
+  outboxDerivedNote:
+    "Recorded by the rehearsal stand-ins; older runs are reconstructed from their steps and files.",
   outboxContentHeld: "Content held by the platform",
   outboxKeptWithFiles: "Kept with the run's files",
   outboxOutsideWorld: "Outside this organization, held by the stand-in",
@@ -304,9 +305,9 @@ export const copy = {
   promotionNeedsPromoter: "Promoting needs a promoter.",
   sendBackNoteLabel: "What should change before this goes live",
   sendBackNoteRequired: "Say what should change before sending this back.",
-  notTiedToRoutine: "This run is not tied to a routine, so there is nothing to promote.",
+  notTiedToRoutine: "This run is not tied to an agent, so there is nothing to promote.",
   viewersCannotAct: "Viewers cannot act on runs.",
-  assignedToSomeoneElse: "This run's routine is assigned to someone else.",
+  assignedToSomeoneElse: "This run's agent is assigned to someone else.",
   rehearsalOnlyAnswerAt: "Scheduled answers only work on rehearsal runs.",
   rehearsalOnlyPromotion: "Only rehearsal results can be submitted for promotion.",
   platformRefused: "The platform did not accept this action.",
@@ -354,7 +355,7 @@ export const notificationTitles = {
     goal ? `The plan for "${goal}" is ready to review.` : "A plan is ready to review.",
   resume: () => "A run is paused and waiting for someone to resume it.",
   deadline: () => "A checkpoint is coming up on its deadline.",
-  promotionRequested: () => "A routine finished rehearsing and is ready to review for promotion.",
+  promotionRequested: () => "An agent finished rehearsing and is ready to review for promotion.",
   budgetWarning: (goal?: string | null) =>
     goal ? `"${goal}" is approaching its budget.` : "A run is approaching its budget.",
   budgetExhausted: (goal?: string | null) =>
@@ -395,46 +396,46 @@ export const notificationSettingsCopy = {
 } as const;
 
 /**
- * Catalog copy. Product vocabulary only: routines, systems,
+ * Catalog copy. Product vocabulary only: Agent templates, systems,
  * workspaces, test scores. The stored eval_thresholds column never reaches
  * the screen by that name; users see a "test score floor".
  */
 export const catalogCopy = {
   title: "Catalog",
-  intro: "Routines published by Convoy, ready to install into one of your workspaces.",
-  installRoutine: "Install a routine",
+  intro: "Agent templates published by Convoy, ready to add to an Agent in one of your workspaces.",
+  installRoutine: "Install Agent template",
   publishAction: "Publish to catalog",
-  publishTitle: "Publish a routine",
+  publishTitle: "Publish an Agent template",
   publishIntro:
-    "Publishing takes a snapshot of the routine and puts it on the storefront for every organization.",
+    "Publishing takes a snapshot of an Agent's goal and requirements and puts it on the storefront.",
   whatItNeeds: "What it needs",
   testScoreFloorLabel: "Test score floor",
   testScoreFloor: (score: number) => `Ships only above ${score}`,
   updateAvailable: "Update available",
   installedPinned: (version: number) => `Installed · pinned to v${version}`,
   chooseWorkspace: "Choose a workspace",
-  chooseWorkspaceHint: "Pick the workspace this routine should work inside.",
+  chooseWorkspaceHint: "Pick the shared workspace this Agent should operate through.",
   compatibilityTitle: "How it fits this workspace",
-  allGreen: "Everything this routine needs is already connected.",
+  allGreen: "Everything this Agent needs is already connected.",
   connectedCheck: (system: string) => `${system} is connected`,
-  needsMapping: (system: string) => `Choose which ${system} this routine should use`,
+  needsMapping: (system: string) => `Choose which ${system} this Agent should use`,
   connectFirst: (system: string) => `Connect ${system} first`,
   portableExcept: (count: number) =>
     `Portable except ${count} vendor-specific ${count === 1 ? "tool" : "tools"}`,
   fullyPortable: "Fully portable across vendors",
   installPinned: (version: number) => `Install pinned to v${version}`,
   installBlocked: "Connect the missing systems before installing.",
-  installedNote: "Installed. This routine is now on the routines list.",
-  viewInstalledRoutine: "Open the routines list",
+  installedNote: "Installed. The Agent now carries this goal and its requirements.",
+  viewInstalledRoutine: "Open the Agent",
   installNeedsWorkspace:
-    "Create a workspace first, so this routine has somewhere to run.",
+    "Create a shared workspace first, so Agents have connected systems to use.",
   goToWorkspaces: "Go to workspaces",
   changelogTitle: "Changelog",
   versionChip: (version: number) => `v${version}`,
   publishedBy: (publisher: string) => `Published by ${publisher}`,
-  emptyTitle: "No routines are available to install yet",
+  emptyTitle: "No Agent templates are available yet",
   emptyBody:
-    "Routines published to the catalog appear here, ready to install into a workspace. Your Convoy contact can help you get the first one published.",
+    "Agent templates published to the catalog appear here. Your Convoy contact can help publish the first one.",
 } as const;
 
 /** Billing copy; billing is invoice-first Stripe. */
@@ -457,7 +458,7 @@ export const adminCopy = {
   policiesTitle: "Policies",
   policiesIntro: "Budget defaults and export rules for this organization.",
   defaultRunBudgetCap: "Default budget per run",
-  defaultRunBudgetCapHint: "New routines start with this cap unless one is set for them.",
+  defaultRunBudgetCapHint: "New Agents start with this cap unless one is set for them.",
   monthlySpendNotice: "Monthly spend notice",
   monthlySpendNoticeHint: "Admins hear about it when monthly spend passes this amount.",
   viewerEvidenceExport: "Viewers can export the evidence binder",
@@ -623,43 +624,43 @@ export const feedbackCopy = {
   submit: "Send feedback",
   bodyRequired: "Write your feedback before sending.",
   ratingRequired: "Pick a star rating before sending.",
-  noRunsYetNote: "Feedback attaches to a run. This routine has not run yet.",
-  attachesToLatestRun: "Your feedback attaches to this routine's latest run.",
+  noRunsYetNote: "Feedback attaches to a run. This Agent has not run yet.",
+  attachesToLatestRun: "Your feedback attaches to this Agent's latest run.",
   emptyStream: "No feedback yet",
   sent: "Feedback sent",
   starsOutOfFive: (rating: number) => `${rating} of 5`,
 } as const;
 
-/** Shared copy for the routine evaluation and learning surfaces. */
+/** Shared copy for the Agent evaluation and learning surfaces. */
 export const improveCopy = {
-  evaluationTitle: "Routine evaluation",
-  evaluationIntro: "How each routine scores in rehearsal, and the runs behind the numbers.",
+  evaluationTitle: "Agent evaluation",
+  evaluationIntro: "How each Agent scores in rehearsal, and the runs behind the numbers.",
   evaluationEmptyTitle: "Nothing to evaluate yet",
   evaluationEmptyBody:
-    "Once this organization has routines, their test scores chart here run by run.",
+    "Once this organization has Agents, their test scores chart here run by run.",
   suitesTitle: "Scenario groups",
   scenarioCount: (count: number) => `${count} ${count === 1 ? "scenario" : "scenarios"}`,
   trendTitle: "Test score trend",
   noScoresYet: "No test scores yet",
-  noScoresBody: "Rehearsal results will chart here once this routine has been scored.",
+  noScoresBody: "Rehearsal results will chart here once this Agent has been scored.",
   scorecardsTitle: "Run scorecards",
   trajectoriesTitle: "Recent scored runs",
   scoredRunsTitle: "Scored runs",
-  scoredRunsEmptyBody: "Runs of this routine appear here once they are scored.",
+  scoredRunsEmptyBody: "Runs of this Agent appear here once they are scored.",
   scoreColumn: "Score",
   scoredAtColumn: "When",
   runColumn: "Run",
   learningTitle: "Learning",
-  learningIntro: "What the routines have learned, waiting for a person to approve it.",
+  learningIntro: "What the Agents have learned, waiting for a person to approve it.",
   queueTitle: "Improvements to review",
   queueEmpty: "Nothing to review right now",
-  queueEmptyBody: "Improvements appear here when a routine has something worth changing.",
+  queueEmptyBody: "Improvements appear here when an Agent has something worth changing.",
   approveAction: "Approve",
   shipAction: "Ship",
-  changelogTitle: "Routine changelog",
+  changelogTitle: "Agent changelog",
   changelogEmpty: "No changes yet",
-  changelogEmptyBody: "Changes shipped to this routine will appear here.",
-  changelogNoRoutines: "Changes appear here once this organization has routines.",
+  changelogEmptyBody: "Changes shipped to this Agent will appear here.",
+  changelogNoRoutines: "Changes appear here once this organization has Agents.",
   changelogInstalledNote: "Installed from the catalog",
   changelogCreatedNote: "Added to this organization",
   feedbackReviewTitle: "Recent feedback",
@@ -669,16 +670,16 @@ export const improveCopy = {
 /** Copy for the start-a-run picker. */
 export const startRunCopy = {
   title: "Start a run",
-  intro: "Pick a routine and start it now.",
-  pickRoutine: "Choose a routine",
+  intro: "Pick an Agent and start it now.",
+  pickRoutine: "Choose an Agent",
   planTitle: "What it will do",
   noRoutinesTitle: "Nothing to run yet",
-  noRoutinesBody: "This organization has no routines. Install one from the catalog first.",
+  noRoutinesBody: "This organization has no configured Agents. Create one first.",
   browseCatalog: "Browse the catalog",
   startRehearsal: "Start a rehearsal run",
   startProduction: "Start a live run",
   noWorkspaceNote:
-    "No workspace connects the systems this routine needs, so it cannot run yet.",
+    "This Agent's shared workspace is missing a required system, so it cannot run yet.",
   viewersCannotStart: "Viewers cannot start runs.",
 } as const;
 
@@ -722,7 +723,7 @@ export const logsCopy = {
   title: "Logs",
   intro: "Every event from this organization's runs, newest first, with spend alongside.",
   emptyTitle: "No events yet",
-  emptyBody: "Events appear here as soon as a routine starts working.",
+  emptyBody: "Events appear here as soon as an Agent starts working.",
   filterEventType: "Event type",
   filterRun: "Run",
   filterLens: "Show",

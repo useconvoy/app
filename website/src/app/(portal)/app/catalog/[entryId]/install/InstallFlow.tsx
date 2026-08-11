@@ -17,6 +17,8 @@ import { catalogCopy } from "@/lexicon";
 import { CompatibilityReportView } from "../../CompatibilityReportView";
 
 export interface InstallOption {
+  agentId: string;
+  agentName: string;
   workspaceId: string;
   workspaceName: string;
   report: CompatibilityReport;
@@ -27,17 +29,17 @@ export interface InstallFlowProps {
   version: number;
   options: InstallOption[];
   systemNames: Record<string, string>;
-  install: (entryId: string, workspaceId: string) => Promise<{ pinnedVersion: number }>;
+  install: (entryId: string, agentId: string) => Promise<{ pinnedVersion: number; agentId: string }>;
 }
 
 export function InstallFlow({ entryId, version, options, systemNames, install }: InstallFlowProps) {
   const router = useRouter();
-  const [workspaceId, setWorkspaceId] = useState<string>("");
+  const [agentId, setAgentId] = useState<string>("");
   const [busy, setBusy] = useState(false);
-  const [installed, setInstalled] = useState(false);
+  const [installedAgentId, setInstalledAgentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const selected = options.find((option) => option.workspaceId === workspaceId);
+  const selected = options.find((option) => option.agentId === agentId);
   const blocked = selected !== undefined && selected.report.connectPrompts.length > 0;
 
   async function confirm() {
@@ -45,8 +47,8 @@ export function InstallFlow({ entryId, version, options, systemNames, install }:
     setBusy(true);
     setError(null);
     try {
-      await install(entryId, selected.workspaceId);
-      setInstalled(true);
+      const result = await install(entryId, selected.agentId);
+      setInstalledAgentId(result.agentId);
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Something went wrong");
@@ -55,12 +57,12 @@ export function InstallFlow({ entryId, version, options, systemNames, install }:
     }
   }
 
-  if (installed) {
+  if (installedAgentId) {
     return (
       <div role="status" className="rounded-md border border-line bg-card p-4 text-sm text-ink">
         <p>{catalogCopy.installedNote}</p>
-        <Link href="/app/routines" className="mt-2 inline-block text-sm text-ink underline">
-          {catalogCopy.viewInstalledRoutine}
+        <Link href={`/app/agents/${installedAgentId}`} className="mt-2 inline-block text-sm text-ink underline">
+          View installed Agent
         </Link>
       </div>
     );
@@ -69,20 +71,20 @@ export function InstallFlow({ entryId, version, options, systemNames, install }:
   return (
     <div className="space-y-6">
       <fieldset className="rounded-md border border-line bg-card p-4">
-        <legend className="px-1 text-sm font-medium text-ink">{catalogCopy.chooseWorkspace}</legend>
-        <p className="text-xs text-muted">{catalogCopy.chooseWorkspaceHint}</p>
+        <legend className="px-1 text-sm font-medium text-ink">Choose an agent</legend>
+        <p className="text-xs text-muted">The template adds its goal and requirements to this Agent. The Workspace remains shared with any other Agents using it.</p>
         <div className="mt-3 space-y-2">
           {options.map((option) => (
-            <label key={option.workspaceId} className="flex items-center gap-2 text-sm text-ink">
+            <label key={option.agentId} className="flex items-center gap-2 text-sm text-ink">
               <input
                 type="radio"
-                name="workspace"
-                value={option.workspaceId}
-                checked={workspaceId === option.workspaceId}
-                onChange={() => setWorkspaceId(option.workspaceId)}
+                name="agent"
+                value={option.agentId}
+                checked={agentId === option.agentId}
+                onChange={() => setAgentId(option.agentId)}
                 className="h-4 w-4 accent-pine"
               />
-              {option.workspaceName}
+              <span>{option.agentName} <span className="text-muted">· {option.workspaceName}</span></span>
             </label>
           ))}
         </div>

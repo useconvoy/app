@@ -169,7 +169,7 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
     # -- plain-HTTP data plane (what the runtime calls today) --------------
 
     def _data_plane_claims(environment_id: str, version: int, run_id: str,
-                           authorization: str) -> RunClaims:
+                           authorization: str, x_convoy_internal: str = "") -> RunClaims:
         """Claims for a data-plane call. Bearer run-JWT is authoritative (and
         must match the path's environment); anonymous is allowed only under
         the compose-parity flag, deriving tenant from the environment row."""
@@ -181,6 +181,11 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
             if claims.environment_id != environment_id or claims.environment_version != version:
                 raise HTTPException(403, "run token is scoped to a different environment")
             return claims
+        if internal and x_convoy_internal == internal:
+            snapshot = service._policy.load_environment(environment_id, version)
+            return RunClaims(run_id=run_id or "runtime", mission_id=run_id or "runtime",
+                             workspace_id=snapshot.row.workspace_id,
+                             environment_id=environment_id, environment_version=version)
         if not allow_anonymous_data_plane:
             raise HTTPException(401, "data-plane calls require a run token")
         snapshot = service._policy.load_environment(environment_id, version)
@@ -191,11 +196,14 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
     @app.post("/data-plane/{environment_id}/{version}/tools/{tool_id}")
     async def data_plane_tool(environment_id: str, version: int, tool_id: str,
                               req: DataPlaneToolCall,
-                              authorization: str = Header(default="")):
+                              authorization: str = Header(default=""),
+                              x_convoy_internal: str = Header(default="")):
         """Inline read dispatch — mirrors the stub-env `POST /tools/{tool_id}`
         contract: 200 {"result": ...} on success. Promoted/side-effecting
         tools are refused here; they must come through /effects with a key."""
-        claims = _data_plane_claims(environment_id, version, req.run_id, authorization)
+        claims = _data_plane_claims(
+            environment_id, version, req.run_id, authorization, x_convoy_internal
+        )
         snapshot = service._policy.load_environment(environment_id, version)
         try:
             resolution = service._policy.resolve(snapshot, tool_id)
@@ -214,11 +222,14 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
     @app.post("/data-plane/{environment_id}/{version}/effects/{tool_id}")
     async def data_plane_effect(environment_id: str, version: int, tool_id: str,
                                 req: DataPlaneEffectCall,
-                                authorization: str = Header(default="")):
+                                authorization: str = Header(default=""),
+                                x_convoy_internal: str = Header(default="")):
         """Promoted/side-effecting dispatch — mirrors the stub-env
         `POST /effects/{tool_id}` contract: 200 {"result": ..., "replayed":
         bool}; a repeated idempotency key never fires the effect twice."""
-        claims = _data_plane_claims(environment_id, version, req.run_id, authorization)
+        claims = _data_plane_claims(
+            environment_id, version, req.run_id, authorization, x_convoy_internal
+        )
         try:
             result, replayed = await service.call_effect(
                 claims, tool_id, req.args, idempotency_key=req.idempotency_key,
@@ -228,6 +239,52 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
         except ConnectorError as err:
             raise HTTPException(502, str(err))
         return {"result": result, "replayed": replayed}
+
+    @app.post("/simulated-data-plane/{environment_id}/{version}/tools/{tool_id}")
+    async def simulated_data_plane_tool(
+        environment_id: str,
+        version: int,
+        tool_id: str,
+        req: DataPlaneToolCall,
+        authorization: str = Header(default=""),
+        x_convoy_internal: str = Header(default=""),
+    ):
+        claims = _data_plane_claims(
+            environment_id, version, req.run_id, authorization, x_convoy_internal
+        )
+        snapshot = service._policy.load_environment(environment_id, version)
+        try:
+            resolution = service._policy.resolve(snapshot, tool_id)
+        except PolicyDenied as denial:
+            raise HTTPException(403, denial.reason)
+        if resolution.execution != "inline":
+            raise HTTPException(409, "tool %s is promoted; call /effects" % tool_id)
+        result = await service.call_simulated_tool(
+            claims, tool_id, req.args, step_id=req.step_id
+        )
+        return {"result": result}
+
+    @app.post("/simulated-data-plane/{environment_id}/{version}/effects/{tool_id}")
+    async def simulated_data_plane_effect(
+        environment_id: str,
+        version: int,
+        tool_id: str,
+        req: DataPlaneEffectCall,
+        authorization: str = Header(default=""),
+        x_convoy_internal: str = Header(default=""),
+    ):
+        claims = _data_plane_claims(
+            environment_id, version, req.run_id, authorization, x_convoy_internal
+        )
+        recorded = service._recorded_result(claims, req.idempotency_key)
+        result = await service.call_simulated_tool(
+            claims,
+            tool_id,
+            req.args,
+            step_id=req.step_id,
+            idempotency_key=req.idempotency_key,
+        )
+        return {"result": result, "replayed": recorded is not None}
 
     @app.get("/environments/{environment_id}")
     async def registry_alias(environment_id: str, version: Optional[int] = None,

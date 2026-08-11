@@ -49,6 +49,11 @@ export interface SystemGrant {
   sideEffecting: boolean;
   /** Required whenever a side-effecting system is granted write. */
   standIn?: StandIn;
+  /**
+   * Tool surface pinned when the workspace grant is created. Optional for
+   * workspaces created before connector grants were carried into runs.
+   */
+  tools?: Array<{ name: string; sideEffecting: boolean }>;
 }
 
 export interface WorkspaceVersion {
@@ -76,20 +81,35 @@ export interface BrowserPolicy {
   persistProfile: boolean;
 }
 
-/** A named runtime target beneath a workspace. */
-export interface ExecutionEnvironment {
+/** An agent plus the runtime configuration used for each of its runs. */
+export interface Agent {
   id: string;
   workspaceId: string;
   name: string;
   purpose: string;
-  /** Registry id for operator detail; null on the local stand-in path. */
+  /** Internal registry id; null on the table-backed stand-in path. */
   registryEnvironmentId: string | null;
   productionBindingId: string;
   rehearsalBindingId: string;
   sandboxTemplate: string;
   browserPolicy: BrowserPolicy | null;
-  /** Workspace files are checkpointed automatically across compute leases. */
+  /** Agent files and memory are checkpointed automatically across compute leases. */
   persistence: "automatic";
+  /** The outcome this Agent owns. Empty only for a migrated runtime-only draft. */
+  goal: string;
+  /** Workspace systems this Agent is allowed to use for its goal. */
+  systems: string[];
+  /** Numeric string as Postgres returns it, e.g. "75.00". */
+  budgetCapUsd: string;
+  /** Plain-language working instructions; the runtime may revise its live plan. */
+  planSteps: string[];
+  /** Plain schedule text; null means on demand only. */
+  scheduleDescription: string | null;
+  /** Catalog provenance when this Agent was installed from a template. */
+  sourceEntryId: string | null;
+  sourceVersion: number | null;
+  /** False only for an older runtime profile that still needs a goal. */
+  automationConfigured: boolean;
   version: number;
   isDefault: boolean;
   createdAt: string;
@@ -130,10 +150,14 @@ export interface CreateWorkspaceInput {
   customSystems?: CustomWorkspaceSystem[];
 }
 
-export interface CreateExecutionEnvironmentInput {
+export interface CreateAgentInput {
   workspaceId: string;
   name: string;
   purpose: string;
+  goal: string;
+  planSteps: string[];
+  scheduleDescription: string | null;
+  budgetCapUsd: number;
   sandboxTemplate: string;
   browserPolicy: BrowserPolicy | null;
   makeDefault?: boolean;
@@ -143,15 +167,9 @@ export interface EnvironmentsClient {
   listWorkspaces(orgId: string): Promise<Workspace[]>;
   getWorkspace(orgId: string, workspaceId: string): Promise<Workspace | null>;
   createWorkspace(orgId: string, input: CreateWorkspaceInput): Promise<Workspace>;
-  listExecutionEnvironments(orgId: string, workspaceId?: string): Promise<ExecutionEnvironment[]>;
-  getExecutionEnvironment(
-    orgId: string,
-    environmentId: string,
-  ): Promise<ExecutionEnvironment | null>;
-  createExecutionEnvironment(
-    orgId: string,
-    input: CreateExecutionEnvironmentInput,
-  ): Promise<ExecutionEnvironment>;
+  listAgents(orgId: string, workspaceId?: string): Promise<Agent[]>;
+  getAgent(orgId: string, agentId: string): Promise<Agent | null>;
+  createAgent(orgId: string, input: CreateAgentInput): Promise<Agent>;
 }
 
 interface WorkspaceRow {
@@ -166,7 +184,7 @@ interface WorkspaceRow {
   createdAt: Date;
 }
 
-interface ExecutionEnvironmentRow {
+interface AgentRow {
   id: string;
   workspaceId: string;
   registryEnvironmentId: string | null;
@@ -176,17 +194,31 @@ interface ExecutionEnvironmentRow {
   rehearsalBindingId: string;
   sandboxTemplate: string;
   browserPolicy: unknown;
+  goal: string;
+  systems: string[];
+  budgetCapUsd: string;
+  planSteps: unknown;
+  scheduleDescription: string | null;
+  sourceEntryId: string | null;
+  sourceVersion: number | null;
+  automationConfigured: boolean;
   version: number;
   isDefault: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
 
-const EXECUTION_ENVIRONMENT_COLUMNS = `id, workspace_id AS "workspaceId",
+const AGENT_COLUMNS = `id, workspace_id AS "workspaceId",
        registry_environment_id AS "registryEnvironmentId", name, purpose,
        production_binding_id AS "productionBindingId",
        rehearsal_binding_id AS "rehearsalBindingId",
        sandbox_template AS "sandboxTemplate", browser_policy AS "browserPolicy",
+       goal, systems, budget_cap_usd AS "budgetCapUsd",
+       plan_steps AS "planSteps",
+       schedule_description AS "scheduleDescription",
+       source_entry_id AS "sourceEntryId",
+       source_version AS "sourceVersion",
+       automation_configured AS "automationConfigured",
        version, is_default AS "isDefault", created_at AS "createdAt",
        updated_at AS "updatedAt"`;
 
@@ -201,7 +233,7 @@ function toBrowserPolicy(value: unknown): BrowserPolicy | null {
   };
 }
 
-function toExecutionEnvironment(row: ExecutionEnvironmentRow): ExecutionEnvironment {
+function toAgent(row: AgentRow): Agent {
   return {
     id: row.id,
     workspaceId: row.workspaceId,
@@ -213,6 +245,16 @@ function toExecutionEnvironment(row: ExecutionEnvironmentRow): ExecutionEnvironm
     sandboxTemplate: row.sandboxTemplate,
     browserPolicy: toBrowserPolicy(row.browserPolicy),
     persistence: "automatic",
+    goal: row.goal,
+    systems: Array.isArray(row.systems) ? row.systems : [],
+    budgetCapUsd: row.budgetCapUsd,
+    planSteps: Array.isArray(row.planSteps)
+      ? row.planSteps.filter((step): step is string => typeof step === "string")
+      : [],
+    scheduleDescription: row.scheduleDescription,
+    sourceEntryId: row.sourceEntryId,
+    sourceVersion: row.sourceVersion,
+    automationConfigured: row.automationConfigured,
     version: row.version,
     isDefault: row.isDefault,
     createdAt: row.createdAt.toISOString(),
@@ -298,65 +340,68 @@ class DbEnvironmentsClient implements EnvironmentsClient {
     });
   }
 
-  async listExecutionEnvironments(
+  async listAgents(
     orgId: string,
     workspaceId?: string,
-  ): Promise<ExecutionEnvironment[]> {
+  ): Promise<Agent[]> {
     if (workspaceId && !UUID_PATTERN.test(workspaceId)) return [];
     return withOrgContext({ orgId }, async (client) => {
       const values: string[] = [orgId];
       const workspaceFilter = workspaceId ? " AND workspace_id = $2" : "";
       if (workspaceId) values.push(workspaceId);
-      const { rows } = await client.query<ExecutionEnvironmentRow>(
-        `SELECT ${EXECUTION_ENVIRONMENT_COLUMNS}
-           FROM execution_environments
+      const { rows } = await client.query<AgentRow>(
+        `SELECT ${AGENT_COLUMNS}
+           FROM agents
           WHERE org_id = $1${workspaceFilter}
           ORDER BY is_default DESC, created_at`,
         values,
       );
-      return rows.map(toExecutionEnvironment);
+      return rows.map(toAgent);
     });
   }
 
-  async getExecutionEnvironment(
+  async getAgent(
     orgId: string,
-    environmentId: string,
-  ): Promise<ExecutionEnvironment | null> {
-    if (!UUID_PATTERN.test(environmentId)) return null;
+    agentId: string,
+  ): Promise<Agent | null> {
+    if (!UUID_PATTERN.test(agentId)) return null;
     return withOrgContext({ orgId }, async (client) => {
-      const { rows } = await client.query<ExecutionEnvironmentRow>(
-        `SELECT ${EXECUTION_ENVIRONMENT_COLUMNS}
-           FROM execution_environments WHERE org_id = $1 AND id = $2`,
-        [orgId, environmentId],
+      const { rows } = await client.query<AgentRow>(
+        `SELECT ${AGENT_COLUMNS}
+           FROM agents WHERE org_id = $1 AND id = $2`,
+        [orgId, agentId],
       );
-      return rows[0] ? toExecutionEnvironment(rows[0]) : null;
+      return rows[0] ? toAgent(rows[0]) : null;
     });
   }
 
-  async createExecutionEnvironment(
+  async createAgent(
     orgId: string,
-    input: CreateExecutionEnvironmentInput,
-  ): Promise<ExecutionEnvironment> {
+    input: CreateAgentInput,
+  ): Promise<Agent> {
     const workspace = await this.getWorkspace(orgId, input.workspaceId);
     if (!workspace) throw new Error("That workspace does not exist");
     return withOrgContext({ orgId }, async (client) => {
       const existing = await client.query<{ present: boolean }>(
-        "SELECT EXISTS (SELECT 1 FROM execution_environments WHERE org_id = $1 AND workspace_id = $2) AS present",
+        "SELECT EXISTS (SELECT 1 FROM agents WHERE org_id = $1 AND workspace_id = $2) AS present",
         [orgId, input.workspaceId],
       );
       const makeDefault = input.makeDefault === true || existing.rows[0]?.present !== true;
       if (makeDefault) {
         await client.query(
-          "UPDATE execution_environments SET is_default = false, updated_at = now() WHERE org_id = $1 AND workspace_id = $2",
+          "UPDATE agents SET is_default = false, updated_at = now() WHERE org_id = $1 AND workspace_id = $2",
           [orgId, input.workspaceId],
         );
       }
-      const { rows } = await client.query<ExecutionEnvironmentRow>(
-        `INSERT INTO execution_environments
+      const { rows } = await client.query<AgentRow>(
+        `INSERT INTO agents
            (org_id, workspace_id, name, purpose, production_binding_id,
-            rehearsal_binding_id, sandbox_template, browser_policy, is_default)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         RETURNING ${EXECUTION_ENVIRONMENT_COLUMNS}`,
+            rehearsal_binding_id, sandbox_template, browser_policy, is_default,
+            goal, systems, budget_cap_usd, plan_steps, schedule_description,
+            automation_configured)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+                 $10, $11, $12, $13, $14, true)
+         RETURNING ${AGENT_COLUMNS}`,
         [
           orgId,
           input.workspaceId,
@@ -367,9 +412,14 @@ class DbEnvironmentsClient implements EnvironmentsClient {
           input.sandboxTemplate,
           input.browserPolicy ? JSON.stringify(input.browserPolicy) : null,
           makeDefault,
+          input.goal,
+          workspace.systems.map((system) => system.systemId),
+          input.budgetCapUsd,
+          JSON.stringify(input.planSteps),
+          input.scheduleDescription,
         ],
       );
-      return toExecutionEnvironment(rows[0]!);
+      return toAgent(rows[0]!);
     });
   }
 }
@@ -382,12 +432,9 @@ interface RegistryConfig {
   token: string;
 }
 
-// Every workspace gets a rehearsal copy that can actually run code: a
-// non-empty sandbox_template is what makes the registry grant `sandbox_exec`
-// and compile a runnable rehearsal binding (an empty template yields a hollow
-// rehearsal that can read connectors but never execute the routine's own
-// steps). This default is a placeholder image ref until the
-// environments-as-content pipeline lets an org pick per-workspace images.
+// The registry still requires a workspace compatibility binding. Agents add
+// their own runtime definition beneath it; this template only keeps that
+// internal bridge runnable while new Agents choose their own template.
 const DEFAULT_SANDBOX_TEMPLATE = "convoy-devbox-python";
 
 /** Both env vars or nothing: a half-configured flag stays off. */
@@ -435,7 +482,7 @@ interface RegistryWorkspaceCreated {
   environmentId: string;
 }
 
-interface RegistryExecutionEnvironmentRow {
+interface RegistryAgentRuntimeRow {
   environmentId: string;
   workspaceId: string;
   version: number;
@@ -659,20 +706,20 @@ class RegistryEnvironmentsClient implements EnvironmentsClient {
       : toWorkspace(cached);
   }
 
-  async listExecutionEnvironments(
+  async listAgents(
     orgId: string,
     workspaceId?: string,
-  ): Promise<ExecutionEnvironment[]> {
+  ): Promise<Agent[]> {
     if (!workspaceId) {
       const workspaces = await this.listWorkspaces(orgId);
       const nested = await Promise.all(
-        workspaces.map((workspace) => this.listExecutionEnvironments(orgId, workspace.id)),
+        workspaces.map((workspace) => this.listAgents(orgId, workspace.id)),
       );
       return nested.flat().sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     }
     const ctx = await this.context(orgId);
     if (!ctx || !UUID_PATTERN.test(workspaceId)) {
-      return this.fallback.listExecutionEnvironments(orgId, workspaceId);
+      return this.fallback.listAgents(orgId, workspaceId);
     }
     const cachedWorkspace = await withOrgContext({ orgId }, async (client) => {
       const { rows } = await client.query<LinkedWorkspaceRow>(
@@ -682,17 +729,17 @@ class RegistryEnvironmentsClient implements EnvironmentsClient {
       return rows[0] ?? null;
     });
     if (!cachedWorkspace?.environmentsWorkspaceId) {
-      return this.fallback.listExecutionEnvironments(orgId, workspaceId);
+      return this.fallback.listAgents(orgId, workspaceId);
     }
-    const remote = await registryFetch<RegistryExecutionEnvironmentRow[]>(
+    const remote = await registryFetch<RegistryAgentRuntimeRow[]>(
       this.config,
       `/organizations/${ctx.registryOrgId}/workspaces/${cachedWorkspace.environmentsWorkspaceId}/environments`,
       { actsFor: ctx.actsFor },
     );
     return withOrgContext({ orgId }, async (client) => {
-      const existing = await client.query<ExecutionEnvironmentRow>(
-        `SELECT ${EXECUTION_ENVIRONMENT_COLUMNS}
-           FROM execution_environments WHERE org_id = $1 AND workspace_id = $2`,
+      const existing = await client.query<AgentRow>(
+        `SELECT ${AGENT_COLUMNS}
+           FROM agents WHERE org_id = $1 AND workspace_id = $2`,
         [orgId, workspaceId],
       );
       const byRegistryId = new Map(
@@ -701,55 +748,61 @@ class RegistryEnvironmentsClient implements EnvironmentsClient {
           .map((row) => [row.registryEnvironmentId as string, row]),
       );
       const hasDefault = existing.rows.some((row) => row.isDefault);
-      const merged: ExecutionEnvironment[] = [];
-      for (const [index, environment] of remote.entries()) {
-        let row = byRegistryId.get(environment.environmentId);
+      const merged: Agent[] = [];
+      for (const [index, runtime] of remote.entries()) {
+        let row = byRegistryId.get(runtime.environmentId);
         if (!row) {
-          const inserted = await client.query<ExecutionEnvironmentRow>(
-            `INSERT INTO execution_environments
+          const inserted = await client.query<AgentRow>(
+            `INSERT INTO agents
                (org_id, workspace_id, registry_environment_id, name, purpose,
                 production_binding_id, rehearsal_binding_id, sandbox_template,
                 browser_policy, version, is_default)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-             RETURNING ${EXECUTION_ENVIRONMENT_COLUMNS}`,
+             RETURNING ${AGENT_COLUMNS}`,
             [
               orgId,
               workspaceId,
-              environment.environmentId,
-              environment.name,
-              environment.purpose,
-              environment.productionBindingId,
-              environment.rehearsalBindingId,
-              environment.sandboxTemplate,
-              environment.browserPolicy ? JSON.stringify(environment.browserPolicy) : null,
-              environment.version,
+              runtime.environmentId,
+              runtime.name,
+              runtime.purpose,
+              runtime.productionBindingId,
+              runtime.rehearsalBindingId,
+              runtime.sandboxTemplate,
+              runtime.browserPolicy ? JSON.stringify(runtime.browserPolicy) : null,
+              runtime.version,
               !hasDefault && index === 0,
             ],
           );
           row = inserted.rows[0]!;
         }
-        merged.push(toExecutionEnvironment(row));
+        merged.push(toAgent(row));
+      }
+      const remoteIds = new Set(remote.map((runtime) => runtime.environmentId));
+      for (const row of existing.rows) {
+        if (!row.registryEnvironmentId || !remoteIds.has(row.registryEnvironmentId)) {
+          merged.push(toAgent(row));
+        }
       }
       return merged.sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
     });
   }
 
-  async getExecutionEnvironment(
+  async getAgent(
     orgId: string,
-    environmentId: string,
-  ): Promise<ExecutionEnvironment | null> {
-    const cached = await this.fallback.getExecutionEnvironment(orgId, environmentId);
+    agentId: string,
+  ): Promise<Agent | null> {
+    const cached = await this.fallback.getAgent(orgId, agentId);
     if (!cached) return null;
-    const environments = await this.listExecutionEnvironments(orgId, cached.workspaceId);
-    return environments.find((environment) => environment.id === environmentId) ?? cached;
+    const agents = await this.listAgents(orgId, cached.workspaceId);
+    return agents.find((agent) => agent.id === agentId) ?? cached;
   }
 
-  async createExecutionEnvironment(
+  async createAgent(
     orgId: string,
-    input: CreateExecutionEnvironmentInput,
-  ): Promise<ExecutionEnvironment> {
+    input: CreateAgentInput,
+  ): Promise<Agent> {
     const ctx = await this.context(orgId);
-    if (!ctx) return this.fallback.createExecutionEnvironment(orgId, input);
+    if (!ctx) return this.fallback.createAgent(orgId, input);
     const cachedWorkspace = await withOrgContext({ orgId }, async (client) => {
       const { rows } = await client.query<LinkedWorkspaceRow>(
         `SELECT ${LINKED_WORKSPACE_COLUMNS} FROM workspaces WHERE org_id = $1 AND id = $2`,
@@ -758,9 +811,9 @@ class RegistryEnvironmentsClient implements EnvironmentsClient {
       return rows[0] ?? null;
     });
     if (!cachedWorkspace?.environmentsWorkspaceId) {
-      return this.fallback.createExecutionEnvironment(orgId, input);
+      return this.fallback.createAgent(orgId, input);
     }
-    const created = await registryFetch<RegistryExecutionEnvironmentRow>(
+    const created = await registryFetch<RegistryAgentRuntimeRow>(
       this.config,
       `/organizations/${ctx.registryOrgId}/workspaces/${cachedWorkspace.environmentsWorkspaceId}/environments`,
       {
@@ -776,23 +829,26 @@ class RegistryEnvironmentsClient implements EnvironmentsClient {
     );
     return withOrgContext({ orgId }, async (client) => {
       const existing = await client.query<{ present: boolean }>(
-        "SELECT EXISTS (SELECT 1 FROM execution_environments WHERE org_id = $1 AND workspace_id = $2) AS present",
+        "SELECT EXISTS (SELECT 1 FROM agents WHERE org_id = $1 AND workspace_id = $2) AS present",
         [orgId, input.workspaceId],
       );
       const makeDefault = input.makeDefault === true || existing.rows[0]?.present !== true;
       if (makeDefault) {
         await client.query(
-          "UPDATE execution_environments SET is_default = false, updated_at = now() WHERE org_id = $1 AND workspace_id = $2",
+          "UPDATE agents SET is_default = false, updated_at = now() WHERE org_id = $1 AND workspace_id = $2",
           [orgId, input.workspaceId],
         );
       }
-      const { rows } = await client.query<ExecutionEnvironmentRow>(
-        `INSERT INTO execution_environments
+      const { rows } = await client.query<AgentRow>(
+        `INSERT INTO agents
            (org_id, workspace_id, registry_environment_id, name, purpose,
             production_binding_id, rehearsal_binding_id, sandbox_template,
-            browser_policy, version, is_default)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         RETURNING ${EXECUTION_ENVIRONMENT_COLUMNS}`,
+            browser_policy, version, is_default, goal, systems,
+            budget_cap_usd, plan_steps, schedule_description,
+            automation_configured)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+                 $12, $13, $14, $15, $16, true)
+         RETURNING ${AGENT_COLUMNS}`,
         [
           orgId,
           input.workspaceId,
@@ -805,9 +861,14 @@ class RegistryEnvironmentsClient implements EnvironmentsClient {
           created.browserPolicy ? JSON.stringify(created.browserPolicy) : null,
           created.version,
           makeDefault,
+          input.goal,
+          toWorkspace(cachedWorkspace).systems.map((system) => system.systemId),
+          input.budgetCapUsd,
+          JSON.stringify(input.planSteps),
+          input.scheduleDescription,
         ],
       );
-      return toExecutionEnvironment(rows[0]!);
+      return toAgent(rows[0]!);
     });
   }
 }
@@ -1003,7 +1064,11 @@ export async function connectManagedSystem(
  */
 export async function connectCustomSystem(
   orgId: string,
-  input: { displayName: string; url: string; bearerToken?: string },
+  input: {
+    displayName: string;
+    url: string;
+    bearerToken?: string;
+  },
 ): Promise<{ connectionId: string; tools: string[] }> {
   const ctx = await systemsContext(orgId);
   if (!ctx) throw new Error("This deployment is not linked to the systems registry");
@@ -1016,7 +1081,9 @@ export async function connectCustomSystem(
         kind: "mcp_custom",
         provider: "mcp_custom",
         displayName: input.displayName,
-        config: { url: input.url },
+        config: {
+          url: input.url,
+        },
         ...(input.bearerToken ? { secretValue: input.bearerToken } : {}),
       },
       actsFor: ctx.actsFor,
