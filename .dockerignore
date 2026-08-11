@@ -1,0 +1,16 @@
+.git
+.venv
+.next
+.pytest_cache
+.ruff_cache
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+website/.next
+website/node_modules
+agent-runtime/docker/litellm/wheels
+agent-runtime/docker/litellm/prisma-cache
+**/.terraform
+poc
+sandbox/.runtime
+sandbox/node_modules

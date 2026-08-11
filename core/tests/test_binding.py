@@ -2,7 +2,13 @@
 consumes them (the types themselves are runtime-transcribed; deep coverage
 lives in agent-runtime's suites)."""
 
-from convoy_core import ClockConfig, EnvironmentBinding, PermissionScope, ToolGrant
+from convoy_core import (
+    BrowserRuntimeConfig,
+    ClockConfig,
+    EnvironmentBinding,
+    PermissionScope,
+    ToolGrant,
+)
 
 
 def test_binding_roundtrip_with_clock_and_scope():
@@ -15,8 +21,10 @@ def test_binding_roundtrip_with_clock_and_scope():
         credential_scope="convoy-gateway:run-jwt:env_a@3",
         data_namespace="ws_1/env_a", sandbox_template="sbx-v3",
         clock=ClockConfig(mode="virtual", advance="on_idle"),
+        browser=BrowserRuntimeConfig(allowedDomains=["app.example.com"]),
     )
     assert EnvironmentBinding.model_validate(binding.model_dump(mode="json")) == binding
+    assert binding.browser.enabled
 
 
 def test_tool_grant_defaults_match_design_s5():

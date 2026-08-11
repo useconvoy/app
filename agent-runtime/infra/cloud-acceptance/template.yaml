@@ -1,0 +1,148 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Short-lived roles and logs for the Convoy cloud acceptance test.
+
+Parameters:
+  TestId:
+    Type: String
+    AllowedPattern: "[a-z0-9-]+"
+  ArtifactBucketName:
+    Type: String
+  EcrRepositoryArn:
+    Type: String
+  TemporalSecretArn:
+    Type: String
+  AnthropicSecretArn:
+    Type: String
+
+Resources:
+  AcceptanceLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /convoy/cloud-acceptance/${TestId}
+      RetentionInDays: 1
+      Tags:
+        - Key: convoy:test-id
+          Value: !Ref TestId
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: PullImagesWriteLogsAndInjectSecrets
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource: !Ref EcrRepositoryArn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub ${AcceptanceLogGroup.Arn}:*
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource:
+                  - !Ref TemporalSecretArn
+                  - !Ref AnthropicSecretArn
+      Tags:
+        - Key: convoy:test-id
+          Value: !Ref TestId
+
+  SandboxTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CredentialFreeSandbox
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Deny
+                Action: "*"
+                Resource: "*"
+      Tags:
+        - Key: convoy:test-id
+          Value: !Ref TestId
+
+  ControllerTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AcceptanceControlPlane
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${ArtifactBucketName}/cloud-acceptance/${TestId}/*
+                  - !Sub arn:${AWS::Partition}:s3:::${ArtifactBucketName}/runs/cloud-e2e-${TestId}-*/*
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !Sub arn:${AWS::Partition}:s3:::${ArtifactBucketName}
+                Condition:
+                  StringLike:
+                    s3:prefix:
+                      - !Sub cloud-acceptance/${TestId}/*
+                      - !Sub runs/cloud-e2e-${TestId}-*/*
+              - Effect: Allow
+                Action:
+                  - ecs:RunTask
+                Resource: !Sub arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/convoy-cloud-acceptance-${TestId}-sandbox:*
+              - Effect: Allow
+                Action:
+                  - ecs:DescribeTasks
+                  - ecs:ListTasks
+                  - ecs:StopTask
+                  - ecs:TagResource
+                Resource: "*"
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  - !GetAtt ExecutionRole.Arn
+                  - !GetAtt SandboxTaskRole.Arn
+      Tags:
+        - Key: convoy:test-id
+          Value: !Ref TestId
+
+Outputs:
+  LogGroupName:
+    Value: !Ref AcceptanceLogGroup
+  ExecutionRoleArn:
+    Value: !GetAtt ExecutionRole.Arn
+  ControllerTaskRoleArn:
+    Value: !GetAtt ControllerTaskRole.Arn
+  SandboxTaskRoleArn:
+    Value: !GetAtt SandboxTaskRole.Arn

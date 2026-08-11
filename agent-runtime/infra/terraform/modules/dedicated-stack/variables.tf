@@ -180,6 +180,59 @@ variable "temporal_task_queue" {
 }
 
 # ---------------------------------------------------------------------------
+# Environments registry + runtime model selection
+# ---------------------------------------------------------------------------
+
+variable "environments_url" {
+  description = "Public HTTPS base URL of the environments gateway (for example the DigitalOcean-hosted /gateway endpoint)."
+  type        = string
+
+  validation {
+    condition     = can(regex("^https://", var.environments_url))
+    error_message = "environments_url must be an HTTPS URL."
+  }
+}
+
+variable "environments_internal_token_secret_arn" {
+  description = "Secrets Manager ARN whose value is the environments gateway internal service token."
+  type        = string
+
+  validation {
+    condition     = can(regex("^arn:aws[a-zA-Z-]*:secretsmanager:", var.environments_internal_token_secret_arn))
+    error_message = "environments_internal_token_secret_arn must be a Secrets Manager ARN."
+  }
+}
+
+variable "runtime_turn_executor" {
+  description = "Agent turn executor used by cloud workers."
+  type        = string
+  default     = "pydantic_ai"
+
+  validation {
+    condition     = contains(["scripted", "pydantic_ai"], var.runtime_turn_executor)
+    error_message = "runtime_turn_executor must be scripted or pydantic_ai."
+  }
+}
+
+variable "runtime_default_model" {
+  description = "Default LiteLLM model alias for new runs."
+  type        = string
+  default     = "anthropic/claude-sonnet-5"
+}
+
+variable "runtime_approved_models" {
+  description = "LiteLLM model aliases the runtime may select."
+  type        = list(string)
+  default     = ["anthropic/claude-sonnet-5"]
+}
+
+variable "runtime_fallback_chains" {
+  description = "Optional per-model ordered fallback aliases."
+  type        = map(list(string))
+  default     = {}
+}
+
+# ---------------------------------------------------------------------------
 # Images & services
 # ---------------------------------------------------------------------------
 

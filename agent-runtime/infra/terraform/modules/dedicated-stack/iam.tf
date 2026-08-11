@@ -1,7 +1,7 @@
 # IAM. Credential rules:
-#   - Trusted workers mint short-lived STS creds per tenant+run by assuming
-#     the data-access role WITH a session policy scoped to
-#     s3://<bucket>/{tenant}/{env}/... (template in templates/).
+#   - Trusted workers use refreshable STS credentials by assuming the
+#     stack-local data-access role. Its ceiling is this dedicated customer's
+#     artifact bucket; sandboxes receive only single-object presigned URLs.
 #   - The sandbox task role holds NO credentials to any data store; data is
 #     materialized in and artifacts are pulled out by trusted workers.
 
@@ -28,6 +28,7 @@ locals {
       aws_secretsmanager_secret.db_credentials.arn,
       var.temporal_mtls_cert_secret_arn,
       var.temporal_mtls_key_secret_arn,
+      var.environments_internal_token_secret_arn,
     ],
     values(var.model_provider_secrets),
     var.langfuse_secret_arn == null ? [] : [var.langfuse_secret_arn],
@@ -100,10 +101,9 @@ resource "aws_iam_role_policy" "task_execution" {
 }
 
 # ---------------------------------------------------------------------------
-# Data-access role: the ONLY path to tenant data in S3. Workers and the
-# control plane assume it with an STS session policy narrowed to
-# {tenant}/{env}/ prefixes (templates/sts-session-policy.json.tpl), so the
-# effective credential handed to any activity is prefix-scoped and short-lived.
+# Data-access role: the ONLY application path to this dedicated stack's S3
+# bucket. Workers and the control plane assume it with refreshable STS
+# credentials; those credentials never cross into sandbox tasks.
 # ---------------------------------------------------------------------------
 
 resource "aws_iam_role" "data_access" {
@@ -133,9 +133,8 @@ resource "aws_iam_role_policy" "data_access" {
   name = "artifact-store"
   role = aws_iam_role.data_access.id
 
-  # Ceiling permissions; every actual session is further narrowed by the
-  # session policy to s3://<bucket>/{tenant}/{env}/*. No s3:DeleteObject —
-  # artifacts are never hard-deleted; removal is a tombstone, not a delete.
+  # Stack-local ceiling permissions. No s3:DeleteObject — artifacts are never
+  # hard-deleted; removal is a tombstone, not a delete.
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [

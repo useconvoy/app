@@ -80,3 +80,25 @@ def effective_inline_tools(
             continue
         effective.append(offered)
     return effective
+
+
+def effective_tools(agent_tools: list[ToolGrant], registry: list[ToolGrant]) -> list[ToolGrant]:
+    """Every tool the agent may see, with the binding entry authoritative.
+
+    Run creation already resolves requested ids against the binding. Repeating
+    the intersection here protects direct executor callers and prevents a
+    stale agent specification from widening execution mode, side-effect flags,
+    or resource scope after an environment version changes.
+    """
+    by_id = {grant.tool_id: grant for grant in registry}
+    effective: list[ToolGrant] = []
+    seen: set[str] = set()
+    for requested in agent_tools:
+        offered = by_id.get(requested.tool_id)
+        if offered is None or requested.tool_id in seen:
+            continue
+        seen.add(requested.tool_id)
+        if offered.execution == "inline" and offered.side_effecting:
+            continue
+        effective.append(offered)
+    return effective

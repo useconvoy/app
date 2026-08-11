@@ -19,7 +19,7 @@ from botocore.exceptions import ClientError
 from botocore.stub import ANY, Stubber
 from moto import mock_aws
 
-from convoy_core import SandboxJob
+from convoy_core import BrowserRuntimeConfig, SandboxJob
 from convoy_runtime.config import RuntimeConfig
 from convoy_runtime.providers.artifact_store import ArtifactStore
 from convoy_runtime.providers.sandbox import LocalSandboxProvider, SandboxLostError
@@ -231,6 +231,29 @@ async def test_create_rehydrates_workspace_from_snapshot_capability(
     assert workspace_url.path.endswith("/convoy-test/sandboxes/old/snapshot-abc.tar")
 
 
+async def test_create_passes_browser_policy_and_integrity_pinned_browser_source(
+    store: ArtifactStore, ecs_stub: tuple[RecordingEcs, Stubber]
+) -> None:
+    ecs, stubber = ecs_stub
+    _stub_run_task(stubber)
+    _stub_describe(stubber, "RUNNING")
+
+    await _provider(store, ecs).create(
+        "browser",
+        None,
+        BrowserRuntimeConfig(allowedDomains=["example.com"], persistProfile=True),
+    )
+    env = _override_env(ecs.kwargs_for("run_task")[0])
+    assert json.loads(env["CONVOY_SANDBOX_BROWSER_POLICY"]) == {
+        "allowedDomains": ["example.com"],
+        "persistProfile": True,
+    }
+    source_url = urlparse(env["CONVOY_SANDBOX_BROWSER_SOURCE_URL"])
+    assert source_url.path.endswith("/control/browser.py")
+    source = _read_object(store.bucket, source_url.path.split("/convoy-test/", 1)[1])
+    assert env["CONVOY_SANDBOX_BROWSER_SOURCE_SHA256"] == hashlib.sha256(source).hexdigest()
+
+
 async def test_create_fails_when_the_task_never_starts(
     store: ArtifactStore, ecs_stub: tuple[RecordingEcs, Stubber]
 ) -> None:
@@ -336,9 +359,7 @@ async def test_exec_after_destroy_raises_sandbox_lost(
         {"taskArns": []},
         {
             "cluster": CLUSTER,
-            "family": FAMILY,
             "startedBy": handle.sandbox_id,
-            "desiredStatus": "RUNNING",
         },
     )
     with pytest.raises(SandboxLostError):
@@ -350,9 +371,7 @@ async def test_exec_after_destroy_raises_sandbox_lost(
         {"taskArns": []},
         {
             "cluster": CLUSTER,
-            "family": FAMILY,
             "startedBy": handle.sandbox_id,
-            "desiredStatus": "RUNNING",
         },
     )
     await provider.destroy(handle)

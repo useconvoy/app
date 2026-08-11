@@ -41,7 +41,7 @@ One `module "stack"` instantiation creates, per customer:
 | Compute | ECS cluster + Fargate services: control plane (behind ALB), Temporal workers (bootstrap build), LiteLLM proxy (Cloud Map DNS `litellm.convoy-<stack>.internal`), registered **sandbox task definition** (no service — the ECS SandboxProvider `RunTask`s on demand) | |
 | Registry | Per-stack ECR repos: `convoy-<stack>/{control-plane,temporal-worker,litellm,sandbox}` | Shared cross-stack registry is a later optimization |
 | Secrets | Per-stack payload-codec key (generated), LiteLLM master key (generated), DB credentials — all in Secrets Manager under the per-stack KMS key | No secret value is ever written into code or tfvars |
-| IAM | Task roles per service; a **data-access role** workers/control-plane assume with an STS session policy scoped to `s3://<bucket>/{tenant}/{env}/...` (`templates/sts-session-policy.json.tpl`); **sandbox task role with zero data-store access plus an explicit deny** | Every data credential is short-lived and prefix-scoped |
+| IAM | Task roles per service; a **stack-local data-access role** workers/control-plane assume with refreshable STS credentials scoped to the dedicated customer's artifact bucket; **sandbox task role with zero data-store access plus an explicit deny** | Data credentials stay in trusted services; sandboxes receive only object-scoped presigned capabilities |
 | Observability | KMS-encrypted CloudWatch log groups `/convoy/<stack>/<service>`, Container Insights | Langfuse keys injected when `langfuse_secret_arn` is set |
 
 Convoy-operated, **not** stamped by this module: the Temporal Cloud namespace
@@ -101,9 +101,10 @@ exist in the ops account.
    ```
    (`bootstrap` matches the module's default `image_tag` and
    `worker_build_id`; the bootstrap worker service starts polling once its
-   image exists. The `sandbox` image only has to provide a `python3` on
-   PATH — the runtime injects its own job runner into each sandbox task at
-   launch.) Then register `bootstrap` as the queue's initial default
+   image exists. Build `agent-runtime/docker/sandbox.Dockerfile`; it provides
+   Python, Chromium, and `tini`. The runtime integrity-pins and injects its job
+   runner and browser controller into each sandbox task at launch.) Then
+   register `bootstrap` as the queue's initial default
    build id:
    ```sh
    temporal task-queue update-build-ids add-new-default \
@@ -238,18 +239,20 @@ module:
    ```
    Ambient AWS credentials must be able to RunTask/StopTask in the cluster,
    pass the sandbox roles, and read/write the artifact bucket (the worker
-   task role's surface). The sandbox image only needs a `python3` on PATH —
-   the runtime ships its own runner into the task at create time over an
-   integrity-pinned presigned URL. Expect real Fargate startup latency
+   task role's surface). The sandbox image supplies Python and Chromium; the
+   runtime ships integrity-pinned runner/browser sources into the task at
+   create time over presigned URLs. Expect real Fargate startup latency
    (~1 min per sandbox). The battery asserts that snapshot restore allocates
    a different sandbox id, preserves filesystem state, and replays a prior
    idempotency key without executing it twice—the provider-level cloud proof
    required by the runtime's pause/resume lifecycle.
    Also verify the credential-free invariant from inside a sandbox task:
    `aws s3 ls s3://<artifact_bucket>` and any `sts:AssumeRole` must fail
-   (explicit deny), and outbound internet must time out (endpoint-only SG) —
-   while presigned URLs for the stack bucket keep working through the S3
-   gateway endpoint, which is exactly the intended data plane.
+   (explicit deny). Browser HTTP/S reaches the NAT, while Chromium is
+   configured to use the in-task domain-allowlist proxy. This is
+   application-level enforcement; deployments needing a hard network boundary
+   should add a dedicated egress proxy or AWS Network Firewall and restrict
+   the sandbox security group to it.
 4. **Versioned deploy against a live run** — start a multi-step run; mid-run,
    deploy a new worker build via the procedure above; assert the run
    completes on its original build id (`temporal workflow describe` shows

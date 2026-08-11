@@ -28,8 +28,15 @@ from typing import Protocol
 
 import anyio.to_thread
 
-from convoy_core import ArtifactRef, SandboxHandle, SandboxJob, SandboxJobResult
+from convoy_core import (
+    ArtifactRef,
+    BrowserRuntimeConfig,
+    SandboxHandle,
+    SandboxJob,
+    SandboxJobResult,
+)
 from convoy_runtime.providers.artifact_store import ArtifactStore
+from convoy_runtime.providers.sandbox_browser import BrowserRuntime
 
 PROVIDER_LOCAL = "local"
 
@@ -56,7 +63,12 @@ class SandboxLostError(RuntimeError):
 class SandboxProvider(Protocol):
     """The owned execution-substrate seam."""
 
-    async def create(self, template: str, workspace: ArtifactRef | None) -> SandboxHandle:
+    async def create(
+        self,
+        template: str,
+        workspace: ArtifactRef | None,
+        browser: BrowserRuntimeConfig | None = None,
+    ) -> SandboxHandle:
         """New sandbox from `template`, rehydrating `workspace` when given."""
         ...
 
@@ -88,16 +100,30 @@ class LocalSandboxProvider:
         self._store = store
         self._base_dir = base_dir
         self._prefix = key_prefix.strip("/")
+        self._browsers: dict[str, BrowserRuntime] = {}
 
     # ------------------------------------------------------------- protocol
 
-    async def create(self, template: str, workspace: ArtifactRef | None) -> SandboxHandle:
+    async def create(
+        self,
+        template: str,
+        workspace: ArtifactRef | None,
+        browser: BrowserRuntimeConfig | None = None,
+    ) -> SandboxHandle:
         sandbox_id = f"sbx-{uuid.uuid4().hex[:12]}"
         root = self._workspace(sandbox_id)
         root.mkdir(parents=True, exist_ok=False)
         if workspace is not None:
             data = await self._store.get_bytes(workspace)
             await anyio.to_thread.run_sync(self._extract, data, root)
+        browser_runtime = BrowserRuntime(root, browser)
+        if browser_runtime.enabled:
+            try:
+                await anyio.to_thread.run_sync(browser_runtime.start)
+            except Exception:
+                await anyio.to_thread.run_sync(lambda: shutil.rmtree(root, ignore_errors=True))
+                raise
+            self._browsers[sandbox_id] = browser_runtime
         return SandboxHandle(sandbox_id=sandbox_id, provider=PROVIDER_LOCAL, template=template)
 
     async def exec(self, h: SandboxHandle, job: SandboxJob) -> SandboxJobResult:
@@ -115,10 +141,16 @@ class LocalSandboxProvider:
         timeout = (
             job.timeout.total_seconds() if job.timeout is not None else _DEFAULT_JOB_TIMEOUT_SECONDS
         )
+        browser = self._browsers.get(h.sandbox_id)
         process = await asyncio.create_subprocess_exec(
             *job.command,
             cwd=root,
-            env={**_BASE_ENV, "HOME": str(root), **job.env},
+            env={
+                **_BASE_ENV,
+                "HOME": str(root),
+                **job.env,
+                **(browser.job_env if browser is not None else {}),
+            },
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -154,7 +186,14 @@ class LocalSandboxProvider:
         root = self._workspace(h.sandbox_id)
         if not root.is_dir():
             raise SandboxLostError(f"sandbox {h.sandbox_id} has no workspace")
-        data = await anyio.to_thread.run_sync(self._archive, root)
+        browser = self._browsers.get(h.sandbox_id)
+        if browser is not None:
+            await anyio.to_thread.run_sync(browser.stop_browser)
+        try:
+            data = await anyio.to_thread.run_sync(self._archive, root)
+        finally:
+            if browser is not None:
+                await anyio.to_thread.run_sync(browser.start)
         digest = hashlib.sha256(data).hexdigest()
         return await self._store.put_bytes(
             f"{self._prefix}/{h.sandbox_id}/snapshot-{digest[:16]}.tar",
@@ -163,6 +202,9 @@ class LocalSandboxProvider:
         )
 
     async def destroy(self, h: SandboxHandle) -> None:
+        browser = self._browsers.pop(h.sandbox_id, None)
+        if browser is not None:
+            await anyio.to_thread.run_sync(browser.close)
         await anyio.to_thread.run_sync(
             lambda: shutil.rmtree(self._workspace(h.sandbox_id), ignore_errors=True)
         )

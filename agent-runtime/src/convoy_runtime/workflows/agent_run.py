@@ -1555,6 +1555,7 @@ class AgentRunWorkflow:
                         template=self._carry.binding.sandbox_template,
                         snapshot_ref=self._sandbox_snapshot_ref,
                         handle=self._sandbox_handle,
+                        browser=self._carry.binding.browser,
                     ),
                     result_type=SandboxJobOutcome,
                     start_to_close_timeout=_SANDBOX_JOB_TIMEOUT,
@@ -1598,13 +1599,36 @@ class AgentRunWorkflow:
             PromotedToolOutcome,
             await workflow.execute_activity(
                 names.RUN_PROMOTED_TOOL,
-                PromotedToolRequest(run_id=state.run_id, call=call),
+                PromotedToolRequest(
+                    run_id=state.run_id,
+                    call=call,
+                    endpoint_url=str(
+                        self._carry.binding.connector_endpoints.get("data_plane", "")
+                    ),
+                ),
                 result_type=PromotedToolOutcome,
                 start_to_close_timeout=_PROMOTED_TOOL_TIMEOUT,
                 heartbeat_timeout=_PROMOTED_TOOL_HEARTBEAT,
                 retry_policy=_PROMOTED_TOOL_RETRY,
             ),
         )
+        # Patch-marker keeps event insertion replay-safe for runs whose
+        # histories predate the recorded stand-in result.
+        if (
+            workflow.patched("simulated-promoted-effect-event-v1")
+            and self._carry.binding.kind == "sandbox"
+            and tool_outcome.simulated_result is not None
+        ):
+            await self._emit(
+                "simulated_effect",
+                payload={
+                    "tool_id": tool_outcome.tool_id,
+                    "idempotency_key": tool_outcome.idempotency_key,
+                    "replayed": tool_outcome.replayed,
+                    "result_ref": tool_outcome.result_ref.model_dump(mode="json"),
+                    "result": tool_outcome.simulated_result,
+                },
+            )
         return tool_outcome.result_ref
 
     async def _hibernate_sandbox(self, reason: SandboxReleaseReason) -> None:
@@ -1714,6 +1738,7 @@ class AgentRunWorkflow:
                     restore_id=restore_id,
                     template=self._carry.binding.sandbox_template,
                     snapshot_ref=self._sandbox_snapshot_ref,
+                    browser=self._carry.binding.browser,
                 ),
                 result_type=SandboxRestoreOutcome,
                 start_to_close_timeout=_SANDBOX_LIFECYCLE_TIMEOUT,

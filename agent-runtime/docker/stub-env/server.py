@@ -23,6 +23,7 @@ paths can be exercised.
 Stdlib-only on purpose: the container needs no network at build time.
 """
 
+import hashlib
 import json
 import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -75,6 +76,42 @@ TOOL_REGISTRY = [
         "side_effecting": True,
     },
     {
+        "tool_id": "google.drive_list_files",
+        "scope": {"resource": "google:drive:*", "actions": ["read"]},
+        "execution": "inline",
+        "side_effecting": False,
+    },
+    {
+        "tool_id": "google.sheets_read_range",
+        "scope": {"resource": "google:sheets:*", "actions": ["read"]},
+        "execution": "inline",
+        "side_effecting": False,
+    },
+    {
+        "tool_id": "google.sheets_append_row",
+        "scope": {"resource": "google:sheets:*", "actions": ["write"]},
+        "execution": "promoted",
+        "side_effecting": True,
+    },
+    {
+        "tool_id": "slack.list_channels",
+        "scope": {"resource": "slack:*", "actions": ["read"]},
+        "execution": "inline",
+        "side_effecting": False,
+    },
+    {
+        "tool_id": "slack.read_messages",
+        "scope": {"resource": "slack:*", "actions": ["read"]},
+        "execution": "inline",
+        "side_effecting": False,
+    },
+    {
+        "tool_id": "slack.post_message",
+        "scope": {"resource": "slack:*", "actions": ["write"]},
+        "execution": "promoted",
+        "side_effecting": True,
+    },
+    {
         # Invalid on purpose: inline tools must be read-only. Requesting this
         # grant must be rejected at run creation.
         "tool_id": "audit_write",
@@ -90,12 +127,15 @@ def binding(environment_id: str, tenant_id: str) -> dict[str, object]:
     clock: dict[str, object] = {"mode": "real", "advance": "manual", "ratio": None}
     if kind == "sandbox" and environment_id.endswith("-virtual"):
         clock = {"mode": "virtual", "advance": "manual", "ratio": None}
+    endpoint = DATA_PLANE_URL.rstrip("/")
+    if kind == "sandbox":
+        endpoint += "/simulated-data-plane"
     return {
         "id": environment_id,
         "tenant_id": tenant_id,
         "kind": kind,
         "tool_registry": TOOL_REGISTRY,
-        "connector_endpoints": {"data_plane": DATA_PLANE_URL},
+        "connector_endpoints": {"data_plane": endpoint},
         "credential_scope": "stub:no-credentials",
         "data_namespace": f"{tenant_id}/stub",
         "sandbox_template": "stub",
@@ -118,7 +158,34 @@ def kb_search(args: dict[str, object]) -> dict[str, object]:
     return {"query": query, "results": results}
 
 
-TOOL_HANDLERS = {"kb_lookup": kb_lookup, "kb_search": kb_search}
+def google_drive_list_files(_: dict[str, object]) -> dict[str, object]:
+    return {"files": [], "nextPageToken": None}
+
+
+def google_sheets_read_range(args: dict[str, object]) -> dict[str, object]:
+    return {
+        "range": args.get("range", ""),
+        "majorDimension": "ROWS",
+        "values": [],
+    }
+
+
+def slack_list_channels(_: dict[str, object]) -> dict[str, object]:
+    return {"ok": True, "channels": [], "response_metadata": {"next_cursor": ""}}
+
+
+def slack_read_messages(_: dict[str, object]) -> dict[str, object]:
+    return {"ok": True, "messages": [], "has_more": False}
+
+
+TOOL_HANDLERS = {
+    "kb_lookup": kb_lookup,
+    "kb_search": kb_search,
+    "google.drive_list_files": google_drive_list_files,
+    "google.sheets_read_range": google_sheets_read_range,
+    "slack.list_channels": slack_list_channels,
+    "slack.read_messages": slack_read_messages,
+}
 
 
 def kb_delete_effect(args: dict[str, object]) -> dict[str, object]:
@@ -132,13 +199,49 @@ def generic_effect(tool_id: str, args: dict[str, object]) -> dict[str, object]:
     return {"ok": True, "tool_id": tool_id, "args": args}
 
 
+def stand_in_effect(
+    tool_id: str, idempotency_key: str, args: dict[str, object]
+) -> dict[str, object]:
+    material = json.dumps(
+        {"tool": tool_id, "key": idempotency_key, "args": args}, sort_keys=True
+    ).encode()
+    effect_id = "sim-" + hashlib.sha256(material).hexdigest()[:16]
+    if tool_id == "slack.post_message":
+        return {
+            "ok": True,
+            "simulated": True,
+            "channel": args.get("channel", ""),
+            "ts": effect_id.removeprefix("sim-")[:10] + ".000000",
+            "message": {"text": args.get("text", "")},
+        }
+    if tool_id == "google.sheets_append_row":
+        values = args.get("values")
+        return {
+            "spreadsheetId": args.get("spreadsheetId", ""),
+            "tableRange": args.get("range", "A1"),
+            "updates": {
+                "updatedRows": 1,
+                "updatedCells": len(values) if isinstance(values, list) else 0,
+                "updatedRange": args.get("range", "A1"),
+            },
+            "simulated": True,
+            "effectId": effect_id,
+        }
+    return generic_effect(tool_id, args)
+
+
 def run_effect(tool_id: str, idempotency_key: str, args: dict[str, object]) -> dict[str, object]:
     """Journaled side effect: a repeated key never fires twice."""
     record = JOURNAL.get(idempotency_key)
     if record is not None:
         record["requests"] = int(str(record.get("requests", 1))) + 1
         return {"tool_id": tool_id, "result": record["result"], "replayed": True}
-    result = kb_delete_effect(args) if tool_id == "kb_delete" else generic_effect(tool_id, args)
+    if tool_id == "kb_delete":
+        result = kb_delete_effect(args)
+    elif tool_id in {"slack.post_message", "google.sheets_append_row"}:
+        result = stand_in_effect(tool_id, idempotency_key, args)
+    else:
+        result = generic_effect(tool_id, args)
     JOURNAL[idempotency_key] = {
         "idempotency_key": idempotency_key,
         "tool_id": tool_id,
@@ -166,6 +269,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parts = [p for p in urlparse(self.path).path.split("/") if p]
+        if parts and parts[0] == "simulated-data-plane":
+            parts = parts[1:]
         if len(parts) != 2 or parts[0] not in ("tools", "effects"):
             self._json(404, {"error": "not found"})
             return

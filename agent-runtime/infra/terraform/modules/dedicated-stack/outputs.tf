@@ -139,7 +139,7 @@ output "sandbox_task_family" {
 }
 
 output "sandbox_security_group_id" {
-  description = "No-ingress, endpoint-only-egress security group for sandbox tasks."
+  description = "No-ingress sandbox security group with HTTP/S browser and VPC-endpoint egress."
   value       = aws_security_group.sandbox.id
 }
 

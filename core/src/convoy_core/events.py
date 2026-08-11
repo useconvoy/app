@@ -32,6 +32,7 @@ RunEventType = Literal[
     "child_spawned",
     "child_landed",
     "compaction_applied",
+    "simulated_effect",
     "environment_provisioned",
     "environment_checkpointed",
     "environment_hibernated",

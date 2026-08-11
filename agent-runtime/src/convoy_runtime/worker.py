@@ -55,6 +55,7 @@ def build_turn_executor(
             gateway=ModelGateway(config.model_gateway),
             litellm_base_url=config.litellm_base_url,
             key_provider=key_provider,
+            environments_internal_token=config.environments_internal_token,
         )
     return ScriptedTurnExecutor(store, turn_delay_seconds=config.scripted_turn_delay_seconds)
 
@@ -100,6 +101,7 @@ async def run_worker(config: RuntimeConfig) -> None:
         region=config.s3_region,
         access_key=config.s3_access_key,
         secret_key=config.s3_secret_key,
+        role_arn=config.data_access_role_arn,
     )
     db = ProjectionsDB(config.pg_dsn)
     await db.open()
@@ -122,6 +124,7 @@ async def run_worker(config: RuntimeConfig) -> None:
     promoted_activities = PromotedToolActivities(
         store,
         stub_env_url=config.stub_env_url,
+        environments_internal_token=config.environments_internal_token,
         completion_delay_seconds=config.promoted_tool_delay_seconds,
     )
     sandbox_activities = SandboxJobActivities(store, build_sandbox_provider(config, store))

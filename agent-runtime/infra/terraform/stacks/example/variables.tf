@@ -55,6 +55,36 @@ variable "temporal_mtls_key_secret_arn" {
   type        = string
 }
 
+variable "environments_url" {
+  description = "Public HTTPS base URL of the hosted environments gateway."
+  type        = string
+}
+
+variable "environments_internal_token_secret_arn" {
+  description = "Secrets Manager ARN containing the shared environments service token."
+  type        = string
+}
+
+variable "runtime_turn_executor" {
+  type    = string
+  default = "pydantic_ai"
+}
+
+variable "runtime_default_model" {
+  type    = string
+  default = "anthropic/claude-sonnet-5"
+}
+
+variable "runtime_approved_models" {
+  type    = list(string)
+  default = ["anthropic/claude-sonnet-5"]
+}
+
+variable "runtime_fallback_chains" {
+  type    = map(list(string))
+  default = {}
+}
+
 variable "image_tag" {
   description = "Image tag (git SHA / build id) for the initial service images."
   type        = string

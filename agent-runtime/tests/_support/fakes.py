@@ -310,6 +310,11 @@ class FakeRuntime:
             idempotency_key=call.idempotency_key,
             result_ref=support_ref(f"runs/{request.run_id}/promoted/{call.idempotency_key}.json"),
             replayed=replayed,
+            simulated_result=(
+                {"simulated": True, "tool": call.tool_id}
+                if "/simulated-data-plane" in request.endpoint_url
+                else None
+            ),
         )
 
     @activity.defn(name=names.RUN_SANDBOX_JOB)

@@ -2,10 +2,11 @@
 
 One sandbox = one per-run Fargate task RunTask'd on demand from the stack's
 registered sandbox task family; there is no long-running sandbox service.
-The task boots a runtime-owned runner (source claim-checked to the artifact
-store at create time and fetched by an integrity-pinned bootstrap, so any
-image with a `python3` works) that keeps the workspace on the task's
-ephemeral storage for the sandbox's lifetime.
+The task boots a runtime-owned runner and browser controller (both source
+claim-checked to the artifact store and fetched by an integrity-pinned
+bootstrap) that keep the workspace on ephemeral storage for the sandbox's
+lifetime. Browser-enabled templates must supply Chromium; the canonical
+Convoy sandbox image does.
 
 The whole data plane is credential-free by construction. The sandbox holds
 no IAM credentials — its task role carries an explicit deny — and instead
@@ -41,19 +42,32 @@ import boto3
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
 
-from convoy_core import ArtifactRef, SandboxHandle, SandboxJob, SandboxJobResult
+from convoy_core import (
+    ArtifactRef,
+    BrowserRuntimeConfig,
+    SandboxHandle,
+    SandboxJob,
+    SandboxJobResult,
+)
 from convoy_runtime.providers.artifact_store import ArtifactStore
 from convoy_runtime.providers.sandbox import SandboxLostError
 
 PROVIDER_ECS = "ecs"
 
 _RUNNER_SOURCE_PATH = Path(__file__).with_name("sandbox_ecs_runner.py")
+_BROWSER_SOURCE_PATH = Path(__file__).with_name("sandbox_browser.py")
 
 # The bootstrap is the only code the task definition needs to run: it fetches
 # the runner over its capability URL, refuses anything that does not hash to
 # the pinned digest, and executes it. Small enough to ride RunTask overrides.
 _BOOTSTRAP = (
-    "import hashlib, os, urllib.request\n"
+    "import hashlib, os, pathlib, sys, urllib.request\n"
+    "browser = urllib.request.urlopen(os.environ['CONVOY_SANDBOX_BROWSER_SOURCE_URL']).read()\n"
+    "browser_digest = hashlib.sha256(browser).hexdigest()\n"
+    "assert browser_digest == os.environ['CONVOY_SANDBOX_BROWSER_SOURCE_SHA256'], "
+    "'browser source integrity mismatch'\n"
+    "pathlib.Path('/tmp/convoy_sandbox_browser.py').write_bytes(browser)\n"
+    "sys.path.insert(0, '/tmp')\n"
     "source = urllib.request.urlopen(os.environ['CONVOY_SANDBOX_RUNNER_URL']).read()\n"
     "digest = hashlib.sha256(source).hexdigest()\n"
     "assert digest == os.environ['CONVOY_SANDBOX_RUNNER_SHA256'], 'runner integrity mismatch'\n"
@@ -91,6 +105,7 @@ class EcsSandboxProvider:
         container_name: str = "sandbox",
         key_prefix: str = "sandboxes",
         region: str | None = None,
+        assign_public_ip: bool = False,
         sandbox_ttl_seconds: int = 28_800,
         create_timeout_seconds: float = 300.0,
         submit_timeout_seconds: float = 180.0,
@@ -102,6 +117,7 @@ class EcsSandboxProvider:
         self._family = task_family
         self._subnets = subnets
         self._security_group = security_group
+        self._assign_public_ip = assign_public_ip
         self._container = container_name
         self._prefix = key_prefix.strip("/")
         self._ttl = sandbox_ttl_seconds
@@ -115,12 +131,22 @@ class EcsSandboxProvider:
 
     # ------------------------------------------------------------- protocol
 
-    async def create(self, template: str, workspace: ArtifactRef | None) -> SandboxHandle:
+    async def create(
+        self,
+        template: str,
+        workspace: ArtifactRef | None,
+        browser: BrowserRuntimeConfig | None = None,
+    ) -> SandboxHandle:
         sandbox_id = f"sbx-{uuid.uuid4().hex[:12]}"
         runner_source = _RUNNER_SOURCE_PATH.read_bytes()
         runner_ref = await self._store.put_bytes(
             f"{self._sandbox_prefix(sandbox_id)}/control/runner.py",
             runner_source,
+            content_type="text/x-python",
+        )
+        browser_ref = await self._store.put_bytes(
+            f"{self._sandbox_prefix(sandbox_id)}/control/browser.py",
+            _BROWSER_SOURCE_PATH.read_bytes(),
             content_type="text/x-python",
         )
         environment = [
@@ -130,6 +156,15 @@ class EcsSandboxProvider:
                 "value": self._store.presign_get(runner_ref, expires_seconds=900),
             },
             {"name": "CONVOY_SANDBOX_RUNNER_SHA256", "value": runner_ref.sha256},
+            {
+                "name": "CONVOY_SANDBOX_BROWSER_SOURCE_URL",
+                "value": self._store.presign_get(browser_ref, expires_seconds=900),
+            },
+            {"name": "CONVOY_SANDBOX_BROWSER_SOURCE_SHA256", "value": browser_ref.sha256},
+            {
+                "name": "CONVOY_SANDBOX_BROWSER_POLICY",
+                "value": (browser or BrowserRuntimeConfig()).model_dump_json(by_alias=True),
+            },
             {
                 "name": "CONVOY_SANDBOX_MAILBOX_URL",
                 "value": self._store.presign_get_key(
@@ -158,7 +193,7 @@ class EcsSandboxProvider:
                     "awsvpcConfiguration": {
                         "subnets": self._subnets,
                         "securityGroups": [self._security_group],
-                        "assignPublicIp": "DISABLED",
+                        "assignPublicIp": "ENABLED" if self._assign_public_ip else "DISABLED",
                     }
                 },
                 overrides={
@@ -311,9 +346,7 @@ class EcsSandboxProvider:
         def _list() -> Any:
             return self._ecs.list_tasks(
                 cluster=self._cluster,
-                family=self._family,
                 startedBy=sandbox_id,
-                desiredStatus="RUNNING",
             )
 
         response = await anyio.to_thread.run_sync(_list)

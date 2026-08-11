@@ -7,7 +7,12 @@ snapshots."""
 from decimal import Decimal
 
 import pytest
-from _support.common import TEST_TASK_QUEUE, fixture_run_state, start_time_skipping_env
+from _support.common import (
+    TEST_TASK_QUEUE,
+    fixture_carry,
+    fixture_run_state,
+    start_time_skipping_env,
+)
 from _support.fakes import FakeRuntime, ScriptedTurn
 from temporalio.worker import Worker
 
@@ -20,6 +25,10 @@ pytestmark = pytest.mark.anyio
 
 async def _run(fake: FakeRuntime, run_id: str) -> RunResult:
     state = fixture_run_state(run_id=run_id)
+    carry = fixture_carry()
+    carry.binding.connector_endpoints = {
+        "data_plane": "http://gateway.test/simulated-data-plane/env-1/1"
+    }
     env = await start_time_skipping_env()
     async with (
         env,
@@ -32,7 +41,7 @@ async def _run(fake: FakeRuntime, run_id: str) -> RunResult:
     ):
         return await env.client.execute_workflow(
             AgentRunWorkflow.run,
-            args=[state, "alice@example.test"],
+            args=[state, "alice@example.test", carry],
             id=run_id,
             task_queue=TEST_TASK_QUEUE,
         )
@@ -73,6 +82,10 @@ async def test_promote_runs_the_tool_as_its_own_activity_then_resumes_the_turn()
     assert types.count("step_started") == 2
     assert types.count("step_done") == 2
     assert types.count("compaction_applied") == 2
+    effects = fake.events_of("simulated_effect")
+    assert len(effects) == 1
+    assert effects[0].payload["tool_id"] == "kb_delete"
+    assert effects[0].payload["result"] == {"simulated": True, "tool": "kb_delete"}
 
 
 async def test_promoted_activity_retry_reuses_the_key_and_never_doubles_the_effect() -> None:

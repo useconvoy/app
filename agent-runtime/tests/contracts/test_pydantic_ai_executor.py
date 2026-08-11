@@ -146,6 +146,23 @@ async def test_ungrated_registry_tool_is_unauthorized(harness: ExecutorHarness) 
     assert not [e for e in transcript["tool_log"] if e["status"] == "ok"]
 
 
+async def test_granted_promoted_tool_returns_a_durable_call_request() -> None:
+    harness = await _make_harness(model="mock-fallback", tools=["kb_delete"])
+    result = await harness.execute(goal='[[call:kb_delete {"key": "q3-revenue"}]]')
+    assert result.outcome == "promote"
+    assert result.promoted_call is not None
+    assert result.promoted_call.tool_id == "kb_delete"
+    assert result.promoted_call.activity == "run_promoted_tool"
+    assert result.promoted_call.args_ref is not None
+    assert await harness.store.get_json(result.promoted_call.args_ref) == {"key": "q3-revenue"}
+
+
+def test_connector_tool_ids_are_mapped_to_provider_safe_function_names() -> None:
+    assert PydanticAITurnExecutor._model_tool_name("slack.post_message", set()) == (
+        "slack__post_message"
+    )
+
+
 async def test_fallback_stays_within_approved_models_and_is_recorded() -> None:
     # mock-primary maps to an upstream that always fails; the chain's only
     # other member is mock-fallback, which serves the turn.
