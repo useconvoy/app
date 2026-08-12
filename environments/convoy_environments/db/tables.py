@@ -39,8 +39,8 @@ def _utcnow() -> _dt.datetime:
     return _dt.datetime.now(_dt.timezone.utc)
 
 
-class Workspace(Base):
-    __tablename__ = "workspaces"
+class Organization(Base):
+    __tablename__ = "organizations"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[_dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
@@ -56,7 +56,7 @@ class User(Base):
 
 class Membership(Base):
     __tablename__ = "memberships"
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), primary_key=True)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
     role: Mapped[str] = mapped_column(String(16))  # admin | builder | member
 
@@ -68,7 +68,7 @@ class Secret(Base):
 
     __tablename__ = "secrets"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
     name: Mapped[str] = mapped_column(String(255))
     backend: Mapped[str] = mapped_column(String(32))  # builtin | onepassword | aws_sm | vault
     backend_ref: Mapped[str] = mapped_column(String(512), nullable=True)
@@ -78,13 +78,13 @@ class Secret(Base):
     created_by: Mapped[str] = mapped_column(String(64), nullable=True)
     created_at: Mapped[_dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     rotated_at: Mapped[_dt.datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    __table_args__ = (UniqueConstraint("workspace_id", "name"),)
+    __table_args__ = (UniqueConstraint("organization_id", "name"),)
 
 
 class Connection(Base):
     __tablename__ = "connections"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
     kind: Mapped[str] = mapped_column(String(32))  # mcp_managed | mcp_custom | aws_role | browser_identity
     provider: Mapped[str] = mapped_column(String(64))
     display_name: Mapped[str] = mapped_column(String(255))
@@ -104,7 +104,7 @@ class Environment(Base):
     __tablename__ = "environments"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
     # Null for the legacy/base policy bundle attached directly to an
     # organization. Named execution environments point at that base bundle
     # and inherit its connector grants while owning runtime configuration
@@ -121,7 +121,7 @@ class Environment(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[str] = mapped_column(String(64), nullable=True)
     created_at: Mapped[_dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-    __table_args__ = (UniqueConstraint("workspace_id", "name", "version"),)
+    __table_args__ = (UniqueConstraint("organization_id", "name", "version"),)
 
 
 class EnvironmentConnection(Base):
@@ -162,8 +162,8 @@ class AuditLog(Base):
 
     __tablename__ = "audit_log"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    # Nullable: user-level events (e.g. idp linkage) have no workspace scope.
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True, nullable=True)
+    # Nullable: user-level events (e.g. idp linkage) have no organization scope.
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True, nullable=True)
     actor_user_id: Mapped[str] = mapped_column(String(64), nullable=True)
     action: Mapped[str] = mapped_column(String(64))
     subject_type: Mapped[str] = mapped_column(String(32))
@@ -179,12 +179,12 @@ class Event(Base):
     it (camelCase, exclude_none); the other columns are extracted indexes,
     never a second source of truth. (mission_id, seq) is the append-order
     invariant; readers order by (ts, seq) per the EventLog contract.
-    workspace_id is denormalized tenant attribution — the gateway knows it
+    organization_id is denormalized tenant attribution — the gateway knows it
     from the JWT; the runtime knows it from the mission registry."""
 
     __tablename__ = "events"
     event_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(String(64), nullable=True, index=True)
+    organization_id: Mapped[str] = mapped_column(String(64), nullable=True, index=True)
     mission_id: Mapped[str] = mapped_column(String(64), index=True)
     seq: Mapped[int] = mapped_column(Integer)
     type: Mapped[str] = mapped_column(String(32), index=True)

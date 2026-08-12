@@ -1,6 +1,6 @@
 import httpx
 from convoy_environments.db import Base, SqlEventLog, make_session_factory
-from convoy_environments.db.tables import Connection, Environment, EnvironmentConnection, Workspace
+from convoy_environments.db.tables import Connection, Environment, EnvironmentConnection, Organization
 from convoy_environments.gateway import GatewayService
 from convoy_environments.gateway.mcp_server import build_app as build_gateway_app
 from convoy_environments.schema import ConnectionManifest, ToolSpec
@@ -29,11 +29,11 @@ def _service(connection_config=None, transport=None, sandbox_url=""):
         ]
     )
     with sessions() as session:
-        session.add(Workspace(id="org-1", name="Sandbox organization"))
+        session.add(Organization(id="org-1", name="Sandbox organization"))
         session.add(
             Connection(
                 id="conn-1",
-                workspace_id="org-1",
+                organization_id="org-1",
                 kind="mcp_managed",
                 provider="slack",
                 display_name="Slack",
@@ -56,7 +56,7 @@ def _service(connection_config=None, transport=None, sandbox_url=""):
             Environment(
                 id="env-1",
                 version=1,
-                workspace_id="org-1",
+                organization_id="org-1",
                 name="Demo",
                 backing_type="live",
                 browser_policy=None,

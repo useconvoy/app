@@ -90,7 +90,7 @@ class GatewayService:
     def _sandbox_id(claims: RunClaims) -> str:
         """Stable, opaque sandbox identity for one run."""
         material = "%s:%s:%s" % (
-            claims.workspace_id,
+            claims.organization_id,
             claims.environment_id,
             claims.run_id,
         )
@@ -222,7 +222,7 @@ class GatewayService:
                     "args": args,
                     "reason": denial.reason,
                 },
-                workspace_id=claims.workspace_id,
+                organization_id=claims.organization_id,
             )
             raise
 
@@ -231,12 +231,12 @@ class GatewayService:
                 result = await self._invoke(resolution, tool, args)
                 self._log.append(
                     {**base, "type": "tool_call", "tool": tool, "args": args, "result": result},
-                    workspace_id=claims.workspace_id,
+                    organization_id=claims.organization_id,
                 )
             except ConnectorError as err:
                 self._log.append(
                     {**base, "type": "tool_call", "tool": tool, "args": args, "error": str(err)},
-                    workspace_id=claims.workspace_id,
+                    organization_id=claims.organization_id,
                 )
                 raise
             return result
@@ -249,11 +249,11 @@ class GatewayService:
 
         self._log.append(
             {**base, "type": "tool_intent", "tool": tool, "args": args, "idempotencyKey": key},
-            workspace_id=claims.workspace_id,
+            organization_id=claims.organization_id,
         )
         self._log.append(
             {**base, "type": "tool_executed", "tool": tool, "args": args, "idempotencyKey": key},
-            workspace_id=claims.workspace_id,
+            organization_id=claims.organization_id,
         )
         try:
             result = await self._invoke(resolution, tool, args)
@@ -267,12 +267,12 @@ class GatewayService:
                     "idempotencyKey": key,
                     "error": str(err),
                 },
-                workspace_id=claims.workspace_id,
+                organization_id=claims.organization_id,
             )
             raise
         self._log.append(
             {**base, "type": "tool_result", "tool": tool, "idempotencyKey": key, "result": result},
-            workspace_id=claims.workspace_id,
+            organization_id=claims.organization_id,
         )
         return result
 
@@ -386,12 +386,12 @@ class GatewayService:
             )
         return EnvironmentBinding(
             id="%s@%d/%s" % (environment_id, version, kind),
-            tenant_id=env.workspace_id,
+            tenant_id=env.organization_id,
             kind=kind,
             tool_registry=tool_registry,
             connector_endpoints=endpoints,
             credential_scope="convoy-gateway:run-jwt:%s@%d" % (environment_id, version),
-            data_namespace=env.data_namespace or "%s/%s" % (env.workspace_id, environment_id),
+            data_namespace=env.data_namespace or "%s/%s" % (env.organization_id, environment_id),
             sandbox_template=env.sandbox_template or "",
             clock=clock,
             browser=browser_policy,
@@ -453,7 +453,7 @@ class GatewayService:
                     "args": args,
                     "reason": denial.reason,
                 },
-                workspace_id=claims.workspace_id,
+                organization_id=claims.organization_id,
             )
             raise
 
@@ -469,7 +469,7 @@ class GatewayService:
             )
             self._log.append(
                 {**base, "type": "tool_call", "tool": tool, "args": args, "result": result},
-                workspace_id=claims.workspace_id,
+                organization_id=claims.organization_id,
             )
             return result
 
@@ -479,11 +479,11 @@ class GatewayService:
             return recorded.result
         self._log.append(
             {**base, "type": "tool_intent", "tool": tool, "args": args, "idempotencyKey": key},
-            workspace_id=claims.workspace_id,
+            organization_id=claims.organization_id,
         )
         self._log.append(
             {**base, "type": "tool_executed", "tool": tool, "args": args, "idempotencyKey": key},
-            workspace_id=claims.workspace_id,
+            organization_id=claims.organization_id,
         )
         result = (
             await self._invoke_connector_sandbox(
@@ -503,11 +503,11 @@ class GatewayService:
                 "idempotencyKey": key,
                 "result": result,
             },
-            workspace_id=claims.workspace_id,
+            organization_id=claims.organization_id,
         )
         self._log.append(
             {**base, "type": "tool_result", "tool": tool, "idempotencyKey": key, "result": result},
-            workspace_id=claims.workspace_id,
+            organization_id=claims.organization_id,
         )
         return result
 
@@ -537,7 +537,7 @@ class GatewayService:
                     "args": {"domain": domain},
                     "reason": reason,
                 },
-                workspace_id=claims.workspace_id,
+                organization_id=claims.organization_id,
             )
             raise PolicyDenied(reason)
         for ec, conn in snapshot.connections:
@@ -556,7 +556,7 @@ class GatewayService:
                         "args": {"domain": domain, "connectionId": conn.id},
                         "result": {"leased": True},
                     },
-                    workspace_id=claims.workspace_id,
+                    organization_id=claims.organization_id,
                 )
                 return {
                     "domain": domain,
@@ -573,6 +573,6 @@ class GatewayService:
                 "args": {"domain": domain},
                 "reason": reason,
             },
-            workspace_id=claims.workspace_id,
+            organization_id=claims.organization_id,
         )
         raise PolicyDenied(reason)

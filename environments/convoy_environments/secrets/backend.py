@@ -45,14 +45,14 @@ class SecretsService:
         except KeyError:
             raise ValueError("unknown secrets backend: %s" % name)
 
-    def create(self, workspace_id: str, name: str, value: str, backend: str = "builtin",
+    def create(self, organization_id: str, name: str, value: str, backend: str = "builtin",
                created_by: Optional[str] = None) -> str:
-        row = Secret(id="sec_" + uuid.uuid4().hex[:20], workspace_id=workspace_id,
+        row = Secret(id="sec_" + uuid.uuid4().hex[:20], organization_id=organization_id,
                      name=name, backend=backend, key_version=1, created_by=created_by)
         self._backend(backend).store(row, value)
         with self._sf() as session:
             session.add(row)
-            session.add(AuditLog(workspace_id=workspace_id, actor_user_id=created_by,
+            session.add(AuditLog(organization_id=organization_id, actor_user_id=created_by,
                                  action="secret.create", subject_type="secret", subject_id=row.id))
             session.commit()
         return row.id
@@ -65,7 +65,7 @@ class SecretsService:
             row.key_version += 1
             row.rotated_at = datetime.now(timezone.utc)
             self._backend(row.backend).store(row, value)
-            session.add(AuditLog(workspace_id=row.workspace_id, actor_user_id=actor,
+            session.add(AuditLog(organization_id=row.organization_id, actor_user_id=actor,
                                  action="secret.rotate", subject_type="secret", subject_id=row.id))
             session.commit()
         self._cache.pop(secret_id, None)

@@ -69,7 +69,7 @@ class DataPlaneEffectCall(BaseModel):
 class MintRequest(BaseModel):
     runId: str
     missionId: str
-    workspaceId: str
+    organizationId: str
     environmentId: str
     environmentVersion: int
     ttlSeconds: int = 3600
@@ -184,13 +184,13 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
         if internal and x_convoy_internal == internal:
             snapshot = service._policy.load_environment(environment_id, version)
             return RunClaims(run_id=run_id or "runtime", mission_id=run_id or "runtime",
-                             workspace_id=snapshot.row.workspace_id,
+                             organization_id=snapshot.row.organization_id,
                              environment_id=environment_id, environment_version=version)
         if not allow_anonymous_data_plane:
             raise HTTPException(401, "data-plane calls require a run token")
         snapshot = service._policy.load_environment(environment_id, version)
         return RunClaims(run_id=run_id or "anonymous", mission_id=run_id or "anonymous",
-                         workspace_id=snapshot.row.workspace_id,
+                         organization_id=snapshot.row.organization_id,
                          environment_id=environment_id, environment_version=version)
 
     @app.post("/data-plane/{environment_id}/{version}/tools/{tool_id}")
@@ -321,7 +321,7 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
     @app.post("/internal/run-tokens")
     async def mint(req: MintRequest, _: None = Depends(internal_dep)):
         token = mint_run_token(
-            RunClaims(run_id=req.runId, mission_id=req.missionId, workspace_id=req.workspaceId,
+            RunClaims(run_id=req.runId, mission_id=req.missionId, organization_id=req.organizationId,
                       environment_id=req.environmentId, environment_version=req.environmentVersion),
             ttl_s=req.ttlSeconds, secret=gateway_secret,
         )

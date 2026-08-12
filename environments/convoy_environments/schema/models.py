@@ -5,7 +5,7 @@ convoy_core.events. These are the API/config shapes; the SQLAlchemy tables in
 convoy_environments.db mirror them in snake_case columns.
 
 The two-object rule (spec §1.2): a Connection is an admin-owned authenticated
-link to one external system — expensive, workspace-level. An Environment is a
+link to one external system — expensive, organization-level. An Environment is a
 cheap, versioned-immutable policy bundle that subsets connections. Never merge
 them.
 """
@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .hashing import manifest_hash as _manifest_hash
 from .hashing import policy_hash as _policy_hash
 
-WorkspaceRole = Literal["admin", "builder", "member"]
+OrganizationRole = Literal["admin", "builder", "member"]
 EnvironmentRole = Literal["viewer", "operator", "env_admin"]
 
 ConnectionKind = Literal["mcp_managed", "mcp_custom", "aws_role", "browser_identity"]
@@ -81,7 +81,7 @@ class Connection(_Model):
     itself is a reference into a secrets backend, never a value."""
 
     connectionId: str
-    workspaceId: str
+    organizationId: str
     kind: ConnectionKind
     provider: str
     displayName: str
@@ -118,7 +118,7 @@ class Environment(_Model):
     silently."""
 
     environmentId: str
-    workspaceId: str
+    organizationId: str
     parentEnvironmentId: Optional[str] = None
     name: str
     version: int = Field(ge=1)
