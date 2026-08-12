@@ -69,7 +69,7 @@ export const systemCatalog: SystemDefinition[] = [
   },
   {
     id: "document_store",
-    displayName: "Document store",
+    displayName: "Google Drive",
     sideEffecting: false,
     standInNote: null,
     connection: {
@@ -85,9 +85,9 @@ export const systemCatalog: SystemDefinition[] = [
   },
   {
     id: "messaging",
-    displayName: "Messaging",
+    displayName: "Slack",
     sideEffecting: true,
-    standInNote: "Stand-in for Messaging: messages are held in the outbox instead of being sent.",
+    standInNote: "Stand-in for Slack: messages are held in the outbox instead of being sent.",
     connection: {
       provider: "slack",
       tools: [

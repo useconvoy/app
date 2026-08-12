@@ -33,7 +33,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { area: "workspaces", label: "Agents", href: "/app/agents" },
       { area: "workspaces", label: "Workspaces", href: "/app/workspaces" },
-      { area: "workspaces", label: "Systems", href: "/app/systems" },
+      { area: "workspaces", label: "Connectors", href: "/app/connectors" },
     ],
   },
   {

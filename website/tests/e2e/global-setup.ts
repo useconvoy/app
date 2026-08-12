@@ -39,17 +39,17 @@ async function seedAgent(adminDsn: string, orgName: string): Promise<void> {
       { systemId: "hris", displayName: "HR system", scope: "read", sideEffecting: false },
       {
         systemId: "document_store",
-        displayName: "Document store",
+        displayName: "Google Drive",
         scope: "write",
         sideEffecting: false,
       },
       {
         systemId: "messaging",
-        displayName: "Messaging",
+        displayName: "Slack",
         scope: "write",
         sideEffecting: true,
         standIn: {
-          note: "Stand-in for Messaging: messages are held in the outbox instead of being sent.",
+          note: "Stand-in for Slack: messages are held in the outbox instead of being sent.",
         },
       },
     ]);

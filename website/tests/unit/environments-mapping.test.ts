@@ -125,7 +125,7 @@ describe("withCatalogFacts", () => {
       { systemId: "messaging", displayName: "Msgs", scope: "read", sideEffecting: false },
     ];
     const [fresh] = withCatalogFacts(stale);
-    expect(fresh).toMatchObject({ displayName: "Messaging", sideEffecting: true });
+    expect(fresh).toMatchObject({ displayName: "Slack", sideEffecting: true });
   });
 
   it("leaves grants for unknown systems untouched", () => {

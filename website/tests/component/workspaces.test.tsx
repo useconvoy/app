@@ -22,7 +22,7 @@ const systems: SystemOption[] = [
     id: "messaging",
     displayName: "Messaging",
     sideEffecting: true,
-    standInNote: "Stand-in for Messaging: messages are held in the outbox instead of being sent.",
+    standInNote: "Stand-in for Slack: messages are held in the outbox instead of being sent.",
   },
 ];
 
@@ -137,7 +137,7 @@ describe("WorkspaceDetail", () => {
     expect(screen.getAllByText("View only")).toHaveLength(2);
     expect(screen.getAllByText("Can update")).toHaveLength(2);
     expect(
-      screen.getByText("Stand-in for Messaging: messages are held in the outbox instead of being sent."),
+      screen.getByText("Stand-in for Slack: messages are held in the outbox instead of being sent."),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Production operations/ })).toHaveAttribute(
       "href",

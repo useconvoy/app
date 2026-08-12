@@ -53,7 +53,7 @@ const EXAMPLES: ExampleRoutine[] = [
     heldStep: 2,
     heldNote:
       "Each exception memo waits here for a named reviewer to sign off before the run continues.",
-    systems: ["Identity provider", "HR system", "Document store", "Messaging"],
+    systems: ["Identity provider", "HR system", "Google Drive", "Slack"],
     budgetCapUsd: 75,
   },
   {
@@ -74,7 +74,7 @@ const EXAMPLES: ExampleRoutine[] = [
     heldStep: 2,
     heldNote:
       "Documents that come back incomplete are held for a person to decide: accept, chase again, or escalate.",
-    systems: ["CRM", "Document store", "Messaging"],
+    systems: ["CRM", "Google Drive", "Slack"],
     budgetCapUsd: 40,
   },
   {
@@ -95,7 +95,7 @@ const EXAMPLES: ExampleRoutine[] = [
     heldStep: 1,
     heldNote:
       "The reminder batch waits here so a person can read the messages before any of them go out.",
-    systems: ["Messaging", "Document store"],
+    systems: ["Slack", "Google Drive"],
     budgetCapUsd: 30,
   },
 ];
