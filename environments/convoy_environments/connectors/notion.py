@@ -35,6 +35,15 @@ _VERSION = "2022-06-28"
 @register
 class NotionConnector(Connector):
     provider = "notion"
+    display_name = "Notion"
+    description = "Search shared pages, read them, and create new ones."
+    credential_label = "Internal integration secret"
+    credential_placeholder = "ntn_..."
+    credential_steps = (
+        "In Notion, create an internal integration for your workspace.",
+        "Share the pages and databases your Agents should reach with that integration.",
+        "Paste the integration secret here.",
+    )
 
     async def manifest(self, credential: Optional[str] = None) -> ConnectionManifest:
         return ConnectionManifest(tools=list(_TOOLS))

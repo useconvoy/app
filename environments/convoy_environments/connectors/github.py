@@ -36,6 +36,15 @@ _API = "https://api.github.com"
 @register
 class GitHubConnector(Connector):
     provider = "github"
+    display_name = "GitHub"
+    description = "Read issues and files, and open issues in your repositories."
+    credential_label = "Personal access token"
+    credential_placeholder = "github_pat_..."
+    credential_steps = (
+        "In GitHub, create a fine-grained personal access token.",
+        "Grant it read access to the repositories your Agents work in, and issues write access if they should open issues.",
+        "Paste the token here.",
+    )
 
     async def manifest(self, credential: Optional[str] = None) -> ConnectionManifest:
         return ConnectionManifest(tools=list(_TOOLS))

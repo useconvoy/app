@@ -30,6 +30,15 @@ class ConnectorError(Exception):
 class Connector(abc.ABC):
     provider: str = ""
 
+    # Directory metadata: how the console presents this provider before any
+    # connection exists. Code connectors are platform-scoped by definition.
+    display_name: str = ""
+    description: str = ""
+    credential_label: str = "Credential"
+    credential_placeholder: str = ""
+    credential_multiline: bool = False
+    credential_steps: tuple = ()
+
     def __init__(
         self,
         config: Optional[Dict[str, Any]] = None,
@@ -83,6 +92,11 @@ _REGISTRY: Dict[str, Type[Connector]] = {}
 def register(cls: Type[Connector]) -> Type[Connector]:
     _REGISTRY[cls.provider] = cls
     return cls
+
+
+def registered_connectors() -> Dict[str, Type[Connector]]:
+    """The code connectors, keyed by provider, for the console directory."""
+    return dict(_REGISTRY)
 
 
 def get_connector(

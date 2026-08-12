@@ -27,6 +27,9 @@ export interface ConnectorCard {
   state: ConnectionState;
   toolCount: number;
   sideEffecting: boolean;
+  /** Registry-served copy; when absent the static fallbacks apply. */
+  blurb?: string;
+  credential?: { label: string; placeholder: string; multiline: boolean; steps: string[] };
 }
 
 export interface CustomConnectorCard {
@@ -272,8 +275,11 @@ export function ConnectorsBoard({
   }
 
   function connectorRow(connector: ConnectorCard) {
-    const help = connector.provider ? PROVIDER_HELP[connector.provider] : undefined;
-    const blurb = connector.provider ? PROVIDER_BLURB[connector.provider] : undefined;
+    const help =
+      connector.credential ??
+      (connector.provider ? PROVIDER_HELP[connector.provider] : undefined);
+    const blurb =
+      connector.blurb ?? (connector.provider ? PROVIDER_BLURB[connector.provider] : undefined);
     const open = openConnector === connector.systemId;
     const isConnected = connector.state !== "not_connected";
     return (
@@ -320,7 +326,9 @@ export function ConnectorsBoard({
             <CredentialForm
               label={help.label}
               placeholder={help.placeholder}
-              multiline={connector.provider === "google"}
+              multiline={
+                (help as { multiline?: boolean }).multiline ?? connector.provider === "google"
+              }
               pendingLabel={isConnected ? "Replace" : "Connect"}
               onSubmit={(value) =>
                 connector.connectionId && isConnected

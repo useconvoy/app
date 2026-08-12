@@ -15,6 +15,7 @@ import {
   attachSystemCredential,
   connectCustomSystem,
   connectManagedSystem,
+  listProviderDirectory,
   verifySystemConnection,
 } from "@/lib/api/environments";
 import { declaredManifest } from "@/lib/api/environments-mapping";
@@ -66,11 +67,37 @@ export async function connectProvider(
   secretValue: string,
 ): Promise<ConnectorActionResult> {
   const session = await requireConnectorsActor();
-  const system = catalogSystem(systemId);
-  if (!system?.connection) throw new Error("No provider serves that connector yet");
   if (secretValue.trim().length === 0) {
     return { ok: false, message: "Paste the credential first." };
   }
+  // Declarative platform providers ("platform:<provider>") come from the
+  // registry directory, not the static catalog: connecting one registers
+  // an ordinary custom connection pointed at the platform's MCP server,
+  // with the pasted credential as its bearer.
+  if (systemId.startsWith("platform:")) {
+    const provider = systemId.slice("platform:".length);
+    const entry = (await listProviderDirectory(session.orgId))?.find(
+      (candidate) => candidate.provider === provider,
+    );
+    if (!entry?.mcpUrl) throw new Error("No provider serves that connector yet");
+    try {
+      const created = await connectCustomSystem(session.orgId, {
+        displayName: entry.displayName,
+        url: entry.mcpUrl,
+        bearerToken: secretValue.trim(),
+      });
+      await audit(session.orgId, session.userId, "connector.connected",
+        `${provider} (${created.tools.length} actions)`);
+      revalidatePath("/app/connectors");
+      revalidatePath("/app/workspaces");
+      return { ok: true, message: `${entry.displayName} is connected.` };
+    } catch (error) {
+      await audit(session.orgId, session.userId, "connector.connect_failed", provider);
+      return { ok: false, message: verificationMessage(error) };
+    }
+  }
+  const system = catalogSystem(systemId);
+  if (!system?.connection) throw new Error("No provider serves that connector yet");
   try {
     const result = await connectManagedSystem(session.orgId, {
       provider: system.connection.provider,

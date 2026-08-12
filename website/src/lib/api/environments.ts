@@ -1012,6 +1012,33 @@ export async function listSystemConnections(orgId: string): Promise<SystemConnec
   }));
 }
 
+/** One provider directory entry, served by the registry. */
+export interface ProviderDirectoryEntry {
+  provider: string;
+  displayName: string;
+  description: string;
+  kind: "code" | "declarative";
+  scope: "platform";
+  mcpUrl?: string;
+  credential: { label: string; placeholder: string; multiline: boolean; steps: string[] };
+  tools: Array<{ name: string; execution?: string; sideEffecting: boolean; description?: string }>;
+}
+
+/**
+ * The registry-served provider directory: every provider the platform can
+ * reach, before any connection exists. Null when the registry is not
+ * linked (the caller falls back to the static catalog).
+ */
+export async function listProviderDirectory(
+  orgId: string,
+): Promise<ProviderDirectoryEntry[] | null> {
+  const ctx = await systemsContext(orgId);
+  if (!ctx) return null;
+  return registryFetch<ProviderDirectoryEntry[]>(ctx.config, "/providers", {
+    actsFor: ctx.actsFor,
+  });
+}
+
 /**
  * Re-run the registry's provider probe on a connection's stored
  * credential. The registry reveals the value only to probe the provider

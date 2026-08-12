@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 
-import { listSystemConnections, type SystemConnection } from "@/lib/api/environments";
+import {
+  listProviderDirectory,
+  listSystemConnections,
+  type SystemConnection,
+} from "@/lib/api/environments";
 import {
   addCustomConnector,
   checkConnectorHealth,
@@ -33,32 +37,80 @@ function connectionState(connection: SystemConnection | undefined): ConnectionSt
  */
 export default async function ConnectorsPage() {
   const { session } = await requireWorkspacesPage();
-  const connections = await listSystemConnections(session.orgId);
+  const [connections, directory] = await Promise.all([
+    listSystemConnections(session.orgId),
+    listProviderDirectory(session.orgId),
+  ]);
 
   const byProvider = new Map((connections ?? []).map((connection) => [connection.provider, connection]));
-  const connectors: ConnectorCard[] = systemCatalog
-    .filter((system) => system.connection !== null)
-    .map((system) => {
-      const connection = system.connection ? byProvider.get(system.connection.provider) : undefined;
+  const catalogIdByProvider = new Map(
+    systemCatalog
+      .filter((system) => system.connection !== null)
+      .map((system) => [system.connection!.provider, system]),
+  );
+
+  // The registry-served directory is authoritative when linked: a provider
+  // added service-side appears here with no website change. Code providers
+  // keep their catalog grant ids; declarative platform providers connect
+  // through the custom-connection mechanism and are matched back to their
+  // directory entry by display name. The static catalog remains the
+  // fallback for unlinked (dev) deployments.
+  let connectors: ConnectorCard[];
+  let customSource: SystemConnection[];
+  if (directory !== null) {
+    const declarativeNames = new Set(
+      directory.filter((entry) => entry.kind === "declarative").map((entry) => entry.displayName),
+    );
+    connectors = directory.map((entry) => {
+      const catalogEntry = catalogIdByProvider.get(entry.provider);
+      const connection =
+        entry.kind === "code"
+          ? byProvider.get(entry.provider)
+          : (connections ?? []).find(
+              (candidate) =>
+                candidate.kind === "mcp_custom" && candidate.displayName === entry.displayName,
+            );
       return {
-        systemId: system.id,
-        displayName: system.displayName,
-        provider: system.connection?.provider ?? null,
+        systemId: catalogEntry?.id ?? `platform:${entry.provider}`,
+        displayName: entry.displayName,
+        provider: entry.provider,
         connectionId: connection?.connectionId ?? null,
         state: connectionState(connection),
-        toolCount: connection?.toolCount ?? system.connection?.tools.length ?? 0,
-        sideEffecting: system.sideEffecting,
+        toolCount: connection?.toolCount ?? entry.tools.length,
+        sideEffecting: entry.tools.some((tool) => tool.sideEffecting),
+        blurb: entry.description || undefined,
+        credential: entry.credential,
       };
     });
-  const customConnectors = (connections ?? [])
-    .filter((connection) => connection.kind === "mcp_custom")
-    .map((connection) => ({
-      connectionId: connection.connectionId,
-      displayName: connection.displayName,
-      state: connectionState(connection),
-      toolCount: connection.toolCount,
-      tools: connection.tools.map((tool) => tool.name),
-    }));
+    // Declarative connections render as directory cards, not custom rows.
+    customSource = (connections ?? []).filter(
+      (connection) =>
+        connection.kind === "mcp_custom" && !declarativeNames.has(connection.displayName),
+    );
+  } else {
+    connectors = systemCatalog
+      .filter((system) => system.connection !== null)
+      .map((system) => {
+        const connection = system.connection ? byProvider.get(system.connection.provider) : undefined;
+        return {
+          systemId: system.id,
+          displayName: system.displayName,
+          provider: system.connection?.provider ?? null,
+          connectionId: connection?.connectionId ?? null,
+          state: connectionState(connection),
+          toolCount: connection?.toolCount ?? system.connection?.tools.length ?? 0,
+          sideEffecting: system.sideEffecting,
+        };
+      });
+    customSource = (connections ?? []).filter((connection) => connection.kind === "mcp_custom");
+  }
+  const customConnectors = customSource.map((connection) => ({
+    connectionId: connection.connectionId,
+    displayName: connection.displayName,
+    state: connectionState(connection),
+    toolCount: connection.toolCount,
+    tools: connection.tools.map((tool) => tool.name),
+  }));
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">

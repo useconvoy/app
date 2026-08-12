@@ -156,6 +156,28 @@ class BrowserProfile(Base):
     captured_by_run_id: Mapped[str] = mapped_column(String(64), nullable=True)
 
 
+class PlatformConnector(Base):
+    """A declarative platform connector: a Convoy-hosted MCP server offered
+    to every organization as a first-class provider. Connecting one creates
+    an ordinary mcp_custom connection pointed at the platform URL, so the
+    gateway's existing MCP execution path serves it unchanged. Rows are the
+    breadth tier of the provider directory; code connectors are the depth
+    tier."""
+
+    __tablename__ = "platform_connectors"
+    provider: Mapped[str] = mapped_column(String(64), primary_key=True)
+    display_name: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(Text, default="")
+    mcp_url: Mapped[str] = mapped_column(String(512))
+    manifest: Mapped[dict] = mapped_column(PortableJSON, default=dict)
+    credential_label: Mapped[str] = mapped_column(String(128), default="Bearer token")
+    credential_placeholder: Mapped[str] = mapped_column(String(128), default="")
+    credential_steps: Mapped[list] = mapped_column(PortableJSON, default=list)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[str] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[_dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class EventRule(Base):
     """One event trigger: when `event_type` arrives on `connection_id`,
     start a run for `agent_id` from the frozen template below. The template
