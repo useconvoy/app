@@ -12,24 +12,25 @@
  */
 "use server";
 
-import { controlPlane, controlPlaneUrl, sseHeaders, type ActorContext } from "@/lib/api/client";
-import { routineIdForRun } from "@/lib/api/runs";
+import { controlPlane } from "@/lib/api/client";
+import { getRun, isRehearsalTarget } from "@/lib/api/runs";
 import { copy } from "@/lexicon";
 import { can } from "@/lib/permissions";
-import { isRehearsalRun, recordRunTarget } from "@/lib/routines/data";
 import { isAssignedToRoutine } from "@/lib/routines/queries";
 import type { CommandResult, SteerMode, SteerResult } from "./command-types";
 import { requireRunContext, type RunContext } from "./context";
 
 type Guard =
-  | { ok: true; context: RunContext }
+  | { ok: true; context: RunContext; environmentId: string }
   | { ok: false; refused: { kind: "refused"; message: string } };
 
 /**
  * The shared gate: active member with answer_checkpoints (member and up;
  * pause/land/steer deliberately ride the same grant), plus assignment
- * awareness. A member acting on a run that maps to a routine must be
- * assigned to that routine; admins and operators pass regardless.
+ * awareness. A member acting on a run that maps to an Agent must be
+ * assigned to that Agent; admins and operators pass regardless. The run's
+ * attribution (agent, binding target) comes from the control plane's own
+ * record, so runs started outside this process guard identically.
  */
 async function guardRunAction(runId: string): Promise<Guard> {
   const context = await requireRunContext();
@@ -37,14 +38,15 @@ async function guardRunAction(runId: string): Promise<Guard> {
   if (!can("answer_checkpoints", membership.role, membership.capabilities)) {
     return { ok: false, refused: { kind: "refused", message: copy.viewersCannotAct } };
   }
-  const routineId = routineIdForRun(runId);
+  const view = await getRun(context.actor, runId);
+  const routineId = view?.agent_id ?? undefined;
   if (routineId && membership.role !== "admin" && membership.role !== "operator") {
     const assigned = await isAssignedToRoutine(session.orgId, session.userId, routineId);
     if (!assigned) {
       return { ok: false, refused: { kind: "refused", message: copy.assignedToSomeoneElse } };
     }
   }
-  return { ok: true, context };
+  return { ok: true, context, environmentId: view?.environment_id ?? "" };
 }
 
 /** Map a non-2xx edge response to the discriminated result. */
@@ -147,50 +149,6 @@ export async function approvePlan(
 }
 
 /**
- * Whether the run is a rehearsal, checked server-side. The console's own
- * runs are recorded at start; runs first seen through their detail page are
- * checked against the stream's sandbox flag (the first event carries it)
- * and remembered. TODO(runtime-D8): the run list's sandbox flag replaces
- * this probe.
- */
-async function isRehearsal(actor: ActorContext, runId: string): Promise<boolean> {
-  if (isRehearsalRun(runId)) return true;
-  const controller = new AbortController();
-  try {
-    const upstream = await fetch(
-      `${controlPlaneUrl()}/runs/${encodeURIComponent(runId)}/events?after=0`,
-      {
-        headers: { ...sseHeaders(actor), Accept: "text/event-stream" },
-        cache: "no-store",
-        signal: controller.signal,
-      },
-    );
-    if (!upstream.ok || !upstream.body) return false;
-    const reader = upstream.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    // A handful of reads is plenty: the first frame arrives immediately on
-    // any run that exists.
-    for (let i = 0; i < 8; i += 1) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const frame = buffer.match(/^data: (.*)$/m);
-      if (frame) {
-        const event = JSON.parse(frame[1]!) as { sandbox?: unknown };
-        if (event.sandbox === true) recordRunTarget(runId, "rehearsal");
-        return event.sandbox === true;
-      }
-    }
-    return false;
-  } catch {
-    return false;
-  } finally {
-    controller.abort();
-  }
-}
-
-/**
  * Answer one step's open checkpoint. `atVirtual` scripts a simulated
  * answer at a rehearsal moment and is refused outside rehearsals; the
  * runtime re-checks either way. Answers render only from the confirming
@@ -204,7 +162,7 @@ export async function respondToGate(
 ): Promise<CommandResult> {
   const guard = await guardRunAction(runId);
   if (!guard.ok) return guard.refused;
-  if (atVirtual && !(await isRehearsal(guard.context.actor, runId))) {
+  if (atVirtual && !isRehearsalTarget(guard.environmentId)) {
     return { kind: "refused", message: copy.rehearsalOnlyAnswerAt };
   }
   const { error, response: httpResponse } = await controlPlane(guard.context.actor).POST(

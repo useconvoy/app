@@ -109,12 +109,12 @@ class ConsoleAuth:
                 user = session.query(User).filter_by(email=email).one_or_none()
                 if user is not None and user.idp_subject is None:
                     user.idp_subject = subject  # first-login linkage, audited
-                    session.add(AuditLog(workspace_id=None, actor_user_id=user.id,
+                    session.add(AuditLog(organization_id=None, actor_user_id=user.id,
                                          action="user.link_idp", subject_type="user",
                                          subject_id=user.id, diff={"idpSubject": subject}))
                     session.commit()
                     return user.id
-            raise HTTPException(403, "no Convoy user for this identity — ask a workspace "
+            raise HTTPException(403, "no Convoy user for this identity — ask an organization "
                                      "admin to invite %s" % (email or subject))
         # Header auth: explicitly flagged on, or implicitly permitted while no
         # bearer verifier is configured (dev/white-glove). The moment WorkOS

@@ -184,13 +184,68 @@ variable "temporal_task_queue" {
 # ---------------------------------------------------------------------------
 
 variable "environments_url" {
-  description = "Public HTTPS base URL of the environments gateway (for example the DigitalOcean-hosted /gateway endpoint)."
+  description = "Override for the environments gateway base URL. Empty (the default) uses the in-stack environments service via Cloud Map; set an HTTPS URL only when a stack fronts an externally hosted gateway."
   type        = string
+  default     = ""
 
   validation {
-    condition     = can(regex("^https://", var.environments_url))
-    error_message = "environments_url must be an HTTPS URL."
+    condition     = var.environments_url == "" || can(regex("^https://", var.environments_url))
+    error_message = "environments_url must be empty (in-stack) or an HTTPS URL."
   }
+}
+
+variable "control_plane_url" {
+  description = "URL runtime workers and the environments service use to reach the control plane (the stack's DNS record for the ALB). Empty leaves in-cluster callers on their configured defaults."
+  type        = string
+  default     = ""
+}
+
+variable "environments_cpu" {
+  description = "Fargate CPU units for the environments service (lean default)."
+  type        = number
+  default     = 512
+}
+
+variable "environments_memory" {
+  description = "Fargate memory (MiB) for the environments service."
+  type        = number
+  default     = 1024
+}
+
+variable "environments_port" {
+  description = "Container port for the environments service (gateway + console)."
+  type        = number
+  default     = 8780
+}
+
+variable "environments_desired_count" {
+  description = "Environments service task count."
+  type        = number
+  default     = 1
+}
+
+variable "connector_sandbox_cpu" {
+  description = "Fargate CPU units for the connector-sandbox service (lean default)."
+  type        = number
+  default     = 256
+}
+
+variable "connector_sandbox_memory" {
+  description = "Fargate memory (MiB) for the connector-sandbox service."
+  type        = number
+  default     = 512
+}
+
+variable "connector_sandbox_port" {
+  description = "Container port for the connector-sandbox service."
+  type        = number
+  default     = 8790
+}
+
+variable "connector_sandbox_desired_count" {
+  description = "Connector-sandbox service task count."
+  type        = number
+  default     = 1
 }
 
 variable "environments_internal_token_secret_arn" {
@@ -243,15 +298,15 @@ variable "image_tag" {
 }
 
 variable "images" {
-  description = "Optional per-service full image URI overrides. Keys: control_plane, temporal_worker, litellm, sandbox. When unset, the per-stack ECR repo + image_tag is used."
+  description = "Optional per-service full image URI overrides. Keys: control_plane, temporal_worker, litellm, sandbox, environments, connector_sandbox. When unset, the per-stack ECR repo + image_tag is used."
   type        = map(string)
   default     = {}
 
   validation {
     condition = alltrue([
-      for k in keys(var.images) : contains(["control_plane", "temporal_worker", "litellm", "sandbox"], k)
+      for k in keys(var.images) : contains(["control_plane", "temporal_worker", "litellm", "sandbox", "environments", "connector_sandbox"], k)
     ])
-    error_message = "images keys must be among: control_plane, temporal_worker, litellm, sandbox."
+    error_message = "images keys must be among: control_plane, temporal_worker, litellm, sandbox, environments, connector_sandbox."
   }
 }
 

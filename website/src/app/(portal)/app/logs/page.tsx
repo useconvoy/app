@@ -5,7 +5,7 @@ import { Field } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { CostRollupsPanel } from "@/components/CostRollupsPanel";
 import { LogEventTable } from "@/components/LogEventTable";
-import { listRuns } from "@/lib/api/runs";
+import { getRun, listRuns } from "@/lib/api/runs";
 import type { RunView } from "@/lib/api/client";
 import { loadOrgEvents, type LogEvent } from "@/lib/logs/events";
 import { requireLogsPage } from "@/lib/logs/gate";
@@ -56,11 +56,19 @@ export default async function LogsPage({
   const actor = { actorId: session.userId, tenantId };
 
   // The control plane may be unreachable in fixture-only setups; the page
-  // stays up with an empty explorer rather than failing.
+  // stays up with an empty explorer rather than failing. Cost rollups need
+  // per-step detail, so listed runs hydrate through GET /runs/{id} — the
+  // same fan-in pattern the event poll below already follows.
   let runs: RunView[] = [];
   let events: LogEvent[] = [];
   try {
-    [runs, events] = await Promise.all([listRuns(actor), loadOrgEvents(actor)]);
+    const [summaries, loaded] = await Promise.all([
+      listRuns(actor, { limit: 50 }),
+      loadOrgEvents(actor),
+    ]);
+    const views = await Promise.all(summaries.map((summary) => getRun(actor, summary.run_id)));
+    runs = views.filter((view): view is RunView => view !== null);
+    events = loaded;
   } catch {
     runs = [];
     events = [];

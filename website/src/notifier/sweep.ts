@@ -11,7 +11,6 @@
  */
 import { withOrgContext } from "../lib/db";
 import { notificationTitles } from "../lexicon";
-import { routineIdForRunId } from "./feed";
 import { loadRoutingWorld, resolveRecipients } from "./routing";
 
 /** Default warning window: notice deadlines within the next 60 minutes. */
@@ -62,7 +61,7 @@ export interface SweepTickResult {
 export async function sweepTick(orgId: string, options: SweepOptions = {}): Promise<SweepTickResult> {
   const now = options.now ?? new Date();
   const windowMs = options.windowMs ?? DEFAULT_DEADLINE_WINDOW_MS;
-  const resolveRoutineId = options.resolveRoutineId ?? routineIdForRunId;
+  const resolveRoutineId = options.resolveRoutineId ?? (() => undefined);
 
   return withOrgContext({ orgId }, async (client) => {
     const { rows } = await client.query<{

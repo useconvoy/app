@@ -1,5 +1,5 @@
-from convoy_runtime.control_plane.app import _environment_registry_target
 from convoy_runtime.config import RuntimeConfig
+from convoy_runtime.control_plane.app import _environment_registry_target
 
 
 def test_production_environment_reference_is_unchanged() -> None:

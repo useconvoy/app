@@ -63,3 +63,67 @@ resource "aws_secretsmanager_secret_version" "db_credentials" {
     url      = "postgresql://${aws_db_instance.this.username}:${random_password.db_master.result}@${aws_db_instance.this.address}:${aws_db_instance.this.port}/${aws_db_instance.this.db_name}"
   })
 }
+
+# --- Runtime service token --------------------------------------------------
+# The bearer the website, schedule firings, and the environments service
+# present to the control plane. Generated per stack so a stamped stack never
+# boots on the repo's development default.
+
+resource "random_password" "runtime_service_token" {
+  length  = 48
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "runtime_service_token" {
+  name        = "${local.name_prefix}/runtime-service-token"
+  description = "Control-plane service bearer (CONVOY_DEV_TOKEN / CONVOY_CONTROL_PLANE_TOKEN)."
+  kms_key_id  = aws_kms_key.stack.arn
+
+  tags = merge(local.tags, { Name = "${local.name_prefix}-runtime-service-token" })
+}
+
+resource "aws_secretsmanager_secret_version" "runtime_service_token" {
+  secret_id     = aws_secretsmanager_secret.runtime_service_token.id
+  secret_string = random_password.runtime_service_token.result
+}
+
+# --- Environments service secrets -------------------------------------------
+# Master key (Fernet KEK for the credential vault, urlsafe base64 of 32
+# bytes) and the run-token signing secret. Both stack-generated; the KMS
+# backend later replaces only wrap/unwrap.
+
+resource "random_bytes" "environments_master_key" {
+  length = 32
+}
+
+resource "aws_secretsmanager_secret" "environments_master_key" {
+  name        = "${local.name_prefix}/environments-master-key"
+  description = "Fernet KEK for the environments credential vault (CONVOY_MASTER_KEY)."
+  kms_key_id  = aws_kms_key.stack.arn
+
+  tags = merge(local.tags, { Name = "${local.name_prefix}-environments-master-key" })
+}
+
+resource "aws_secretsmanager_secret_version" "environments_master_key" {
+  secret_id = aws_secretsmanager_secret.environments_master_key.id
+  # Fernet demands urlsafe base64; translate the standard alphabet.
+  secret_string = replace(replace(random_bytes.environments_master_key.base64, "+", "-"), "/", "_")
+}
+
+resource "random_password" "environments_gateway_secret" {
+  length  = 48
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "environments_gateway_secret" {
+  name        = "${local.name_prefix}/environments-gateway-secret"
+  description = "HS256 signing secret for per-run gateway tokens (CONVOY_GATEWAY_SECRET)."
+  kms_key_id  = aws_kms_key.stack.arn
+
+  tags = merge(local.tags, { Name = "${local.name_prefix}-environments-gateway-secret" })
+}
+
+resource "aws_secretsmanager_secret_version" "environments_gateway_secret" {
+  secret_id     = aws_secretsmanager_secret.environments_gateway_secret.id
+  secret_string = random_password.environments_gateway_secret.result
+}

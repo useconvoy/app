@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { ensureRunRegistered, getRun, routineIdForRun } from "@/lib/api/runs";
+import { getRun } from "@/lib/api/runs";
 import { can } from "@/lib/permissions";
 import { submitForPromotion } from "@/lib/promotions/actions";
 import { promotionRequestForRun } from "@/lib/promotions/store";
@@ -39,12 +39,7 @@ export default async function RunDetailPage({
   const { session, membership, actor } = await requireRunPage();
   const run = await getRun(actor, runId);
   if (!run) notFound();
-  // A run first seen through its detail page joins the console's directory
-  // so lists and the Checkpoints inbox can see it. TODO(runtime-D8): the
-  // runtime's list endpoint retires this seam.
-  ensureRunRegistered(runId, actor.tenantId);
-
-  const routineId = routineIdForRun(runId) ?? null;
+  const routineId = run.agent_id ?? null;
   const existing = routineId
     ? promotionRequestForRun(session.orgId, routineId, runId)
     : null;

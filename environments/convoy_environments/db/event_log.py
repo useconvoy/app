@@ -29,17 +29,17 @@ def _iso(dt: datetime) -> str:
 
 
 class SqlEventLog:
-    def __init__(self, session_factory, clock: ClockPort = system_clock, workspace_id: Optional[str] = None) -> None:
+    def __init__(self, session_factory, clock: ClockPort = system_clock, organization_id: Optional[str] = None) -> None:
         self._sf = session_factory
         self._clock = clock
-        self._workspace_id = workspace_id
+        self._organization_id = organization_id
         self._listeners: List[Callable[[Any], None]] = []
 
-    def append(self, input: Dict[str, Any], workspace_id: Optional[str] = None) -> Any:
+    def append(self, input: Dict[str, Any], organization_id: Optional[str] = None) -> Any:
         """Validate + stamp + insert one event. `input` carries the payload
         without eventId/seq/wallTs (ts optional override)."""
         mission_id = input["missionId"]
-        ws = workspace_id or self._workspace_id
+        ws = organization_id or self._organization_id
         last_err: Optional[Exception] = None
         for _ in range(_MAX_SEQ_RETRIES):
             with self._sf() as session:
@@ -56,7 +56,7 @@ class SqlEventLog:
                 session.add(
                     Event(
                         event_id=event.eventId,
-                        workspace_id=ws,
+                        organization_id=ws,
                         mission_id=event.missionId,
                         seq=event.seq,
                         type=payload["type"],
@@ -89,13 +89,13 @@ class SqlEventLog:
     def on_append(self, fn: Callable[[Any], None]) -> None:
         self._listeners.append(fn)
 
-    def open_gates(self, workspace_id: Optional[str] = None) -> List[Any]:
+    def open_gates(self, organization_id: Optional[str] = None) -> List[Any]:
         """Projection: gate_raised events with no matching gate_resolved.
         Returns the raised events (payloads), console-ready."""
         with self._sf() as session:
             q = select(Event.payload).where(Event.type.in_(["gate_raised", "gate_resolved"]))
-            if workspace_id:
-                q = q.where(Event.workspace_id == workspace_id)
+            if organization_id:
+                q = q.where(Event.organization_id == organization_id)
             rows = session.execute(q.order_by(Event.ts, Event.seq)).scalars().all()
         open_by_id: Dict[str, Any] = {}
         for p in rows:

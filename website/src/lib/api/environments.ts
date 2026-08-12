@@ -455,7 +455,7 @@ function registryConfig(): RegistryConfig | null {
 async function registryFetch<T>(
   config: RegistryConfig,
   path: string,
-  options: { method?: "GET" | "POST"; body?: unknown; actsFor?: string } = {},
+  options: { method?: "GET" | "POST" | "DELETE"; body?: unknown; actsFor?: string } = {},
 ): Promise<T> {
   const headers: Record<string, string> = { "X-Convoy-Internal": config.token };
   if (options.actsFor) headers["X-Convoy-Acts-For"] = options.actsFor;
@@ -1132,5 +1132,86 @@ export function routinesUsingWorkspace<R extends { systems: string[]; workspaceI
     routine.workspaceId
       ? routine.workspaceId === workspace.id
       : workspaceForRoutine(routine, workspaces)?.id === workspace.id,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Event triggers (registry-only: rules live in the environments service and
+// fire through its gateway webhook doors; the table-backed fallback has no
+// event machinery, so these return null when the registry flag is off).
+
+export interface EventRule {
+  ruleId: string;
+  connectionId: string;
+  eventType: string;
+  agentId: string;
+  enabled: boolean;
+  goal: string;
+  environmentId: string;
+  budgetUsd: string;
+  createdAt: string;
+}
+
+export interface CreateEventRuleInput {
+  connectionId: string;
+  eventType: string;
+  agentId: string;
+  goal: string;
+  environmentId: string;
+  budgetUsd: string;
+  tools: string[];
+  instructions: string[];
+}
+
+export async function listEventRules(
+  orgId: string,
+  agentId?: string,
+): Promise<EventRule[] | null> {
+  const ctx = await systemsContext(orgId);
+  if (!ctx) return null;
+  const suffix = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+  return registryFetch<EventRule[]>(
+    ctx.config,
+    `/organizations/${ctx.registryOrgId}/event-rules${suffix}`,
+    { actsFor: ctx.actsFor },
+  );
+}
+
+export async function createEventRule(
+  orgId: string,
+  input: CreateEventRuleInput,
+): Promise<EventRule> {
+  const ctx = await systemsContext(orgId);
+  if (!ctx) throw new Error("Event triggers need the environments registry");
+  return registryFetch<EventRule>(
+    ctx.config,
+    `/organizations/${ctx.registryOrgId}/event-rules`,
+    { method: "POST", actsFor: ctx.actsFor, body: input },
+  );
+}
+
+export async function deleteEventRule(orgId: string, ruleId: string): Promise<void> {
+  const ctx = await systemsContext(orgId);
+  if (!ctx) throw new Error("Event triggers need the environments registry");
+  await registryFetch<{ ruleId: string; deleted: boolean }>(
+    ctx.config,
+    `/organizations/${ctx.registryOrgId}/event-rules/${ruleId}`,
+    { method: "DELETE", actsFor: ctx.actsFor },
+  );
+}
+
+/** Store the provider's webhook signing secret on a connection and return
+ * the gateway hook path deliveries should target. */
+export async function setConnectionWebhookSecret(
+  orgId: string,
+  connectionId: string,
+  secret: string,
+): Promise<{ connectionId: string; hookPath: string }> {
+  const ctx = await systemsContext(orgId);
+  if (!ctx) throw new Error("Event triggers need the environments registry");
+  return registryFetch<{ connectionId: string; hookPath: string }>(
+    ctx.config,
+    `/organizations/${ctx.registryOrgId}/connections/${connectionId}/webhook-secret`,
+    { method: "POST", actsFor: ctx.actsFor, body: { secret } },
   );
 }

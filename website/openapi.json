@@ -1,6 +1,84 @@
 {
   "components": {
     "schemas": {
+      "AgentScheduleRequest": {
+        "properties": {
+          "schedule": {
+            "$ref": "#/components/schemas/AgentScheduleSpec"
+          },
+          "template": {
+            "$ref": "#/components/schemas/ScheduleRunTemplateRequest"
+          }
+        },
+        "required": [
+          "schedule",
+          "template"
+        ],
+        "title": "AgentScheduleRequest",
+        "type": "object"
+      },
+      "AgentScheduleSpec": {
+        "description": "What the console saves: a standard 5-field cron in a named timezone,\nplus whether the schedule is live.",
+        "properties": {
+          "cron": {
+            "maxLength": 100,
+            "minLength": 9,
+            "title": "Cron",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "timezone": {
+            "default": "UTC",
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cron"
+        ],
+        "title": "AgentScheduleSpec",
+        "type": "object"
+      },
+      "AgentScheduleView": {
+        "properties": {
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "cron": {
+            "title": "Cron",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "next_run_times": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Next Run Times",
+            "type": "array"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "cron",
+          "timezone",
+          "enabled"
+        ],
+        "title": "AgentScheduleView",
+        "type": "object"
+      },
       "ApprovePlanRequest": {
         "description": "Approve or reject the plan version awaiting approval. The version pin\nguarantees the decision targets the plan the human actually reviewed;\nrejections must say why.",
         "properties": {
@@ -91,6 +169,17 @@
       },
       "CreateRunRequest": {
         "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
           "budget_usd": {
             "anyOf": [
               {
@@ -132,6 +221,14 @@
             "title": "Goal",
             "type": "string"
           },
+          "instructions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Instructions",
+            "type": "array"
+          },
           "max_children": {
             "default": 5,
             "maximum": 10.0,
@@ -170,6 +267,27 @@
               }
             ],
             "title": "Run Id"
+          },
+          "started_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started By"
+          },
+          "started_via": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "schedule",
+              "event"
+            ],
+            "title": "Started Via",
+            "type": "string"
           },
           "success_criteria": {
             "default": [],
@@ -425,6 +543,35 @@
         "title": "HumanGate",
         "type": "object"
       },
+      "RunListResponse": {
+        "description": "Newest-first, keyset-paginated: pass `next_created_before` back as\n`created_before` to fetch the next page; null means the list is done.",
+        "properties": {
+          "next_created_before": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Created Before"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/RunSummary"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "runs"
+        ],
+        "title": "RunListResponse",
+        "type": "object"
+      },
       "RunPolicy": {
         "properties": {
           "approval_scope": {
@@ -491,9 +638,20 @@
         "title": "RunPolicy",
         "type": "object"
       },
-      "RunView": {
-        "description": "Served from Postgres projections only \u2014 never from Temporal. Subagent\nchild runs are rows of their own, linked back by `parent_run_id`.",
+      "RunSummary": {
+        "description": "One row of GET /runs \u2014 the list shape the console renders. Full plan,\nland report, and steps stay on GET /runs/{run_id}.",
         "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
           "budget": {
             "anyOf": [
               {
@@ -503,6 +661,149 @@
                 "type": "null"
               }
             ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "environment_id": {
+            "default": "",
+            "title": "Environment Id",
+            "type": "string"
+          },
+          "execution_session": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecutionSessionView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "goal": {
+            "title": "Goal",
+            "type": "string"
+          },
+          "land_report": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Land Report"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "started_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started By"
+          },
+          "started_via": {
+            "default": "manual",
+            "title": "Started Via",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "steps_done": {
+            "default": 0,
+            "title": "Steps Done",
+            "type": "integer"
+          },
+          "steps_total": {
+            "default": 0,
+            "title": "Steps Total",
+            "type": "integer"
+          },
+          "tenant_id": {
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "tenant_id",
+          "status",
+          "goal",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RunSummary",
+        "type": "object"
+      },
+      "RunView": {
+        "description": "Served from Postgres projections only \u2014 never from Temporal. Subagent\nchild runs are rows of their own, linked back by `parent_run_id`.",
+        "properties": {
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "budget": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BudgetView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "environment_id": {
+            "default": "",
+            "title": "Environment Id",
+            "type": "string"
           },
           "execution_session": {
             "anyOf": [
@@ -557,6 +858,22 @@
             "title": "Run Id",
             "type": "string"
           },
+          "started_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started By"
+          },
+          "started_via": {
+            "default": "manual",
+            "title": "Started Via",
+            "type": "string"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -581,6 +898,58 @@
           "goal"
         ],
         "title": "RunView",
+        "type": "object"
+      },
+      "ScheduleRunTemplateRequest": {
+        "description": "The run the schedule should start on each firing \u2014 what the console\nresolved from the agent at save time. Tenant is taken from the\nauthenticated caller, never this body.",
+        "properties": {
+          "budget_usd": {
+            "title": "Budget Usd",
+            "type": "string"
+          },
+          "environment_id": {
+            "title": "Environment Id",
+            "type": "string"
+          },
+          "goal": {
+            "minLength": 1,
+            "title": "Goal",
+            "type": "string"
+          },
+          "instructions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Instructions",
+            "type": "array"
+          },
+          "started_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started By"
+          },
+          "tools": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "goal",
+          "environment_id",
+          "budget_usd"
+        ],
+        "title": "ScheduleRunTemplateRequest",
         "type": "object"
       },
       "SignalResponse": {
@@ -773,7 +1142,243 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/agents/{agent_id}/schedule": {
+      "delete": {
+        "operationId": "remove_agent_schedule_agents__agent_id__schedule_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Agent Schedule"
+      },
+      "get": {
+        "operationId": "get_agent_schedule_agents__agent_id__schedule_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentScheduleView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Schedule"
+      },
+      "put": {
+        "description": "Create or replace the agent's schedule. The run template freezes what\nthe console resolved at save time; the tenant comes from the\nauthenticated caller, never the body. Firings create runs through the\nnormal POST /runs path with started_via=\"schedule\".",
+        "operationId": "put_agent_schedule_agents__agent_id__schedule_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentScheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentScheduleView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Agent Schedule"
+      }
+    },
+    "/healthz": {
+      "get": {
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Healthz Healthz Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthz"
+      }
+    },
     "/runs": {
+      "get": {
+        "description": "Tenant-scoped run list, newest first, from projections only. This is\nthe console's run directory \u2014 no client should have to remember run ids\nit created (the website's in-process map retires against this).",
+        "operationId": "list_runs_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "created_before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runs"
+      },
       "post": {
         "operationId": "create_run_runs_post",
         "requestBody": {

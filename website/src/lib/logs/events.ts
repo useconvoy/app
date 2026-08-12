@@ -16,7 +16,7 @@
 import "server-only";
 
 import { controlPlane, type ActorContext } from "@/lib/api/client";
-import { knownRunIds } from "@/lib/api/runs";
+import { listRuns } from "@/lib/api/runs";
 
 /** One runtime event, shaped exactly like the recorded SSE fixtures. */
 export interface LogEvent {
@@ -117,12 +117,17 @@ async function fetchRunEvents(actor: ActorContext, runId: string): Promise<LogEv
 }
 
 /**
- * Every event the tenant's known runs have emitted, merged newest first.
- * Polls run in small batches so a long run directory cannot open dozens of
+ * Every event the tenant's recent runs have emitted, merged newest first.
+ * Polls run in small batches so a long run list cannot open dozens of
  * simultaneous streams.
  */
 export async function loadOrgEvents(actor: ActorContext): Promise<LogEvent[]> {
-  const runIds = knownRunIds(actor.tenantId);
+  let runIds: string[] = [];
+  try {
+    runIds = (await listRuns(actor)).map((run) => run.run_id);
+  } catch {
+    return [];
+  }
   const merged: LogEvent[] = [];
   for (let i = 0; i < runIds.length; i += CONCURRENCY) {
     const batch = runIds.slice(i, i + CONCURRENCY);

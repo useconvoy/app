@@ -1602,9 +1602,7 @@ class AgentRunWorkflow:
                 PromotedToolRequest(
                     run_id=state.run_id,
                     call=call,
-                    endpoint_url=str(
-                        self._carry.binding.connector_endpoints.get("data_plane", "")
-                    ),
+                    endpoint_url=str(self._carry.binding.connector_endpoints.get("data_plane", "")),
                 ),
                 result_type=PromotedToolOutcome,
                 start_to_close_timeout=_PROMOTED_TOOL_TIMEOUT,

@@ -6,6 +6,17 @@ import { Button } from "@/components/Button";
 import { RouteStepList } from "@/components/RouteStepList";
 import { environmentsClient } from "@/lib/api/environments";
 import { runAgentNow } from "@/lib/agents/run-actions";
+import { getAgentSchedule } from "@/lib/agents/queries";
+import { clearAgentSchedule, setAgentSchedule } from "@/lib/agents/schedule-actions";
+import { addAgentEventRule, removeAgentEventRule } from "@/lib/agents/event-actions";
+import { suggestedEvents } from "@/lib/agents/events";
+import { listEventRules, listSystemConnections } from "@/lib/api/environments";
+import {
+  SCHEDULE_PRESETS,
+  parseStoredSchedule,
+  presetForCron,
+  scheduleDisplay,
+} from "@/lib/agents/schedule";
 import { friendlyDate, money } from "@/lib/format";
 import { can } from "@/lib/permissions";
 import { requireWorkspacesPage } from "@/lib/workspaces/gate";
@@ -26,12 +37,48 @@ export default async function AgentDetailPage({
   const workspace = await client.getWorkspace(session.orgId, agent.workspaceId);
   const canStart = can("trigger_production_run", membership.role, membership.capabilities);
   const canRunProduction = can("promote", membership.role, membership.capabilities);
+  const canManage = can("manage_workspaces", membership.role, membership.capabilities);
+  const schedule = parseStoredSchedule(await getAgentSchedule(session.orgId, agentId));
+  const eventRules = (await listEventRules(session.orgId, agentId).catch(() => null)) ?? null;
+  const connections = eventRules === null
+    ? null
+    : await listSystemConnections(session.orgId).catch(() => null);
 
   async function startAction(formData: FormData) {
     "use server";
     const target = formData.get("target") === "production" ? "production" : "rehearsal";
     const { runId } = await runAgentNow(agentId, target);
     redirect(`/app/runs/${runId}`);
+  }
+
+  async function eventRuleAction(formData: FormData) {
+    "use server";
+    const removeId = formData.get("removeRuleId");
+    if (typeof removeId === "string" && removeId) {
+      await removeAgentEventRule(agentId, removeId);
+      return;
+    }
+    await addAgentEventRule(agentId, {
+      connectionId: String(formData.get("connectionId") ?? ""),
+      eventType: String(formData.get("eventType") ?? ""),
+      target: formData.get("target") === "production" ? "production" : "rehearsal",
+      webhookSecret: String(formData.get("webhookSecret") ?? ""),
+    });
+  }
+
+  async function scheduleAction(formData: FormData) {
+    "use server";
+    if (formData.get("op") === "clear") {
+      await clearAgentSchedule(agentId);
+      return;
+    }
+    await setAgentSchedule(agentId, {
+      preset: String(formData.get("preset") ?? "weekday_morning"),
+      cron: String(formData.get("cron") ?? ""),
+      timezone: String(formData.get("timezone") ?? "UTC"),
+      target: formData.get("target") === "production" ? "production" : "rehearsal",
+      enabled: formData.get("enabled") === "on",
+    });
   }
 
   return (
@@ -84,6 +131,149 @@ export default async function AgentDetailPage({
           </div>
         )}
       </section>
+
+      <section className="rounded-lg border border-line bg-card p-5">
+        <h2 className="font-display text-lg text-ink">Schedule</h2>
+        <p className="mt-2 text-sm text-muted">
+          {schedule
+            ? `Starts: ${scheduleDisplay(schedule)}`
+            : "This Agent starts on demand only."}
+        </p>
+        {canManage && agent.automationConfigured && (
+          <form action={scheduleAction} className="mt-4 flex flex-wrap items-end gap-3 text-sm">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-muted">When</span>
+              <select
+                name="preset"
+                defaultValue={schedule ? presetForCron(schedule.cron) : "weekday_morning"}
+                className="rounded-sm border border-line bg-field px-2 py-1.5"
+              >
+                {Object.entries(SCHEDULE_PRESETS).map(([key, entry]) => (
+                  <option key={key} value={key}>{entry.label}</option>
+                ))}
+                <option value="custom">Custom cron</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-muted">Custom cron (if selected)</span>
+              <input
+                name="cron"
+                defaultValue={schedule?.cron ?? ""}
+                placeholder="0 9 * * 1-5"
+                className="w-36 rounded-sm border border-line bg-field px-2 py-1.5 font-mono text-xs"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-muted">Timezone</span>
+              <input
+                name="timezone"
+                defaultValue={schedule?.timezone ?? "UTC"}
+                className="w-40 rounded-sm border border-line bg-field px-2 py-1.5"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-muted">Runs as</span>
+              <select
+                name="target"
+                defaultValue={schedule?.target ?? "rehearsal"}
+                className="rounded-sm border border-line bg-field px-2 py-1.5"
+              >
+                <option value="rehearsal">Rehearsal</option>
+                {canRunProduction && <option value="production">Live</option>}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 pb-1.5">
+              <input type="checkbox" name="enabled" defaultChecked={schedule?.enabled ?? true} />
+              <span className="text-xs text-muted">Enabled</span>
+            </label>
+            <div className="flex gap-2 pb-0.5">
+              <Button type="submit" name="op" value="save">Save schedule</Button>
+              {schedule && (
+                <Button type="submit" name="op" value="clear" variant="secondary">
+                  Remove
+                </Button>
+              )}
+            </div>
+          </form>
+        )}
+      </section>
+
+      {eventRules !== null && (
+        <section className="rounded-lg border border-line bg-card p-5">
+          <h2 className="font-display text-lg text-ink">Starts when</h2>
+          {eventRules.length === 0 ? (
+            <p className="mt-2 text-sm text-muted">
+              No event triggers yet. Point a system&apos;s webhook at Convoy and this Agent can
+              start itself when something happens.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {eventRules.map((rule) => (
+                <li key={rule.ruleId} className="flex flex-wrap items-center gap-3 text-sm">
+                  <span className="font-mono text-xs text-ink">{rule.eventType}</span>
+                  <span className="text-xs text-muted">
+                    → {rule.environmentId.endsWith("/sandbox") ? "rehearsal" : "live"}
+                  </span>
+                  {canManage && (
+                    <form action={eventRuleAction}>
+                      <input type="hidden" name="removeRuleId" value={rule.ruleId} />
+                      <Button type="submit" variant="secondary">Remove</Button>
+                    </form>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {canManage && agent.automationConfigured && connections && connections.length > 0 && (
+            <form action={eventRuleAction} className="mt-4 flex flex-wrap items-end gap-3 text-sm">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">System</span>
+                <select name="connectionId" className="rounded-sm border border-line bg-field px-2 py-1.5">
+                  {connections.map((connection) => (
+                    <option key={connection.connectionId} value={connection.connectionId}>
+                      {connection.displayName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">Event</span>
+                <input
+                  name="eventType"
+                  placeholder={suggestedEvents(connections[0]?.provider ?? "").join(", ") || "eventType"}
+                  className="w-44 rounded-sm border border-line bg-field px-2 py-1.5 font-mono text-xs"
+                  list="event-suggestions"
+                />
+                <datalist id="event-suggestions">
+                  {connections.flatMap((connection) =>
+                    suggestedEvents(connection.provider).map((event) => (
+                      <option key={`${connection.connectionId}-${event}`} value={event} />
+                    )),
+                  )}
+                </datalist>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">Runs as</span>
+                <select name="target" className="rounded-sm border border-line bg-field px-2 py-1.5">
+                  <option value="rehearsal">Rehearsal</option>
+                  {canRunProduction && <option value="production">Live</option>}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">Webhook signing secret (first time)</span>
+                <input
+                  name="webhookSecret"
+                  type="password"
+                  className="w-48 rounded-sm border border-line bg-field px-2 py-1.5"
+                />
+              </label>
+              <div className="pb-0.5">
+                <Button type="submit">Add trigger</Button>
+              </div>
+            </form>
+          )}
+        </section>
+      )}
 
       <div className="grid gap-5 md:grid-cols-2">
         <section className="rounded-lg border border-line bg-card p-5">

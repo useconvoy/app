@@ -31,11 +31,14 @@ from convoy_runtime.projections.store import ProjectionStore
 from convoy_runtime.providers.artifact_store import ArtifactStore
 from convoy_runtime.providers.model_gateway import ModelGateway
 from convoy_runtime.providers.model_keys import LiteLLMKeyProvider
+from convoy_runtime.providers.planner import ModelPlanner
 from convoy_runtime.providers.pydantic_ai_turn import PydanticAITurnExecutor
 from convoy_runtime.providers.sandbox import LocalSandboxProvider, SandboxProvider
 from convoy_runtime.providers.sandbox_ecs import EcsSandboxProvider
 from convoy_runtime.providers.turn_executor import ScriptedTurnExecutor, TurnExecutor
+from convoy_runtime.schedules import ScheduledRunStarter
 from convoy_runtime.workflows.agent_run import AgentRunWorkflow
+from convoy_runtime.workflows.scheduled_run import ScheduledRunWorkflow
 from convoy_runtime.workflows.subagent import SubagentWorkflow
 
 
@@ -113,7 +116,14 @@ async def run_worker(config: RuntimeConfig) -> None:
             base_url=config.litellm_base_url, master_key=config.litellm_master_key
         )
 
-    plan_activities = PlanActivities(store)
+    model_planner = None
+    if config.model_planning_enabled and config.litellm_base_url:
+        model_planner = ModelPlanner(
+            base_url=config.litellm_base_url,
+            api_key=config.litellm_master_key,
+            model=config.default_model,
+        )
+    plan_activities = PlanActivities(store, model_planner)
     turn_activities = TurnActivities(build_turn_executor(config, store, key_provider))
     land_activities = LandActivities(store)
     outbox_activities = OutboxActivities(projections)
@@ -128,11 +138,14 @@ async def run_worker(config: RuntimeConfig) -> None:
         completion_delay_seconds=config.promoted_tool_delay_seconds,
     )
     sandbox_activities = SandboxJobActivities(store, build_sandbox_provider(config, store))
+    schedule_starter = ScheduledRunStarter(
+        control_plane_url=config.control_plane_url, token=config.dev_token
+    )
 
     worker = Worker(
         client,
         task_queue=config.task_queue,
-        workflows=[AgentRunWorkflow, SubagentWorkflow],
+        workflows=[AgentRunWorkflow, SubagentWorkflow, ScheduledRunWorkflow],
         activities=[
             plan_activities.create_plan,
             plan_activities.archive_plan_snapshot,
@@ -149,6 +162,7 @@ async def run_worker(config: RuntimeConfig) -> None:
             sandbox_activities.run_sandbox_job,
             sandbox_activities.hibernate_sandbox,
             sandbox_activities.restore_sandbox,
+            schedule_starter.create_scheduled_run,
         ],
         # Deploys are pinned to worker build ids: with TEMPORAL_WORKER_BUILD_ID
         # set (the deploy pipeline's contract) the worker polls versioned under

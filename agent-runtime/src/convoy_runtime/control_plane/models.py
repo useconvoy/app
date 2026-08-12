@@ -9,6 +9,7 @@ from pydantic import AwareDatetime, BaseModel, Field
 
 from convoy_core import HumanGate, RunPolicy
 from convoy_runtime.activities.plan import FanoutFixture
+from convoy_runtime.schedule_template import AgentScheduleSpec
 
 
 class CreateRunRequest(BaseModel):
@@ -23,6 +24,10 @@ class CreateRunRequest(BaseModel):
     # Tool ids requested for the agent, resolved against the environment's
     # registry at creation; unknown or invalid requests are rejected.
     tools: list[str] = []
+    # The agent's authored step list. Lines become the run's initial plan
+    # (a "checkpoint: ..." line becomes a human approval gate on the step
+    # after it); empty means the planner decides.
+    instructions: list[str] = []
     # How many subagent children the root agent may hold at once; fan-out
     # groups larger than this are rejected.
     max_children: int = Field(default=5, ge=0, le=10)
@@ -37,6 +42,12 @@ class CreateRunRequest(BaseModel):
     # Fan-out group to hang into the fixture plan, honored by the stub
     # planner so subagent flows can be exercised end to end.
     fixture_fanout: FanoutFixture | None = None
+    # Console attribution, stored on the run projection and echoed by
+    # GET /runs: which agent definition launched this run, who asked for
+    # it (defaults to the authenticated actor), and the trigger class.
+    agent_id: str | None = None
+    started_by: str | None = None
+    started_via: Literal["manual", "schedule", "event"] = "manual"
 
 
 class CreateRunResponse(BaseModel):
@@ -136,3 +147,67 @@ class RunView(BaseModel):
     budget: BudgetView | None = None
     execution_session: ExecutionSessionView | None = None
     steps: list[StepView] = []
+    # The binding target the run was created against ("env_x" or
+    # "env_x/sandbox") plus console attribution — empty/None for runs that
+    # predate these columns.
+    environment_id: str = ""
+    agent_id: str | None = None
+    started_by: str | None = None
+    started_via: str = "manual"
+    created_at: datetime | None = None
+
+
+class RunSummary(BaseModel):
+    """One row of GET /runs — the list shape the console renders. Full plan,
+    land report, and steps stay on GET /runs/{run_id}."""
+
+    run_id: str
+    tenant_id: str
+    parent_run_id: str | None = None
+    status: str
+    goal: str
+    land_report: dict[str, Any] | None = None
+    budget: BudgetView | None = None
+    environment_id: str = ""
+    agent_id: str | None = None
+    started_by: str | None = None
+    started_via: str = "manual"
+    steps_done: int = 0
+    steps_total: int = 0
+    execution_session: ExecutionSessionView | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ScheduleRunTemplateRequest(BaseModel):
+    """The run the schedule should start on each firing — what the console
+    resolved from the agent at save time. Tenant is taken from the
+    authenticated caller, never this body."""
+
+    goal: str = Field(min_length=1)
+    environment_id: str
+    budget_usd: str
+    tools: list[str] = []
+    instructions: list[str] = []
+    started_by: str | None = None
+
+
+class AgentScheduleRequest(BaseModel):
+    schedule: AgentScheduleSpec
+    template: ScheduleRunTemplateRequest
+
+
+class AgentScheduleView(BaseModel):
+    agent_id: str
+    cron: str
+    timezone: str
+    enabled: bool
+    next_run_times: list[str] = []
+
+
+class RunListResponse(BaseModel):
+    """Newest-first, keyset-paginated: pass `next_created_before` back as
+    `created_before` to fetch the next page; null means the list is done."""
+
+    runs: list[RunSummary]
+    next_created_before: datetime | None = None

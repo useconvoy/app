@@ -203,7 +203,7 @@ async def run_acceptance() -> dict[str, Any]:
     )
     goal = (
         "Cloud runtime acceptance. For the current plan step, call sandbox_exec exactly once. "
-        "Pass command as [\"sh\",\"-c\",\"mkdir -p outputs; "
+        'Pass command as ["sh","-c","mkdir -p outputs; '
         "echo 'CURRENT_STEP_ID' >> data.log; wc -l < data.log > outputs/lines.txt\"], "
         "replacing CURRENT_STEP_ID with the step id shown in the prompt. After its durable "
         "result returns, do not call any tool again; reply with STEP_DONE."
@@ -370,9 +370,12 @@ async def run_acceptance() -> dict[str, Any]:
     if missing_events:
         raise AssertionError(f"missing lifecycle events: {missing_events}; saw {event_types}")
     if not (
-        event_types.index("environment_hibernated") < event_types.index("paused")
-        < event_types.index("environment_restored") < event_types.index("resumed")
-        < event_types.index("environment_terminated") < event_types.index("run_completed")
+        event_types.index("environment_hibernated")
+        < event_types.index("paused")
+        < event_types.index("environment_restored")
+        < event_types.index("resumed")
+        < event_types.index("environment_terminated")
+        < event_types.index("run_completed")
     ):
         raise AssertionError(f"lifecycle event order is wrong: {event_types}")
 

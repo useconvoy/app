@@ -8,7 +8,8 @@
 
 import { revalidatePath } from "next/cache";
 
-import { routineIdForRun } from "@/lib/api/runs";
+import { agentIdForRun } from "@/lib/api/runs";
+import { orgTenantId } from "@/lib/agents/queries";
 import { requireOrgSession } from "@/lib/auth/session";
 import { getMembership } from "@/lib/orgs/queries";
 import { can } from "@/lib/permissions";
@@ -65,7 +66,9 @@ export async function submitFeedback(input: SubmitFeedbackInput): Promise<void> 
   });
 
   revalidatePath(`/app/runs/${runId}`);
-  const routineId = routineIdForRun(runId);
+  const routineId = await orgTenantId(session.orgId)
+    .then((tenantId) => agentIdForRun({ actorId: session.userId, tenantId }, runId))
+    .catch(() => undefined);
   if (routineId) revalidatePath(`/app/routines/${routineId}`);
   revalidatePath("/app/learning");
 }

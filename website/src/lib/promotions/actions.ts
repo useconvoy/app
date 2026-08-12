@@ -7,10 +7,9 @@
 "use server";
 
 import { copy } from "@/lexicon";
-import { routineIdForRun } from "@/lib/api/runs";
+import { getRun, isRehearsalTarget } from "@/lib/api/runs";
 import { withOrgContext } from "@/lib/db";
 import { can } from "@/lib/permissions";
-import { isRehearsalRun } from "@/lib/routines/data";
 import { requireRunContext } from "@/lib/runs/context";
 import { notifyPromotionRequested } from "@/notifier/consumer";
 import {
@@ -33,15 +32,16 @@ export type PromotionDecisionResult =
  * org + routine + run, so a double click cannot mint two reviews.
  */
 export async function submitForPromotion(runId: string): Promise<PromotionSubmitResult> {
-  const { session, membership } = await requireRunContext();
+  const { session, membership, actor } = await requireRunContext();
   if (!can("submit_promotion", membership.role, membership.capabilities)) {
     return { kind: "refused", message: copy.viewersCannotAct };
   }
-  const routineId = routineIdForRun(runId);
+  const view = await getRun(actor, runId);
+  const routineId = view?.agent_id ?? undefined;
   if (!routineId) {
     return { kind: "refused", message: copy.notTiedToRoutine };
   }
-  if (!isRehearsalRun(runId)) {
+  if (!isRehearsalTarget(view?.environment_id)) {
     return { kind: "refused", message: copy.rehearsalOnlyPromotion };
   }
   const request = requestPromotion({

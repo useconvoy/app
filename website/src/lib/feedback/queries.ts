@@ -14,7 +14,8 @@ import "server-only";
 
 import type { PoolClient } from "pg";
 
-import { routineIdForRun } from "@/lib/api/runs";
+import { listRuns } from "@/lib/api/runs";
+import { orgTenantId } from "@/lib/agents/queries";
 import { withOrgContext } from "@/lib/db";
 import type { FeedbackKind, LearningStatus } from "@/lexicon";
 
@@ -88,18 +89,40 @@ export async function listFeedbackForRun(orgId: string, runId: string): Promise<
   });
 }
 
+/** How routine-level reads resolve which runs belong to the routine. */
+export interface RoutineFeedbackOptions {
+  /** Injectable for tests and fixture-only setups; defaults to GET /runs. */
+  runIdsForRoutine?: (orgId: string, routineId: string) => Promise<Set<string>>;
+}
+
+async function runIdsFromControlPlane(orgId: string, routineId: string): Promise<Set<string>> {
+  const tenantId = await orgTenantId(orgId);
+  const runs = await listRuns(
+    { actorId: "system:feedback", tenantId },
+    { agentId: routineId, limit: 200 },
+  );
+  return new Set(runs.map((run) => run.run_id));
+}
+
 /**
  * Feedback across all of a routine's runs, newest first. Feedback rows
- * carry run ids only (no domain mirrors), so runs resolve to routines
- * through the run directory. TODO(runtime-D8): the run list endpoint's
- * routine field replaces the directory lookup.
+ * carry run ids only (no domain mirrors); the run list's agent filter
+ * resolves which runs belong to the routine.
  */
 export async function listFeedbackForRoutine(
   orgId: string,
   routineId: string,
+  options: RoutineFeedbackOptions = {},
 ): Promise<FeedbackItem[]> {
   const all = await listFeedbackForOrg(orgId, 500);
-  return all.filter((item) => routineIdForRun(item.runId) === routineId);
+  const resolve = options.runIdsForRoutine ?? runIdsFromControlPlane;
+  let runIds: Set<string>;
+  try {
+    runIds = await resolve(orgId, routineId);
+  } catch {
+    return [];
+  }
+  return all.filter((item) => runIds.has(item.runId));
 }
 
 /** Recent feedback across the organization, for the learning review strip. */
@@ -154,15 +177,23 @@ export async function markFeedbackConsumed(orgId: string, ids: string[]): Promis
  * a person approves an improvement and the feedback behind it rides along
  * to learning.
  */
-export async function queueRoutineFeedback(orgId: string, routineId: string): Promise<number> {
-  const items = await listFeedbackForRoutine(orgId, routineId);
+export async function queueRoutineFeedback(
+  orgId: string,
+  routineId: string,
+  options: RoutineFeedbackOptions = {},
+): Promise<number> {
+  const items = await listFeedbackForRoutine(orgId, routineId, options);
   const ids = items.filter((item) => item.learningStatus === "new").map((item) => item.id);
   return markFeedbackQueued(orgId, ids);
 }
 
 /** Consume a routine's queued feedback when its improvement ships. */
-export async function consumeRoutineFeedback(orgId: string, routineId: string): Promise<number> {
-  const items = await listFeedbackForRoutine(orgId, routineId);
+export async function consumeRoutineFeedback(
+  orgId: string,
+  routineId: string,
+  options: RoutineFeedbackOptions = {},
+): Promise<number> {
+  const items = await listFeedbackForRoutine(orgId, routineId, options);
   const ids = items.filter((item) => item.learningStatus === "queued").map((item) => item.id);
   return markFeedbackConsumed(orgId, ids);
 }

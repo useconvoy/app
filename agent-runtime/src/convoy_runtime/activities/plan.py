@@ -1,13 +1,12 @@
-"""Plan activities: the fixture planner stub and revision snapshot archival.
+"""Plan activities: planning and revision snapshot archival.
 
-Both return *proposals or refs*; only the workflow applies plan state. The
-fixture planner builds a 2-step linear plan from the pinned goal; it can
-attach human gates to named steps, and it can hang a fan-out group between
-the two steps (subagent members plus step-2 as the join), when the run's
-pinned payload asks for them — which is how end-to-end suites exercise gate
-and fan-out flows without a real model planner.
-
-TODO: model-driven planning through the gateway.
+Both return *proposals or refs*; only the workflow applies plan state.
+Planning selects, in order (rationale in providers/planner.py):
+fixture affordances (gates/fan-out on the pinned payload, the test lanes'
+contract) -> the agent's authored instructions (deterministic plan with
+``checkpoint:`` lines becoming approval gates) -> the model planner via
+LiteLLM when configured (fixture fallback on any failure) -> the 2-step
+fixture plan.
 """
 
 from decimal import Decimal
@@ -28,6 +27,13 @@ from convoy_core import (
 )
 from convoy_runtime.activities import names
 from convoy_runtime.providers.artifact_store import ArtifactStore
+from convoy_runtime.providers.planner import (
+    ModelPlanner,
+    PlannerError,
+    assemble_plan,
+    build_instruction_plan,
+    parse_instructions,
+)
 
 
 class FanoutFixture(BaseModel):
@@ -138,8 +144,9 @@ def _parse_fixture_fanout(pinned: dict[str, Any]) -> FanoutFixture | None:
 
 
 class PlanActivities:
-    def __init__(self, store: ArtifactStore) -> None:
+    def __init__(self, store: ArtifactStore, model_planner: ModelPlanner | None = None) -> None:
         self._store = store
+        self._model_planner = model_planner
 
     @activity.defn(name=names.CREATE_PLAN)
     async def create_plan(self, state: RunState) -> Plan:
@@ -147,25 +154,49 @@ class PlanActivities:
         goal = str(pinned.get("goal", ""))
         raw_criteria = cast(list[Any], pinned.get("success_criteria", []))
         success_criteria = [str(c) for c in raw_criteria]
+        raw_instructions = cast(list[Any], pinned.get("instructions", []))
+        instructions = [str(line) for line in raw_instructions]
         gates = _parse_fixture_gates(pinned)
         fanout = _parse_fixture_fanout(pinned)
 
         # Archive the full plan snapshot first (claim-check discipline): the
-        # revision references it; only the ref rides through Temporal.
+        # revision references it; only the ref rides through Temporal. The
+        # builder runs twice — once with a placeholder ref to snapshot, once
+        # with the real ref — so every planning path shares the mechanics.
         snapshot_key = f"runs/{state.run_id}/plans/v1.json"
-        provisional = build_fixture_plan(
-            goal,
-            success_criteria,
-            ArtifactRef(bucket=self._store.bucket, key=snapshot_key, size_bytes=0, sha256=""),
-            gates,
-            fanout,
-            agent=state.agent,
+        placeholder = ArtifactRef(
+            bucket=self._store.bucket, key=snapshot_key, size_bytes=0, sha256=""
         )
+
+        def fixture(ref: ArtifactRef) -> Plan:
+            return build_fixture_plan(goal, success_criteria, ref, gates, fanout, agent=state.agent)
+
+        build: Any = fixture
+        if not gates and fanout is None:
+            if parse_instructions(instructions):
+
+                def from_instructions(ref: ArtifactRef) -> Plan:
+                    return build_instruction_plan(goal, success_criteria, instructions, ref)
+
+                build = from_instructions
+            elif self._model_planner is not None:
+                try:
+                    planned = await self._model_planner.plan(
+                        goal, success_criteria, [grant.tool_id for grant in state.agent.tools]
+                    )
+
+                    def from_model(ref: ArtifactRef) -> Plan:
+                        return assemble_plan(goal, success_criteria, planned, ref)
+
+                    build = from_model
+                except PlannerError as err:
+                    activity.logger.warning(
+                        "model planning failed; using the fixture plan: %s", err
+                    )
+
+        provisional = build(placeholder)
         snapshot_ref = await self._store.put_json(snapshot_key, provisional.model_dump(mode="json"))
-        plan = build_fixture_plan(
-            goal, success_criteria, snapshot_ref, gates, fanout, agent=state.agent
-        )
-        return plan
+        return build(snapshot_ref)
 
     @activity.defn(name=names.ARCHIVE_PLAN_SNAPSHOT)
     async def archive_plan_snapshot(self, run_id: str, plan: Plan) -> ArtifactRef:

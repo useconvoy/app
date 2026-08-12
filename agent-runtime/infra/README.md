@@ -271,3 +271,27 @@ module:
 | No egress assumptions | all external endpoints (Temporal, model gateway, Langfuse, WorkOS) are variables |
 | No public ingress except HTTPS ALB | ALB is the only resource in public subnets with an ingress rule; listener is 443-only |
 | RLS even in dedicated stacks | app-layer migrations; DB substrate forces TLS and private access — Terraform cannot express RLS |
+
+
+## Deployment tiers & cost
+
+Decision (Aug 2026): demos run lean; the dedicated stack is the production
+path, applied only when a customer needs isolation.
+
+| Tier | What it is | ~$/month |
+|---|---|---|
+| **Lean demo (recommended for demos)** | One box (Lightsail 8 GB or a small EC2 instance) running the runtime compose stack (`make e2e-up` with the `demo` profile: Temporal dev server, Postgres, MinIO, LiteLLM, environments service, connector sandboxes) plus the website — the same pattern the website's own demo stack proved at `website/infra/terraform/stacks/demo`. | ~$44 + model usage |
+| **Dedicated stack (this module)** | Per-customer isolation: ECS Fargate services (control plane behind ALB, workers, LiteLLM, environments, connector sandboxes), RDS, S3+KMS, per-run credential-free sandbox tasks. Lean single-AZ defaults. | ~$215–240 AWS + Temporal (self-hosted worker ≈ $35 or Temporal Cloud ≈ $100+) + model usage |
+
+The environments service and the connector sandboxes are stack members now
+(`environments-services.tf`): the runtime reaches the gateway via Cloud Map
+(`http://environments.<stack>.internal:8780/gateway`) unless
+`environments_url` points a stack at an externally hosted gateway. Stamps
+generate a per-stack control-plane service token (`runtime-service-token`)
+so no stack ever boots on the repo's development bearer.
+
+Known hardening follow-up, tracked not hidden: the environments service
+currently shares the stack database (its tables are disjoint from the
+runtime projections); a dedicated database + role on the same RDS instance
+mirrors the compose profile's separation and lands with the credential-vault
+KMS backend.

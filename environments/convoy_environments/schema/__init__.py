@@ -11,5 +11,5 @@ from .models import (  # noqa: F401
     EnvironmentRole,
     ToolExecution,
     ToolSpec,
-    WorkspaceRole,
+    OrganizationRole,
 )

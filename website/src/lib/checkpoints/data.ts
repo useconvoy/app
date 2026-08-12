@@ -11,11 +11,10 @@ import "server-only";
 import type { TimeoutBehavior } from "@/lexicon";
 import { checkpointKinds, notificationTitles } from "@/lexicon";
 import type { ActorContext, RunView } from "@/lib/api/client";
-import { listRuns, routineIdForRun } from "@/lib/api/runs";
+import { getRun, isRehearsalTarget, listRuns } from "@/lib/api/runs";
 import { withOrgContext } from "@/lib/db";
 import { minutesSince } from "@/lib/format";
 import { listPromotionRequests } from "@/lib/promotions/store";
-import { isRehearsalRun } from "@/lib/routines/data";
 import { getRoutine, listApprovers, type ApproverAssignment } from "@/lib/routines/queries";
 import { heldKind } from "@/lib/runs/status";
 
@@ -116,9 +115,18 @@ export async function gatherCheckpointItems(
   userId: string,
   actor: ActorContext,
 ): Promise<CheckpointItem[]> {
+  // The list carries status + attribution; only held runs hydrate to the
+  // full view (plan, steps) that checkpoint cards need — held runs are few.
   let runs: RunView[] = [];
+  let rehearsalByRun = new Map<string, boolean>();
   try {
-    runs = await listRuns(actor);
+    const summaries = await listRuns(actor);
+    const held = summaries.filter((summary) => heldKind(summary.status) !== null);
+    rehearsalByRun = new Map(
+      held.map((summary) => [summary.run_id, isRehearsalTarget(summary.environment_id)]),
+    );
+    const views = await Promise.all(held.map((summary) => getRun(actor, summary.run_id)));
+    runs = views.filter((view): view is RunView => view !== null);
   } catch {
     // The control plane may be unreachable; the inbox stays calm.
     runs = [];
@@ -150,7 +158,7 @@ export async function gatherCheckpointItems(
   for (const run of runs) {
     const kind = heldKind(run.status);
     if (!kind) continue;
-    const routineId = routineIdForRun(run.run_id);
+    const routineId = run.agent_id ?? undefined;
     const approvers = await approversFor(routineId);
     const assignees: CheckpointItemAssignee[] = approvers.map((assignment) => ({
       name: assignment.name,
@@ -159,7 +167,7 @@ export async function gatherCheckpointItems(
     const base = {
       runId: run.run_id,
       runContext: run.goal,
-      rehearsal: isRehearsalRun(run.run_id),
+      rehearsal: rehearsalByRun.get(run.run_id) ?? isRehearsalTarget(run.environment_id),
       teamHeld: assignees.some((assignee) => assignee.kind === "team"),
       assignees,
       promotionRequestId: null,

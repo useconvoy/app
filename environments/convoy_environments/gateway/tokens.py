@@ -1,7 +1,7 @@
 """Per-run gateway tokens.
 
 The runtime mints one token per run (via the internal API) and hands it to
-the devbox. It is scoped to (run, mission, environment@version, workspace)
+the devbox. It is scoped to (run, mission, environment@version, organization)
 with a short expiry renewed per step lease — useless anywhere but this
 gateway. The signing secret never enters a devbox.
 """
@@ -27,7 +27,7 @@ class TokenError(Exception):
 class RunClaims:
     run_id: str
     mission_id: str
-    workspace_id: str
+    organization_id: str
     environment_id: str
     environment_version: int
 
@@ -45,7 +45,7 @@ def mint_run_token(claims: RunClaims, ttl_s: int = 3600, secret: Optional[str] =
         "iss": _ISSUER,
         "sub": claims.run_id,
         "missionId": claims.mission_id,
-        "workspaceId": claims.workspace_id,
+        "organizationId": claims.organization_id,
         "environmentId": claims.environment_id,
         "environmentVersion": claims.environment_version,
         "iat": now,
@@ -62,7 +62,7 @@ def verify_run_token(token: str, secret: Optional[str] = None) -> RunClaims:
     return RunClaims(
         run_id=payload["sub"],
         mission_id=payload["missionId"],
-        workspace_id=payload["workspaceId"],
+        organization_id=payload["organizationId"],
         environment_id=payload["environmentId"],
         environment_version=int(payload["environmentVersion"]),
     )

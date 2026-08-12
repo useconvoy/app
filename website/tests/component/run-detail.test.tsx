@@ -48,6 +48,8 @@ function initialView(events: RunStreamEvent[], over: Partial<RunView> = {}): Run
     land_report: null,
     budget: null,
     steps: [],
+    environment_id: "",
+    started_via: "manual",
     ...over,
   };
 }

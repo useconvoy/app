@@ -21,6 +21,8 @@ const run: RunView = {
   plan: null,
   budget: { cap_usd: "40", spent_usd: "0.0002", reserved_usd: "0" },
   steps: [],
+  environment_id: "",
+  started_via: "manual",
   land_report: {
     goal: "Write exception memos and hold them for review",
     run_id: RUN_ID,

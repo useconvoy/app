@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from ..connectors import ConnectorError
 from ..mcp_protocol import MCP_PROTOCOL_VERSION as PROTOCOL_VERSION
+from .hooks import HookDispatchError, HookVerificationError
 from .policy import PolicyDenied
 from .service import GatewayService
 from .tokens import RunClaims, TokenError, mint_run_token, verify_run_token
@@ -69,13 +70,14 @@ class DataPlaneEffectCall(BaseModel):
 class MintRequest(BaseModel):
     runId: str
     missionId: str
-    workspaceId: str
+    organizationId: str
     environmentId: str
     environmentVersion: int
     ttlSeconds: int = 3600
 
 
 def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
+              hook_dispatcher: Optional[Any] = None,
               internal_token: Optional[str] = None,
               public_url: Optional[str] = None,
               allow_anonymous_data_plane: Optional[bool] = None) -> FastAPI:
@@ -184,13 +186,13 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
         if internal and x_convoy_internal == internal:
             snapshot = service._policy.load_environment(environment_id, version)
             return RunClaims(run_id=run_id or "runtime", mission_id=run_id or "runtime",
-                             workspace_id=snapshot.row.workspace_id,
+                             organization_id=snapshot.row.organization_id,
                              environment_id=environment_id, environment_version=version)
         if not allow_anonymous_data_plane:
             raise HTTPException(401, "data-plane calls require a run token")
         snapshot = service._policy.load_environment(environment_id, version)
         return RunClaims(run_id=run_id or "anonymous", mission_id=run_id or "anonymous",
-                         workspace_id=snapshot.row.workspace_id,
+                         organization_id=snapshot.row.organization_id,
                          environment_id=environment_id, environment_version=version)
 
     @app.post("/data-plane/{environment_id}/{version}/tools/{tool_id}")
@@ -286,6 +288,27 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
         )
         return {"result": result, "replayed": recorded is not None}
 
+    @app.post("/hooks/{connection_id}")
+    async def receive_hook(connection_id: str, request: Request):
+        """Provider webhook door. Signature-verified against the connection's
+        webhook secret (fail closed when unset); matching event rules create
+        runs with started_via="event"; provider redelivery is idempotent via
+        delivery-derived run ids. Non-2xx tells the provider to redeliver."""
+        if hook_dispatcher is None:
+            raise HTTPException(503, "event triggers are not configured")
+        body = await request.body()
+        try:
+            result = await hook_dispatcher.dispatch(
+                connection_id, body, dict(request.headers)
+            )
+        except LookupError:
+            raise HTTPException(404, "unknown connection")
+        except HookVerificationError as err:
+            raise HTTPException(403, str(err))
+        except HookDispatchError as err:
+            raise HTTPException(503, str(err))
+        return result
+
     @app.get("/environments/{environment_id}")
     async def registry_alias(environment_id: str, version: Optional[int] = None,
                              kind: str = "production", tenant_id: str = "",
@@ -321,7 +344,7 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
     @app.post("/internal/run-tokens")
     async def mint(req: MintRequest, _: None = Depends(internal_dep)):
         token = mint_run_token(
-            RunClaims(run_id=req.runId, mission_id=req.missionId, workspace_id=req.workspaceId,
+            RunClaims(run_id=req.runId, mission_id=req.missionId, organization_id=req.organizationId,
                       environment_id=req.environmentId, environment_version=req.environmentVersion),
             ttl_s=req.ttlSeconds, secret=gateway_secret,
         )

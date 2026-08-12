@@ -1,7 +1,7 @@
 /**
  * Routine view assembly: the org's stored routine definitions joined with
- * real run history from the run directory, approver assignments from the
- * website DB, and workspace grants from the environments adapter.
+ * real run history from the control plane's run list, approver assignments
+ * from the website DB, and workspace grants from the environments adapter.
  * Everything a routine surface renders comes through here so the data
  * seams stay in one place. A fresh organization has no routines and every
  * consumer renders a designed empty state.
@@ -15,7 +15,7 @@ import {
   type SystemGrant,
   type Workspace,
 } from "@/lib/api/environments";
-import { listRuns, routineIdForRun } from "@/lib/api/runs";
+import { isRehearsalTarget, listRuns } from "@/lib/api/runs";
 import { selectWorkspace, type WorkspaceSelection } from "@/lib/workspaces/fit";
 import {
   getRoutine,
@@ -24,31 +24,6 @@ import {
   type RoutineRecord,
 } from "./queries";
 import { triggersForRoutine, type RoutineTriggers } from "./triggers";
-
-/**
- * Which lens an on-demand run was started under. RunView carries no
- * rehearsal flag, so the console remembers what it asked for; production
- * stays the unlabeled default for anything it did not start.
- * TODO(runtime-D8): the run list endpoint's sandbox flag replaces this.
- */
-declare global {
-  var __convoyRunTargets: Map<string, "rehearsal" | "production"> | undefined;
-}
-
-function runTargets(): Map<string, "rehearsal" | "production"> {
-  if (!globalThis.__convoyRunTargets) {
-    globalThis.__convoyRunTargets = new Map();
-  }
-  return globalThis.__convoyRunTargets;
-}
-
-export function recordRunTarget(runId: string, target: "rehearsal" | "production"): void {
-  runTargets().set(runId, target);
-}
-
-export function isRehearsalRun(runId: string): boolean {
-  return runTargets().get(runId) === "rehearsal";
-}
 
 export interface RoutineRunSummary {
   runId: string;
@@ -71,14 +46,14 @@ async function runHistory(actor: ActorContext): Promise<Map<string, RoutineRunSu
     return byRoutine;
   }
   for (const view of views) {
-    const routineId = routineIdForRun(view.run_id);
+    const routineId = view.agent_id;
     if (!routineId) continue;
     const summaries = byRoutine.get(routineId) ?? [];
     summaries.push({
       runId: view.run_id,
       status: view.status,
       spentUsd: view.budget?.spent_usd ?? null,
-      rehearsal: isRehearsalRun(view.run_id),
+      rehearsal: isRehearsalTarget(view.environment_id),
     });
     byRoutine.set(routineId, summaries);
   }

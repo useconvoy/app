@@ -3,14 +3,12 @@
 LEXICON (the deployed website's vocabulary wins on every user-facing
 surface; the machine seam below the console is frozen and keeps its names):
 
-    console "organization"  = db `workspaces` table    = wire `tenant_id`
+    console "organization"  = db `organizations` table = wire `tenant_id`
     console "workspace"     = db `environments` table  = wire `environment_id`
 
 An organization is the tenant (the customer). A workspace is a bundle of
 system grants with production + rehearsal bindings — what the code and the
-runtime call an environment. Python internals (tables, models, RBAC helpers,
-GatewayService) deliberately keep the old names; only the HTTP paths and
-JSON keys here speak the website's language. The runtime registry
+runtime call an environment. The runtime registry
 (GET /environments/{id}, /internal/*, /data-plane/*, /mcp/*) is untouched.
 
 Auth: WorkOS bearer at the edge, dev header auth behind a flag, and a
@@ -37,14 +35,15 @@ from ..db.tables import (
     Environment as EnvironmentRow,
     EnvironmentConnection as EnvConnRow,
     EnvironmentGrant,
+    EventRule,
     Membership,
+    Organization,
     User,
-    Workspace,
 )
 from ..schema import ConnectionManifest, policy_hash
 from ..secrets import SecretsService
 from .auth import ConsoleAuth
-from .rbac import require_env_role, require_workspace_role
+from .rbac import require_env_role, require_organization_role
 
 
 def _id(prefix: str) -> str:
@@ -112,6 +111,28 @@ class AttachSecret(BaseModel):
     secretBackend: str = "builtin"
 
 
+class SetWebhookSecret(BaseModel):
+    """The provider's webhook *signing* secret — verification material the
+    hooks door must read on every delivery, so it lives in the connection
+    config, not the write-only credential vault."""
+
+    secret: str = Field(min_length=8, max_length=256)
+
+
+class CreateEventRule(BaseModel):
+    connectionId: str
+    eventType: str = Field(min_length=1, max_length=128)
+    agentId: str
+    enabled: bool = True
+    # The frozen run template, resolved by the console at save time.
+    goal: str = Field(min_length=1)
+    environmentId: str
+    budgetUsd: str
+    tools: List[str] = Field(default_factory=list)
+    instructions: List[str] = Field(default_factory=list)
+    startedBy: Optional[str] = None
+
+
 class CreateGrant(BaseModel):
     userId: str
     role: Literal["viewer", "operator", "env_admin"]
@@ -147,26 +168,26 @@ def build_console_app(session_factory, secrets: SecretsService,
     def _audit(session, org_id: str, actor: str, action: str, subject_type: str, subject_id: str,
                diff: Optional[dict] = None) -> None:
         # Flush domain rows first: with no relationship() constructs the unit
-        # of work won't order audit_log after workspaces on its own, and
+        # of work won't order audit_log after organizations on its own, and
         # Postgres enforces the FK where SQLite silently didn't.
         session.flush()
-        session.add(AuditLog(workspace_id=org_id, actor_user_id=actor, action=action,
+        session.add(AuditLog(organization_id=org_id, actor_user_id=actor, action=action,
                              subject_type=subject_type, subject_id=subject_id, diff=diff))
 
-    # -- organizations (db: workspaces) ------------------------------------
+    # -- organizations ----------------------------------------------------
 
     @app.post("/organizations")
     async def create_organization(req: CreateOrganization, _: None = Depends(provisioning_dep)):
         with session_factory() as s:
-            org = Workspace(id=_id("ws"), name=req.name)
+            org = Organization(id=_id("org"), name=req.name)
             user = s.query(User).filter_by(email=req.creatorEmail).one_or_none()
             if user is None:
                 user = User(id=_id("usr"), email=req.creatorEmail)
                 s.add(user)
             s.add(org)
             s.flush()  # org + user rows must precede the membership FK on Postgres
-            s.add(Membership(workspace_id=org.id, user_id=user.id, role="admin"))
-            _audit(s, org.id, user.id, "workspace.create", "workspace", org.id)
+            s.add(Membership(organization_id=org.id, user_id=user.id, role="admin"))
+            _audit(s, org.id, user.id, "organization.create", "organization", org.id)
             s.commit()
             return {"organizationId": org.id, "userId": user.id}
 
@@ -180,7 +201,7 @@ def build_console_app(session_factory, secrets: SecretsService,
         in through WorkOS with this email (auth.py links idp_subject then) —
         no email delivery in this layer; the website owns notifications."""
         with session_factory() as s:
-            require_workspace_role(s, org_id, user, "admin")
+            require_organization_role(s, org_id, user, "admin")
             invitee = s.query(User).filter_by(email=req.email).one_or_none()
             if invitee is None:
                 invitee = User(id=_id("usr"), email=req.email)
@@ -190,7 +211,7 @@ def build_console_app(session_factory, secrets: SecretsService,
             if existing is not None:
                 existing.role = req.role
             else:
-                s.add(Membership(workspace_id=org_id, user_id=invitee.id, role=req.role))
+                s.add(Membership(organization_id=org_id, user_id=invitee.id, role=req.role))
             _audit(s, org_id, user, "membership.upsert", "membership",
                    "%s:%s" % (org_id, invitee.id), {"email": req.email, "role": req.role})
             s.commit()
@@ -200,9 +221,9 @@ def build_console_app(session_factory, secrets: SecretsService,
     @app.get("/organizations/{org_id}/memberships")
     async def list_memberships(org_id: str, user: str = Depends(user_dep)):
         with session_factory() as s:
-            require_workspace_role(s, org_id, user, "member")
+            require_organization_role(s, org_id, user, "member")
             rows = (s.query(Membership, User).join(User, User.id == Membership.user_id)
-                    .filter(Membership.workspace_id == org_id).all())
+                    .filter(Membership.organization_id == org_id).all())
             return [{"userId": u.id, "email": u.email, "role": m.role,
                      "linked": u.idp_subject is not None} for m, u in rows]
 
@@ -211,7 +232,7 @@ def build_console_app(session_factory, secrets: SecretsService,
     @app.post("/organizations/{org_id}/connections")
     async def create_connection(org_id: str, req: CreateConnection, user: str = Depends(user_dep)):
         with session_factory() as s:
-            require_workspace_role(s, org_id, user, "admin")
+            require_organization_role(s, org_id, user, "admin")
         secret_ref = None
         if req.secretValue is not None:
             secret_ref = secrets.create(org_id, "%s:%s" % (req.provider, req.displayName),
@@ -227,7 +248,7 @@ def build_console_app(session_factory, secrets: SecretsService,
             except ConnectorError as err:
                 raise HTTPException(400, "could not build manifest: %s" % err)
         with session_factory() as s:
-            row = ConnectionRow(id=_id("conn"), workspace_id=org_id, kind=req.kind,
+            row = ConnectionRow(id=_id("conn"), organization_id=org_id, kind=req.kind,
                                 provider=req.provider, display_name=req.displayName,
                                 config=req.config, secret_ref=secret_ref,
                                 manifest=manifest.model_dump(exclude_none=True),
@@ -242,22 +263,22 @@ def build_console_app(session_factory, secrets: SecretsService,
     @app.get("/organizations/{org_id}/connections")
     async def list_connections(org_id: str, user: str = Depends(user_dep)):
         with session_factory() as s:
-            require_workspace_role(s, org_id, user, "member")
-            rows = s.query(ConnectionRow).filter_by(workspace_id=org_id).all()
+            require_organization_role(s, org_id, user, "member")
+            rows = s.query(ConnectionRow).filter_by(organization_id=org_id).all()
             return [{"connectionId": r.id, "kind": r.kind, "provider": r.provider,
                      "displayName": r.display_name, "status": r.status,
                      "manifestHash": r.manifest_hash} for r in rows]
 
     def _connection_or_404(s, org_id: str, connection_id: str) -> ConnectionRow:
         row = s.get(ConnectionRow, connection_id)
-        if row is None or row.workspace_id != org_id:
+        if row is None or row.organization_id != org_id:
             raise HTTPException(404, "unknown connection %s" % connection_id)
         return row
 
     @app.get("/organizations/{org_id}/connections/{connection_id}")
     async def connection_detail(org_id: str, connection_id: str, user: str = Depends(user_dep)):
         with session_factory() as s:
-            require_workspace_role(s, org_id, user, "member")
+            require_organization_role(s, org_id, user, "member")
             row = _connection_or_404(s, org_id, connection_id)
             manifest = ConnectionManifest.model_validate(row.manifest or {})
             out = {"connectionId": row.id, "kind": row.kind, "provider": row.provider,
@@ -283,7 +304,7 @@ def build_console_app(session_factory, secrets: SecretsService,
         the stored value but flags the connection needs_reauth so the
         console can say exactly that."""
         with session_factory() as s:
-            require_workspace_role(s, org_id, user, "admin")
+            require_organization_role(s, org_id, user, "admin")
             row = _connection_or_404(s, org_id, connection_id)
             provider, config, secret_ref = row.provider, dict(row.config or {}), row.secret_ref
         if secret_ref is None:
@@ -321,7 +342,7 @@ def build_console_app(session_factory, secrets: SecretsService,
         conn_rows = []
         for wc in req.connections:
             conn = s.get(ConnectionRow, wc.connectionId)
-            if conn is None or conn.workspace_id != org_id:
+            if conn is None or conn.organization_id != org_id:
                 raise HTTPException(400, "unknown connection %s" % wc.connectionId)
             manifest = ConnectionManifest.model_validate(conn.manifest)
             unknown = [t for t in wc.toolAllowlist if manifest.tool(t) is None]
@@ -342,7 +363,7 @@ def build_console_app(session_factory, secrets: SecretsService,
             sandbox_template=req.sandboxTemplate,
             data_namespace=namespace,
         )
-        env = EnvironmentRow(id=env_id, version=version, workspace_id=org_id,
+        env = EnvironmentRow(id=env_id, version=version, organization_id=org_id,
                              parent_environment_id=parent_environment_id,
                              name=req.name, backing_type=req.backingType,
                              browser_policy=req.browserPolicy,
@@ -359,7 +380,7 @@ def build_console_app(session_factory, secrets: SecretsService,
         beneath it without breaking routines that use this fallback binding.
         """
         with session_factory() as s:
-            require_workspace_role(s, org_id, user, "builder")
+            require_organization_role(s, org_id, user, "builder")
             env_id = _id("env")
             env, conn_rows = _build_env_rows(s, org_id, env_id, 1, req, user)
             s.add(env)
@@ -376,7 +397,7 @@ def build_console_app(session_factory, secrets: SecretsService,
                                        req: CreateWorkspaceSpec, user: str = Depends(user_dep)):
         with session_factory() as s:
             require_env_role(s, org_id, workspace_id, user, "env_admin")
-            latest = (s.query(EnvironmentRow).filter_by(id=workspace_id, workspace_id=org_id,
+            latest = (s.query(EnvironmentRow).filter_by(id=workspace_id, organization_id=org_id,
                                                         parent_environment_id=None)
                       .order_by(EnvironmentRow.version.desc()).first())
             if latest is None:
@@ -404,8 +425,8 @@ def build_console_app(session_factory, secrets: SecretsService,
         binding and is always "wall"; `rehearsalClockMode` describes the
         rehearsal binding and is always "virtual"."""
         with session_factory() as s:
-            role = require_workspace_role(s, org_id, user, "member")
-            envs = (s.query(EnvironmentRow).filter_by(workspace_id=org_id,
+            role = require_organization_role(s, org_id, user, "member")
+            envs = (s.query(EnvironmentRow).filter_by(organization_id=org_id,
                                                       parent_environment_id=None)
                     .order_by(EnvironmentRow.id, EnvironmentRow.version).all())
             visible = []
@@ -443,7 +464,7 @@ def build_console_app(session_factory, secrets: SecretsService,
         with session_factory() as s:
             require_env_role(s, org_id, workspace_id, user, "viewer")
             rows = (s.query(EnvironmentRow)
-                    .filter_by(workspace_id=org_id, parent_environment_id=workspace_id)
+                    .filter_by(organization_id=org_id, parent_environment_id=workspace_id)
                     .order_by(EnvironmentRow.id, EnvironmentRow.version.desc()).all())
             latest: Dict[str, EnvironmentRow] = {}
             for row in rows:
@@ -457,7 +478,7 @@ def build_console_app(session_factory, secrets: SecretsService,
         with session_factory() as s:
             require_env_role(s, org_id, workspace_id, user, "env_admin")
             base = (s.query(EnvironmentRow)
-                    .filter_by(id=workspace_id, workspace_id=org_id,
+                    .filter_by(id=workspace_id, organization_id=org_id,
                                parent_environment_id=None)
                     .order_by(EnvironmentRow.version.desc()).first())
             if base is None:
@@ -501,7 +522,7 @@ def build_console_app(session_factory, secrets: SecretsService,
         with session_factory() as s:
             require_env_role(s, org_id, workspace_id, user, "viewer")
             row = (s.query(EnvironmentRow)
-                   .filter_by(id=environment_id, workspace_id=org_id,
+                   .filter_by(id=environment_id, organization_id=org_id,
                               parent_environment_id=workspace_id)
                    .order_by(EnvironmentRow.version.desc()).first())
             if row is None:
@@ -522,6 +543,71 @@ def build_console_app(session_factory, secrets: SecretsService,
                    "%s:%s" % (workspace_id, req.userId), {"role": req.role})
             s.commit()
             return {"workspaceId": workspace_id, "userId": req.userId, "role": req.role}
+
+    # -- event triggers ----------------------------------------------------
+
+    @app.post("/organizations/{org_id}/connections/{connection_id}/webhook-secret")
+    async def set_webhook_secret(org_id: str, connection_id: str, req: SetWebhookSecret,
+                                 user: str = Depends(user_dep)):
+        with session_factory() as s:
+            require_organization_role(s, org_id, user, "admin")
+            row = _connection_or_404(s, org_id, connection_id)
+            config = dict(row.config or {})
+            config["webhookSecret"] = req.secret
+            row.config = config
+            _audit(s, org_id, user, "connection.webhook_secret_set", "connection",
+                   connection_id, {"provider": row.provider})
+            s.commit()
+            return {"connectionId": connection_id, "hookPath": "/gateway/hooks/%s" % connection_id}
+
+    @app.post("/organizations/{org_id}/event-rules")
+    async def create_event_rule(org_id: str, req: CreateEventRule, user: str = Depends(user_dep)):
+        with session_factory() as s:
+            require_organization_role(s, org_id, user, "admin")
+            _connection_or_404(s, org_id, req.connectionId)
+            rule = EventRule(id=_id("rule"), organization_id=org_id,
+                             connection_id=req.connectionId, event_type=req.eventType,
+                             agent_id=req.agentId, enabled=req.enabled, goal=req.goal,
+                             environment_id=req.environmentId, budget_usd=req.budgetUsd,
+                             tools=req.tools, instructions=req.instructions,
+                             started_by=req.startedBy or user, created_by=user)
+            s.add(rule)
+            _audit(s, org_id, user, "event_rule.create", "event_rule", rule.id,
+                   {"connectionId": req.connectionId, "eventType": req.eventType,
+                    "agentId": req.agentId})
+            s.commit()
+            return _event_rule_payload(rule)
+
+    def _event_rule_payload(rule: EventRule) -> Dict[str, Any]:
+        return {"ruleId": rule.id, "connectionId": rule.connection_id,
+                "eventType": rule.event_type, "agentId": rule.agent_id,
+                "enabled": rule.enabled, "goal": rule.goal,
+                "environmentId": rule.environment_id, "budgetUsd": rule.budget_usd,
+                "createdAt": rule.created_at.isoformat()}
+
+    @app.get("/organizations/{org_id}/event-rules")
+    async def list_event_rules(org_id: str, agent_id: Optional[str] = None,
+                               user: str = Depends(user_dep)):
+        with session_factory() as s:
+            require_organization_role(s, org_id, user, "member")
+            query = s.query(EventRule).filter_by(organization_id=org_id)
+            if agent_id:
+                query = query.filter_by(agent_id=agent_id)
+            return [_event_rule_payload(rule) for rule in query.all()]
+
+    @app.delete("/organizations/{org_id}/event-rules/{rule_id}")
+    async def delete_event_rule(org_id: str, rule_id: str, user: str = Depends(user_dep)):
+        """The registry's first removal endpoint: rules are pure config, so
+        deleting one has no credential or version-pinning consequences."""
+        with session_factory() as s:
+            require_organization_role(s, org_id, user, "admin")
+            rule = s.get(EventRule, rule_id)
+            if rule is None or rule.organization_id != org_id:
+                raise HTTPException(404, "unknown event rule %s" % rule_id)
+            s.delete(rule)
+            _audit(s, org_id, user, "event_rule.delete", "event_rule", rule_id)
+            s.commit()
+            return {"ruleId": rule_id, "deleted": True}
 
     # Gates deliberately absent: human gates are plan-step-level and
     # runtime-owned (HumanGate + human_response signal, DESIGN §6/§7); gate

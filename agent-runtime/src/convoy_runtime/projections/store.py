@@ -79,6 +79,14 @@ class RunProjection(BaseModel):
     budget_cap_usd: Decimal | None = None
     budget_spent_usd: Decimal | None = None
     budget_reserved_usd: Decimal | None = None
+    environment_id: str = ""
+    agent_id: str | None = None
+    started_by: str | None = None
+    started_via: str = "manual"
+    # Step progress counters, populated by list_runs only (get_run callers
+    # receive the full step rows instead).
+    steps_done: int = 0
+    steps_total: int = 0
     execution_session: ExecutionSessionProjection | None = None
     created_at: datetime
     updated_at: datetime
@@ -97,15 +105,29 @@ class ProjectionStore:
         environment_id: str = "",
         status: str = "planning",
         budget_cap_usd: Decimal | None = None,
+        agent_id: str | None = None,
+        started_by: str | None = None,
+        started_via: str = "manual",
     ) -> None:
         async with self._db.tenant_connection(tenant_id) as conn:
             await conn.execute(
                 """
-                INSERT INTO runs (tenant_id, run_id, status, goal, budget_cap_usd)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO runs (tenant_id, run_id, status, goal, budget_cap_usd,
+                                  environment_id, agent_id, started_by, started_via)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (run_id) DO NOTHING
                 """,
-                (tenant_id, run_id, status, goal, budget_cap_usd),
+                (
+                    tenant_id,
+                    run_id,
+                    status,
+                    goal,
+                    budget_cap_usd,
+                    environment_id,
+                    agent_id,
+                    started_by,
+                    started_via,
+                ),
             )
             await conn.execute(
                 """
@@ -372,7 +394,8 @@ class ProjectionStore:
                 """
                 SELECT tenant_id, run_id, parent_run_id, status, goal, plan,
                        land_report, budget_cap_usd, budget_spent_usd,
-                       budget_reserved_usd, created_at, updated_at
+                       budget_reserved_usd, environment_id, agent_id,
+                       started_by, started_via, created_at, updated_at
                 FROM runs WHERE run_id = %s
                 """,
                 (run_id,),
@@ -393,6 +416,74 @@ class ProjectionStore:
         raw = dict(row)
         raw["execution_session"] = dict(session_row) if session_row is not None else None
         return RunProjection.model_validate(raw)
+
+    async def list_runs(
+        self,
+        tenant_id: str,
+        *,
+        status: str | None = None,
+        agent_id: str | None = None,
+        created_before: datetime | None = None,
+        limit: int = 50,
+    ) -> list[RunProjection]:
+        """Newest-first run list for one tenant, with keyset pagination on
+        `created_at` (pass the last row's `created_at` back as
+        `created_before` for the next page). Execution-session state joins in
+        the same query so list rows match `get_run`'s shape. Filters are
+        null-guarded parameters so the SQL stays a static literal."""
+        async with self._db.tenant_connection(tenant_id) as conn:
+            cursor = await conn.execute(
+                """
+                SELECT r.tenant_id, r.run_id, r.parent_run_id, r.status, r.goal,
+                       r.plan, r.land_report, r.budget_cap_usd, r.budget_spent_usd,
+                       r.budget_reserved_usd, r.environment_id, r.agent_id,
+                       r.started_by, r.started_via, r.created_at, r.updated_at,
+                       s.environment_id AS s_environment_id, s.status AS s_status,
+                       s.sandbox_id AS s_sandbox_id,
+                       s.sandbox_provider AS s_sandbox_provider,
+                       s.sandbox_template AS s_sandbox_template,
+                       s.generation AS s_generation,
+                       s.latest_checkpoint_id AS s_latest_checkpoint_id,
+                       s.latest_snapshot_ref AS s_latest_snapshot_ref,
+                       s.updated_at AS s_updated_at,
+                       COALESCE(p.steps_done, 0) AS steps_done,
+                       COALESCE(p.steps_total, 0) AS steps_total
+                FROM runs r
+                LEFT JOIN run_execution_sessions s ON s.run_id = r.run_id
+                LEFT JOIN LATERAL (
+                    SELECT count(*) FILTER (WHERE rs.status = 'done') AS steps_done,
+                           count(*) AS steps_total
+                    FROM run_steps rs WHERE rs.run_id = r.run_id
+                ) p ON TRUE
+                WHERE (%(status)s::text IS NULL OR r.status = %(status)s)
+                  AND (%(agent_id)s::text IS NULL OR r.agent_id = %(agent_id)s)
+                  AND (%(created_before)s::timestamptz IS NULL
+                       OR r.created_at < %(created_before)s)
+                ORDER BY r.created_at DESC, r.run_id DESC
+                LIMIT %(limit)s
+                """,
+                {
+                    "status": status,
+                    "agent_id": agent_id,
+                    "created_before": created_before,
+                    "limit": limit,
+                },
+            )
+            rows = await cursor.fetchall()
+        projections: list[RunProjection] = []
+        for row in rows:
+            raw = dict(row)
+            session = None
+            if raw.get("s_status") is not None:
+                session = {
+                    key.removeprefix("s_"): value
+                    for key, value in raw.items()
+                    if key.startswith("s_")
+                }
+            raw = {k: v for k, v in raw.items() if not k.startswith("s_")}
+            raw["execution_session"] = session
+            projections.append(RunProjection.model_validate(raw))
+        return projections
 
     async def get_steps(self, tenant_id: str, run_id: str) -> list[StepProjection]:
         async with self._db.tenant_connection(tenant_id) as conn:

@@ -16,7 +16,7 @@ both directions.
 
 | Console / website term | environments service | runtime wire (frozen) |
 |---|---|---|
-| **organization** — the tenant/customer | db table `workspaces` (legacy name for organizations) + `org_id` in the console API (`/organizations/{org_id}/…`, branch org-vocabulary) | `tenant_id` |
+| **organization** — the tenant/customer | db table `organizations` + `org_id` in the console API (`/organizations/{org_id}/…`) | `tenant_id` |
 | **workspace** — a shared named scope for system connections and grants; many Agents may use it | a base row in db table `environments` (`parent_environment_id IS NULL`) + `workspaceId` in the console API | connector grants compiled into an `EnvironmentBinding` |
 | **agent** — the goal, instructions, schedule, and runtime setup for one worker; it references one shared workspace | a child row in db table `environments` (`parent_environment_id = workspaceId`) reached through the internal nested `/workspaces/{workspaceId}/environments` API, enriched by the website `agents` row | `AgentSpec` + `environment_id` + immutable `EnvironmentBinding` (DESIGN §5) |
 | **rehearsal copy** | `?kind=sandbox` binding compiled for an agent's runtime setup | `kind="sandbox"` + virtual `ClockConfig` |
@@ -42,7 +42,7 @@ both directions.
    (per SERVICE-CONTRACTS §0's amendment rule) can change them.
 3. **When writing docs, qualify ambiguous uses.** The same word can point at
    different objects across layers, so disambiguate inline: "workspace
-   (console)" vs "`workspaces` table (legacy name for organizations)";
+   (console)" vs the environments service's `organizations` table;
    "agent runtime setup (console)" vs `EnvironmentBinding` (the frozen wire
    snapshot it compiles into).
 

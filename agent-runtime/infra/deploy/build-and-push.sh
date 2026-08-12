@@ -7,7 +7,8 @@
 #     ./build-and-push.sh --service temporal-worker --tag <git-sha> \
 #       [--context <dir>] [--dockerfile <path>] [--platform linux/amd64]
 #
-#   --service     One of: control-plane | temporal-worker | litellm | sandbox.
+#   --service     One of: control-plane | temporal-worker | litellm | sandbox |
+#                 environments | connector-sandbox.
 #   --tag         Image tag; use the git SHA (it doubles as the worker build id).
 #   --context     Docker build context (default: monorepo root, two levels up).
 #   --dockerfile  Dockerfile path (default: <context>/agent-runtime/docker/<service>.Dockerfile).
@@ -37,8 +38,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "${SERVICE}" in
-  control-plane|temporal-worker|litellm|sandbox) ;;
-  *) die "--service must be one of: control-plane, temporal-worker, litellm, sandbox" ;;
+  control-plane|temporal-worker|litellm|sandbox|environments|connector-sandbox) ;;
+  *) die "--service must be one of: control-plane, temporal-worker, litellm, sandbox, environments, connector-sandbox" ;;
 esac
 [[ -n "${TAG}" ]] || die "--tag is required (use the git SHA)"
 
@@ -46,7 +47,17 @@ need_cmd aws; need_cmd jq; need_cmd docker
 require_stack_env
 
 CONTEXT="${CONTEXT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
-DOCKERFILE="${DOCKERFILE:-${CONTEXT}/agent-runtime/docker/${SERVICE}.Dockerfile}"
+# The environments service builds from the monorepo root (it copies core/);
+# the connector sandbox is a self-contained Node workspace.
+case "${SERVICE}" in
+  environments)
+    DOCKERFILE="${DOCKERFILE:-${CONTEXT}/environments/Dockerfile}" ;;
+  connector-sandbox)
+    DOCKERFILE="${DOCKERFILE:-${CONTEXT}/sandbox/Dockerfile}"
+    CONTEXT="${CONTEXT}/sandbox" ;;
+  *)
+    DOCKERFILE="${DOCKERFILE:-${CONTEXT}/agent-runtime/docker/${SERVICE}.Dockerfile}" ;;
+esac
 [[ -f "${DOCKERFILE}" ]] || die "Dockerfile not found: ${DOCKERFILE} (pass --dockerfile)"
 
 IMAGE="$(ecr_repo_url "${SERVICE}"):${TAG}"

@@ -4,6 +4,48 @@
  */
 
 export interface paths {
+    "/agents/{agent_id}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Schedule */
+        get: operations["get_agent_schedule_agents__agent_id__schedule_get"];
+        /**
+         * Put Agent Schedule
+         * @description Create or replace the agent's schedule. The run template freezes what
+         *     the console resolved at save time; the tenant comes from the
+         *     authenticated caller, never the body. Firings create runs through the
+         *     normal POST /runs path with started_via="schedule".
+         */
+        put: operations["put_agent_schedule_agents__agent_id__schedule_put"];
+        post?: never;
+        /** Remove Agent Schedule */
+        delete: operations["remove_agent_schedule_agents__agent_id__schedule_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/healthz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Healthz */
+        get: operations["healthz_healthz_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/runs": {
         parameters: {
             query?: never;
@@ -11,7 +53,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Runs
+         * @description Tenant-scoped run list, newest first, from projections only. This is
+         *     the console's run directory — no client should have to remember run ids
+         *     it created (the website's in-process map retires against this).
+         */
+        get: operations["list_runs_runs_get"];
         put?: never;
         /** Create Run */
         post: operations["create_run_runs_post"];
@@ -202,6 +250,46 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AgentScheduleRequest */
+        AgentScheduleRequest: {
+            schedule: components["schemas"]["AgentScheduleSpec"];
+            template: components["schemas"]["ScheduleRunTemplateRequest"];
+        };
+        /**
+         * AgentScheduleSpec
+         * @description What the console saves: a standard 5-field cron in a named timezone,
+         *     plus whether the schedule is live.
+         */
+        AgentScheduleSpec: {
+            /** Cron */
+            cron: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Timezone
+             * @default UTC
+             */
+            timezone: string;
+        };
+        /** AgentScheduleView */
+        AgentScheduleView: {
+            /** Agent Id */
+            agent_id: string;
+            /** Cron */
+            cron: string;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Next Run Times
+             * @default []
+             */
+            next_run_times: string[];
+            /** Timezone */
+            timezone: string;
+        };
         /**
          * ApprovePlanRequest
          * @description Approve or reject the plan version awaiting approval. The version pin
@@ -242,6 +330,8 @@ export interface components {
         };
         /** CreateRunRequest */
         CreateRunRequest: {
+            /** Agent Id */
+            agent_id?: string | null;
             /**
              * Budget Usd
              * @default 10
@@ -263,6 +353,11 @@ export interface components {
             /** Goal */
             goal: string;
             /**
+             * Instructions
+             * @default []
+             */
+            instructions: string[];
+            /**
              * Max Children
              * @default 5
              */
@@ -272,6 +367,14 @@ export interface components {
             policy?: components["schemas"]["RunPolicy"] | null;
             /** Run Id */
             run_id?: string | null;
+            /** Started By */
+            started_by?: string | null;
+            /**
+             * Started Via
+             * @default manual
+             * @enum {string}
+             */
+            started_via: "manual" | "schedule" | "event";
             /**
              * Success Criteria
              * @default []
@@ -374,6 +477,17 @@ export interface components {
             /** Timeout */
             timeout?: string | null;
         };
+        /**
+         * RunListResponse
+         * @description Newest-first, keyset-paginated: pass `next_created_before` back as
+         *     `created_before` to fetch the next page; null means the list is done.
+         */
+        RunListResponse: {
+            /** Next Created Before */
+            next_created_before?: string | null;
+            /** Runs */
+            runs: components["schemas"]["RunSummary"][];
+        };
         /** RunPolicy */
         RunPolicy: {
             /**
@@ -422,12 +536,78 @@ export interface components {
             require_plan_approval: boolean;
         };
         /**
+         * RunSummary
+         * @description One row of GET /runs — the list shape the console renders. Full plan,
+         *     land report, and steps stay on GET /runs/{run_id}.
+         */
+        RunSummary: {
+            /** Agent Id */
+            agent_id?: string | null;
+            budget?: components["schemas"]["BudgetView"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Environment Id
+             * @default
+             */
+            environment_id: string;
+            execution_session?: components["schemas"]["ExecutionSessionView"] | null;
+            /** Goal */
+            goal: string;
+            /** Land Report */
+            land_report?: {
+                [key: string]: unknown;
+            } | null;
+            /** Parent Run Id */
+            parent_run_id?: string | null;
+            /** Run Id */
+            run_id: string;
+            /** Started By */
+            started_by?: string | null;
+            /**
+             * Started Via
+             * @default manual
+             */
+            started_via: string;
+            /** Status */
+            status: string;
+            /**
+             * Steps Done
+             * @default 0
+             */
+            steps_done: number;
+            /**
+             * Steps Total
+             * @default 0
+             */
+            steps_total: number;
+            /** Tenant Id */
+            tenant_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
          * RunView
          * @description Served from Postgres projections only — never from Temporal. Subagent
          *     child runs are rows of their own, linked back by `parent_run_id`.
          */
         RunView: {
+            /** Agent Id */
+            agent_id?: string | null;
             budget?: components["schemas"]["BudgetView"] | null;
+            /** Created At */
+            created_at?: string | null;
+            /**
+             * Environment Id
+             * @default
+             */
+            environment_id: string;
             execution_session?: components["schemas"]["ExecutionSessionView"] | null;
             /** Goal */
             goal: string;
@@ -443,6 +623,13 @@ export interface components {
             } | null;
             /** Run Id */
             run_id: string;
+            /** Started By */
+            started_by?: string | null;
+            /**
+             * Started Via
+             * @default manual
+             */
+            started_via: string;
             /** Status */
             status: string;
             /**
@@ -452,6 +639,32 @@ export interface components {
             steps: components["schemas"]["StepView"][];
             /** Tenant Id */
             tenant_id: string;
+        };
+        /**
+         * ScheduleRunTemplateRequest
+         * @description The run the schedule should start on each firing — what the console
+         *     resolved from the agent at save time. Tenant is taken from the
+         *     authenticated caller, never this body.
+         */
+        ScheduleRunTemplateRequest: {
+            /** Budget Usd */
+            budget_usd: string;
+            /** Environment Id */
+            environment_id: string;
+            /** Goal */
+            goal: string;
+            /**
+             * Instructions
+             * @default []
+             */
+            instructions: string[];
+            /** Started By */
+            started_by?: string | null;
+            /**
+             * Tools
+             * @default []
+             */
+            tools: string[];
         };
         /** SignalResponse */
         SignalResponse: {
@@ -542,6 +755,159 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_agent_schedule_agents__agent_id__schedule_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentScheduleView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_agent_schedule_agents__agent_id__schedule_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentScheduleView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_agent_schedule_agents__agent_id__schedule_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    healthz_healthz_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
+    list_runs_runs_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                agent_id?: string | null;
+                created_before?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_run_runs_post: {
         parameters: {
             query?: never;

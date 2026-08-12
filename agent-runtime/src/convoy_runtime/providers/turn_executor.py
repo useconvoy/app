@@ -286,7 +286,15 @@ class ScriptedTurnExecutor:
     def _promoted_args(grant: ToolGrant, turn: TurnInput, ctx: TurnContext) -> dict[str, Any]:
         """Deterministic promoted-call arguments. Sandbox jobs append a line
         to a workspace log and report its length, so workspace continuity
-        across snapshots (and rebuilds after loss) is externally checkable."""
+        across snapshots (and rebuilds after loss) is externally checkable.
+
+        Connector tools from the environments service's built-in catalog get
+        arguments their real connectors accept: the integrated stack routes
+        rehearsal calls through the production connector code (which validates
+        arguments), so the generic step/turn payload that satisfied the stub
+        registry would fail there. Fixture ids match the sandbox component's
+        default `connector-development` fixture; every value derives only from
+        the step and turn, keeping replays identical."""
         if grant.tool_id == "sandbox_browser":
             # The deterministic lane proves the browser session is usable
             # without navigating outside the environment's allowlist.
@@ -298,6 +306,22 @@ class ScriptedTurnExecutor:
                 "wc -l < data.log | tr -d ' ' > outputs/lines.txt"
             )
             return {"command": ["sh", "-c", script], "env": {}, "inputs": []}
+        note = f"{turn.step_id} turn {ctx.turn}"
+        if grant.tool_id == "slack.post_message":
+            return {"channel": "C_GENERAL", "text": f"[scripted] {note}"}
+        if grant.tool_id == "github.create_issue":
+            return {"repo": "convoy-sandbox/demo", "title": f"[scripted] {note}", "body": note}
+        if grant.tool_id == "google.sheets_append_row":
+            return {
+                "spreadsheetId": "sheet-operations",
+                "range": "A1",
+                "values": [turn.step_id, str(ctx.turn)],
+            }
+        if grant.tool_id == "notion.create_page":
+            return {
+                "parent": {"type": "workspace", "workspace": True},
+                "properties": {"title": f"[scripted] {note}"},
+            }
         return {"step_id": turn.step_id, "turn": ctx.turn}
 
     # ----------------------------------------------------------- turn count
