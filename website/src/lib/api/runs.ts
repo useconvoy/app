@@ -82,6 +82,9 @@ export interface CreateRunInput {
   budgetUsd: string;
   /** Connector capabilities requested from the selected immutable binding. */
   tools?: string[];
+  /** The agent's authored step list; becomes the run's initial plan (a
+   * "checkpoint: ..." line becomes an approval gate on the next step). */
+  instructions?: string[];
   agentId?: string;
   /** @deprecated Use agentId. Accepted only at the frozen compatibility seam. */
   routineId?: string;
@@ -109,6 +112,7 @@ export async function createRun(
       max_children: 5,
       success_criteria: [],
       tools: input.tools ?? [],
+      instructions: input.instructions ?? [],
       agent_id: input.agentId ?? input.routineId ?? null,
       started_by: input.startedById ?? null,
       started_via: input.startedVia ?? "manual",

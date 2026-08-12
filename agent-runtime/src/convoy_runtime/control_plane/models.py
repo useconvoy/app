@@ -23,6 +23,10 @@ class CreateRunRequest(BaseModel):
     # Tool ids requested for the agent, resolved against the environment's
     # registry at creation; unknown or invalid requests are rejected.
     tools: list[str] = []
+    # The agent's authored step list. Lines become the run's initial plan
+    # (a "checkpoint: ..." line becomes a human approval gate on the step
+    # after it); empty means the planner decides.
+    instructions: list[str] = []
     # How many subagent children the root agent may hold at once; fan-out
     # groups larger than this are rejected.
     max_children: int = Field(default=5, ge=0, le=10)

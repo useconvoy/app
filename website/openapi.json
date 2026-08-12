@@ -143,6 +143,14 @@
             "title": "Goal",
             "type": "string"
           },
+          "instructions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Instructions",
+            "type": "array"
+          },
           "max_children": {
             "default": 5,
             "maximum": 10.0,

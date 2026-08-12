@@ -31,6 +31,7 @@ from convoy_runtime.projections.store import ProjectionStore
 from convoy_runtime.providers.artifact_store import ArtifactStore
 from convoy_runtime.providers.model_gateway import ModelGateway
 from convoy_runtime.providers.model_keys import LiteLLMKeyProvider
+from convoy_runtime.providers.planner import ModelPlanner
 from convoy_runtime.providers.pydantic_ai_turn import PydanticAITurnExecutor
 from convoy_runtime.providers.sandbox import LocalSandboxProvider, SandboxProvider
 from convoy_runtime.providers.sandbox_ecs import EcsSandboxProvider
@@ -113,7 +114,14 @@ async def run_worker(config: RuntimeConfig) -> None:
             base_url=config.litellm_base_url, master_key=config.litellm_master_key
         )
 
-    plan_activities = PlanActivities(store)
+    model_planner = None
+    if config.model_planning_enabled and config.litellm_base_url:
+        model_planner = ModelPlanner(
+            base_url=config.litellm_base_url,
+            api_key=config.litellm_master_key,
+            model=config.default_model,
+        )
+    plan_activities = PlanActivities(store, model_planner)
     turn_activities = TurnActivities(build_turn_executor(config, store, key_provider))
     land_activities = LandActivities(store)
     outbox_activities = OutboxActivities(projections)

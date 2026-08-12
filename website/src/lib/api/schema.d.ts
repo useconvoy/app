@@ -288,6 +288,11 @@ export interface components {
             /** Goal */
             goal: string;
             /**
+             * Instructions
+             * @default []
+             */
+            instructions: string[];
+            /**
              * Max Children
              * @default 5
              */

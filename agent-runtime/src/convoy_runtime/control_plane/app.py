@@ -210,6 +210,8 @@ async def create_run(
         "goal": body.goal,
         "success_criteria": body.success_criteria,
     }
+    if body.instructions:
+        pinned_payload["instructions"] = body.instructions
     if body.fixture_gates:
         pinned_payload["fixture_gates"] = {
             step_id: gate.model_dump(mode="json") for step_id, gate in body.fixture_gates.items()

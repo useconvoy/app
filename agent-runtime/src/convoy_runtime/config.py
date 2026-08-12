@@ -32,6 +32,13 @@ _DEFAULT_GATEWAY: dict[str, object] = {
 }
 
 
+def _planner_mode() -> "Literal['auto', 'model', 'fixture']":
+    mode = _env("CONVOY_PLANNER", "auto")
+    if mode not in ("auto", "model", "fixture"):
+        raise ValueError(f"CONVOY_PLANNER must be auto, model, or fixture, not {mode!r}")
+    return mode  # type: ignore[return-value]
+
+
 def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)
 
@@ -85,6 +92,9 @@ class RuntimeConfig:
     codec_key: bytes
     scripted_turn_delay_seconds: float
     turn_executor: Literal["scripted", "pydantic_ai"]
+    # "auto": model planning rides with the pydantic_ai executor; "model"
+    # forces it on, "fixture" forces it off.
+    planner: Literal["auto", "model", "fixture"]
     default_model: str
     litellm_base_url: str
     litellm_master_key: str
@@ -100,6 +110,15 @@ class RuntimeConfig:
     promoted_tool_delay_seconds: float
     temporal_worker_build_id: str
     temporal_tls: TLSConfig | bool
+
+    @property
+    def model_planning_enabled(self) -> bool:
+        """Whether create_plan should ask the model for the initial plan."""
+        if self.planner == "model":
+            return True
+        if self.planner == "fixture":
+            return False
+        return self.turn_executor == "pydantic_ai"
 
     @classmethod
     def from_env(cls) -> "RuntimeConfig":
@@ -161,6 +180,7 @@ class RuntimeConfig:
             # Test knob for e2e determinism (0 in production paths).
             scripted_turn_delay_seconds=float(_env("CONVOY_SCRIPTED_TURN_DELAY", "0")),
             turn_executor=executor,
+            planner=_planner_mode(),
             default_model=_env("CONVOY_DEFAULT_MODEL", "scripted-echo-1"),
             litellm_base_url=_env("LITELLM_BASE_URL", ""),
             litellm_master_key=_env("LITELLM_MASTER_KEY", ""),

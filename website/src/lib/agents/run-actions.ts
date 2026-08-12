@@ -74,6 +74,7 @@ export async function runAgentNow(
       environmentId: production ? agent.productionBindingId : agent.rehearsalBindingId,
       budgetUsd: agent.budgetCapUsd,
       tools,
+      instructions: agent.planSteps,
       agentId: agent.id,
       startedById: session.userId,
       startedVia: "manual",
