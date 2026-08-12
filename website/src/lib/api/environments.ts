@@ -976,9 +976,25 @@ interface RegistryConnectionDetail {
 async function systemsContext(orgId: string) {
   const config = registryConfig();
   if (!config) return null;
-  const registryOrgId = await getEnvironmentsOrgId(orgId);
-  if (!registryOrgId) return null;
+  let registryOrgId = await getEnvironmentsOrgId(orgId);
   const session = await requireSession();
+  if (!registryOrgId) {
+    // Lazy backfill: an organization created before this deployment was
+    // linked to the registry provisions its registry org on first use,
+    // so connectors are connectable the moment the link exists instead
+    // of only for organizations created after it.
+    const org = await withOrgContext({ orgId }, async (client) => {
+      const { rows } = await client.query<{ name: string }>(
+        "SELECT name FROM organizations WHERE id = $1",
+        [orgId],
+      );
+      return rows[0] ?? null;
+    });
+    if (!org) return null;
+    await provisionEnvironmentsOrg({ orgId, name: org.name, creatorEmail: session.email });
+    registryOrgId = await getEnvironmentsOrgId(orgId);
+    if (!registryOrgId) return null;
+  }
   return { config, registryOrgId, actsFor: session.email };
 }
 

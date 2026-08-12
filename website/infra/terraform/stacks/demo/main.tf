@@ -46,7 +46,14 @@ locals {
     # box without re-stamping it: the deploy workflow re-syncs .env from this
     # secret on every release. The bootstrap also writes APP_URL statically
     # for fresh instances; the deploy sync deduplicates.
-    APP_URL = "https://${var.domain_name}"
+    # The environments service (connector registry) rides the same box and
+    # the same secret channel. The website reaches it over the compose
+    # network; nothing is exposed publicly.
+    CONVOY_ENVIRONMENTS_URL            = "http://environments:8780/console"
+    CONVOY_ENVIRONMENTS_INTERNAL_TOKEN = random_password.environments_internal_token.result
+    CONVOY_ENVIRONMENTS_MASTER_KEY     = replace(replace(random_bytes.environments_master_key.base64, "+", "-"), "/", "_")
+    CONVOY_ENVIRONMENTS_PG_DSN         = "postgresql+psycopg://convoy_website_admin:${urlencode(random_password.pg_admin.result)}@postgres:5432/convoy_environments"
+    APP_URL                            = "https://${var.domain_name}"
   }
 }
 
@@ -56,6 +63,17 @@ locals {
 # here and delivered through the runtime secret so it follows the same rule
 # as every other credential: never templated into user_data, never in the
 # repository, rotated by bumping the keeper below and re-encrypting rows.
+# The environments service's credential-vault master key (Fernet: urlsafe
+# base64 of 32 random bytes) and the website<->registry internal token.
+resource "random_bytes" "environments_master_key" {
+  length = 32
+}
+
+resource "random_password" "environments_internal_token" {
+  length  = 48
+  special = false
+}
+
 resource "random_bytes" "model_kek" {
   length = 32
 }
@@ -101,6 +119,36 @@ resource "aws_ecr_repository" "website" {
   force_delete = true
 
   tags = merge(local.tags, { Name = "${local.name_prefix}-website" })
+}
+
+resource "aws_ecr_repository" "environments" {
+  name                 = "${local.name_prefix}/environments"
+  image_tag_mutability = "IMMUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  force_delete = true
+
+  tags = merge(local.tags, { Name = "${local.name_prefix}-environments" })
+}
+
+resource "aws_ecr_lifecycle_policy" "environments" {
+  repository = aws_ecr_repository.environments.name
+
+  policy = jsonencode({
+    rules = [{
+      rulePriority = 1
+      description  = "Keep the last 10 images."
+      selection = {
+        tagStatus   = "any"
+        countType   = "imageCountMoreThan"
+        countNumber = 10
+      }
+      action = { type = "expire" }
+    }]
+  })
 }
 
 resource "aws_ecr_lifecycle_policy" "website" {
@@ -181,7 +229,7 @@ resource "aws_iam_user_policy" "instance" {
           "ecr:GetDownloadUrlForLayer",
           "ecr:BatchCheckLayerAvailability",
         ]
-        Resource = aws_ecr_repository.website.arn
+        Resource = [aws_ecr_repository.website.arn, aws_ecr_repository.environments.arn]
       },
       {
         Sid      = "ReadThisSecretOnly"
@@ -416,7 +464,7 @@ resource "aws_iam_role_policy" "github_deploy" {
           "ecr:BatchGetImage",
           "ecr:DescribeImages",
         ]
-        Resource = aws_ecr_repository.website.arn
+        Resource = [aws_ecr_repository.website.arn, aws_ecr_repository.environments.arn]
       },
     ]
   })

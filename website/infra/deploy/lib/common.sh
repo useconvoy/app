@@ -40,7 +40,7 @@ ecr_registry() {
 # One repository for the whole console: web, notifier, and migrate are three
 # commands over the same image.
 ecr_repo_url() {
-  printf '%s' "${ECR_REPO_URL:-$(ecr_registry)/${NAME_PREFIX}/website}"
+  printf '%s' "${ECR_REPO_URL:-$(ecr_registry)/${NAME_PREFIX}/${ECR_REPO_NAME:-website}}"
 }
 
 ecr_login() {
@@ -55,7 +55,7 @@ ecr_login() {
 # instead of letting the push fail with a registry error.
 ecr_tag_exists() { # $1 = tag
   aws ecr describe-images \
-    --repository-name "${NAME_PREFIX}/website" \
+    --repository-name "${NAME_PREFIX}/${ECR_REPO_NAME:-website}" \
     --image-ids "imageTag=$1" >/dev/null 2>&1
 }
 
