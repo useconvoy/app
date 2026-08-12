@@ -127,9 +127,9 @@ exports[`NavItems > shows every area to an admin 1`] = `
         <li>
           <a
             class="block rounded-md px-3 py-2 text-sm font-medium transition-colors text-muted hover:bg-field hover:text-ink"
-            href="/app/systems"
+            href="/app/connectors"
           >
-            Systems
+            Connectors
           </a>
         </li>
       </ul>

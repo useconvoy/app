@@ -1,11 +1,11 @@
 /**
- * The Systems board: every catalog system with its connection state and an
- * enterprise connect flow (paste a provider credential — a service account
- * key or a workspace token — no consent popups), plus the org's custom
- * systems (remote tool servers) with an add form that verifies the server
- * answers before anything is saved. Actions come bound from the server
- * page; results render inline and honestly, including "saved but the
- * provider rejected it".
+ * The Connectors board: each provider this organization can connect (Slack,
+ * Google Drive) with its live connection state and an enterprise connect
+ * flow (paste a provider credential a workspace admin controls, no consent
+ * popups), plus the org's custom connectors (remote tool servers) with an
+ * add form that verifies the server answers before anything is saved.
+ * Actions come bound from the server page; results render inline and
+ * honestly, including "saved but the provider rejected it".
  */
 "use client";
 
@@ -14,21 +14,21 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
-import type { SystemActionResult } from "@/lib/systems/actions";
+import type { ConnectorActionResult } from "@/lib/connectors/actions";
 
 export type ConnectionState = "connected" | "credentials_pending" | "needs_reauth" | "not_connected";
 
-export interface SystemCard {
+export interface ConnectorCard {
   systemId: string;
   displayName: string;
   provider: string | null;
   connectionId: string | null;
-  state: ConnectionState | "no_provider";
+  state: ConnectionState;
   toolCount: number;
   sideEffecting: boolean;
 }
 
-export interface CustomSystemCard {
+export interface CustomConnectorCard {
   connectionId: string;
   displayName: string;
   state: ConnectionState;
@@ -36,25 +36,30 @@ export interface CustomSystemCard {
   tools: string[];
 }
 
-export interface SystemsBoardProps {
+export interface ConnectorsBoardProps {
   registryLinked: boolean;
-  systems: SystemCard[];
-  customSystems: CustomSystemCard[];
-  connect: (systemId: string, secretValue: string) => Promise<SystemActionResult>;
+  connectors: ConnectorCard[];
+  customConnectors: CustomConnectorCard[];
+  connect: (systemId: string, secretValue: string) => Promise<ConnectorActionResult>;
   addCustom: (
     displayName: string,
     url: string,
     bearerToken: string,
-  ) => Promise<SystemActionResult>;
-  reattach: (connectionId: string, secretValue: string) => Promise<SystemActionResult>;
+  ) => Promise<ConnectorActionResult>;
+  reattach: (connectionId: string, secretValue: string) => Promise<ConnectorActionResult>;
 }
 
-const STATE_LABEL: Record<SystemCard["state"], string> = {
+const STATE_LABEL: Record<ConnectionState, string> = {
   connected: "Connected",
   credentials_pending: "Credentials pending",
   needs_reauth: "Needs re-auth",
   not_connected: "Not connected",
-  no_provider: "No provider yet",
+};
+
+/** What each provider does for an Agent, in one line under the name. */
+const PROVIDER_BLURB: Record<string, string> = {
+  slack: "Read channels and messages, and post as this organization's app.",
+  google: "List Drive files, read spreadsheets, and append rows.",
 };
 
 /** Provider-specific paste instructions, in plain language. */
@@ -65,7 +70,7 @@ const PROVIDER_HELP: Record<string, { label: string; placeholder: string; steps:
     steps: [
       "In your Google Cloud console, create a service account and download its JSON key.",
       "Turn on the Drive and Sheets APIs for that project.",
-      "Share the folders this organization works in with the service account's email address.",
+      "Share the Drive folders and spreadsheets this organization works in with the service account's email address.",
     ],
   },
   slack: {
@@ -79,9 +84,8 @@ const PROVIDER_HELP: Record<string, { label: string; placeholder: string; steps:
   },
 };
 
-function stateChip(state: SystemCard["state"]) {
-  const tone =
-    state === "connected" ? "pass" : state === "no_provider" || state === "not_connected" ? "neutral" : "hold";
+function stateChip(state: ConnectionState) {
+  const tone = state === "connected" ? "pass" : state === "not_connected" ? "neutral" : "hold";
   return <Chip tone={tone}>{STATE_LABEL[state]}</Chip>;
 }
 
@@ -96,11 +100,11 @@ function CredentialForm({
   placeholder: string;
   multiline: boolean;
   pendingLabel: string;
-  onSubmit: (value: string) => Promise<SystemActionResult>;
+  onSubmit: (value: string) => Promise<ConnectorActionResult>;
 }) {
   const router = useRouter();
   const [value, setValue] = useState("");
-  const [result, setResult] = useState<SystemActionResult | null>(null);
+  const [result, setResult] = useState<ConnectorActionResult | null>(null);
   const [pending, startTransition] = useTransition();
 
   function submit() {
@@ -148,28 +152,28 @@ function CredentialForm({
   );
 }
 
-export function SystemsBoard({
+export function ConnectorsBoard({
   registryLinked,
-  systems,
-  customSystems,
+  connectors,
+  customConnectors,
   connect,
   addCustom,
   reattach,
-}: SystemsBoardProps) {
+}: ConnectorsBoardProps) {
   const router = useRouter();
-  const [openSystem, setOpenSystem] = useState<string | null>(null);
+  const [openConnector, setOpenConnector] = useState<string | null>(null);
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [customName, setCustomName] = useState("");
   const [customUrl, setCustomUrl] = useState("");
   const [customToken, setCustomToken] = useState("");
-  const [customResult, setCustomResult] = useState<SystemActionResult | null>(null);
+  const [customResult, setCustomResult] = useState<ConnectorActionResult | null>(null);
   const [customPending, startCustom] = useTransition();
 
   if (!registryLinked) {
     return (
       <div className="rounded-lg border border-line bg-card p-6 text-sm text-muted">
-        This deployment is not linked to the systems registry, so connections cannot be managed
-        here yet.
+        This deployment is not linked to the connections registry, so connectors cannot be
+        managed here yet.
       </div>
     );
   }
@@ -195,31 +199,30 @@ export function SystemsBoard({
   return (
     <div className="space-y-6">
       <ul className="m-0 list-none space-y-3 p-0">
-        {systems.map((system) => {
-          const help = system.provider ? PROVIDER_HELP[system.provider] : undefined;
-          const open = openSystem === system.systemId;
-          const connectable = system.state !== "no_provider" && help !== undefined;
+        {connectors.map((connector) => {
+          const help = connector.provider ? PROVIDER_HELP[connector.provider] : undefined;
+          const blurb = connector.provider ? PROVIDER_BLURB[connector.provider] : undefined;
+          const open = openConnector === connector.systemId;
+          const connectable = help !== undefined;
           return (
-            <li key={system.systemId} className="rounded-lg border border-line bg-card p-5">
+            <li key={connector.systemId} className="rounded-lg border border-line bg-card p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium text-ink">{system.displayName}</p>
+                  <p className="text-sm font-medium text-ink">{connector.displayName}</p>
                   <p className="mt-0.5 text-xs text-muted">
-                    {system.state === "connected" || system.state === "credentials_pending"
-                      ? `${system.toolCount} ${system.toolCount === 1 ? "tool" : "tools"}`
-                      : system.state === "no_provider"
-                        ? "Grants for this system stay website-side for now."
-                        : "Agents can use this once it is connected."}
+                    {connector.state === "connected" || connector.state === "credentials_pending"
+                      ? `${connector.toolCount} ${connector.toolCount === 1 ? "tool" : "tools"}`
+                      : blurb ?? "Agents can use this once it is connected."}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {stateChip(system.state)}
+                  {stateChip(connector.state)}
                   {connectable && (
                     <Button
                       variant="secondary"
-                      onClick={() => setOpenSystem(open ? null : system.systemId)}
+                      onClick={() => setOpenConnector(open ? null : connector.systemId)}
                     >
-                      {system.state === "connected" ? "Replace credential" : "Connect"}
+                      {connector.state === "connected" ? "Replace credential" : "Connect"}
                     </Button>
                   )}
                 </div>
@@ -238,12 +241,12 @@ export function SystemsBoard({
                   <CredentialForm
                     label={help.label}
                     placeholder={help.placeholder}
-                    multiline={system.provider === "google"}
-                    pendingLabel={system.state === "connected" ? "Replace" : "Connect"}
+                    multiline={connector.provider === "google"}
+                    pendingLabel={connector.state === "connected" ? "Replace" : "Connect"}
                     onSubmit={(value) =>
-                      system.connectionId && system.state !== "not_connected"
-                        ? reattach(system.connectionId, value)
-                        : connect(system.systemId, value)
+                      connector.connectionId && connector.state !== "not_connected"
+                        ? reattach(connector.connectionId, value)
+                        : connect(connector.systemId, value)
                     }
                   />
                 </div>
@@ -255,9 +258,9 @@ export function SystemsBoard({
 
       <section>
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-xl text-ink">Custom systems</h2>
+          <h2 className="font-display text-xl text-ink">Custom connectors</h2>
           <Button variant="secondary" onClick={() => setShowCustomForm((current) => !current)}>
-            Add custom system
+            Add custom connector
           </Button>
         </div>
         <p className="mt-1 text-sm text-muted">
@@ -299,26 +302,26 @@ export function SystemsBoard({
             </div>
           </div>
         )}
-        {customSystems.length > 0 ? (
+        {customConnectors.length > 0 ? (
           <ul className="m-0 mt-3 list-none space-y-3 p-0">
-            {customSystems.map((system) => (
-              <li key={system.connectionId} className="rounded-lg border border-line bg-card p-5">
+            {customConnectors.map((connector) => (
+              <li key={connector.connectionId} className="rounded-lg border border-line bg-card p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium text-ink">{system.displayName}</p>
+                    <p className="text-sm font-medium text-ink">{connector.displayName}</p>
                     <p className="mt-0.5 text-xs text-muted">
-                      {system.tools.length > 0 ? system.tools.join(" · ") : "No tools declared"}
+                      {connector.tools.length > 0 ? connector.tools.join(" · ") : "No tools declared"}
                     </p>
                   </div>
-                  {stateChip(system.state)}
+                  {stateChip(connector.state)}
                 </div>
-                {system.state === "needs_reauth" && (
+                {connector.state === "needs_reauth" && (
                   <CredentialForm
                     label="Bearer token"
                     placeholder="Paste the new token"
                     multiline={false}
                     pendingLabel="Replace"
-                    onSubmit={(value) => reattach(system.connectionId, value)}
+                    onSubmit={(value) => reattach(connector.connectionId, value)}
                   />
                 )}
               </li>
@@ -327,7 +330,7 @@ export function SystemsBoard({
         ) : (
           !showCustomForm && (
             <p className="mt-3 rounded-lg border border-line bg-card p-4 text-sm text-muted">
-              No custom systems yet.
+              No custom connectors yet.
             </p>
           )
         )}

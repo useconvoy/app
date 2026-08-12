@@ -25,8 +25,6 @@ const INTERNAL_NOUNS = [
   "gates",
   "tenant",
   "tenants",
-  "connector",
-  "connectors",
   "telemetry",
 ];
 

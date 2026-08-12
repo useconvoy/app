@@ -157,7 +157,7 @@ describe("NavItems", () => {
       "Runs",
       "Agents",
       "Workspaces",
-      "Systems",
+      "Connectors",
       "Agent evaluation",
       "Learning",
       "Logs",
@@ -174,7 +174,7 @@ describe("NavItems", () => {
     for (const label of ["Overview", "Runs", "Agent evaluation", "Learning"]) {
       expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
     }
-    for (const label of ["Checkpoints", "Agents", "Workspaces", "Systems", "Logs", "Admin"]) {
+    for (const label of ["Checkpoints", "Agents", "Workspaces", "Connectors", "Logs", "Admin"]) {
       expect(screen.queryByRole("link", { name: label })).not.toBeInTheDocument();
     }
     expect(container).toMatchSnapshot();

@@ -20,7 +20,7 @@ both directions.
 | **workspace** — a shared named scope for system connections and grants; many Agents may use it | a base row in db table `environments` (`parent_environment_id IS NULL`) + `workspaceId` in the console API | connector grants compiled into an `EnvironmentBinding` |
 | **agent** — the goal, instructions, schedule, and runtime setup for one worker; it references one shared workspace | a child row in db table `environments` (`parent_environment_id = workspaceId`) reached through the internal nested `/workspaces/{workspaceId}/environments` API, enriched by the website `agents` row | `AgentSpec` + `environment_id` + immutable `EnvironmentBinding` (DESIGN §5) |
 | **rehearsal copy** | `?kind=sandbox` binding compiled for an agent's runtime setup | `kind="sandbox"` + virtual `ClockConfig` |
-| **system** | connector + connection (an authenticated link to one external system) | `connector_endpoints` entry (a gateway MCP door) |
+| **connector** — a service the organization connects (Slack, Google Drive, its own tool servers) | connector + connection (an authenticated link to one external system) | `connector_endpoints` entry (a gateway MCP door) |
 | **system grant** | connection + `tool_allowlist` | `ToolGrant` |
 | **stand-in** | deterministic connector fixture selected by a sandbox binding | `simulated_effect` audit event + idempotent simulated data plane |
 | **run** | — | `run_id` + `RunState` |
@@ -30,9 +30,11 @@ both directions.
 
 1. **User-facing surfaces use console vocabulary exclusively.** The website,
    marketing pages, notifications, and anything else a customer reads say
-   organization, workspace, agent, rehearsal copy, system, stand-in,
-   checkpoint — never tenant, sandbox, connector, mock, environment,
-   or gate.
+   organization, workspace, agent, rehearsal copy, connector, stand-in,
+   checkpoint — never tenant, sandbox, mock, environment, or gate.
+   ("Connector" graduated from internal noun to product vocabulary when the
+   Systems page became Connectors; "system" remains acceptable in grant
+   copy.)
    On the website this is build-enforced through
    `website/src/lexicon.ts`.
 2. **Wire names are frozen.** `tenant_id`, `environment_id`,

@@ -1,6 +1,7 @@
 /**
- * Server actions for the Systems page: connecting a catalog system's
- * provider, registering a custom system, and re-attaching credentials.
+ * Server actions for the Connectors page: connecting a provider (Slack,
+ * Google Drive) by pasting its credential, registering a custom connector
+ * (a tool server the org runs), and re-attaching credentials.
  * Admin/Operator-only, same matrix as workspace management. Credential
  * values pass straight through to the registry (write-only there) and are
  * never stored or logged website-side; the admin_audit row records the
@@ -22,12 +23,12 @@ import { getMembership } from "@/lib/orgs/queries";
 import { can } from "@/lib/permissions";
 import { catalogSystem } from "@/lib/workspaces/system-catalog";
 
-export interface SystemActionResult {
+export interface ConnectorActionResult {
   ok: boolean;
   message: string;
 }
 
-async function requireSystemsActor() {
+async function requireConnectorsActor() {
   const session = await requireOrgSession();
   const membership = await getMembership(session.orgId, session.userId);
   if (
@@ -35,7 +36,7 @@ async function requireSystemsActor() {
     membership.status !== "active" ||
     !can("manage_workspaces", membership.role, membership.capabilities)
   ) {
-    throw new Error("You cannot manage systems");
+    throw new Error("You cannot manage connectors");
   }
   return session;
 }
@@ -58,14 +59,14 @@ function verificationMessage(error: unknown): string {
   return "That did not work. Check the details and try again.";
 }
 
-/** Connect a catalog system by pasting its provider credential. */
-export async function connectSystem(
+/** Connect a provider by pasting its credential. */
+export async function connectProvider(
   systemId: string,
   secretValue: string,
-): Promise<SystemActionResult> {
-  const session = await requireSystemsActor();
+): Promise<ConnectorActionResult> {
+  const session = await requireConnectorsActor();
   const system = catalogSystem(systemId);
-  if (!system?.connection) throw new Error("No provider serves that system yet");
+  if (!system?.connection) throw new Error("No provider serves that connector yet");
   if (secretValue.trim().length === 0) {
     return { ok: false, message: "Paste the credential first." };
   }
@@ -76,8 +77,8 @@ export async function connectSystem(
       manifest: declaredManifest(system.connection),
       secretValue: secretValue.trim(),
     });
-    await audit(session.orgId, session.userId, "system.connected", `${systemId} (${result.status})`);
-    revalidatePath("/app/systems");
+    await audit(session.orgId, session.userId, "connector.connected", `${systemId} (${result.status})`);
+    revalidatePath("/app/connectors");
     revalidatePath("/app/workspaces");
     return {
       ok: result.status === "active",
@@ -87,22 +88,22 @@ export async function connectSystem(
           : "Saved, but the provider did not accept the credential yet.",
     };
   } catch (error) {
-    await audit(session.orgId, session.userId, "system.connect_failed", systemId);
-    revalidatePath("/app/systems");
+    await audit(session.orgId, session.userId, "connector.connect_failed", systemId);
+    revalidatePath("/app/connectors");
     return { ok: false, message: verificationMessage(error) };
   }
 }
 
-/** Register a custom system: a remote MCP server this org operates. */
-export async function addCustomSystem(
+/** Register a custom connector: a remote MCP server this org operates. */
+export async function addCustomConnector(
   displayName: string,
   url: string,
   bearerToken: string,
-): Promise<SystemActionResult> {
-  const session = await requireSystemsActor();
+): Promise<ConnectorActionResult> {
+  const session = await requireConnectorsActor();
   const name = displayName.trim();
   const target = url.trim();
-  if (name.length < 2) return { ok: false, message: "Give the system a name." };
+  if (name.length < 2) return { ok: false, message: "Give the connector a name." };
   let parsed: URL;
   try {
     parsed = new URL(target);
@@ -118,8 +119,8 @@ export async function addCustomSystem(
       url: target,
       bearerToken: bearerToken.trim() || undefined,
     });
-    await audit(session.orgId, session.userId, "system.custom_added", `${name} (${created.tools.length} tools)`);
-    revalidatePath("/app/systems");
+    await audit(session.orgId, session.userId, "connector.custom_added", `${name} (${created.tools.length} tools)`);
+    revalidatePath("/app/connectors");
     revalidatePath("/app/workspaces");
     return {
       ok: true,
@@ -136,20 +137,20 @@ export async function addCustomSystem(
 export async function reattachCredential(
   connectionId: string,
   secretValue: string,
-): Promise<SystemActionResult> {
-  const session = await requireSystemsActor();
+): Promise<ConnectorActionResult> {
+  const session = await requireConnectorsActor();
   if (secretValue.trim().length === 0) {
     return { ok: false, message: "Paste the credential first." };
   }
   try {
     const result = await attachSystemCredential(session.orgId, connectionId, secretValue.trim());
-    await audit(session.orgId, session.userId, "system.credential_replaced",
+    await audit(session.orgId, session.userId, "connector.credential_replaced",
       `${connectionId} (${result.status})`);
-    revalidatePath("/app/systems");
+    revalidatePath("/app/connectors");
     return { ok: result.status === "active", message: "Credential updated." };
   } catch (error) {
-    await audit(session.orgId, session.userId, "system.credential_rejected", connectionId);
-    revalidatePath("/app/systems");
+    await audit(session.orgId, session.userId, "connector.credential_rejected", connectionId);
+    revalidatePath("/app/connectors");
     return { ok: false, message: verificationMessage(error) };
   }
 }
