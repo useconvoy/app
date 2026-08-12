@@ -131,18 +131,25 @@ jobs:
       - name: Is this commit already in ECR?
         id: existing
         run: |
-          if aws ecr describe-images \
-               --repository-name "convoy-console-${STACK_NAME}/website" \
-               --image-ids "imageTag=${{ steps.meta.outputs.tag }}" >/dev/null 2>&1; then
-            echo "found=true" >>"$GITHUB_OUTPUT"
+          found=true
+          for repo in website environments; do
+            aws ecr describe-images \
+                 --repository-name "convoy-console-${STACK_NAME}/${repo}" \
+                 --image-ids "imageTag=${{ steps.meta.outputs.tag }}" >/dev/null 2>&1 || found=false
+          done
+          echo "found=${found}" >>"$GITHUB_OUTPUT"
+          if [ "${found}" = "true" ]; then
             echo "::notice::${{ steps.meta.outputs.tag }} already in ECR; redeploying it without rebuilding"
-          else
-            echo "found=false" >>"$GITHUB_OUTPUT"
           fi
 
       - name: Build and push
         if: steps.existing.outputs.found == 'false'
-        run: website/infra/deploy/build-and-push.sh --tag "${{ steps.meta.outputs.tag }}"
+        run: |
+          website/infra/deploy/build-and-push.sh --tag "${{ steps.meta.outputs.tag }}"
+          # The environments service (connector registry) builds from the
+          # monorepo root so core/ is reachable, with its own Dockerfile.
+          website/infra/deploy/build-and-push.sh --tag "${{ steps.meta.outputs.tag }}" \
+            --repo environments --context . --dockerfile environments/Dockerfile
 
       - name: Repoint the instance and restart
         env:
@@ -181,6 +188,32 @@ jobs:
           sed -i -E "s#(image: [0-9]+\.dkr\.ecr\.[^:]*/website):.*#\1:${TAG}#" compose.yaml
           grep -c "website:${TAG}" compose.yaml
 
+          # The environments service (connector registry) rides in a compose
+          # override so the bootstrap-owned compose.yaml never needs editing.
+          # Its env comes from the same secret-synced .env; the registry it
+          # writes lives in its own database on the box postgres.
+          REPO_PREFIX=$(sed -nE 's#.*image: ([0-9]+\.dkr\.ecr\.[^ ]+)/website:.*#\1#p' compose.yaml | head -1)
+          test -n "${REPO_PREFIX}" || { echo "no website image line found in compose.yaml"; exit 1; }
+          cat > compose.override.yaml <<OVERRIDE
+          services:
+            environments:
+              image: ${REPO_PREFIX}/environments:${TAG}
+              restart: unless-stopped
+              environment:
+                CONVOY_DATABASE_URL: \${CONVOY_ENVIRONMENTS_PG_DSN}
+                CONVOY_MASTER_KEY: \${CONVOY_ENVIRONMENTS_MASTER_KEY}
+                CONVOY_INTERNAL_TOKEN: \${CONVOY_ENVIRONMENTS_INTERNAL_TOKEN}
+                CONVOY_GATEWAY_PUBLIC_URL: http://environments:8780/gateway
+                CONVOY_PORT: "8780"
+              depends_on:
+                postgres:
+                  condition: service_healthy
+            web:
+              environment:
+                CONVOY_ENVIRONMENTS_URL: \${CONVOY_ENVIRONMENTS_URL}
+                CONVOY_ENVIRONMENTS_INTERNAL_TOKEN: \${CONVOY_ENVIRONMENTS_INTERNAL_TOKEN}
+          OVERRIDE
+
           # The instance authenticated to ECR once, during bootstrap, and those
           # tokens last twelve hours. Every deploy after the first day was
           # therefore going to pull with an expired one. Re-authenticate on each
@@ -217,6 +250,13 @@ jobs:
           mv .env.next .env
 
           docker compose pull
+
+          # The registry's database and tables, idempotently, every release.
+          docker compose exec -T postgres sh -c \
+            'psql -U convoy_website_admin -d convoy_website -tc \
+               "SELECT 1 FROM pg_database WHERE datname = '"'"'convoy_environments'"'"'" | grep -q 1 || \
+             createdb -U convoy_website_admin convoy_environments'
+          docker compose run --rm -T environments convoy-environments init-db
 
           if [ "${RUN_MIGRATIONS}" = "true" ]; then
             # Both halves, in this order: the schema, then the app-role

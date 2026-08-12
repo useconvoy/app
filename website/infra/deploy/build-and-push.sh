@@ -27,7 +27,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
 
-TAG="" CONTEXT="" DOCKERFILE="" PLATFORM="linux/amd64"
+TAG="" CONTEXT="" DOCKERFILE="" PLATFORM="linux/amd64" REPO="website"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -35,6 +35,7 @@ while [[ $# -gt 0 ]]; do
     --context) CONTEXT="$2"; shift 2 ;;
     --dockerfile) DOCKERFILE="$2"; shift 2 ;;
     --platform) PLATFORM="$2"; shift 2 ;;
+    --repo) REPO="$2"; shift 2 ;;
     -h|--help) grep '^#' "$0" | cut -c3-; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
@@ -46,13 +47,14 @@ done
 
 need_cmd aws; need_cmd jq; need_cmd docker
 require_stack_env
+export ECR_REPO_NAME="${REPO}"
 
 CONTEXT="${CONTEXT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 DOCKERFILE="${DOCKERFILE:-${CONTEXT}/Dockerfile}"
 [[ -f "${DOCKERFILE}" ]] || die "Dockerfile not found: ${DOCKERFILE} (pass --dockerfile)"
 
 if ecr_tag_exists "${TAG}"; then
-  die "tag ${TAG} already exists in ${NAME_PREFIX}/website and tags are immutable; pick a new tag"
+  die "tag ${TAG} already exists in ${NAME_PREFIX}/${REPO} and tags are immutable; pick a new tag"
 fi
 
 IMAGE="$(ecr_repo_url):${TAG}"
