@@ -35,12 +35,18 @@ def main() -> None:
         from .console_api import build_console_app
         from .db import SqlEventLog, make_engine, make_session_factory
         from .gateway import GatewayService
+        from .gateway.hooks import HookDispatcher
         from .gateway.mcp_server import build_app as build_gateway_app
         from .secrets import BuiltinBackend, MasterKey, SecretsService
 
         session_factory = make_session_factory(make_engine())
         secrets = SecretsService(session_factory, {"builtin": BuiltinBackend(MasterKey())})
         log = SqlEventLog(session_factory)
+        hook_dispatcher = HookDispatcher(
+            session_factory,
+            control_plane_url=os.environ.get("CONVOY_CONTROL_PLANE_URL", "http://localhost:8700"),
+            control_plane_token=os.environ.get("CONVOY_CONTROL_PLANE_TOKEN", ""),
+        )
         app = FastAPI(title="convoy-environments")
         app.mount(
             "/gateway",
@@ -51,7 +57,8 @@ def main() -> None:
                     event_log=log,
                     sandbox_url=os.environ.get("CONVOY_CONNECTOR_SANDBOX_URL", ""),
                     sandbox_admin_token=os.environ.get("SANDBOX_ADMIN_TOKEN", ""),
-                )
+                ),
+                hook_dispatcher=hook_dispatcher,
             ),
         )
         app.mount("/console", build_console_app(session_factory, secrets))

@@ -156,6 +156,29 @@ class BrowserProfile(Base):
     captured_by_run_id: Mapped[str] = mapped_column(String(64), nullable=True)
 
 
+class EventRule(Base):
+    """One event trigger: when `event_type` arrives on `connection_id`,
+    start a run for `agent_id` from the frozen template below. The template
+    mirrors the schedule template runtime-side: what the console resolved
+    at save time (binding target, tools, instructions, budget)."""
+
+    __tablename__ = "event_rules"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
+    connection_id: Mapped[str] = mapped_column(ForeignKey("connections.id"), index=True)
+    event_type: Mapped[str] = mapped_column(String(128))
+    agent_id: Mapped[str] = mapped_column(String(64), index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    goal: Mapped[str] = mapped_column(Text)
+    environment_id: Mapped[str] = mapped_column(String(128))
+    budget_usd: Mapped[str] = mapped_column(String(32))
+    tools: Mapped[list] = mapped_column(PortableJSON, default=list)
+    instructions: Mapped[list] = mapped_column(PortableJSON, default=list)
+    started_by: Mapped[str] = mapped_column(String(64), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[_dt.datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
 class AuditLog(Base):
     """Control-plane changes only (connection created, env version added,
     grant changed, secret rotated). Runtime actions live in `events`."""

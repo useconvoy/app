@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from ..connectors import ConnectorError
 from ..mcp_protocol import MCP_PROTOCOL_VERSION as PROTOCOL_VERSION
+from .hooks import HookDispatchError, HookVerificationError
 from .policy import PolicyDenied
 from .service import GatewayService
 from .tokens import RunClaims, TokenError, mint_run_token, verify_run_token
@@ -76,6 +77,7 @@ class MintRequest(BaseModel):
 
 
 def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
+              hook_dispatcher: Optional[Any] = None,
               internal_token: Optional[str] = None,
               public_url: Optional[str] = None,
               allow_anonymous_data_plane: Optional[bool] = None) -> FastAPI:
@@ -285,6 +287,27 @@ def build_app(service: GatewayService, gateway_secret: Optional[str] = None,
             idempotency_key=req.idempotency_key,
         )
         return {"result": result, "replayed": recorded is not None}
+
+    @app.post("/hooks/{connection_id}")
+    async def receive_hook(connection_id: str, request: Request):
+        """Provider webhook door. Signature-verified against the connection's
+        webhook secret (fail closed when unset); matching event rules create
+        runs with started_via="event"; provider redelivery is idempotent via
+        delivery-derived run ids. Non-2xx tells the provider to redeliver."""
+        if hook_dispatcher is None:
+            raise HTTPException(503, "event triggers are not configured")
+        body = await request.body()
+        try:
+            result = await hook_dispatcher.dispatch(
+                connection_id, body, dict(request.headers)
+            )
+        except LookupError:
+            raise HTTPException(404, "unknown connection")
+        except HookVerificationError as err:
+            raise HTTPException(403, str(err))
+        except HookDispatchError as err:
+            raise HTTPException(503, str(err))
+        return result
 
     @app.get("/environments/{environment_id}")
     async def registry_alias(environment_id: str, version: Optional[int] = None,

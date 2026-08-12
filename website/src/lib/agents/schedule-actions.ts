@@ -10,15 +10,14 @@
  */
 import { revalidatePath } from "next/cache";
 
-import { environmentsClient, type Agent } from "@/lib/api/environments";
+import { environmentsClient } from "@/lib/api/environments";
 import { controlPlane } from "@/lib/api/client";
 import { requireOrgSession } from "@/lib/auth/session";
 import { withOrgContext } from "@/lib/db";
 import { getMembership } from "@/lib/orgs/queries";
 import { can } from "@/lib/permissions";
-import { toolIdsForRoutine } from "@/lib/workspaces/system-catalog";
-import { agentRuntimeToolIds } from "./capabilities";
 import { orgTenantId } from "./queries";
+import { buildRunTemplate } from "./template";
 import {
   resolveCron,
   scheduleDisplay,
@@ -42,33 +41,6 @@ async function guardScheduleEdit(agentId: string) {
   return { session, membership, agent };
 }
 
-async function runTemplateFor(
-  orgId: string,
-  agent: Agent,
-  target: ScheduleTarget,
-  startedBy: string,
-) {
-  if (!agent.automationConfigured || !agent.goal.trim()) {
-    throw new Error("Give this agent a goal before scheduling it");
-  }
-  const workspace = await environmentsClient().getWorkspace(orgId, agent.workspaceId);
-  if (!workspace) throw new Error("This agent's workspace no longer exists");
-  const tools = [
-    ...new Set([
-      ...toolIdsForRoutine(agent.systems, workspace.systems),
-      ...agentRuntimeToolIds(agent),
-    ]),
-  ].sort();
-  return {
-    goal: agent.goal,
-    environment_id: target === "production" ? agent.productionBindingId : agent.rehearsalBindingId,
-    budget_usd: agent.budgetCapUsd,
-    tools,
-    instructions: agent.planSteps,
-    started_by: startedBy,
-  };
-}
-
 export async function setAgentSchedule(
   agentId: string,
   input: ScheduleFormInput,
@@ -88,7 +60,7 @@ export async function setAgentSchedule(
   };
 
   const tenantId = await orgTenantId(session.orgId);
-  const template = await runTemplateFor(session.orgId, agent, schedule.target, session.userId);
+  const template = await buildRunTemplate(session.orgId, agent, schedule.target, session.userId);
   const { error } = await controlPlane({ actorId: session.userId, tenantId }).PUT(
     "/agents/{agent_id}/schedule",
     {

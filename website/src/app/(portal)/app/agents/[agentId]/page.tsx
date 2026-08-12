@@ -8,6 +8,9 @@ import { environmentsClient } from "@/lib/api/environments";
 import { runAgentNow } from "@/lib/agents/run-actions";
 import { getAgentSchedule } from "@/lib/agents/queries";
 import { clearAgentSchedule, setAgentSchedule } from "@/lib/agents/schedule-actions";
+import { addAgentEventRule, removeAgentEventRule } from "@/lib/agents/event-actions";
+import { suggestedEvents } from "@/lib/agents/events";
+import { listEventRules, listSystemConnections } from "@/lib/api/environments";
 import {
   SCHEDULE_PRESETS,
   parseStoredSchedule,
@@ -36,12 +39,31 @@ export default async function AgentDetailPage({
   const canRunProduction = can("promote", membership.role, membership.capabilities);
   const canManage = can("manage_workspaces", membership.role, membership.capabilities);
   const schedule = parseStoredSchedule(await getAgentSchedule(session.orgId, agentId));
+  const eventRules = (await listEventRules(session.orgId, agentId).catch(() => null)) ?? null;
+  const connections = eventRules === null
+    ? null
+    : await listSystemConnections(session.orgId).catch(() => null);
 
   async function startAction(formData: FormData) {
     "use server";
     const target = formData.get("target") === "production" ? "production" : "rehearsal";
     const { runId } = await runAgentNow(agentId, target);
     redirect(`/app/runs/${runId}`);
+  }
+
+  async function eventRuleAction(formData: FormData) {
+    "use server";
+    const removeId = formData.get("removeRuleId");
+    if (typeof removeId === "string" && removeId) {
+      await removeAgentEventRule(agentId, removeId);
+      return;
+    }
+    await addAgentEventRule(agentId, {
+      connectionId: String(formData.get("connectionId") ?? ""),
+      eventType: String(formData.get("eventType") ?? ""),
+      target: formData.get("target") === "production" ? "production" : "rehearsal",
+      webhookSecret: String(formData.get("webhookSecret") ?? ""),
+    });
   }
 
   async function scheduleAction(formData: FormData) {
@@ -175,6 +197,83 @@ export default async function AgentDetailPage({
           </form>
         )}
       </section>
+
+      {eventRules !== null && (
+        <section className="rounded-lg border border-line bg-card p-5">
+          <h2 className="font-display text-lg text-ink">Starts when</h2>
+          {eventRules.length === 0 ? (
+            <p className="mt-2 text-sm text-muted">
+              No event triggers yet. Point a system&apos;s webhook at Convoy and this Agent can
+              start itself when something happens.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {eventRules.map((rule) => (
+                <li key={rule.ruleId} className="flex flex-wrap items-center gap-3 text-sm">
+                  <span className="font-mono text-xs text-ink">{rule.eventType}</span>
+                  <span className="text-xs text-muted">
+                    → {rule.environmentId.endsWith("/sandbox") ? "rehearsal" : "live"}
+                  </span>
+                  {canManage && (
+                    <form action={eventRuleAction}>
+                      <input type="hidden" name="removeRuleId" value={rule.ruleId} />
+                      <Button type="submit" variant="secondary">Remove</Button>
+                    </form>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {canManage && agent.automationConfigured && connections && connections.length > 0 && (
+            <form action={eventRuleAction} className="mt-4 flex flex-wrap items-end gap-3 text-sm">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">System</span>
+                <select name="connectionId" className="rounded-sm border border-line bg-field px-2 py-1.5">
+                  {connections.map((connection) => (
+                    <option key={connection.connectionId} value={connection.connectionId}>
+                      {connection.displayName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">Event</span>
+                <input
+                  name="eventType"
+                  placeholder={suggestedEvents(connections[0]?.provider ?? "").join(", ") || "eventType"}
+                  className="w-44 rounded-sm border border-line bg-field px-2 py-1.5 font-mono text-xs"
+                  list="event-suggestions"
+                />
+                <datalist id="event-suggestions">
+                  {connections.flatMap((connection) =>
+                    suggestedEvents(connection.provider).map((event) => (
+                      <option key={`${connection.connectionId}-${event}`} value={event} />
+                    )),
+                  )}
+                </datalist>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">Runs as</span>
+                <select name="target" className="rounded-sm border border-line bg-field px-2 py-1.5">
+                  <option value="rehearsal">Rehearsal</option>
+                  {canRunProduction && <option value="production">Live</option>}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs text-muted">Webhook signing secret (first time)</span>
+                <input
+                  name="webhookSecret"
+                  type="password"
+                  className="w-48 rounded-sm border border-line bg-field px-2 py-1.5"
+                />
+              </label>
+              <div className="pb-0.5">
+                <Button type="submit">Add trigger</Button>
+              </div>
+            </form>
+          )}
+        </section>
+      )}
 
       <div className="grid gap-5 md:grid-cols-2">
         <section className="rounded-lg border border-line bg-card p-5">

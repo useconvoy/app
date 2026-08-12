@@ -35,9 +35,10 @@ from ..db.tables import (
     Environment as EnvironmentRow,
     EnvironmentConnection as EnvConnRow,
     EnvironmentGrant,
+    EventRule,
     Membership,
-    User,
     Organization,
+    User,
 )
 from ..schema import ConnectionManifest, policy_hash
 from ..secrets import SecretsService
@@ -108,6 +109,28 @@ class CreateExecutionEnvironment(BaseModel):
 class AttachSecret(BaseModel):
     secretValue: str
     secretBackend: str = "builtin"
+
+
+class SetWebhookSecret(BaseModel):
+    """The provider's webhook *signing* secret — verification material the
+    hooks door must read on every delivery, so it lives in the connection
+    config, not the write-only credential vault."""
+
+    secret: str = Field(min_length=8, max_length=256)
+
+
+class CreateEventRule(BaseModel):
+    connectionId: str
+    eventType: str = Field(min_length=1, max_length=128)
+    agentId: str
+    enabled: bool = True
+    # The frozen run template, resolved by the console at save time.
+    goal: str = Field(min_length=1)
+    environmentId: str
+    budgetUsd: str
+    tools: List[str] = Field(default_factory=list)
+    instructions: List[str] = Field(default_factory=list)
+    startedBy: Optional[str] = None
 
 
 class CreateGrant(BaseModel):
@@ -520,6 +543,71 @@ def build_console_app(session_factory, secrets: SecretsService,
                    "%s:%s" % (workspace_id, req.userId), {"role": req.role})
             s.commit()
             return {"workspaceId": workspace_id, "userId": req.userId, "role": req.role}
+
+    # -- event triggers ----------------------------------------------------
+
+    @app.post("/organizations/{org_id}/connections/{connection_id}/webhook-secret")
+    async def set_webhook_secret(org_id: str, connection_id: str, req: SetWebhookSecret,
+                                 user: str = Depends(user_dep)):
+        with session_factory() as s:
+            require_organization_role(s, org_id, user, "admin")
+            row = _connection_or_404(s, org_id, connection_id)
+            config = dict(row.config or {})
+            config["webhookSecret"] = req.secret
+            row.config = config
+            _audit(s, org_id, user, "connection.webhook_secret_set", "connection",
+                   connection_id, {"provider": row.provider})
+            s.commit()
+            return {"connectionId": connection_id, "hookPath": "/gateway/hooks/%s" % connection_id}
+
+    @app.post("/organizations/{org_id}/event-rules")
+    async def create_event_rule(org_id: str, req: CreateEventRule, user: str = Depends(user_dep)):
+        with session_factory() as s:
+            require_organization_role(s, org_id, user, "admin")
+            _connection_or_404(s, org_id, req.connectionId)
+            rule = EventRule(id=_id("rule"), organization_id=org_id,
+                             connection_id=req.connectionId, event_type=req.eventType,
+                             agent_id=req.agentId, enabled=req.enabled, goal=req.goal,
+                             environment_id=req.environmentId, budget_usd=req.budgetUsd,
+                             tools=req.tools, instructions=req.instructions,
+                             started_by=req.startedBy or user, created_by=user)
+            s.add(rule)
+            _audit(s, org_id, user, "event_rule.create", "event_rule", rule.id,
+                   {"connectionId": req.connectionId, "eventType": req.eventType,
+                    "agentId": req.agentId})
+            s.commit()
+            return _event_rule_payload(rule)
+
+    def _event_rule_payload(rule: EventRule) -> Dict[str, Any]:
+        return {"ruleId": rule.id, "connectionId": rule.connection_id,
+                "eventType": rule.event_type, "agentId": rule.agent_id,
+                "enabled": rule.enabled, "goal": rule.goal,
+                "environmentId": rule.environment_id, "budgetUsd": rule.budget_usd,
+                "createdAt": rule.created_at.isoformat()}
+
+    @app.get("/organizations/{org_id}/event-rules")
+    async def list_event_rules(org_id: str, agent_id: Optional[str] = None,
+                               user: str = Depends(user_dep)):
+        with session_factory() as s:
+            require_organization_role(s, org_id, user, "member")
+            query = s.query(EventRule).filter_by(organization_id=org_id)
+            if agent_id:
+                query = query.filter_by(agent_id=agent_id)
+            return [_event_rule_payload(rule) for rule in query.all()]
+
+    @app.delete("/organizations/{org_id}/event-rules/{rule_id}")
+    async def delete_event_rule(org_id: str, rule_id: str, user: str = Depends(user_dep)):
+        """The registry's first removal endpoint: rules are pure config, so
+        deleting one has no credential or version-pinning consequences."""
+        with session_factory() as s:
+            require_organization_role(s, org_id, user, "admin")
+            rule = s.get(EventRule, rule_id)
+            if rule is None or rule.organization_id != org_id:
+                raise HTTPException(404, "unknown event rule %s" % rule_id)
+            s.delete(rule)
+            _audit(s, org_id, user, "event_rule.delete", "event_rule", rule_id)
+            s.commit()
+            return {"ruleId": rule_id, "deleted": True}
 
     # Gates deliberately absent: human gates are plan-step-level and
     # runtime-owned (HumanGate + human_response signal, DESIGN §6/§7); gate
