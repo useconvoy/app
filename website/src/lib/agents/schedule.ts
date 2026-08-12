@@ -51,7 +51,7 @@ export function scheduleDisplay(schedule: AgentSchedule): string {
   const preset = Object.values(SCHEDULE_PRESETS).find((entry) => entry.cron === schedule.cron);
   const when = preset ? preset.label : `cron ${schedule.cron}`;
   const zone = schedule.timezone === "UTC" ? "" : ` (${schedule.timezone})`;
-  const paused = schedule.enabled ? "" : " — paused";
+  const paused = schedule.enabled ? "" : " (paused)";
   return `${when}${zone}, ${schedule.target}${paused}`;
 }
 

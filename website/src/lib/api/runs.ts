@@ -57,8 +57,8 @@ export async function getRun(actor: ActorContext, runId: string): Promise<RunVie
 
 /**
  * Whether a binding target is a rehearsal copy. Registry rehearsal bindings
- * are the `<environment>/sandbox` convention; the table-backed dev fallback
- * binds rehearsal to the runtime stub's `stub-local`. Runs created before
+ * carry the environment id with a /sandbox suffix; the table-backed dev
+ * fallback binds rehearsal to the runtime stub's `stub-local`. Runs created before
  * the environment_id column carry an empty target and read as production —
  * the runtime re-checks every rehearsal-only operation server-side anyway.
  */

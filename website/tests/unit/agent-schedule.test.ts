@@ -63,7 +63,7 @@ describe("presetForCron / scheduleDisplay", () => {
         target: "production",
         enabled: false,
       }),
-    ).toBe("Every weekday at 9:00 (America/Chicago), production — paused");
+    ).toBe("Every weekday at 9:00 (America/Chicago), production (paused)");
   });
 });
 

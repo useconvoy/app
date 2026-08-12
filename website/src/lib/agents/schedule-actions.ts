@@ -23,7 +23,6 @@ import {
   scheduleDisplay,
   type AgentSchedule,
   type ScheduleFormInput,
-  type ScheduleTarget,
 } from "./schedule";
 
 async function guardScheduleEdit(agentId: string) {
