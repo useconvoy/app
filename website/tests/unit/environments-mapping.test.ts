@@ -94,6 +94,32 @@ describe("connectionPlanForGrants", () => {
     expect(slack.toolAllowlist).toEqual(["slack.list_channels", "slack.read_messages"]);
   });
 
+  it("honors an explicit action selection as the allowlist", () => {
+    const selected = grantsFromChoices([
+      {
+        systemId: "messaging",
+        scope: "write",
+        useStandIn: true,
+        tools: ["slack.read_messages", "slack.post_message"],
+      },
+    ]);
+    const [plan] = connectionPlanForGrants(selected);
+    expect(plan!.toolAllowlist).toEqual(["slack.read_messages", "slack.post_message"]);
+  });
+
+  it("never lets a read-scope selection smuggle in a mutating action", () => {
+    const selected = grantsFromChoices([
+      {
+        systemId: "messaging",
+        scope: "read",
+        useStandIn: false,
+        tools: ["slack.read_messages", "slack.post_message"],
+      },
+    ]);
+    const [plan] = connectionPlanForGrants(selected);
+    expect(plan!.toolAllowlist).toEqual(["slack.read_messages"]);
+  });
+
   it("declares manifests whose mutating tools are promoted and flagged", () => {
     const slack = plans.find((plan) => plan.provider === "slack")!;
     const post = slack.manifest.tools.find((tool) => tool.name === "slack.post_message")!;

@@ -18,6 +18,7 @@ import {
 } from "@/lib/api/environments";
 import { requireOrgSession } from "@/lib/auth/session";
 import { withOrgContext } from "@/lib/db";
+import { unconnectableGrants } from "@/lib/workspaces/connector-health";
 import { catalogSystem } from "@/lib/workspaces/system-catalog";
 import { getMembership } from "@/lib/orgs/queries";
 import { can } from "@/lib/permissions";
@@ -43,7 +44,13 @@ export async function customSystemDefinitions(orgId: string): Promise<CustomWork
 export interface CreateWorkspacePayload {
   name: string;
   purpose: string;
-  systems: Array<{ systemId: string; scope: "read" | "write"; useStandIn: boolean }>;
+  systems: Array<{
+    systemId: string;
+    scope: "read" | "write";
+    useStandIn: boolean;
+    /** Actions enabled for this connector; absent keeps the full scope surface. */
+    tools?: string[];
+  }>;
 }
 
 export async function createWorkspace(payload: CreateWorkspacePayload): Promise<{ id: string }> {
@@ -66,19 +73,54 @@ export async function createWorkspace(payload: CreateWorkspacePayload): Promise<
     throw new Error("Say which shared work this workspace supports");
   }
   if (payload.systems.length === 0) {
-    throw new Error("Connect at least one system");
+    throw new Error("Pick at least one connector");
   }
-  // Custom system grants ("custom:<connection>") resolve against the org's
-  // registry connections, server-side — the modal's list is a lens only.
+  // Custom connector grants ("custom:<connection>") resolve against the
+  // registry connections, server-side; the modal list is a lens only.
+  // One listing serves both resolution and the health check below.
+  const connections = await listSystemConnections(session.orgId);
   const wantsCustom = payload.systems.some((choice) => choice.systemId.startsWith("custom:"));
   const customSystems = wantsCustom ? await customSystemDefinitions(session.orgId) : [];
   const customById = new Map(customSystems.map((definition) => [definition.id, definition]));
 
   for (const choice of payload.systems) {
     const system = catalogSystem(choice.systemId) ?? customById.get(choice.systemId);
-    if (!system) throw new Error("Unknown system");
+    if (!system) throw new Error("Unknown connector");
     if (choice.scope !== "read" && choice.scope !== "write") {
       throw new Error("Unknown grant");
+    }
+    // An explicit action selection must name actions the connector
+    // declares, and cannot be empty (deselect the connector instead).
+    if (choice.tools) {
+      const declared = new Set(
+        ("connection" in system ? system.connection?.tools : system.tools)?.map(
+          (tool) => tool.name,
+        ) ?? [],
+      );
+      if (choice.tools.length === 0) {
+        throw new Error(`Enable at least one action for ${system.displayName}`);
+      }
+      for (const tool of choice.tools) {
+        if (!declared.has(tool)) {
+          throw new Error(`${system.displayName} has no action named ${tool}`);
+        }
+      }
+    }
+  }
+
+  // A workspace bundles healthy connectors. When the registry is linked,
+  // every provider-backed or custom grant must resolve to an active
+  // connection (with a verified credential, custom servers excepted)
+  // before anything is created. The dev fallback has no connections to
+  // check, so it keeps the old behavior.
+  if (connections !== null) {
+    const blocked = unconnectableGrants(payload.systems, connections);
+    if (blocked.length > 0) {
+      throw new Error(
+        `Connect ${blocked.join(", ")} on the Connectors page before adding ${
+          blocked.length === 1 ? "it" : "them"
+        } to a workspace`,
+      );
     }
   }
 

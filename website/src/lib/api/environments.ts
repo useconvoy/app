@@ -145,7 +145,13 @@ export interface CustomWorkspaceSystem {
 export interface CreateWorkspaceInput {
   name: string;
   purpose: string;
-  systems: Array<{ systemId: string; scope: "read" | "write"; useStandIn: boolean }>;
+  systems: Array<{
+    systemId: string;
+    scope: "read" | "write";
+    useStandIn: boolean;
+    /** Explicitly enabled actions; absent grants the scope-derived surface. */
+    tools?: string[];
+  }>;
   /** Definitions for any "custom:" ids in `systems`; supplied server-side. */
   customSystems?: CustomWorkspaceSystem[];
 }
@@ -608,12 +614,13 @@ class RegistryEnvironmentsClient implements EnvironmentsClient {
     const custom = input.customSystems ?? [];
     const systems = grantsFromChoices(input.systems, custom);
 
-    // Granted systems with a registry provider become connections; ensure
-    // one connection per provider exists in the organization first. New
-    // connections are created secretless with the catalog's declared
-    // manifest: the tool surface is pinned now, and REAL CREDENTIALS ARE
-    // ATTACHED LATER through the connections surface (which re-verifies
-    // the manifest against the live system).
+    // A workspace bundles the organization's existing connectors: every
+    // provider-backed grant must resolve to a connection made on the
+    // Connectors page. Creating secretless placeholder connections here
+    // was the pre-Connectors behavior; now a missing connection is the
+    // caller's error, stated in the connector's own name. (Credential
+    // health is enforced by the create action; this guard keeps the
+    // client honest for any other caller.)
     const existing = await registryFetch<RegistryConnectionRow[]>(
       this.config,
       `/organizations/${ctx.registryOrgId}/connections`,
@@ -621,23 +628,11 @@ class RegistryEnvironmentsClient implements EnvironmentsClient {
     );
     const connections: Array<{ connectionId: string; toolAllowlist: string[] }> = [];
     for (const plan of connectionPlanForGrants(systems)) {
-      let connectionId = existing.find((row) => row.provider === plan.provider)?.connectionId;
+      const connectionId = existing.find((row) => row.provider === plan.provider)?.connectionId;
       if (!connectionId) {
-        const created = await registryFetch<{ connectionId: string }>(
-          this.config,
-          `/organizations/${ctx.registryOrgId}/connections`,
-          {
-            method: "POST",
-            body: {
-              kind: "mcp_managed",
-              provider: plan.provider,
-              displayName: plan.displayName,
-              manifest: plan.manifest,
-            },
-            actsFor: ctx.actsFor,
-          },
+        throw new Error(
+          `${plan.displayName} is not connected: connect it on the Connectors page first`,
         );
-        connectionId = created.connectionId;
       }
       connections.push({ connectionId, toolAllowlist: plan.toolAllowlist });
     }
@@ -649,9 +644,10 @@ class RegistryEnvironmentsClient implements EnvironmentsClient {
     for (const choice of input.systems) {
       const definition = customById.get(choice.systemId);
       if (!definition) continue;
-      const tools = choice.scope === "write"
-        ? definition.tools
-        : definition.tools.filter((tool) => !tool.sideEffecting);
+      const selected = choice.tools ? new Set(choice.tools) : null;
+      const tools = definition.tools
+        .filter((tool) => (selected ? selected.has(tool.name) : true))
+        .filter((tool) => choice.scope === "write" || !tool.sideEffecting);
       connections.push({
         connectionId: definition.connectionId,
         toolAllowlist: tools.map((tool) => tool.name),

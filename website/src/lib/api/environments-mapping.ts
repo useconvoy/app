@@ -99,12 +99,21 @@ export function connectionPlanForGrants(grants: SystemGrant[]): ConnectionPlan[]
   for (const grant of grants) {
     const spec = catalogSystem(grant.systemId)?.connection;
     if (!spec) continue;
+    // A grant that carries its tool set is authoritative (the create
+    // modal's per-action selection lands here); the scope still guards
+    // side-effecting tools out of read grants. Grants without tools
+    // fall back to the scope-derived surface.
+    const toolAllowlist = grant.tools
+      ? grant.tools
+          .filter((tool) => grant.scope === "write" || !tool.sideEffecting)
+          .map((tool) => tool.name)
+      : toolAllowlistFor(spec, grant.scope);
     plans.push({
       systemId: grant.systemId,
       provider: spec.provider,
       displayName: grant.displayName,
       manifest: declaredManifest(spec),
-      toolAllowlist: toolAllowlistFor(spec, grant.scope),
+      toolAllowlist,
     });
   }
   return plans;

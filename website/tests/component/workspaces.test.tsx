@@ -17,12 +17,25 @@ import { WorkspaceDetail } from "@/app/(portal)/app/workspaces/[workspaceId]/Wor
 import { fixtureWorkspaces } from "@/lib/fixtures/environments";
 
 const systems: SystemOption[] = [
-  { id: "document_store", displayName: "Document store", sideEffecting: false, standInNote: null },
+  {
+    id: "document_store",
+    displayName: "Document store",
+    sideEffecting: false,
+    standInNote: null,
+    tools: [
+      { name: "google.drive_list_files", sideEffecting: false },
+      { name: "google.sheets_append_row", sideEffecting: true },
+    ],
+  },
   {
     id: "messaging",
     displayName: "Messaging",
     sideEffecting: true,
     standInNote: "Stand-in for Slack: messages are held in the outbox instead of being sent.",
+    tools: [
+      { name: "slack.read_messages", sideEffecting: false },
+      { name: "slack.post_message", sideEffecting: true },
+    ],
   },
 ];
 
@@ -41,12 +54,14 @@ async function openModalAndFill(create: (payload: unknown) => Promise<{ id: stri
 }
 
 describe("CreateWorkspaceModal", () => {
-  it("automatically isolates side-effecting writes for rehearsal runs", async () => {
+  it("derives Can update from enabling an action that makes changes, and isolates it", async () => {
     const create = vi.fn().mockResolvedValue({ id: "workspace-x" });
     const { user, dialog } = await openModalAndFill(create);
 
     await user.click(within(dialog).getByLabelText("Messaging"));
-    await user.selectOptions(within(dialog).getByRole("combobox"), "write");
+    // Safe actions are pre-enabled; turning on the mutating action
+    // upgrades the grant and shows the isolation note.
+    await user.click(within(dialog).getByLabelText(/post_message/));
     expect(
       within(dialog).getByText(/Rehearsal runs isolate writes automatically/),
     ).toBeInTheDocument();
@@ -55,13 +70,20 @@ describe("CreateWorkspaceModal", () => {
     expect(create).toHaveBeenCalledWith({
       name: "Finance workspace",
       purpose: "Invoicing checks run here.",
-      systems: [{ systemId: "messaging", scope: "write", useStandIn: true }],
+      systems: [
+        {
+          systemId: "messaging",
+          scope: "write",
+          useStandIn: true,
+          tools: ["slack.read_messages", "slack.post_message"],
+        },
+      ],
     });
     expect(navigation.refresh).toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("lets a read grant on a side-effecting system through without a stand-in", async () => {
+  it("keeps the default selection read-only, without a stand-in", async () => {
     const create = vi.fn().mockResolvedValue({ id: "workspace-x" });
     const { user, dialog } = await openModalAndFill(create);
 
@@ -71,8 +93,44 @@ describe("CreateWorkspaceModal", () => {
     expect(create).toHaveBeenCalledWith({
       name: "Finance workspace",
       purpose: "Invoicing checks run here.",
-      systems: [{ systemId: "messaging", scope: "read", useStandIn: false }],
+      systems: [
+        {
+          systemId: "messaging",
+          scope: "read",
+          useStandIn: false,
+          tools: ["slack.read_messages"],
+        },
+      ],
     });
+  });
+
+  it("requires at least one enabled action on a selected connector", async () => {
+    const create = vi.fn();
+    const { user, dialog } = await openModalAndFill(create);
+
+    await user.click(within(dialog).getByLabelText("Messaging"));
+    await user.click(within(dialog).getByLabelText(/read_messages/));
+    await user.click(within(dialog).getByRole("button", { name: "Create workspace" }));
+
+    expect(create).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Enable at least one action for Messaging.",
+    );
+  });
+
+  it("filters connectors through the search box", async () => {
+    const user = userEvent.setup();
+    render(<CreateWorkspaceModal systems={systems} create={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "New workspace" }));
+    const dialog = screen.getByRole("dialog");
+
+    await user.type(within(dialog).getByLabelText("Search connectors"), "docu");
+    expect(within(dialog).getByLabelText(/Document store/)).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/Messaging/)).not.toBeInTheDocument();
+
+    await user.clear(within(dialog).getByLabelText("Search connectors"));
+    await user.type(within(dialog).getByLabelText("Search connectors"), "zzz");
+    expect(within(dialog).getByText("No connector matches that search.")).toBeInTheDocument();
   });
 
   it("requires a name, a purpose, and at least one system", async () => {
@@ -86,7 +144,39 @@ describe("CreateWorkspaceModal", () => {
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("Give the workspace a name.");
     expect(alert).toHaveTextContent("Say which shared work this workspace supports.");
-    expect(alert).toHaveTextContent("Connect at least one system.");
+    expect(alert).toHaveTextContent("Pick at least one connector.");
+  });
+
+  it("only lets healthy connectors be selected, pointing the rest at the Connectors page", async () => {
+    const user = userEvent.setup();
+    render(
+      <CreateWorkspaceModal
+        systems={[
+          { ...systems[0]!, status: "connected" },
+          { ...systems[1]!, status: "not_connected" },
+        ]}
+        create={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "New workspace" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByLabelText(/Document store/)).toBeEnabled();
+    expect(within(dialog).getByLabelText(/Messaging/)).toBeDisabled();
+    expect(within(dialog).getByRole("link", { name: "Connect it first" })).toHaveAttribute(
+      "href",
+      "/app/connectors",
+    );
+  });
+
+  it("explains where to connect services when nothing is connected yet", async () => {
+    const user = userEvent.setup();
+    render(<CreateWorkspaceModal systems={[]} create={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "New workspace" }));
+    expect(screen.getByText(/Nothing is connected yet/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Connectors page/ })).toHaveAttribute(
+      "href",
+      "/app/connectors",
+    );
   });
 
   it("points to agent setup as the next step", async () => {
