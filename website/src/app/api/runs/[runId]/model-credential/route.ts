@@ -7,15 +7,15 @@
  * human in the loop. Nothing about the key is ever logged, and the key is
  * returned only after the token authenticates.
  *
- * A run's organization is resolved from the in-process run directory
- * (TODO(runtime-D8)): a run the console never registered has no entry, so
- * issuance for it is a not-found. That is the same limitation the run list
- * carries today and retires with the same seam.
+ * A run's organization is resolved by asking the control plane itself:
+ * each org's tenant is probed with GET /runs/{id} until one claims the run
+ * (RLS scopes the read, so a wrong tenant is a clean 404). Dedicated
+ * stacks hold one organization, so the probe is a single call.
  */
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { NextRequest } from "next/server";
 
-import { tenantForRun } from "@/lib/api/runs";
+import { getRun } from "@/lib/api/runs";
 import { issueCredential } from "@/lib/credentials/store";
 import { isProvider } from "@/lib/credentials/verify";
 import { withSystemContext } from "@/lib/db";
@@ -32,15 +32,26 @@ function tokenAuthenticates(request: NextRequest, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-/** Resolve a runtime tenant id to a website org id under a no-person context. */
-async function orgIdForTenant(tenantId: string): Promise<string | null> {
+/** Every organization's (org id, runtime tenant) under a no-person context. */
+async function listOrgTenants(): Promise<{ id: string; tenantId: string }[]> {
   return withSystemContext(async (client) => {
-    const { rows } = await client.query<{ id: string }>(
-      "SELECT id FROM list_organizations() WHERE tenant_id = $1",
-      [tenantId],
+    const { rows } = await client.query<{ id: string; tenantId: string }>(
+      'SELECT id, tenant_id AS "tenantId" FROM list_organizations()',
     );
-    return rows[0]?.id ?? null;
+    return rows;
   });
+}
+
+/** The org owning a run, found by probing each tenant's run view. */
+async function orgForRun(runId: string): Promise<string | null> {
+  for (const org of await listOrgTenants()) {
+    const view = await getRun(
+      { actorId: "system:model-credential", tenantId: org.tenantId },
+      runId,
+    ).catch(() => null);
+    if (view) return org.id;
+  }
+  return null;
 }
 
 async function readProvider(request: NextRequest): Promise<string | null> {
@@ -74,10 +85,7 @@ export async function POST(
   }
 
   const { runId } = await context.params;
-  const tenantId = tenantForRun(runId);
-  if (!tenantId) return new Response(null, { status: 404 });
-
-  const orgId = await orgIdForTenant(tenantId);
+  const orgId = await orgForRun(runId);
   if (!orgId) return new Response(null, { status: 404 });
 
   const key = await issueCredential({ orgId, provider, runId });

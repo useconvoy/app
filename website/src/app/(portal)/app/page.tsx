@@ -2,12 +2,12 @@ import Link from "next/link";
 
 import { StatusChip } from "@/components/StatusChip";
 import { checkpointKinds, copy } from "@/lexicon";
-import type { RunView } from "@/lib/api/client";
+import type { RunSummary } from "@/lib/api/runs";
 import { listRuns } from "@/lib/api/runs";
 import { money } from "@/lib/format";
 import { requireRunPage } from "@/lib/runs/context";
-import { filterGroup, heldKind, progress, type HeldKind } from "@/lib/runs/status";
-import { isRehearsalRun } from "@/lib/routines/data";
+import { filterGroup, heldKind, type HeldKind } from "@/lib/runs/status";
+import { isRehearsalTarget } from "@/lib/api/runs";
 
 /**
  * Overview v1: held-for-you, runs in flight, recent reports; the calm
@@ -16,7 +16,7 @@ import { isRehearsalRun } from "@/lib/routines/data";
  */
 export default async function OverviewPage() {
   const { actor } = await requireRunPage();
-  let runs: RunView[] = [];
+  let runs: RunSummary[] = [];
   try {
     runs = await listRuns(actor);
   } catch {
@@ -45,7 +45,7 @@ export default async function OverviewPage() {
 }
 
 /** Stuck runs, one typed line per stuck kind, each linking to its run. */
-function HeldForYou({ runs }: { runs: RunView[] }) {
+function HeldForYou({ runs }: { runs: RunSummary[] }) {
   if (runs.length === 0) {
     return <QuietSection title="Held for you" message="Nothing is waiting on your judgment." />;
   }
@@ -65,29 +65,26 @@ function HeldForYou({ runs }: { runs: RunView[] }) {
   );
 }
 
-function RunsInFlight({ runs }: { runs: RunView[] }) {
+function RunsInFlight({ runs }: { runs: RunSummary[] }) {
   if (runs.length === 0) {
     return <QuietSection title="Runs in flight" message="No runs are in flight right now." />;
   }
   return (
     <RunSection title="Runs in flight">
-      {runs.map((run) => {
-        const { done, total } = progress(run.steps ?? []);
-        return (
-          <li key={run.run_id}>
-            <RunLine run={run}>
-              <span className="font-mono text-xs text-muted">
-                {done}/{total} steps
-              </span>
-            </RunLine>
-          </li>
-        );
-      })}
+      {runs.map((run) => (
+        <li key={run.run_id}>
+          <RunLine run={run}>
+            <span className="font-mono text-xs text-muted">
+              {run.steps_done ?? 0}/{run.steps_total ?? 0} steps
+            </span>
+          </RunLine>
+        </li>
+      ))}
     </RunSection>
   );
 }
 
-function RecentReports({ runs }: { runs: RunView[] }) {
+function RecentReports({ runs }: { runs: RunSummary[] }) {
   if (runs.length === 0) {
     return (
       <QuietSection title="Recent reports" message="Reports will appear here after runs land." />
@@ -106,8 +103,8 @@ function RecentReports({ runs }: { runs: RunView[] }) {
   );
 }
 
-function RunLine({ run, children }: { run: RunView; children?: React.ReactNode }) {
-  const rehearsal = isRehearsalRun(run.run_id);
+function RunLine({ run, children }: { run: RunSummary; children?: React.ReactNode }) {
+  const rehearsal = isRehearsalTarget(run.environment_id);
   return (
     <Link
       href={`/app/runs/${run.run_id}`}

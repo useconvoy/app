@@ -3,11 +3,9 @@ import Link from "next/link";
 
 import { ErrorBlock } from "@/components/ErrorBlock";
 import { copy } from "@/lexicon";
-import { listRuns, runStartedBy } from "@/lib/api/runs";
+import { isRehearsalTarget, listRuns } from "@/lib/api/runs";
 import { can } from "@/lib/permissions";
 import { requireRunPage } from "@/lib/runs/context";
-import { progress } from "@/lib/runs/status";
-import { isRehearsalRun } from "@/lib/routines/data";
 import { RunsList, type RunListRow } from "./runs-list";
 
 export const metadata: Metadata = { title: "Runs" };
@@ -33,19 +31,16 @@ export default async function RunsPage({
   try {
     const views = await listRuns(actor);
     rows = views
-      .filter((view) => !mineOnly || runStartedBy(view.run_id) === session.userId)
-      .map((view) => {
-        const { done, total } = progress(view.steps ?? []);
-        return {
-          id: view.run_id,
-          goal: view.goal,
-          status: view.status,
-          done,
-          total,
-          spentUsd: view.budget?.spent_usd ?? null,
-          rehearsal: isRehearsalRun(view.run_id),
-        };
-      });
+      .filter((view) => !mineOnly || view.started_by === session.userId)
+      .map((view) => ({
+        id: view.run_id,
+        goal: view.goal,
+        status: view.status,
+        done: view.steps_done ?? 0,
+        total: view.steps_total ?? 0,
+        spentUsd: view.budget?.spent_usd ?? null,
+        rehearsal: isRehearsalTarget(view.environment_id),
+      }));
   } catch {
     rows = null;
   }

@@ -18,10 +18,11 @@ import json
 import uuid
 from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Annotated, Any, cast
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from temporalio.client import Client
 from temporalio.exceptions import WorkflowAlreadyStartedError
@@ -47,6 +48,8 @@ from convoy_runtime.control_plane.models import (
     CreateRunResponse,
     ExecutionSessionView,
     GateRespondRequest,
+    RunListResponse,
+    RunSummary,
     RunView,
     SignalResponse,
     SteerRequest,
@@ -104,6 +107,7 @@ app = FastAPI(title="Convoy Agent Runtime", lifespan=_lifespan)
 @app.get("/healthz")
 async def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
 
 ActorDep = Annotated[Actor, Depends(require_actor)]
 
@@ -275,6 +279,9 @@ async def create_run(
         environment_id=body.environment_id,
         status="planning",
         budget_cap_usd=body.budget_usd,
+        agent_id=body.agent_id,
+        started_by=body.started_by or actor.actor_id,
+        started_via=body.started_via,
     )
     client = _temporal(request)
     # Idempotent retry: WorkflowAlreadyStartedError means the run already exists.
@@ -474,7 +481,69 @@ async def get_run(request: Request, run_id: str, actor: ActorDep) -> RunView:
             )
             for step in steps
         ],
+        environment_id=run.environment_id,
+        agent_id=run.agent_id,
+        started_by=run.started_by,
+        started_via=run.started_via,
+        created_at=run.created_at,
     )
+
+
+@app.get("/runs", response_model=RunListResponse)
+async def list_runs(
+    request: Request,
+    actor: ActorDep,
+    status: str | None = None,
+    agent_id: str | None = None,
+    created_before: datetime | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> RunListResponse:
+    """Tenant-scoped run list, newest first, from projections only. This is
+    the console's run directory — no client should have to remember run ids
+    it created (the website's in-process map retires against this)."""
+    projections = _projections(request)
+    runs = await projections.list_runs(
+        actor.tenant_id,
+        status=status,
+        agent_id=agent_id,
+        created_before=created_before,
+        limit=limit,
+    )
+    summaries = [
+        RunSummary(
+            run_id=run.run_id,
+            tenant_id=run.tenant_id,
+            parent_run_id=run.parent_run_id,
+            status=run.status,
+            goal=run.goal,
+            land_report=run.land_report,
+            budget=(
+                BudgetView(
+                    cap_usd=run.budget_cap_usd,
+                    spent_usd=run.budget_spent_usd,
+                    reserved_usd=run.budget_reserved_usd,
+                )
+                if run.budget_cap_usd is not None
+                else None
+            ),
+            environment_id=run.environment_id,
+            agent_id=run.agent_id,
+            started_by=run.started_by,
+            started_via=run.started_via,
+            steps_done=run.steps_done,
+            steps_total=run.steps_total,
+            execution_session=(
+                ExecutionSessionView.model_validate(run.execution_session.model_dump())
+                if run.execution_session is not None
+                else None
+            ),
+            created_at=run.created_at,
+            updated_at=run.updated_at,
+        )
+        for run in runs
+    ]
+    next_cursor = runs[-1].created_at if len(runs) == limit else None
+    return RunListResponse(runs=summaries, next_created_before=next_cursor)
 
 
 @app.get("/runs/{run_id}/events")

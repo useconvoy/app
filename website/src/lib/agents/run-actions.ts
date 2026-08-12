@@ -7,7 +7,6 @@ import { createRun } from "@/lib/api/runs";
 import { requireOrgSession } from "@/lib/auth/session";
 import { getMembership } from "@/lib/orgs/queries";
 import { can } from "@/lib/permissions";
-import { recordRunTarget } from "@/lib/routines/data";
 import { missingSystems, systemDisplayNames } from "@/lib/workspaces/fit";
 import { toolIdsForRoutine } from "@/lib/workspaces/system-catalog";
 import { agentRuntimeToolIds } from "./capabilities";
@@ -77,9 +76,9 @@ export async function runAgentNow(
       tools,
       agentId: agent.id,
       startedById: session.userId,
+      startedVia: "manual",
     },
   );
-  recordRunTarget(runId, target);
   revalidatePath(`/app/agents/${agent.id}`);
   revalidatePath("/app/agents");
   revalidatePath("/app/runs");

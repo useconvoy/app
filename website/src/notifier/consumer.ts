@@ -15,7 +15,6 @@ import type { PoolClient } from "pg";
 import { withOrgContext } from "../lib/db";
 import { notificationTitles } from "../lexicon";
 import type { EventFeed } from "./feed";
-import { routineIdForRunId } from "./feed";
 import { candidatesForEvent, type NotificationCandidate } from "./rules";
 import { loadRoutingWorld, resolveRecipients, type RoutingWorld } from "./routing";
 
@@ -92,7 +91,7 @@ export async function consumerTick(
   feed: EventFeed,
   options: ConsumerOptions = {},
 ): Promise<ConsumerTickResult> {
-  const resolveRoutineId = options.resolveRoutineId ?? routineIdForRunId;
+  const resolveRoutineId = options.resolveRoutineId ?? (() => undefined);
   const cursor = await withOrgContext({ orgId }, (client) => readCursor(client, orgId));
   const batch = await feed.pull(cursor);
   if (batch.length === 0) return { events: 0, notifications: 0, cursor };

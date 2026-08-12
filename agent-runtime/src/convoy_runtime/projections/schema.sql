@@ -13,6 +13,14 @@ CREATE TABLE IF NOT EXISTS runs (
     budget_cap_usd      numeric,
     budget_spent_usd    numeric,
     budget_reserved_usd numeric,
+    -- The exact binding target the caller selected ("env_x" or
+    -- "env_x/sandbox") — rehearsal-vs-production is derivable from it.
+    environment_id      text        NOT NULL DEFAULT '',
+    -- Console attribution: which agent definition launched this run, who
+    -- asked for it, and through which trigger class.
+    agent_id            text,
+    started_by          text,
+    started_via         text        NOT NULL DEFAULT 'manual',
     created_at          timestamptz NOT NULL DEFAULT now(),
     updated_at          timestamptz NOT NULL DEFAULT now()
 );
@@ -22,9 +30,17 @@ ALTER TABLE runs ADD COLUMN IF NOT EXISTS budget_cap_usd      numeric;
 ALTER TABLE runs ADD COLUMN IF NOT EXISTS budget_spent_usd    numeric;
 ALTER TABLE runs ADD COLUMN IF NOT EXISTS budget_reserved_usd numeric;
 ALTER TABLE runs ADD COLUMN IF NOT EXISTS parent_run_id       text;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS environment_id      text NOT NULL DEFAULT '';
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS agent_id            text;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS started_by          text;
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS started_via         text NOT NULL DEFAULT 'manual';
 
 -- Child runs of a parent, in one indexed lookup.
 CREATE INDEX IF NOT EXISTS runs_parent_idx ON runs (tenant_id, parent_run_id);
+
+-- The run list: newest-first per tenant, optionally narrowed to one agent.
+CREATE INDEX IF NOT EXISTS runs_tenant_created_idx ON runs (tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS runs_tenant_agent_idx   ON runs (tenant_id, agent_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS run_events (
     tenant_id  text        NOT NULL,

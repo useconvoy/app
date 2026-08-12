@@ -7,7 +7,8 @@ threads so activities stay non-blocking.
 
 import hashlib
 import json
-from typing import TYPE_CHECKING, Any, Callable, cast
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, cast
 
 import anyio.to_thread
 import boto3
@@ -35,7 +36,7 @@ def _assumed_role_session(role_arn: str, region: str) -> boto3.Session:
         raise RuntimeError("CONVOY_DATA_ACCESS_ROLE_ARN is set but no source AWS credentials exist")
 
     def client_creator(service_name: str, **kwargs: Any) -> Any:
-        factory = cast("Callable[..., Any]", getattr(source, "client"))
+        factory = cast("Callable[..., Any]", source.client)
         return factory(service_name, **kwargs)
 
     fetcher = cast("Any", AssumeRoleCredentialFetcher)(
@@ -79,6 +80,7 @@ class ArtifactStore:
             aws_secret_access_key=secret_key,
             config=BotoConfig(signature_version="s3v4", s3={"addressing_style": "path"}),
         )
+
     @property
     def bucket(self) -> str:
         return self._bucket

@@ -1,116 +1,51 @@
 /**
  * Run listing and creation over the control plane.
  *
- * The runtime does not yet expose an org-wide run list; that addition is
- * requested from the runtime (`GET /runs`). Until it lands, this directory
- * tracks run ids per tenant in process memory: runs created through the
- * console register here, and every read hydrates through the real
- * `GET /runs/{id}` so nothing domain-shaped is ever cached or persisted on
- * the website side. TODO(runtime-D8): replace the registry with the
- * runtime's list endpoint and delete the registration seam.
+ * `GET /runs` is the run directory now: it serves the tenant's runs newest
+ * first with console attribution (agent_id, started_by, started_via) and the
+ * exact binding target (environment_id) on every row. Nothing about runs is
+ * remembered website-side anymore — the old in-process registry and the
+ * rehearsal-target map are gone, so runs started by any process (seed
+ * scripts, schedules, other instances) are first-class in every surface.
  */
 import "server-only";
 
 import { controlPlane, type ActorContext, type RunView } from "./client";
+import type { components } from "./schema";
 
-/** Console-side facts recorded at creation time, keyed by run id. */
-interface RunRecord {
-  runId: string;
-  tenantId: string;
-  /** Durable Agent the run was triggered from; drives assignment routing. */
+export type RunSummary = components["schemas"]["RunSummary"];
+
+export interface ListRunsOptions {
+  status?: string;
+  /** Narrow to runs launched from one Agent. */
   agentId?: string;
-  /** @deprecated Frozen compatibility input; normalized into agentId. */
-  routineId?: string;
-  /** Website user who started the run; drives the "my runs" filter. */
-  startedById?: string;
-  createdAt: string;
+  /** Keyset cursor: pass the previous page's last `created_at`. */
+  createdBefore?: string;
+  limit?: number;
 }
 
-declare global {
-  var __convoyRunDirectory: Map<string, RunRecord> | undefined;
-}
-
-function directory(): Map<string, RunRecord> {
-  if (!globalThis.__convoyRunDirectory) {
-    globalThis.__convoyRunDirectory = new Map();
-  }
-  return globalThis.__convoyRunDirectory;
-}
-
-export function registerRun(record: Omit<RunRecord, "createdAt">): void {
-  directory().set(record.runId, {
-    ...record,
-    agentId: record.agentId ?? record.routineId,
-    createdAt: new Date().toISOString(),
+/**
+ * The tenant's runs, newest first, from the control plane's list endpoint.
+ * Callers that can render a partial surface should catch and degrade, as
+ * before — the control plane may be unreachable.
+ */
+export async function listRuns(
+  actor: ActorContext,
+  options: ListRunsOptions = {},
+): Promise<RunSummary[]> {
+  const { data } = await controlPlane(actor).GET("/runs", {
+    params: {
+      query: {
+        ...(options.status === undefined ? {} : { status: options.status }),
+        ...(options.agentId === undefined ? {} : { agent_id: options.agentId }),
+        ...(options.createdBefore === undefined
+          ? {}
+          : { created_before: options.createdBefore }),
+        limit: options.limit ?? 100,
+      },
+    },
   });
-}
-
-/**
- * Register a run the console first met through its detail page (created
- * outside the console, e.g. by an operator at the edge), so lists and the
- * Checkpoints inbox can see it. Never overwrites a creation-time record,
- * which knows the routine. TODO(runtime-D8): retired with the directory.
- */
-export function ensureRunRegistered(runId: string, tenantId: string): void {
-  if (!directory().has(runId)) {
-    directory().set(runId, { runId, tenantId, createdAt: new Date().toISOString() });
-  }
-}
-
-export function agentIdForRun(runId: string): string | undefined {
-  const record = directory().get(runId);
-  return record?.agentId ?? record?.routineId;
-}
-
-/** Compatibility for runtime/event modules that have not renamed the wire yet. */
-export function routineIdForRun(runId: string): string | undefined {
-  return agentIdForRun(runId);
-}
-
-/**
- * The runtime tenant a run belongs to, or undefined for a run this process
- * never registered. Model-key issuance resolves a run's organization through
- * this. The limitation rides with the directory (TODO(runtime-D8)): a run
- * created at the edge that the console never met has no entry here, so
- * issuance for it returns not-found until the runtime exposes the run list
- * and this seam retires.
- */
-export function tenantForRun(runId: string): string | undefined {
-  return directory().get(runId)?.tenantId;
-}
-
-/**
- * Who started a run through the console, or undefined for runs first met
- * at the edge. The "my runs" filter keys on this; a run the console did
- * not start is honestly nobody's.
- */
-export function runStartedBy(runId: string): string | undefined {
-  return directory().get(runId)?.startedById;
-}
-
-export function knownRunIds(tenantId: string): string[] {
-  return [...directory().values()]
-    .filter((record) => record.tenantId === tenantId)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .map((record) => record.runId);
-}
-
-/**
- * Hydrate every known run for the tenant through the single authenticated
- * edge. Runs the control plane no longer knows (404) drop out silently; a
- * 404 is a 404 and is never probed further.
- */
-export async function listRuns(actor: ActorContext): Promise<RunView[]> {
-  const client = controlPlane(actor);
-  const views = await Promise.all(
-    knownRunIds(actor.tenantId).map(async (runId) => {
-      const { data } = await client.GET("/runs/{run_id}", {
-        params: { path: { run_id: runId } },
-      });
-      return data ?? null;
-    }),
-  );
-  return views.filter((view): view is RunView => view !== null);
+  return data?.runs ?? [];
 }
 
 export async function getRun(actor: ActorContext, runId: string): Promise<RunView | null> {
@@ -118,6 +53,27 @@ export async function getRun(actor: ActorContext, runId: string): Promise<RunVie
     params: { path: { run_id: runId } },
   });
   return data ?? null;
+}
+
+/**
+ * Whether a binding target is a rehearsal copy. Registry rehearsal bindings
+ * are the `<environment>/sandbox` convention; the table-backed dev fallback
+ * binds rehearsal to the runtime stub's `stub-local`. Runs created before
+ * the environment_id column carry an empty target and read as production —
+ * the runtime re-checks every rehearsal-only operation server-side anyway.
+ */
+export function isRehearsalTarget(environmentId: string | null | undefined): boolean {
+  if (!environmentId) return false;
+  return environmentId.endsWith("/sandbox") || environmentId === "stub-local";
+}
+
+/** The Agent a run was launched from, resolved through the control plane. */
+export async function agentIdForRun(
+  actor: ActorContext,
+  runId: string,
+): Promise<string | undefined> {
+  const view = await getRun(actor, runId);
+  return view?.agent_id ?? undefined;
 }
 
 export interface CreateRunInput {
@@ -131,10 +87,13 @@ export interface CreateRunInput {
   routineId?: string;
   /** Website user starting the run, for the "my runs" filter. */
   startedById?: string;
+  /** Trigger class; console launches are manual. */
+  startedVia?: "manual" | "schedule" | "event";
   requirePlanApproval?: boolean;
 }
 
-/** Create a run at the edge and register it so the list can see it. */
+/** Create a run at the edge; attribution rides the request and lands in the
+ * run projection, so the list sees it with no website-side bookkeeping. */
 export async function createRun(
   actor: ActorContext,
   input: CreateRunInput,
@@ -150,6 +109,9 @@ export async function createRun(
       max_children: 5,
       success_criteria: [],
       tools: input.tools ?? [],
+      agent_id: input.agentId ?? input.routineId ?? null,
+      started_by: input.startedById ?? null,
+      started_via: input.startedVia ?? "manual",
       ...(input.requirePlanApproval === undefined
         ? {}
         : {
@@ -169,11 +131,5 @@ export async function createRun(
   if (error || !data) {
     throw new Error("run creation was not accepted");
   }
-  registerRun({
-    runId: data.run_id,
-    tenantId: actor.tenantId,
-    agentId: input.agentId ?? input.routineId,
-    startedById: input.startedById,
-  });
   return { runId: data.run_id, status: data.status };
 }

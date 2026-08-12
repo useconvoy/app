@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/healthz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Healthz */
+        get: operations["healthz_healthz_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/runs": {
         parameters: {
             query?: never;
@@ -11,7 +28,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Runs
+         * @description Tenant-scoped run list, newest first, from projections only. This is
+         *     the console's run directory — no client should have to remember run ids
+         *     it created (the website's in-process map retires against this).
+         */
+        get: operations["list_runs_runs_get"];
         put?: never;
         /** Create Run */
         post: operations["create_run_runs_post"];
@@ -242,6 +265,8 @@ export interface components {
         };
         /** CreateRunRequest */
         CreateRunRequest: {
+            /** Agent Id */
+            agent_id?: string | null;
             /**
              * Budget Usd
              * @default 10
@@ -272,6 +297,14 @@ export interface components {
             policy?: components["schemas"]["RunPolicy"] | null;
             /** Run Id */
             run_id?: string | null;
+            /** Started By */
+            started_by?: string | null;
+            /**
+             * Started Via
+             * @default manual
+             * @enum {string}
+             */
+            started_via: "manual" | "schedule" | "event";
             /**
              * Success Criteria
              * @default []
@@ -374,6 +407,17 @@ export interface components {
             /** Timeout */
             timeout?: string | null;
         };
+        /**
+         * RunListResponse
+         * @description Newest-first, keyset-paginated: pass `next_created_before` back as
+         *     `created_before` to fetch the next page; null means the list is done.
+         */
+        RunListResponse: {
+            /** Next Created Before */
+            next_created_before?: string | null;
+            /** Runs */
+            runs: components["schemas"]["RunSummary"][];
+        };
         /** RunPolicy */
         RunPolicy: {
             /**
@@ -422,12 +466,78 @@ export interface components {
             require_plan_approval: boolean;
         };
         /**
+         * RunSummary
+         * @description One row of GET /runs — the list shape the console renders. Full plan,
+         *     land report, and steps stay on GET /runs/{run_id}.
+         */
+        RunSummary: {
+            /** Agent Id */
+            agent_id?: string | null;
+            budget?: components["schemas"]["BudgetView"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Environment Id
+             * @default
+             */
+            environment_id: string;
+            execution_session?: components["schemas"]["ExecutionSessionView"] | null;
+            /** Goal */
+            goal: string;
+            /** Land Report */
+            land_report?: {
+                [key: string]: unknown;
+            } | null;
+            /** Parent Run Id */
+            parent_run_id?: string | null;
+            /** Run Id */
+            run_id: string;
+            /** Started By */
+            started_by?: string | null;
+            /**
+             * Started Via
+             * @default manual
+             */
+            started_via: string;
+            /** Status */
+            status: string;
+            /**
+             * Steps Done
+             * @default 0
+             */
+            steps_done: number;
+            /**
+             * Steps Total
+             * @default 0
+             */
+            steps_total: number;
+            /** Tenant Id */
+            tenant_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
          * RunView
          * @description Served from Postgres projections only — never from Temporal. Subagent
          *     child runs are rows of their own, linked back by `parent_run_id`.
          */
         RunView: {
+            /** Agent Id */
+            agent_id?: string | null;
             budget?: components["schemas"]["BudgetView"] | null;
+            /** Created At */
+            created_at?: string | null;
+            /**
+             * Environment Id
+             * @default
+             */
+            environment_id: string;
             execution_session?: components["schemas"]["ExecutionSessionView"] | null;
             /** Goal */
             goal: string;
@@ -443,6 +553,13 @@ export interface components {
             } | null;
             /** Run Id */
             run_id: string;
+            /** Started By */
+            started_by?: string | null;
+            /**
+             * Started Via
+             * @default manual
+             */
+            started_via: string;
             /** Status */
             status: string;
             /**
@@ -542,6 +659,62 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    healthz_healthz_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
+    list_runs_runs_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                agent_id?: string | null;
+                created_before?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_run_runs_post: {
         parameters: {
             query?: never;

@@ -57,34 +57,10 @@ export interface EventFeed {
   pull(afterOrgSeq: number): Promise<OrgFeedEvent[]>;
 }
 
-/**
- * The run directory (src/lib/api/runs.ts) registers runs created through
- * the console in this process-global map. It is read here through
- * `globalThis` rather than by importing that module, because runs.ts is
- * `server-only` and the notifier also runs as a standalone tsx worker.
- * TODO(runtime-D8): the org feed carries run ids itself; this seam and the
- * directory both disappear with it.
- */
-interface RunDirectoryRecord {
+/** One row of the control plane's run list the feed cares about. */
+export interface FeedRunRow {
   runId: string;
-  tenantId: string;
-  routineId?: string;
-  createdAt: string;
-}
-
-function runDirectory(): Map<string, RunDirectoryRecord> {
-  const holder = globalThis as { __convoyRunDirectory?: Map<string, RunDirectoryRecord> };
-  return holder.__convoyRunDirectory ?? new Map();
-}
-
-export function knownRunIdsForTenant(tenantId: string): string[] {
-  return [...runDirectory().values()]
-    .filter((record) => record.tenantId === tenantId)
-    .map((record) => record.runId);
-}
-
-export function routineIdForRunId(runId: string): string | undefined {
-  return runDirectory().get(runId)?.routineId;
+  agentId?: string;
 }
 
 export interface FanInRunFeedOptions {
@@ -93,8 +69,8 @@ export interface FanInRunFeedOptions {
   actorId?: string;
   baseUrl?: string;
   token?: string;
-  /** Run ids to poll; defaults to the tenant's run directory. */
-  listRunIds?: (tenantId: string) => string[];
+  /** Runs to poll; defaults to the control plane's GET /runs list. */
+  listRuns?: (tenantId: string) => Promise<FeedRunRow[]>;
   /** How long one run's event poll may read before we cut it off. */
   readTimeoutMs?: number;
 }
@@ -136,17 +112,19 @@ export function parseFeedBody(body: string): RunEvent[] {
 
 export class FanInRunFeed implements EventFeed {
   private readonly tenantId: string;
-  private readonly listRunIds: (tenantId: string) => string[];
+  private readonly listRuns: (tenantId: string) => Promise<FeedRunRow[]>;
   private readonly readTimeoutMs: number;
   private readonly client: ReturnType<typeof createClient<paths>>;
   /** Highest per-run seq already merged, in memory only (see docstring). */
   private readonly runCursors = new Map<string, number>();
+  /** run -> agent attribution from the latest list pull; routing reads it. */
+  private readonly runAgents = new Map<string, string>();
   /** Highest synthetic org seq handed out so far. */
   private orgSeq = 0;
 
   constructor(options: FanInRunFeedOptions) {
     this.tenantId = options.tenantId;
-    this.listRunIds = options.listRunIds ?? knownRunIdsForTenant;
+    this.listRuns = options.listRuns ?? ((tenantId) => this.fetchRunList(tenantId));
     this.readTimeoutMs = options.readTimeoutMs ?? 1_500;
     const token = options.token ?? process.env.CONVOY_CONTROL_PLANE_TOKEN;
     if (!token) {
@@ -162,12 +140,37 @@ export class FanInRunFeed implements EventFeed {
     });
   }
 
+  /** The Agent a run maps to, from the latest run-list pull. */
+  agentIdForRun(runId: string): string | undefined {
+    return this.runAgents.get(runId);
+  }
+
+  /** The tenant's runs from the control plane's list endpoint. */
+  private async fetchRunList(tenantId: string): Promise<FeedRunRow[]> {
+    void tenantId; // the client is already tenant-scoped by its headers
+    try {
+      const { data } = await this.client.GET("/runs", {
+        params: { query: { limit: 100 } },
+      });
+      return (data?.runs ?? []).map((run) => ({
+        runId: run.run_id,
+        agentId: run.agent_id ?? undefined,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
   async pull(afterOrgSeq: number): Promise<OrgFeedEvent[]> {
     // The persisted org cursor may be ahead of this instance (fresh start):
     // adopt it so synthetic seqs never go backward.
     if (afterOrgSeq > this.orgSeq) this.orgSeq = afterOrgSeq;
     const merged: RunEvent[] = [];
-    for (const runId of this.listRunIds(this.tenantId)) {
+    const rows = await this.listRuns(this.tenantId);
+    for (const row of rows) {
+      if (row.agentId) this.runAgents.set(row.runId, row.agentId);
+    }
+    for (const { runId } of rows) {
       const after = this.runCursors.get(runId) ?? 0;
       const events = await this.fetchRunEvents(runId, after);
       let cursor = after;

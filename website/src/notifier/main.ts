@@ -13,7 +13,7 @@
  */
 import { withUserContext } from "../lib/db";
 import { consumerTick } from "./consumer";
-import { FanInRunFeed, type EventFeed } from "./feed";
+import { FanInRunFeed } from "./feed";
 import { sweepTick } from "./sweep";
 
 const intervalMs = Number(process.env.NOTIFIER_INTERVAL_MS ?? "2000") || 2000;
@@ -21,7 +21,7 @@ const intervalMs = Number(process.env.NOTIFIER_INTERVAL_MS ?? "2000") || 2000;
 let stopping = false;
 
 /** Persistent per-org feeds so fan-in per-run cursors survive across ticks. */
-const feeds = new Map<string, EventFeed>();
+const feeds = new Map<string, FanInRunFeed>();
 
 interface OrgRow {
   id: string;
@@ -43,7 +43,7 @@ async function listOrganizations(): Promise<OrgRow[]> {
   });
 }
 
-function feedFor(org: OrgRow): EventFeed {
+function feedFor(org: OrgRow): FanInRunFeed {
   let feed = feeds.get(org.id);
   if (!feed) {
     feed = new FanInRunFeed({ tenantId: org.tenantId });
@@ -63,8 +63,10 @@ async function tick(): Promise<void> {
   for (const org of orgs) {
     if (stopping) return;
     try {
-      const consumed = await consumerTick(org.id, feedFor(org));
-      const swept = await sweepTick(org.id);
+      const feed = feedFor(org);
+      const resolveRoutineId = (runId: string) => feed.agentIdForRun(runId);
+      const consumed = await consumerTick(org.id, feed, { resolveRoutineId });
+      const swept = await sweepTick(org.id, { resolveRoutineId });
       if (consumed.events > 0 || swept.notices > 0) {
         log({
           op: "tick",

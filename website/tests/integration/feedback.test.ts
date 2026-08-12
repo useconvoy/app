@@ -13,7 +13,6 @@ import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { registerRun } from "@/lib/api/runs";
 import { withOrgContext } from "@/lib/db";
 import {
   consumeRoutineFeedback,
@@ -80,10 +79,20 @@ describe.skipIf(!ADMIN_DSN)("feedback capture (real Postgres)", () => {
       [orgA, orgB, author, outsider],
     );
 
-    // The run directory maps runs to routines for the routine-level reads.
-    registerRun({ runId: RUN_REVIEW, tenantId: TENANT_A, routineId: "routine-access-review" });
-    registerRun({ runId: RUN_VENDOR, tenantId: TENANT_A, routineId: "routine-vendor-check" });
   }, 30_000);
+
+  // Routine-level reads resolve runs through the control plane's run list;
+  // these tests run against Postgres only, so the mapping is injected.
+  const runMapping = {
+    runIdsForRoutine: async (_orgId: string, routineId: string) =>
+      new Set(
+        routineId === "routine-access-review"
+          ? [RUN_REVIEW]
+          : routineId === "routine-vendor-check"
+            ? [RUN_VENDOR]
+            : [],
+      ),
+  };
 
   afterAll(async () => {
     await globalThis.__convoyWebsitePool?.end();
@@ -128,14 +137,14 @@ describe.skipIf(!ADMIN_DSN)("feedback capture (real Postgres)", () => {
   });
 
   it("resolves routine-level reads through the run directory", async () => {
-    const review = await listFeedbackForRoutine(orgA, "routine-access-review");
+    const review = await listFeedbackForRoutine(orgA, "routine-access-review", runMapping);
     expect(review.map((item) => item.id).sort()).toEqual([commentId, ratingId].sort());
-    const vendor = await listFeedbackForRoutine(orgA, "routine-vendor-check");
+    const vendor = await listFeedbackForRoutine(orgA, "routine-vendor-check", runMapping);
     expect(vendor.map((item) => item.id)).toEqual([vendorId]);
   });
 
   it("queues a routine's new feedback on approval, leaving other routines alone", async () => {
-    const queued = await queueRoutineFeedback(orgA, "routine-access-review");
+    const queued = await queueRoutineFeedback(orgA, "routine-access-review", runMapping);
     expect(queued).toBe(2);
     expect(await statusOf(ratingId)).toBe("queued");
     expect(await statusOf(commentId)).toBe("queued");
@@ -148,7 +157,7 @@ describe.skipIf(!ADMIN_DSN)("feedback capture (real Postgres)", () => {
     expect(await statusOf(vendorId)).toBe("new");
 
     // queued only from new: re-queueing consumed rows is a no-op.
-    const consumed = await consumeRoutineFeedback(orgA, "routine-access-review");
+    const consumed = await consumeRoutineFeedback(orgA, "routine-access-review", runMapping);
     expect(consumed).toBe(2);
     expect(await statusOf(ratingId)).toBe("consumed");
     expect(await markFeedbackQueued(orgA, [ratingId])).toBe(0);

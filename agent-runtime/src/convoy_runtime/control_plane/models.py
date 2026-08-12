@@ -37,6 +37,12 @@ class CreateRunRequest(BaseModel):
     # Fan-out group to hang into the fixture plan, honored by the stub
     # planner so subagent flows can be exercised end to end.
     fixture_fanout: FanoutFixture | None = None
+    # Console attribution, stored on the run projection and echoed by
+    # GET /runs: which agent definition launched this run, who asked for
+    # it (defaults to the authenticated actor), and the trigger class.
+    agent_id: str | None = None
+    started_by: str | None = None
+    started_via: Literal["manual", "schedule", "event"] = "manual"
 
 
 class CreateRunResponse(BaseModel):
@@ -136,3 +142,41 @@ class RunView(BaseModel):
     budget: BudgetView | None = None
     execution_session: ExecutionSessionView | None = None
     steps: list[StepView] = []
+    # The binding target the run was created against ("env_x" or
+    # "env_x/sandbox") plus console attribution — empty/None for runs that
+    # predate these columns.
+    environment_id: str = ""
+    agent_id: str | None = None
+    started_by: str | None = None
+    started_via: str = "manual"
+    created_at: datetime | None = None
+
+
+class RunSummary(BaseModel):
+    """One row of GET /runs — the list shape the console renders. Full plan,
+    land report, and steps stay on GET /runs/{run_id}."""
+
+    run_id: str
+    tenant_id: str
+    parent_run_id: str | None = None
+    status: str
+    goal: str
+    land_report: dict[str, Any] | None = None
+    budget: BudgetView | None = None
+    environment_id: str = ""
+    agent_id: str | None = None
+    started_by: str | None = None
+    started_via: str = "manual"
+    steps_done: int = 0
+    steps_total: int = 0
+    execution_session: ExecutionSessionView | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RunListResponse(BaseModel):
+    """Newest-first, keyset-paginated: pass `next_created_before` back as
+    `created_before` to fetch the next page; null means the list is done."""
+
+    runs: list[RunSummary]
+    next_created_before: datetime | None = None
