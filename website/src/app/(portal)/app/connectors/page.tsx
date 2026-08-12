@@ -1,7 +1,12 @@
 import type { Metadata } from "next";
 
 import { listSystemConnections, type SystemConnection } from "@/lib/api/environments";
-import { addCustomConnector, connectProvider, reattachCredential } from "@/lib/connectors/actions";
+import {
+  addCustomConnector,
+  checkConnectorHealth,
+  connectProvider,
+  reattachCredential,
+} from "@/lib/connectors/actions";
 import { requireWorkspacesPage } from "@/lib/workspaces/gate";
 import { systemCatalog } from "@/lib/workspaces/system-catalog";
 import { ConnectorsBoard, type ConnectionState, type ConnectorCard } from "./ConnectorsBoard";
@@ -72,6 +77,7 @@ export default async function ConnectorsPage() {
         connect={connectProvider}
         addCustom={addCustomConnector}
         reattach={reattachCredential}
+        checkHealth={checkConnectorHealth}
       />
     </div>
   );

@@ -15,6 +15,7 @@ import {
   attachSystemCredential,
   connectCustomSystem,
   connectManagedSystem,
+  verifySystemConnection,
 } from "@/lib/api/environments";
 import { declaredManifest } from "@/lib/api/environments-mapping";
 import { requireOrgSession } from "@/lib/auth/session";
@@ -130,6 +131,34 @@ export async function addCustomConnector(
     };
   } catch (error) {
     return { ok: false, message: verificationMessage(error) };
+  }
+}
+
+/** Re-check a connection's health against its provider, on demand. */
+export async function checkConnectorHealth(
+  connectionId: string,
+): Promise<ConnectorActionResult> {
+  const session = await requireConnectorsActor();
+  try {
+    const result = await verifySystemConnection(session.orgId, connectionId);
+    await audit(session.orgId, session.userId, "connector.health_checked",
+      `${connectionId} (${result.status})`);
+    revalidatePath("/app/connectors");
+    if (result.verified === true) {
+      return { ok: true, message: "Healthy. The provider accepted the credential." };
+    }
+    if (result.verified === false) {
+      return { ok: false, message: "The provider rejected the credential. Reconnect it below." };
+    }
+    return {
+      ok: true,
+      message:
+        result.reason === "no credential stored"
+          ? "No credential is stored yet. Connect it first."
+          : "This provider has no automatic check; its first run will tell.",
+    };
+  } catch {
+    return { ok: false, message: "The health check could not run. Try again in a moment." };
   }
 }
 

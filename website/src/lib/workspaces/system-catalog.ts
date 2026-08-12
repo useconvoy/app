@@ -104,6 +104,34 @@ export const systemCatalog: SystemDefinition[] = [
     standInNote: "Stand-in for CRM: record changes are noted for review instead of being applied.",
     connection: null,
   },
+  {
+    id: "code_host",
+    displayName: "GitHub",
+    sideEffecting: true,
+    standInNote: "Stand-in for GitHub: issues are recorded for review instead of being opened.",
+    connection: {
+      provider: "github",
+      tools: [
+        { name: "github.list_issues", execution: "inline", sideEffecting: false },
+        { name: "github.get_file", execution: "inline", sideEffecting: false },
+        { name: "github.create_issue", execution: "promoted", sideEffecting: true },
+      ],
+    },
+  },
+  {
+    id: "knowledge_base",
+    displayName: "Notion",
+    sideEffecting: true,
+    standInNote: "Stand-in for Notion: pages are drafted for review instead of being created.",
+    connection: {
+      provider: "notion",
+      tools: [
+        { name: "notion.search", execution: "inline", sideEffecting: false },
+        { name: "notion.get_page", execution: "inline", sideEffecting: false },
+        { name: "notion.create_page", execution: "promoted", sideEffecting: true },
+      ],
+    },
+  },
 ];
 
 export function catalogSystem(systemId: string): SystemDefinition | undefined {

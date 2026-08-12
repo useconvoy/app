@@ -1013,6 +1013,25 @@ export async function listSystemConnections(orgId: string): Promise<SystemConnec
 }
 
 /**
+ * Re-run the registry's provider probe on a connection's stored
+ * credential. The registry reveals the value only to probe the provider
+ * and moves the connection between active and needs_reauth; nothing
+ * secret crosses back over this call.
+ */
+export async function verifySystemConnection(
+  orgId: string,
+  connectionId: string,
+): Promise<{ connectionId: string; status: string; verified: boolean | null; reason?: string }> {
+  const ctx = await systemsContext(orgId);
+  if (!ctx) throw new Error("This deployment is not linked to the connections registry");
+  return registryFetch(
+    ctx.config,
+    `/organizations/${ctx.registryOrgId}/connections/${connectionId}/verify`,
+    { method: "POST", body: {}, actsFor: ctx.actsFor },
+  );
+}
+
+/**
  * Ensure a managed connection exists for a catalog system's provider,
  * attaching the pasted credential. Declared manifests keep registration
  * offline; the separate credential attach then runs the provider's

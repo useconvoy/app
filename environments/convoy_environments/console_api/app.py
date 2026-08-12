@@ -334,6 +334,46 @@ def build_console_app(session_factory, secrets: SecretsService,
             raise HTTPException(400, "credential stored but verification failed: %s" % failure)
         return {"connectionId": connection_id, "status": status, "verified": verified}
 
+    @app.post("/organizations/{org_id}/connections/{connection_id}/verify")
+    async def verify_connection(org_id: str, connection_id: str,
+                                user: str = Depends(user_dep)):
+        """Re-run the provider probe on the stored credential, on demand.
+
+        This is the console's health check: it reveals the credential only
+        to probe the provider (the value never leaves the service — the
+        gateway's per-call injection and this probe are the vault's two
+        internal read paths) and moves the connection between active and
+        needs_reauth accordingly. Providers without a cheap safe probe
+        report verified null and the status stays put.
+        """
+        with session_factory() as s:
+            require_organization_role(s, org_id, user, "builder")
+            row = _connection_or_404(s, org_id, connection_id)
+            provider, config = row.provider, dict(row.config or {})
+            secret_ref, status = row.secret_ref, row.status
+        if secret_ref is None:
+            return {"connectionId": connection_id, "status": status, "verified": None,
+                    "reason": "no credential stored"}
+
+        verified: Optional[bool] = None
+        try:
+            value = secrets.reveal(secret_ref)
+            verified = await get_connector(provider, config=config).verify_credential(value)
+        except Exception:  # noqa: BLE001 — like the attach probe, any failure
+            # (unreachable provider, auth reject, vault trouble) reads the
+            # same to the caller: not verified.
+            verified = False
+
+        if verified is not None:
+            status = "needs_reauth" if verified is False else "active"
+            with session_factory() as s:
+                row = _connection_or_404(s, org_id, connection_id)
+                row.status = status
+                _audit(s, org_id, user, "connection.verified", "connection", connection_id,
+                       {"provider": provider, "verified": verified})
+                s.commit()
+        return {"connectionId": connection_id, "status": status, "verified": verified}
+
     # -- workspaces (db: environments) -------------------------------------
 
     def _build_env_rows(s, org_id: str, env_id: str, version: int,
