@@ -87,6 +87,7 @@ class RuntimeConfig:
     s3_secret_key: str | None
     data_access_role_arn: str
     stub_env_url: str
+    control_plane_url: str
     environments_internal_token: str
     dev_token: str
     codec_key: bytes
@@ -168,6 +169,9 @@ class RuntimeConfig:
             ),
             data_access_role_arn=_env("CONVOY_DATA_ACCESS_ROLE_ARN", ""),
             stub_env_url=_env("CONVOY_STUB_ENV_URL", "http://localhost:8902"),
+            # Where the worker's schedule firings create runs — the stack's
+            # own control plane.
+            control_plane_url=_env("CONVOY_CONTROL_PLANE_URL", "http://localhost:8700"),
             environments_internal_token=_env_first(
                 "CONVOY_ENVIRONMENTS_INTERNAL_TOKEN",
                 "CONVOY_INTERNAL_TOKEN",

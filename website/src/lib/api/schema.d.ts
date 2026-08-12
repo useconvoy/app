@@ -4,6 +4,31 @@
  */
 
 export interface paths {
+    "/agents/{agent_id}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Schedule */
+        get: operations["get_agent_schedule_agents__agent_id__schedule_get"];
+        /**
+         * Put Agent Schedule
+         * @description Create or replace the agent's schedule. The run template freezes what
+         *     the console resolved at save time; the tenant comes from the
+         *     authenticated caller, never the body. Firings create runs through the
+         *     normal POST /runs path with started_via="schedule".
+         */
+        put: operations["put_agent_schedule_agents__agent_id__schedule_put"];
+        post?: never;
+        /** Remove Agent Schedule */
+        delete: operations["remove_agent_schedule_agents__agent_id__schedule_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -225,6 +250,46 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AgentScheduleRequest */
+        AgentScheduleRequest: {
+            schedule: components["schemas"]["AgentScheduleSpec"];
+            template: components["schemas"]["ScheduleRunTemplateRequest"];
+        };
+        /**
+         * AgentScheduleSpec
+         * @description What the console saves: a standard 5-field cron in a named timezone,
+         *     plus whether the schedule is live.
+         */
+        AgentScheduleSpec: {
+            /** Cron */
+            cron: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Timezone
+             * @default UTC
+             */
+            timezone: string;
+        };
+        /** AgentScheduleView */
+        AgentScheduleView: {
+            /** Agent Id */
+            agent_id: string;
+            /** Cron */
+            cron: string;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Next Run Times
+             * @default []
+             */
+            next_run_times: string[];
+            /** Timezone */
+            timezone: string;
+        };
         /**
          * ApprovePlanRequest
          * @description Approve or reject the plan version awaiting approval. The version pin
@@ -575,6 +640,32 @@ export interface components {
             /** Tenant Id */
             tenant_id: string;
         };
+        /**
+         * ScheduleRunTemplateRequest
+         * @description The run the schedule should start on each firing — what the console
+         *     resolved from the agent at save time. Tenant is taken from the
+         *     authenticated caller, never this body.
+         */
+        ScheduleRunTemplateRequest: {
+            /** Budget Usd */
+            budget_usd: string;
+            /** Environment Id */
+            environment_id: string;
+            /** Goal */
+            goal: string;
+            /**
+             * Instructions
+             * @default []
+             */
+            instructions: string[];
+            /** Started By */
+            started_by?: string | null;
+            /**
+             * Tools
+             * @default []
+             */
+            tools: string[];
+        };
         /** SignalResponse */
         SignalResponse: {
             /**
@@ -664,6 +755,103 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_agent_schedule_agents__agent_id__schedule_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentScheduleView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_agent_schedule_agents__agent_id__schedule_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentScheduleView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_agent_schedule_agents__agent_id__schedule_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     healthz_healthz_get: {
         parameters: {
             query?: never;

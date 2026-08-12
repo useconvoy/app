@@ -9,6 +9,7 @@ from pydantic import AwareDatetime, BaseModel, Field
 
 from convoy_core import HumanGate, RunPolicy
 from convoy_runtime.activities.plan import FanoutFixture
+from convoy_runtime.schedule_template import AgentScheduleSpec
 
 
 class CreateRunRequest(BaseModel):
@@ -176,6 +177,32 @@ class RunSummary(BaseModel):
     execution_session: ExecutionSessionView | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class ScheduleRunTemplateRequest(BaseModel):
+    """The run the schedule should start on each firing — what the console
+    resolved from the agent at save time. Tenant is taken from the
+    authenticated caller, never this body."""
+
+    goal: str = Field(min_length=1)
+    environment_id: str
+    budget_usd: str
+    tools: list[str] = []
+    instructions: list[str] = []
+    started_by: str | None = None
+
+
+class AgentScheduleRequest(BaseModel):
+    schedule: AgentScheduleSpec
+    template: ScheduleRunTemplateRequest
+
+
+class AgentScheduleView(BaseModel):
+    agent_id: str
+    cron: str
+    timezone: str
+    enabled: bool
+    next_run_times: list[str] = []
 
 
 class RunListResponse(BaseModel):

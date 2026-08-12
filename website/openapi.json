@@ -1,6 +1,84 @@
 {
   "components": {
     "schemas": {
+      "AgentScheduleRequest": {
+        "properties": {
+          "schedule": {
+            "$ref": "#/components/schemas/AgentScheduleSpec"
+          },
+          "template": {
+            "$ref": "#/components/schemas/ScheduleRunTemplateRequest"
+          }
+        },
+        "required": [
+          "schedule",
+          "template"
+        ],
+        "title": "AgentScheduleRequest",
+        "type": "object"
+      },
+      "AgentScheduleSpec": {
+        "description": "What the console saves: a standard 5-field cron in a named timezone,\nplus whether the schedule is live.",
+        "properties": {
+          "cron": {
+            "maxLength": 100,
+            "minLength": 9,
+            "title": "Cron",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "timezone": {
+            "default": "UTC",
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cron"
+        ],
+        "title": "AgentScheduleSpec",
+        "type": "object"
+      },
+      "AgentScheduleView": {
+        "properties": {
+          "agent_id": {
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "cron": {
+            "title": "Cron",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "next_run_times": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Next Run Times",
+            "type": "array"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "cron",
+          "timezone",
+          "enabled"
+        ],
+        "title": "AgentScheduleView",
+        "type": "object"
+      },
       "ApprovePlanRequest": {
         "description": "Approve or reject the plan version awaiting approval. The version pin\nguarantees the decision targets the plan the human actually reviewed;\nrejections must say why.",
         "properties": {
@@ -822,6 +900,58 @@
         "title": "RunView",
         "type": "object"
       },
+      "ScheduleRunTemplateRequest": {
+        "description": "The run the schedule should start on each firing \u2014 what the console\nresolved from the agent at save time. Tenant is taken from the\nauthenticated caller, never this body.",
+        "properties": {
+          "budget_usd": {
+            "title": "Budget Usd",
+            "type": "string"
+          },
+          "environment_id": {
+            "title": "Environment Id",
+            "type": "string"
+          },
+          "goal": {
+            "minLength": 1,
+            "title": "Goal",
+            "type": "string"
+          },
+          "instructions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Instructions",
+            "type": "array"
+          },
+          "started_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started By"
+          },
+          "tools": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "goal",
+          "environment_id",
+          "budget_usd"
+        ],
+        "title": "ScheduleRunTemplateRequest",
+        "type": "object"
+      },
       "SignalResponse": {
         "properties": {
           "accepted": {
@@ -1012,6 +1142,130 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/agents/{agent_id}/schedule": {
+      "delete": {
+        "operationId": "remove_agent_schedule_agents__agent_id__schedule_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Agent Schedule"
+      },
+      "get": {
+        "operationId": "get_agent_schedule_agents__agent_id__schedule_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentScheduleView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Schedule"
+      },
+      "put": {
+        "description": "Create or replace the agent's schedule. The run template freezes what\nthe console resolved at save time; the tenant comes from the\nauthenticated caller, never the body. Firings create runs through the\nnormal POST /runs path with started_via=\"schedule\".",
+        "operationId": "put_agent_schedule_agents__agent_id__schedule_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentScheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentScheduleView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Agent Schedule"
+      }
+    },
     "/healthz": {
       "get": {
         "operationId": "healthz_healthz_get",

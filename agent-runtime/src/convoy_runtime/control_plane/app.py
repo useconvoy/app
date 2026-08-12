@@ -41,6 +41,8 @@ from convoy_runtime.codec import runtime_data_converter
 from convoy_runtime.config import RuntimeConfig
 from convoy_runtime.control_plane.auth import Actor, require_actor
 from convoy_runtime.control_plane.models import (
+    AgentScheduleRequest,
+    AgentScheduleView,
     ApprovePlanRequest,
     BudgetView,
     ClockAdvanceRequest,
@@ -61,6 +63,15 @@ from convoy_runtime.projections.store import ProjectionStore, RunProjection
 from convoy_runtime.providers.artifact_store import ArtifactStore
 from convoy_runtime.providers.grants import GrantValidationError, resolve_requested_tools
 from convoy_runtime.providers.model_gateway import ModelGateway, ModelGatewayError
+from convoy_runtime.schedule_template import (
+    ScheduledRunTemplate,
+    validate_schedule_spec,
+)
+from convoy_runtime.schedules import (
+    delete_agent_schedule,
+    describe_agent_schedule,
+    upsert_agent_schedule,
+)
 from convoy_runtime.signals import ClockAdvance, GateResponse, PlanApprovalDecision
 from convoy_runtime.workflows.agent_run import AgentRunWorkflow
 
@@ -546,6 +557,63 @@ async def list_runs(
     ]
     next_cursor = runs[-1].created_at if len(runs) == limit else None
     return RunListResponse(runs=summaries, next_created_before=next_cursor)
+
+
+@app.put("/agents/{agent_id}/schedule", response_model=AgentScheduleView)
+async def put_agent_schedule(
+    request: Request, agent_id: str, body: AgentScheduleRequest, actor: ActorDep
+) -> AgentScheduleView:
+    """Create or replace the agent's schedule. The run template freezes what
+    the console resolved at save time; the tenant comes from the
+    authenticated caller, never the body. Firings create runs through the
+    normal POST /runs path with started_via="schedule"."""
+    try:
+        validate_schedule_spec(body.schedule)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    template = ScheduledRunTemplate(
+        tenant_id=actor.tenant_id,
+        agent_id=agent_id,
+        goal=body.template.goal,
+        environment_id=body.template.environment_id,
+        budget_usd=body.template.budget_usd,
+        tools=body.template.tools,
+        instructions=body.template.instructions,
+        started_by=body.template.started_by or actor.actor_id,
+    )
+    config = _config(request)
+    await upsert_agent_schedule(_temporal(request), template, body.schedule, config.task_queue)
+    view = await describe_agent_schedule(_temporal(request), agent_id)
+    assert view is not None
+    return AgentScheduleView(
+        agent_id=agent_id,
+        cron=view.cron,
+        timezone=view.timezone,
+        enabled=view.enabled,
+        next_run_times=view.next_run_times,
+    )
+
+
+@app.get("/agents/{agent_id}/schedule", response_model=AgentScheduleView)
+async def get_agent_schedule(request: Request, agent_id: str, actor: ActorDep) -> AgentScheduleView:
+    view = await describe_agent_schedule(_temporal(request), agent_id)
+    if view is None:
+        raise HTTPException(status_code=404, detail=f"agent {agent_id!r} has no schedule")
+    return AgentScheduleView(
+        agent_id=agent_id,
+        cron=view.cron,
+        timezone=view.timezone,
+        enabled=view.enabled,
+        next_run_times=view.next_run_times,
+    )
+
+
+@app.delete("/agents/{agent_id}/schedule", response_model=SignalResponse)
+async def remove_agent_schedule(request: Request, agent_id: str, actor: ActorDep) -> SignalResponse:
+    removed = await delete_agent_schedule(_temporal(request), agent_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"agent {agent_id!r} has no schedule")
+    return SignalResponse(run_id=agent_id, signal="schedule_removed")
 
 
 @app.get("/runs/{run_id}/events")

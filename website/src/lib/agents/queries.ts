@@ -65,3 +65,17 @@ export async function orgTenantId(orgId: string): Promise<string> {
     return tenantId;
   });
 }
+
+/** The agent's stored structured schedule, or null when it starts on demand. */
+export async function getAgentSchedule(
+  orgId: string,
+  agentId: string,
+): Promise<unknown | null> {
+  return withOrgContext({ orgId }, async (client) => {
+    const { rows } = await client.query<{ schedule: unknown }>(
+      "SELECT schedule FROM agents WHERE id = $1",
+      [agentId],
+    );
+    return rows[0]?.schedule ?? null;
+  });
+}

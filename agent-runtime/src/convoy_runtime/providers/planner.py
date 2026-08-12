@@ -145,19 +145,19 @@ def build_instruction_plan(
     return assemble_plan(goal, success_criteria, planned, snapshot_ref)
 
 
-_SYSTEM_PROMPT = """You are the planning stage of a durable work agent.
+_SYSTEM_PROMPT = f"""You are the planning stage of a durable work agent.
 Produce a short, executable plan for the goal below. Respond with ONLY a
 JSON object of this exact shape (no prose, no markdown fences):
-{"steps": [{"description": "...", "checkpoint": null, "required": true}]}
+{{"steps": [{{"description": "...", "checkpoint": null, "required": true}}]}}
 
 Rules:
-- 2 to %(max_steps)d steps, each a single concrete action in imperative voice.
+- 2 to {MAX_PLANNED_STEPS} steps, each a single concrete action in imperative voice.
 - Steps run strictly in order; do not include numbering in descriptions.
 - Set "checkpoint" to a short question for a human approver on any step
   whose effects reach outside the organization (sending, posting, filing);
   otherwise null.
 - Set "required" false only for steps the goal can succeed without.
-""" % {"max_steps": MAX_PLANNED_STEPS}
+"""
 
 
 class ModelPlanner:
