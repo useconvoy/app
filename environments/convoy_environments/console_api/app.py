@@ -28,7 +28,7 @@ from typing import Any, Dict, List, Literal, Optional
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from ..connectors import ConnectorError, get_connector
+from ..connectors import ConnectorError, get_connector, registered_connectors
 from ..db.tables import (
     AuditLog,
     Connection as ConnectionRow,
@@ -39,6 +39,7 @@ from ..db.tables import (
     Membership,
     Organization,
     User,
+    PlatformConnector,
 )
 from ..schema import ConnectionManifest, policy_hash
 from ..secrets import SecretsService
@@ -133,6 +134,18 @@ class CreateEventRule(BaseModel):
     startedBy: Optional[str] = None
 
 
+class UpsertPlatformConnector(BaseModel):
+    provider: str = Field(min_length=2, max_length=64)
+    displayName: str = Field(min_length=2, max_length=255)
+    description: str = ""
+    mcpUrl: str = Field(min_length=8, max_length=512)
+    manifest: Dict[str, Any] = Field(default_factory=dict)
+    credentialLabel: str = "Bearer token"
+    credentialPlaceholder: str = ""
+    credentialSteps: List[str] = Field(default_factory=list)
+    enabled: bool = True
+
+
 class CreateGrant(BaseModel):
     userId: str
     role: Literal["viewer", "operator", "env_admin"]
@@ -173,6 +186,80 @@ def build_console_app(session_factory, secrets: SecretsService,
         session.flush()
         session.add(AuditLog(organization_id=org_id, actor_user_id=actor, action=action,
                              subject_type=subject_type, subject_id=subject_id, diff=diff))
+
+    # -- provider directory ------------------------------------------------
+
+    @app.get("/providers")
+    async def provider_directory(user: str = Depends(user_dep)):
+        """The whole provider directory: code connectors (the platform's
+        depth tier, listed straight from the connector registry so a new
+        connector class appears here with no further wiring) plus enabled
+        declarative platform connectors (the breadth tier, Convoy-hosted
+        MCP servers stored as rows). Org-scoped custom connections are NOT
+        here; they live on /organizations/{org}/connections."""
+        entries: List[Dict[str, Any]] = []
+        for provider, cls in sorted(registered_connectors().items()):
+            if provider == "mcp_custom":
+                continue  # the mechanism behind custom + declarative, not a provider
+            manifest = await cls().manifest()
+            entries.append({
+                "provider": provider,
+                "displayName": cls.display_name or provider,
+                "description": cls.description,
+                "kind": "code",
+                "scope": "platform",
+                "credential": {
+                    "label": cls.credential_label,
+                    "placeholder": cls.credential_placeholder,
+                    "multiline": cls.credential_multiline,
+                    "steps": list(cls.credential_steps),
+                },
+                "tools": [{"name": t.name, "execution": t.execution,
+                           "sideEffecting": t.sideEffecting, "description": t.description}
+                          for t in manifest.tools],
+            })
+        with session_factory() as s:
+            rows = s.query(PlatformConnector).filter_by(enabled=True).all()
+            for row in rows:
+                entries.append({
+                    "provider": row.provider,
+                    "displayName": row.display_name,
+                    "description": row.description,
+                    "kind": "declarative",
+                    "scope": "platform",
+                    "mcpUrl": row.mcp_url,
+                    "credential": {
+                        "label": row.credential_label,
+                        "placeholder": row.credential_placeholder,
+                        "multiline": False,
+                        "steps": list(row.credential_steps or []),
+                    },
+                    "tools": list((row.manifest or {}).get("tools", [])),
+                })
+        return entries
+
+    @app.post("/platform-connectors")
+    async def upsert_platform_connector(req: UpsertPlatformConnector,
+                                        _: None = Depends(provisioning_dep)):
+        """Team authoring door for the breadth tier, behind the provisioning
+        token: publish (or update) a declarative platform connector. Takes
+        effect in the directory immediately; existing org connections keep
+        the config they were created with."""
+        with session_factory() as s:
+            row = s.get(PlatformConnector, req.provider)
+            if row is None:
+                row = PlatformConnector(provider=req.provider)
+                s.add(row)
+            row.display_name = req.displayName
+            row.description = req.description
+            row.mcp_url = req.mcpUrl
+            row.manifest = req.manifest
+            row.credential_label = req.credentialLabel
+            row.credential_placeholder = req.credentialPlaceholder
+            row.credential_steps = req.credentialSteps
+            row.enabled = req.enabled
+            s.commit()
+        return {"provider": req.provider, "enabled": req.enabled}
 
     # -- organizations ----------------------------------------------------
 
@@ -332,6 +419,46 @@ def build_console_app(session_factory, secrets: SecretsService,
             s.commit()
         if failure is not None:
             raise HTTPException(400, "credential stored but verification failed: %s" % failure)
+        return {"connectionId": connection_id, "status": status, "verified": verified}
+
+    @app.post("/organizations/{org_id}/connections/{connection_id}/verify")
+    async def verify_connection(org_id: str, connection_id: str,
+                                user: str = Depends(user_dep)):
+        """Re-run the provider probe on the stored credential, on demand.
+
+        This is the console's health check: it reveals the credential only
+        to probe the provider (the value never leaves the service — the
+        gateway's per-call injection and this probe are the vault's two
+        internal read paths) and moves the connection between active and
+        needs_reauth accordingly. Providers without a cheap safe probe
+        report verified null and the status stays put.
+        """
+        with session_factory() as s:
+            require_organization_role(s, org_id, user, "builder")
+            row = _connection_or_404(s, org_id, connection_id)
+            provider, config = row.provider, dict(row.config or {})
+            secret_ref, status = row.secret_ref, row.status
+        if secret_ref is None:
+            return {"connectionId": connection_id, "status": status, "verified": None,
+                    "reason": "no credential stored"}
+
+        verified: Optional[bool] = None
+        try:
+            value = secrets.reveal(secret_ref)
+            verified = await get_connector(provider, config=config).verify_credential(value)
+        except Exception:  # noqa: BLE001 — like the attach probe, any failure
+            # (unreachable provider, auth reject, vault trouble) reads the
+            # same to the caller: not verified.
+            verified = False
+
+        if verified is not None:
+            status = "needs_reauth" if verified is False else "active"
+            with session_factory() as s:
+                row = _connection_or_404(s, org_id, connection_id)
+                row.status = status
+                _audit(s, org_id, user, "connection.verified", "connection", connection_id,
+                       {"provider": provider, "verified": verified})
+                s.commit()
         return {"connectionId": connection_id, "status": status, "verified": verified}
 
     # -- workspaces (db: environments) -------------------------------------

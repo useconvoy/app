@@ -33,6 +33,15 @@ _API = "https://slack.com/api"
 @register
 class SlackConnector(Connector):
     provider = "slack"
+    display_name = "Slack"
+    description = "Read channels and messages, and post as this organization's app."
+    credential_label = "Bot token"
+    credential_placeholder = "xoxb-..."
+    credential_steps = (
+        "Create a Slack app for your workspace and install it.",
+        "Give it the channel read and write scopes your Agents need.",
+        "Paste the bot token that starts with xoxb.",
+    )
 
     async def manifest(self, credential: Optional[str] = None) -> ConnectionManifest:
         return ConnectionManifest(tools=list(_TOOLS))

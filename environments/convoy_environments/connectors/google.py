@@ -67,6 +67,16 @@ _token_cache: Dict[Tuple[str, str, str], Tuple[str, float]] = {}
 @register
 class GoogleConnector(Connector):
     provider = "google"
+    display_name = "Google Drive"
+    description = "List Drive files, read spreadsheets, and append rows."
+    credential_label = "Service account key (JSON)"
+    credential_placeholder = '{ "type": "service_account", ... }'
+    credential_multiline = True
+    credential_steps = (
+        "In your Google Cloud console, create a service account and download its JSON key.",
+        "Turn on the Drive and Sheets APIs for that project.",
+        "Share the Drive folders and spreadsheets this organization works in with the service account's email address.",
+    )
 
     async def manifest(self, credential: Optional[str] = None) -> ConnectionManifest:
         return ConnectionManifest(tools=list(_TOOLS))

@@ -15,6 +15,8 @@ import {
   attachSystemCredential,
   connectCustomSystem,
   connectManagedSystem,
+  listProviderDirectory,
+  verifySystemConnection,
 } from "@/lib/api/environments";
 import { declaredManifest } from "@/lib/api/environments-mapping";
 import { requireOrgSession } from "@/lib/auth/session";
@@ -65,11 +67,37 @@ export async function connectProvider(
   secretValue: string,
 ): Promise<ConnectorActionResult> {
   const session = await requireConnectorsActor();
-  const system = catalogSystem(systemId);
-  if (!system?.connection) throw new Error("No provider serves that connector yet");
   if (secretValue.trim().length === 0) {
     return { ok: false, message: "Paste the credential first." };
   }
+  // Declarative platform providers ("platform:<provider>") come from the
+  // registry directory, not the static catalog: connecting one registers
+  // an ordinary custom connection pointed at the platform's MCP server,
+  // with the pasted credential as its bearer.
+  if (systemId.startsWith("platform:")) {
+    const provider = systemId.slice("platform:".length);
+    const entry = (await listProviderDirectory(session.orgId))?.find(
+      (candidate) => candidate.provider === provider,
+    );
+    if (!entry?.mcpUrl) throw new Error("No provider serves that connector yet");
+    try {
+      const created = await connectCustomSystem(session.orgId, {
+        displayName: entry.displayName,
+        url: entry.mcpUrl,
+        bearerToken: secretValue.trim(),
+      });
+      await audit(session.orgId, session.userId, "connector.connected",
+        `${provider} (${created.tools.length} actions)`);
+      revalidatePath("/app/connectors");
+      revalidatePath("/app/workspaces");
+      return { ok: true, message: `${entry.displayName} is connected.` };
+    } catch (error) {
+      await audit(session.orgId, session.userId, "connector.connect_failed", provider);
+      return { ok: false, message: verificationMessage(error) };
+    }
+  }
+  const system = catalogSystem(systemId);
+  if (!system?.connection) throw new Error("No provider serves that connector yet");
   try {
     const result = await connectManagedSystem(session.orgId, {
       provider: system.connection.provider,
@@ -130,6 +158,34 @@ export async function addCustomConnector(
     };
   } catch (error) {
     return { ok: false, message: verificationMessage(error) };
+  }
+}
+
+/** Re-check a connection's health against its provider, on demand. */
+export async function checkConnectorHealth(
+  connectionId: string,
+): Promise<ConnectorActionResult> {
+  const session = await requireConnectorsActor();
+  try {
+    const result = await verifySystemConnection(session.orgId, connectionId);
+    await audit(session.orgId, session.userId, "connector.health_checked",
+      `${connectionId} (${result.status})`);
+    revalidatePath("/app/connectors");
+    if (result.verified === true) {
+      return { ok: true, message: "Healthy. The provider accepted the credential." };
+    }
+    if (result.verified === false) {
+      return { ok: false, message: "The provider rejected the credential. Reconnect it below." };
+    }
+    return {
+      ok: true,
+      message:
+        result.reason === "no credential stored"
+          ? "No credential is stored yet. Connect it first."
+          : "This provider has no automatic check; its first run will tell.",
+    };
+  } catch {
+    return { ok: false, message: "The health check could not run. Try again in a moment." };
   }
 }
 
