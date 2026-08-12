@@ -86,7 +86,39 @@ describe("CreateWorkspaceModal", () => {
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("Give the workspace a name.");
     expect(alert).toHaveTextContent("Say which shared work this workspace supports.");
-    expect(alert).toHaveTextContent("Connect at least one system.");
+    expect(alert).toHaveTextContent("Pick at least one connector.");
+  });
+
+  it("only lets healthy connectors be selected, pointing the rest at the Connectors page", async () => {
+    const user = userEvent.setup();
+    render(
+      <CreateWorkspaceModal
+        systems={[
+          { ...systems[0]!, status: "connected" },
+          { ...systems[1]!, status: "not_connected" },
+        ]}
+        create={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "New workspace" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByLabelText(/Document store/)).toBeEnabled();
+    expect(within(dialog).getByLabelText(/Messaging/)).toBeDisabled();
+    expect(within(dialog).getByRole("link", { name: "Connect it first" })).toHaveAttribute(
+      "href",
+      "/app/connectors",
+    );
+  });
+
+  it("explains where to connect services when nothing is connected yet", async () => {
+    const user = userEvent.setup();
+    render(<CreateWorkspaceModal systems={[]} create={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "New workspace" }));
+    expect(screen.getByText(/Nothing is connected yet/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Connectors page/ })).toHaveAttribute(
+      "href",
+      "/app/connectors",
+    );
   });
 
   it("points to agent setup as the next step", async () => {

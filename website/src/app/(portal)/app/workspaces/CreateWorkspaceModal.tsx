@@ -1,12 +1,17 @@
 /**
- * Create-workspace modal: name, purpose, the system picker with View
+ * Create-workspace modal: name, purpose, the connector picker with View
  * only / Can update grants, and the automatic rehearsal-copy note.
+ * Only healthy connectors are selectable: when an option carries a
+ * connection status other than "connected", its checkbox is disabled and
+ * the row points at the Connectors page instead. (Options without a
+ * status, the unlinked dev fallback, stay selectable as before.)
  * Rehearsal isolation is selected when an Agent starts a run, not stored as
  * a Workspace choice; live runs use the real connections granted here.
  */
 "use client";
 
 import { useId, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/Button";
@@ -77,7 +82,7 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
     const found: string[] = [];
     if (name.trim().length < 2) found.push("Give the workspace a name.");
     if (purpose.trim().length < 2) found.push("Say which shared work this workspace supports.");
-    if (included.length === 0) found.push("Connect at least one system.");
+    if (included.length === 0) found.push("Pick at least one connector.");
     if (found.length > 0) {
       setErrors(found);
       return;
@@ -159,19 +164,30 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
                 />
               </div>
               <fieldset className="rounded-md border border-line p-3">
-                <legend className="px-1 text-sm font-medium text-ink">Systems</legend>
+                <legend className="px-1 text-sm font-medium text-ink">Connectors</legend>
+                {systems.length === 0 && (
+                  <p className="text-sm text-muted">
+                    Nothing is connected yet. Set up the services this organization works
+                    through on the <Link href="/app/connectors" className="underline">Connectors page</Link>,
+                    then come back to bundle them into a workspace.
+                  </p>
+                )}
                 <ul className="m-0 list-none space-y-3 p-0">
                   {systems.map((system) => {
                     const choice = choiceFor(system.id);
+                    const connectable = system.status === undefined || system.status === "connected";
                     const isolatesWrites =
                       choice.included && system.sideEffecting && choice.scope === "write";
                     return (
                       <li key={system.id} className="border-b border-line-soft pb-3 last:border-b-0 last:pb-0">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <label className="flex items-center gap-2 text-sm text-ink">
+                          <label
+                            className={`flex items-center gap-2 text-sm ${connectable ? "text-ink" : "text-muted"}`}
+                          >
                             <input
                               type="checkbox"
                               checked={choice.included}
+                              disabled={!connectable}
                               onChange={(event) =>
                                 updateChoice(system.id, { included: event.target.checked })
                               }
@@ -192,6 +208,14 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
                               </span>
                             )}
                           </label>
+                          {!connectable && (
+                            <Link
+                              href="/app/connectors"
+                              className="text-xs text-muted underline"
+                            >
+                              Connect it first
+                            </Link>
+                          )}
                           {choice.included && (
                             <label className="flex items-center gap-2 text-xs text-muted">
                               Access

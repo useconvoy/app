@@ -57,20 +57,28 @@ export default async function WorkspacesPage() {
         <div>
           <h1 className="font-display text-3xl text-ink">Workspaces</h1>
           <p className="mt-2 text-sm text-muted">
-            Connect shared systems and spaces once, then let multiple Agents operate through them.
+            Bundle connected services once, then let multiple Agents operate through them.
+            Every run launched here starts with the workspace connectors already loaded.
           </p>
         </div>
         <CreateWorkspaceModal
           systems={[
-            ...systemCatalog.map((system) => ({
-              id: system.id,
-              displayName: system.displayName,
-              sideEffecting: system.sideEffecting,
-              standInNote: system.standInNote,
-              status: system.connection
-                ? statusOf(byProvider.get(system.connection.provider))
-                : ("no_provider" as const),
-            })),
+            // A workspace bundles connectors, so only catalog entries a
+            // provider serves are offered. When the registry is not
+            // linked (dev fallback), statuses are omitted and the modal
+            // does not gate; linked, only connected entries are
+            // selectable and the rest point at the Connectors page.
+            ...systemCatalog
+              .filter((system) => system.connection !== null)
+              .map((system) => ({
+                id: system.id,
+                displayName: system.displayName,
+                sideEffecting: system.sideEffecting,
+                standInNote: system.standInNote,
+                ...(connections === null
+                  ? {}
+                  : { status: statusOf(byProvider.get(system.connection!.provider)) }),
+              })),
             ...customSystems.map((system) => ({
               id: system.id,
               displayName: system.displayName,
