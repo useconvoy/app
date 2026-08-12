@@ -44,7 +44,13 @@ export async function customSystemDefinitions(orgId: string): Promise<CustomWork
 export interface CreateWorkspacePayload {
   name: string;
   purpose: string;
-  systems: Array<{ systemId: string; scope: "read" | "write"; useStandIn: boolean }>;
+  systems: Array<{
+    systemId: string;
+    scope: "read" | "write";
+    useStandIn: boolean;
+    /** Actions enabled for this connector; absent keeps the full scope surface. */
+    tools?: string[];
+  }>;
 }
 
 export async function createWorkspace(payload: CreateWorkspacePayload): Promise<{ id: string }> {
@@ -82,6 +88,23 @@ export async function createWorkspace(payload: CreateWorkspacePayload): Promise<
     if (!system) throw new Error("Unknown connector");
     if (choice.scope !== "read" && choice.scope !== "write") {
       throw new Error("Unknown grant");
+    }
+    // An explicit action selection must name actions the connector
+    // declares, and cannot be empty (deselect the connector instead).
+    if (choice.tools) {
+      const declared = new Set(
+        ("connection" in system ? system.connection?.tools : system.tools)?.map(
+          (tool) => tool.name,
+        ) ?? [],
+      );
+      if (choice.tools.length === 0) {
+        throw new Error(`Enable at least one action for ${system.displayName}`);
+      }
+      for (const tool of choice.tools) {
+        if (!declared.has(tool)) {
+          throw new Error(`${system.displayName} has no action named ${tool}`);
+        }
+      }
     }
   }
 

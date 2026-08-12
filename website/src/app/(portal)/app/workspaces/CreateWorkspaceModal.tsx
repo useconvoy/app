@@ -1,23 +1,24 @@
 /**
- * Create-workspace modal: name, purpose, the connector picker with View
- * only / Can update grants, and the automatic rehearsal-copy note.
+ * Create-workspace modal: name, purpose, and the connector picker.
+ * Connectors are searchable by name (organizations accumulate many), and
+ * each selected connector expands into its declared actions so the
+ * workspace enables exactly the actions it should. Access scope is
+ * derived, not asked: enabling any action that makes changes turns the
+ * grant into "Can update" and shows the rehearsal-isolation note.
  * Only healthy connectors are selectable: when an option carries a
  * connection status other than "connected", its checkbox is disabled and
  * the row points at the Connectors page instead. (Options without a
  * status, the unlinked dev fallback, stay selectable as before.)
- * Rehearsal isolation is selected when an Agent starts a run, not stored as
- * a Workspace choice; live runs use the real connections granted here.
  */
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/Button";
 import type { CreateWorkspacePayload } from "@/lib/workspaces/actions";
-import { copy, grantLabels } from "@/lexicon";
-import { Select } from "@/components/ui/select";
+import { copy } from "@/lexicon";
 
 export interface SystemOption {
   id: string;
@@ -26,6 +27,8 @@ export interface SystemOption {
   standInNote: string | null;
   /** Connection state chip; absent keeps the pre-systems-page rendering. */
   status?: "connected" | "credentials_pending" | "needs_reauth" | "not_connected" | "no_provider";
+  /** The connector's declared actions; absent keeps the whole surface. */
+  tools?: Array<{ name: string; sideEffecting: boolean }>;
 }
 
 const STATUS_LABEL: Record<NonNullable<SystemOption["status"]>, string> = {
@@ -38,7 +41,8 @@ const STATUS_LABEL: Record<NonNullable<SystemOption["status"]>, string> = {
 
 interface SystemChoice {
   included: boolean;
-  scope: "read" | "write";
+  /** Enabled action names; seeded with the safe (read-only) actions. */
+  tools: Record<string, boolean>;
 }
 
 export interface CreateWorkspaceModalProps {
@@ -46,7 +50,20 @@ export interface CreateWorkspaceModalProps {
   create: (payload: CreateWorkspacePayload) => Promise<{ id: string }>;
 }
 
-const EMPTY_CHOICE: SystemChoice = { included: false, scope: "read" };
+/** The action's short name: the part after the provider prefix. */
+function actionLabel(name: string): string {
+  const dot = name.indexOf(".");
+  return dot >= 0 ? name.slice(dot + 1) : name;
+}
+
+function defaultChoice(system: SystemOption): SystemChoice {
+  return {
+    included: false,
+    tools: Object.fromEntries(
+      (system.tools ?? []).map((tool) => [tool.name, !tool.sideEffecting]),
+    ),
+  };
+}
 
 export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalProps) {
   const router = useRouter();
@@ -54,12 +71,21 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
+  const [query, setQuery] = useState("");
   const [choices, setChoices] = useState<Record<string, SystemChoice>>({});
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
+  const byId = useMemo(() => new Map(systems.map((system) => [system.id, system])), [systems]);
+
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return systems;
+    return systems.filter((system) => system.displayName.toLowerCase().includes(needle));
+  }, [systems, query]);
+
   function choiceFor(systemId: string): SystemChoice {
-    return choices[systemId] ?? EMPTY_CHOICE;
+    return choices[systemId] ?? defaultChoice(byId.get(systemId)!);
   }
 
   function updateChoice(systemId: string, patch: Partial<SystemChoice>): void {
@@ -69,9 +95,26 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
     }));
   }
 
+  function toggleTool(systemId: string, toolName: string, enabled: boolean): void {
+    const current = choiceFor(systemId);
+    updateChoice(systemId, { tools: { ...current.tools, [toolName]: enabled } });
+  }
+
+  /** Selected actions for a system, in declaration order. */
+  function selectedTools(system: SystemOption): Array<{ name: string; sideEffecting: boolean }> {
+    const choice = choiceFor(system.id);
+    return (system.tools ?? []).filter((tool) => choice.tools[tool.name]);
+  }
+
+  function scopeFor(system: SystemOption): "read" | "write" {
+    if (!system.tools || system.tools.length === 0) return "read";
+    return selectedTools(system).some((tool) => tool.sideEffecting) ? "write" : "read";
+  }
+
   function reset(): void {
     setName("");
     setPurpose("");
+    setQuery("");
     setChoices({});
     setErrors([]);
   }
@@ -83,6 +126,11 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
     if (name.trim().length < 2) found.push("Give the workspace a name.");
     if (purpose.trim().length < 2) found.push("Say which shared work this workspace supports.");
     if (included.length === 0) found.push("Pick at least one connector.");
+    for (const system of included) {
+      if ((system.tools ?? []).length > 0 && selectedTools(system).length === 0) {
+        found.push(`Enable at least one action for ${system.displayName}.`);
+      }
+    }
     if (found.length > 0) {
       setErrors(found);
       return;
@@ -94,13 +142,16 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
         name: name.trim(),
         purpose: purpose.trim(),
         systems: included.map((system) => {
-          const choice = choiceFor(system.id);
+          const scope = scopeFor(system);
           return {
             systemId: system.id,
-            scope: choice.scope,
+            scope,
             // Internal compatibility field. Rehearsal runs always isolate
             // writes; production runs still use the real provider.
-            useStandIn: system.sideEffecting && choice.scope === "write",
+            useStandIn: system.sideEffecting && scope === "write",
+            ...(system.tools && system.tools.length > 0
+              ? { tools: selectedTools(system).map((tool) => tool.name) }
+              : {}),
           };
         }),
       });
@@ -165,19 +216,37 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
               </div>
               <fieldset className="rounded-md border border-line p-3">
                 <legend className="px-1 text-sm font-medium text-ink">Connectors</legend>
-                {systems.length === 0 && (
+                {systems.length === 0 ? (
                   <p className="text-sm text-muted">
                     Nothing is connected yet. Set up the services this organization works
                     through on the <Link href="/app/connectors" className="underline">Connectors page</Link>,
                     then come back to bundle them into a workspace.
                   </p>
+                ) : (
+                  <div className="mb-3">
+                    <label htmlFor={`${formId}-search`} className="sr-only">
+                      Search connectors
+                    </label>
+                    <input
+                      id={`${formId}-search`}
+                      type="search"
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                      placeholder="Search connectors"
+                      className="w-full rounded-md border border-line bg-card px-2 py-1.5 text-sm text-ink"
+                    />
+                  </div>
+                )}
+                {systems.length > 0 && visible.length === 0 && (
+                  <p className="text-sm text-muted" role="status">
+                    No connector matches that search.
+                  </p>
                 )}
                 <ul className="m-0 list-none space-y-3 p-0">
-                  {systems.map((system) => {
+                  {visible.map((system) => {
                     const choice = choiceFor(system.id);
                     const connectable = system.status === undefined || system.status === "connected";
-                    const isolatesWrites =
-                      choice.included && system.sideEffecting && choice.scope === "write";
+                    const isolatesWrites = choice.included && scopeFor(system) === "write";
                     return (
                       <li key={system.id} className="border-b border-line-soft pb-3 last:border-b-0 last:pb-0">
                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -216,24 +285,33 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
                               Connect it first
                             </Link>
                           )}
-                          {choice.included && (
-                            <label className="flex items-center gap-2 text-xs text-muted">
-                              Access
-                              <Select
-                                value={choice.scope}
-                                onChange={(event) =>
-                                  updateChoice(system.id, {
-                                    scope: event.target.value === "write" ? "write" : "read",
-                                  })
-                                }
-                                className="rounded-md border border-line bg-card px-2 py-1 text-sm text-ink"
-                              >
-                                <option value="read">{grantLabels.read}</option>
-                                <option value="write">{grantLabels.write}</option>
-                              </Select>
-                            </label>
-                          )}
                         </div>
+                        {choice.included && (system.tools ?? []).length > 0 && (
+                          <div className="mt-2 rounded-md border border-line-soft p-2">
+                            <p className="text-xs font-medium text-muted">Actions</p>
+                            <ul className="m-0 mt-1 list-none space-y-1 p-0">
+                              {(system.tools ?? []).map((tool) => (
+                                <li key={tool.name}>
+                                  <label className="flex items-center gap-2 text-xs text-ink">
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(choice.tools[tool.name])}
+                                      onChange={(event) =>
+                                        toggleTool(system.id, tool.name, event.target.checked)
+                                      }
+                                    />
+                                    <span className="font-mono">{actionLabel(tool.name)}</span>
+                                    {tool.sideEffecting && (
+                                      <span className="rounded-full border border-hold-soft bg-hold-soft px-2 py-0.5 text-[11px] text-hold-text">
+                                        Makes changes
+                                      </span>
+                                    )}
+                                  </label>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                         {isolatesWrites && (
                           <div className="mt-2 rounded-md border border-dashed border-graphite bg-graphite-soft p-2">
                             <p className="text-xs text-graphite">

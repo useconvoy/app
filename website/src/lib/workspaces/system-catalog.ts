@@ -114,6 +114,12 @@ export interface GrantChoice {
   systemId: string;
   scope: "read" | "write";
   useStandIn: boolean;
+  /**
+   * Explicitly enabled actions (tool names) for this connector in this
+   * workspace. Absent keeps the scope-derived surface: every declared
+   * tool rides the grant and the scope decides the allowlist.
+   */
+  tools?: string[];
 }
 
 /**
@@ -148,7 +154,13 @@ export function grantsFromChoices(
     const declaredTools =
       "connection" in system ? system.connection?.tools : system.tools;
     if (declaredTools && declaredTools.length > 0) {
-      grant.tools = declaredTools.map((tool) => ({
+      // An explicit action selection narrows the grant to those tools;
+      // names the connector never declared are simply not grantable.
+      const selected = choice.tools ? new Set(choice.tools) : null;
+      const granted = selected
+        ? declaredTools.filter((tool) => selected.has(tool.name))
+        : declaredTools;
+      grant.tools = granted.map((tool) => ({
         name: tool.name,
         sideEffecting: tool.sideEffecting,
       }));

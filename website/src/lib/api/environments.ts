@@ -145,7 +145,13 @@ export interface CustomWorkspaceSystem {
 export interface CreateWorkspaceInput {
   name: string;
   purpose: string;
-  systems: Array<{ systemId: string; scope: "read" | "write"; useStandIn: boolean }>;
+  systems: Array<{
+    systemId: string;
+    scope: "read" | "write";
+    useStandIn: boolean;
+    /** Explicitly enabled actions; absent grants the scope-derived surface. */
+    tools?: string[];
+  }>;
   /** Definitions for any "custom:" ids in `systems`; supplied server-side. */
   customSystems?: CustomWorkspaceSystem[];
 }
@@ -638,9 +644,10 @@ class RegistryEnvironmentsClient implements EnvironmentsClient {
     for (const choice of input.systems) {
       const definition = customById.get(choice.systemId);
       if (!definition) continue;
-      const tools = choice.scope === "write"
-        ? definition.tools
-        : definition.tools.filter((tool) => !tool.sideEffecting);
+      const selected = choice.tools ? new Set(choice.tools) : null;
+      const tools = definition.tools
+        .filter((tool) => (selected ? selected.has(tool.name) : true))
+        .filter((tool) => choice.scope === "write" || !tool.sideEffecting);
       connections.push({
         connectionId: definition.connectionId,
         toolAllowlist: tools.map((tool) => tool.name),

@@ -70,20 +70,33 @@ export default async function WorkspacesPage() {
             // selectable and the rest point at the Connectors page.
             ...systemCatalog
               .filter((system) => system.connection !== null)
-              .map((system) => ({
-                id: system.id,
-                displayName: system.displayName,
-                sideEffecting: system.sideEffecting,
-                standInNote: system.standInNote,
-                ...(connections === null
-                  ? {}
-                  : { status: statusOf(byProvider.get(system.connection!.provider)) }),
-              })),
+              .map((system) => {
+                const connection = byProvider.get(system.connection!.provider);
+                // The live connection's tool surface wins (it is what the
+                // binding will actually allow); the catalog declaration
+                // covers the unlinked fallback.
+                const tools =
+                  connection && connection.tools.length > 0
+                    ? connection.tools
+                    : system.connection!.tools.map((tool) => ({
+                        name: tool.name,
+                        sideEffecting: tool.sideEffecting,
+                      }));
+                return {
+                  id: system.id,
+                  displayName: system.displayName,
+                  sideEffecting: system.sideEffecting,
+                  standInNote: system.standInNote,
+                  tools,
+                  ...(connections === null ? {} : { status: statusOf(connection) }),
+                };
+              }),
             ...customSystems.map((system) => ({
               id: system.id,
               displayName: system.displayName,
               sideEffecting: system.sideEffecting,
               standInNote: system.standInNote,
+              tools: system.tools,
               status: statusOf(byConnectionId.get(system.connectionId), true),
             })),
           ]}
