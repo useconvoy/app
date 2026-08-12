@@ -23,17 +23,28 @@ locals {
     "convoy:module" = "agent-runtime/dedicated-stack"
   })
 
-  services = ["control-plane", "temporal-worker", "litellm", "sandbox"]
+  services = ["control-plane", "temporal-worker", "litellm", "sandbox", "environments", "connector-sandbox"]
 
   # Resolved image URIs: explicit override wins, else per-stack ECR repo + tag.
   image = {
-    control_plane   = lookup(var.images, "control_plane", "${aws_ecr_repository.this["control-plane"].repository_url}:${var.image_tag}")
-    temporal_worker = lookup(var.images, "temporal_worker", "${aws_ecr_repository.this["temporal-worker"].repository_url}:${var.image_tag}")
-    litellm         = lookup(var.images, "litellm", "${aws_ecr_repository.this["litellm"].repository_url}:${var.image_tag}")
-    sandbox         = lookup(var.images, "sandbox", "${aws_ecr_repository.this["sandbox"].repository_url}:${var.image_tag}")
+    control_plane     = lookup(var.images, "control_plane", "${aws_ecr_repository.this["control-plane"].repository_url}:${var.image_tag}")
+    temporal_worker   = lookup(var.images, "temporal_worker", "${aws_ecr_repository.this["temporal-worker"].repository_url}:${var.image_tag}")
+    litellm           = lookup(var.images, "litellm", "${aws_ecr_repository.this["litellm"].repository_url}:${var.image_tag}")
+    sandbox           = lookup(var.images, "sandbox", "${aws_ecr_repository.this["sandbox"].repository_url}:${var.image_tag}")
+    environments      = lookup(var.images, "environments", "${aws_ecr_repository.this["environments"].repository_url}:${var.image_tag}")
+    connector_sandbox = lookup(var.images, "connector_sandbox", "${aws_ecr_repository.this["connector-sandbox"].repository_url}:${var.image_tag}")
   }
 
   # Internal service discovery namespace (Cloud Map).
   discovery_namespace = "${local.name_prefix}.internal"
   litellm_base_url    = "http://litellm.${local.discovery_namespace}:${var.litellm_port}"
+
+  # The runtime's environments seam: the in-stack service via Cloud Map,
+  # unless a stack explicitly fronts an external gateway.
+  environments_gateway_url = (
+    var.environments_url != ""
+    ? trimsuffix(var.environments_url, "/")
+    : "http://environments.${local.discovery_namespace}:${var.environments_port}/gateway"
+  )
+  connector_sandbox_url = "http://sandbox-connectors.${local.discovery_namespace}:${var.connector_sandbox_port}"
 }

@@ -235,7 +235,8 @@ locals {
     { name = "TEMPORAL_NAMESPACE", value = var.temporal_namespace },
     { name = "TEMPORAL_TASK_QUEUE", value = var.temporal_task_queue },
     { name = "LITELLM_BASE_URL", value = local.litellm_base_url },
-    { name = "CONVOY_STUB_ENV_URL", value = trimsuffix(var.environments_url, "/") },
+    { name = "CONVOY_STUB_ENV_URL", value = local.environments_gateway_url },
+    { name = "CONVOY_CONTROL_PLANE_URL", value = var.control_plane_url != "" ? var.control_plane_url : "http://${aws_lb.control_plane.dns_name}" },
     { name = "CONVOY_TURN_EXECUTOR", value = var.runtime_turn_executor },
     { name = "CONVOY_DEFAULT_MODEL", value = var.runtime_default_model },
     { name = "CONVOY_MODEL_GATEWAY", value = jsonencode({
@@ -253,6 +254,7 @@ locals {
       { name = "TEMPORAL_TLS_CERT_PEM", valueFrom = var.temporal_mtls_cert_secret_arn },
       { name = "TEMPORAL_TLS_KEY_PEM", valueFrom = var.temporal_mtls_key_secret_arn },
       { name = "CONVOY_ENVIRONMENTS_INTERNAL_TOKEN", valueFrom = var.environments_internal_token_secret_arn },
+      { name = "CONVOY_DEV_TOKEN", valueFrom = aws_secretsmanager_secret.runtime_service_token.arn },
     ],
     var.langfuse_secret_arn == null ? [] : [
       { name = "LANGFUSE_PUBLIC_KEY", valueFrom = "${var.langfuse_secret_arn}:LANGFUSE_PUBLIC_KEY::" },
