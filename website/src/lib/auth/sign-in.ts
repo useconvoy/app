@@ -6,6 +6,7 @@
  */
 import "server-only";
 
+import { isSignupAllowed } from "@/lib/auth/allowlist";
 import { createSession } from "@/lib/auth/session";
 import { listUserOrgs, syncUser } from "@/lib/orgs/queries";
 
@@ -17,6 +18,11 @@ export interface SignInIdentity {
 
 /** Returns the post-sign-in destination path. */
 export async function completeSignIn(identity: SignInIdentity): Promise<string> {
+  // The early-access gate runs before anything is created: a denied email
+  // gets no identity row and no session, only the waitlist page.
+  if (!(await isSignupAllowed(identity.email))) {
+    return "/early-access";
+  }
   const user = await syncUser(identity);
   const orgs = await listUserOrgs(user.id);
   const only = orgs.length === 1 ? orgs[0] : undefined;

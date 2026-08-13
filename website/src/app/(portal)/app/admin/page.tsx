@@ -68,6 +68,12 @@ export default async function AdminPage() {
       fact: "Sealed, never shown",
     },
     {
+      href: "/app/admin/access",
+      title: "Early access",
+      description: "Which emails can sign in while Convoy runs a waitlist.",
+      fact: "Existing accounts always keep access",
+    },
+    {
       href: "/app/admin/audit",
       title: adminCopy.auditTitle,
       description: adminCopy.auditIntro,
