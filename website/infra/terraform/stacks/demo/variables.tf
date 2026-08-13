@@ -130,13 +130,19 @@ variable "github_org_id" {
     Leave both this and github_repo_id empty for the default name-based
     subject. Read them from the claim the workflow prints before it assumes
     the role, or from the GitHub API.
+
+    Defaulted to this repository's real IDs on purpose. They are public,
+    non-secret facts, and the default used to be empty: an apply that did
+    not pass them silently rewrote the trust policy to the name-based
+    subject alone, which GitHub no longer sends, and every deploy then
+    failed to assume the role. A correct default cannot be forgotten.
   EOT
   type        = string
-  default     = ""
+  default     = "310527534"
 }
 
 variable "github_repo_id" {
   description = "Numeric GitHub repository ID. See github_org_id."
   type        = string
-  default     = ""
+  default     = "1315891026"
 }
