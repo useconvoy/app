@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { EmptyState } from "@/components/EmptyState";
 import type { Agent } from "@/lib/api/environments";
+import { money } from "@/lib/format";
 
 export function AgentCards({
   agents,
@@ -50,10 +51,8 @@ export function AgentCards({
                 </dd>
               </div>
               <div>
-                <dt className="text-muted">Starts</dt>
-                <dd className="mt-1 text-ink">
-                  {agent.scheduleDescription || "On demand"}
-                </dd>
+                <dt className="text-muted">Budget</dt>
+                <dd className="mt-1 text-ink">{money(agent.budgetCapUsd)} per run</dd>
               </div>
             </dl>
           </Link>

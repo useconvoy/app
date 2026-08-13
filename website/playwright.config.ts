@@ -29,6 +29,9 @@ export default defineConfig({
         process.env.WEBSITE_PG_ADMIN_DSN ??
         "postgresql://convoy_admin:convoy_admin@localhost:5433/convoy_website",
       SESSION_SECRET: process.env.SESSION_SECRET ?? "e2e-session-secret-e2e-session-secret",
+      // The waitlist gate applies to every sign-in; the suite's throwaway
+      // identities live under example.com.
+      CONVOY_ALLOWED_EMAILS: process.env.CONVOY_ALLOWED_EMAILS ?? "@example.com",
       CONVOY_CONTROL_PLANE_URL: process.env.CONVOY_CONTROL_PLANE_URL ?? "http://localhost:8700",
       CONVOY_CONTROL_PLANE_TOKEN: process.env.CONVOY_CONTROL_PLANE_TOKEN ?? "e2e-dev-token",
     },

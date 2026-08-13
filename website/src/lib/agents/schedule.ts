@@ -1,6 +1,6 @@
 /**
  * Pure schedule vocabulary shared by the form, the actions, and the cards.
- * (Kept out of schedule-actions.ts: "use server" modules may only export
+ * (Kept out of the action modules: "use server" files may only export
  * async functions.)
  */
 

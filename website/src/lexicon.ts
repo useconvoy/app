@@ -670,16 +670,16 @@ export const improveCopy = {
 /** Copy for the start-a-run picker. */
 export const startRunCopy = {
   title: "Start a run",
-  intro: "Pick an Agent and start it now.",
-  pickRoutine: "Choose an Agent",
+  intro: "Pick a routine and start it now.",
+  pickRoutine: "Pick a routine",
   planTitle: "What it will do",
   noRoutinesTitle: "Nothing to run yet",
-  noRoutinesBody: "This organization has no configured Agents. Create one first.",
+  noRoutinesBody: "This organization has no routines. Create one first.",
   browseCatalog: "Browse the catalog",
   startRehearsal: "Start a rehearsal run",
   startProduction: "Start a live run",
   noWorkspaceNote:
-    "This Agent's shared workspace is missing a required system, so it cannot run yet.",
+    "This routine's workspace is missing a required system, so it cannot run yet.",
   viewersCannotStart: "Viewers cannot start runs.",
 } as const;
 

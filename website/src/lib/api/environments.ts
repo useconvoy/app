@@ -1170,8 +1170,7 @@ export async function attachSystemCredential(
  * the first workspace whose grants cover every system the routine needs
  * (coverage itself is defined once, in lib/workspaces/fit). Routines
  * installed from the catalog record their workspace directly; this
- * fallback serves anything older or unbound, and full precedence over the
- * recorded binding lives in lib/routines/data resolveWorkspace.
+ * fallback serves anything older or unbound.
  */
 export function workspaceForRoutine(
   routine: { systems: string[] },

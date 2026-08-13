@@ -1,6 +1,6 @@
 /**
  * The portal nav map: Overview · Checkpoints · Runs,
- * BUILD (Agents · Workspaces · Systems),
+ * BUILD (Agents · Routines · Workspaces · Connectors),
  * IMPROVE (Agent evaluation · Learning),
  * then Logs · Admin. Filtering by role is a lens only; every page enforces
  * its own server-side check.
@@ -32,6 +32,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Build",
     items: [
       { area: "workspaces", label: "Agents", href: "/app/agents" },
+      { area: "workspaces", label: "Routines", href: "/app/routines" },
       { area: "workspaces", label: "Workspaces", href: "/app/workspaces" },
       { area: "workspaces", label: "Connectors", href: "/app/connectors" },
     ],
