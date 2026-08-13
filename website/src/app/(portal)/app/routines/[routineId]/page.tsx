@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { Button } from "@/components/Button";
 import { StatusChip } from "@/components/StatusChip";
+import { Select } from "@/components/ui/select";
 import { environmentsClient, listEventRules, listSystemConnections } from "@/lib/api/environments";
 import { isRehearsalTarget, listRuns } from "@/lib/api/runs";
 import { suggestedEvents } from "@/lib/agents/events";
@@ -187,16 +188,19 @@ export default async function RoutineDetailPage({
           <form action={scheduleAction} className="mt-4 flex flex-wrap items-end gap-3 text-sm">
             <label className="flex flex-col gap-1">
               <span className="text-xs text-muted">When</span>
-              <select
+              <Select
                 name="preset"
                 defaultValue={schedule ? presetForCron(schedule.cron) : "weekday_morning"}
-                className="rounded-sm border border-line bg-field px-2 py-1.5"
-              >
-                {Object.entries(SCHEDULE_PRESETS).map(([key, entry]) => (
-                  <option key={key} value={key}>{entry.label}</option>
-                ))}
-                <option value="custom">Custom cron</option>
-              </select>
+                className="w-52"
+                aria-label="When the routine starts"
+                options={[
+                  ...Object.entries(SCHEDULE_PRESETS).map(([key, entry]) => ({
+                    value: key,
+                    label: entry.label,
+                  })),
+                  { value: "custom", label: "Custom cron" },
+                ]}
+              />
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-xs text-muted">Custom cron (if selected)</span>
@@ -217,14 +221,16 @@ export default async function RoutineDetailPage({
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-xs text-muted">Runs as</span>
-              <select
+              <Select
                 name="target"
                 defaultValue={schedule?.target ?? "rehearsal"}
-                className="rounded-sm border border-line bg-field px-2 py-1.5"
-              >
-                <option value="rehearsal">Rehearsal</option>
-                {canRunProduction && <option value="production">Live</option>}
-              </select>
+                className="w-36"
+                aria-label="Schedule target"
+                options={[
+                  { value: "rehearsal", label: "Rehearsal" },
+                  ...(canRunProduction ? [{ value: "production", label: "Live" }] : []),
+                ]}
+              />
             </label>
             <label className="flex items-center gap-2 pb-1.5">
               <input type="checkbox" name="enabled" defaultChecked={schedule?.enabled ?? true} />
@@ -272,13 +278,15 @@ export default async function RoutineDetailPage({
             <form action={eventRuleAction} className="mt-4 flex flex-wrap items-end gap-3 text-sm">
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-muted">System</span>
-                <select name="connectionId" className="rounded-sm border border-line bg-field px-2 py-1.5">
-                  {connections.map((connection) => (
-                    <option key={connection.connectionId} value={connection.connectionId}>
-                      {connection.displayName}
-                    </option>
-                  ))}
-                </select>
+                <Select
+                  name="connectionId"
+                  className="w-44"
+                  aria-label="System the event comes from"
+                  options={connections.map((connection) => ({
+                    value: connection.connectionId,
+                    label: connection.displayName,
+                  }))}
+                />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-muted">Event</span>
@@ -298,10 +306,15 @@ export default async function RoutineDetailPage({
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-muted">Runs as</span>
-                <select name="target" className="rounded-sm border border-line bg-field px-2 py-1.5">
-                  <option value="rehearsal">Rehearsal</option>
-                  {canRunProduction && <option value="production">Live</option>}
-                </select>
+                <Select
+                  name="target"
+                  className="w-36"
+                  aria-label="Event trigger target"
+                  options={[
+                    { value: "rehearsal", label: "Rehearsal" },
+                    ...(canRunProduction ? [{ value: "production", label: "Live" }] : []),
+                  ]}
+                />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-muted">Webhook signing secret (first time)</span>

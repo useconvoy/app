@@ -1,14 +1,18 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { environmentsClient } from "@/lib/api/environments";
-import { createAgent } from "@/lib/agents/actions";
 import { requireWorkspacesPage } from "@/lib/workspaces/gate";
 import { AgentCards } from "./AgentCards";
-import { CreateAgentModal } from "./CreateAgentModal";
 
 export const metadata: Metadata = { title: "Agents" };
 export const dynamic = "force-dynamic";
 
+/**
+ * The Agents list. Agents are not authored by hand: they arrive by
+ * installing a template from the catalog, which creates the Agent in a
+ * chosen Workspace along with its first routine.
+ */
 export default async function AgentsPage() {
   const { session } = await requireWorkspacesPage();
   const client = environmentsClient();
@@ -28,18 +32,17 @@ export default async function AgentsPage() {
             Each Agent has its own goal and runtime setup, and operates through a shared Workspace. Multiple Agents can use the same Workspace and its integrations.
           </p>
         </div>
-        <CreateAgentModal
-          workspaces={workspaces.map((workspace) => ({
-            id: workspace.id,
-            name: workspace.name,
-            systemCount: workspace.systems.length,
-          }))}
-          create={createAgent}
-        />
+        <Link
+          href="/app/catalog"
+          className="rounded-md border border-line bg-card px-3 py-1.5 text-sm font-medium text-ink hover:border-pine"
+        >
+          Install from the catalog
+        </Link>
       </header>
       {workspaces.length === 0 && (
         <p role="status" className="rounded-md border border-hold-soft bg-hold-soft p-3 text-sm text-hold-text">
-          Create a workspace and connect its systems before creating an agent.
+          Create a workspace and connect its systems; installing an agent needs a workspace to
+          run in.
         </p>
       )}
       <AgentCards agents={agents} workspaceNames={workspaceNames} />

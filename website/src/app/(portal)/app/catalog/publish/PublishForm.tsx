@@ -88,13 +88,8 @@ export function PublishForm({ routines, publish }: PublishFormProps) {
         Agent
         <Select
           name="routineId"
-        >
-          {routines.map((routine) => (
-            <option key={routine.id} value={routine.id}>
-              {routine.name}
-            </option>
-          ))}
-        </Select>
+          options={routines.map((routine) => ({ value: routine.id, label: routine.name }))}
+        />
       </label>
       <div className="flex flex-wrap gap-4">
         <label className="block text-sm text-ink">

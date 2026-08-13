@@ -9,16 +9,18 @@ import { computeCompatibility } from "@/lib/catalog/compat";
 import { requireCatalogPage } from "@/lib/catalog/gate";
 import { getEntry } from "@/lib/catalog/queries";
 import { systemCatalog } from "@/lib/workspaces/system-catalog";
-import { catalogCopy, copy } from "@/lexicon";
+import { catalogCopy } from "@/lexicon";
 import { InstallFlow } from "./InstallFlow";
 
 export const metadata: Metadata = { title: "Install an Agent template" };
 
 /**
- * The install screen: the server resolves the Agent template's
- * capability requirements against every workspace up front, so picking a
- * workspace shows its compatibility report instantly; confirming installs
- * with the snapshot version pinned.
+ * The install screen: pick the Workspace the new Agent works in. The
+ * server resolves the template's capability requirements against every
+ * workspace up front, so picking one shows its compatibility report
+ * instantly; confirming creates the Agent (and its first routine) with
+ * the snapshot version pinned. Installing is the only way to add an
+ * Agent.
  */
 export default async function InstallPage({ params }: { params: Promise<{ entryId: string }> }) {
   const { entryId } = await params;
@@ -26,24 +28,12 @@ export default async function InstallPage({ params }: { params: Promise<{ entryI
   const entry = await getEntry({ orgId: session.orgId, userId: session.userId }, entryId);
   if (!entry) notFound();
 
-  const client = environmentsClient();
-  const [workspaces, agents] = await Promise.all([
-    client.listWorkspaces(session.orgId),
-    client.listAgents(session.orgId),
-  ]);
-  const workspacesById = new Map(workspaces.map((workspace) => [workspace.id, workspace]));
-  const options = agents.flatMap((agent) => {
-    const workspace = workspacesById.get(agent.workspaceId);
-    return workspace
-      ? [{
-          agentId: agent.id,
-          agentName: agent.name,
-          workspaceId: workspace.id,
-          workspaceName: workspace.name,
-          report: computeCompatibility(entry.requirements, workspace),
-        }]
-      : [];
-  });
+  const workspaces = await environmentsClient().listWorkspaces(session.orgId);
+  const options = workspaces.map((workspace) => ({
+    workspaceId: workspace.id,
+    workspaceName: workspace.name,
+    report: computeCompatibility(entry.requirements, workspace),
+  }));
 
   // Plain names for every id the reports may mention: the shared system
   // catalog plus whatever concrete systems the workspaces connect.
@@ -74,16 +64,14 @@ export default async function InstallPage({ params }: { params: Promise<{ entryI
         />
       ) : (
         <EmptyState
-          title={agents.length === 0 ? "Create an agent first" : copy.workspacesEmptyTitle}
-          body={agents.length === 0
-            ? "An Agent template needs an Agent already linked to a shared Workspace and runtime setup."
-            : catalogCopy.installNeedsWorkspace}
+          title="Create a workspace first"
+          body={catalogCopy.installNeedsWorkspace}
           action={
             <Link
-              href={agents.length === 0 ? "/app/agents" : "/app/workspaces"}
+              href="/app/workspaces"
               className="rounded-md border border-line bg-card px-3 py-1.5 text-sm font-medium text-ink hover:border-pine"
             >
-              {agents.length === 0 ? "Go to agents" : catalogCopy.goToWorkspaces}
+              {catalogCopy.goToWorkspaces}
             </Link>
           }
         />

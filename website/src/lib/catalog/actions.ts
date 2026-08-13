@@ -75,22 +75,22 @@ export async function publishEntry(input: PublishEntryInput): Promise<{ id: stri
 
 /**
  * The install flow's completion: recompute the compatibility report
- * server-side (the client rendering is convenience, not enforcement),
- * refuse while systems are missing, then enrich the selected Agent with the
- * pinned goal, system requirements, and budget. The Agent's budget starts at
- * the org's default per-run cap; the
- * admin_audit row attributes the install in the same transaction.
+ * server-side (the client rendering is convenience, not enforcement) and
+ * refuse while systems are missing. Installing is the only way an Agent
+ * comes to exist: a first install creates the Agent in the chosen
+ * workspace from the template's goal and requirements; reinstalling an
+ * entry re-pins the Agent that already carries it. The Agent's budget
+ * starts at the org's default per-run cap; the admin_audit row attributes
+ * the install in the same transaction as the pin.
  */
 export async function installEntry(
   entryId: string,
-  agentId: string,
+  workspaceId: string,
 ): Promise<{ pinnedVersion: number; agentId: string }> {
   const { session } = await requireCatalogAction("manage_workspaces");
   const entry = await getEntry({ orgId: session.orgId, userId: session.userId }, entryId);
   if (!entry) throw new Error("That Agent template is not on the storefront");
-  const agent = await environmentsClient().getAgent(session.orgId, agentId);
-  if (!agent) throw new Error("That agent does not exist");
-  const workspace = await environmentsClient().getWorkspace(session.orgId, agent.workspaceId);
+  const workspace = await environmentsClient().getWorkspace(session.orgId, workspaceId);
   if (!workspace) throw new Error("That workspace does not exist");
 
   const report = computeCompatibility(entry.requirements, workspace);
@@ -100,6 +100,30 @@ export async function installEntry(
 
   const settings = await getOrgSettings(session.orgId);
   const ctx = { orgId: session.orgId, userId: session.userId };
+  const alreadyInstalled = await withOrgContext(ctx, async (client) => {
+    const { rows } = await client.query<{ id: string }>(
+      "SELECT id FROM agents WHERE org_id = $1 AND source_entry_id = $2",
+      [session.orgId, entry.id],
+    );
+    return rows[0]?.id ?? null;
+  });
+  const agentId =
+    alreadyInstalled ??
+    (
+      await environmentsClient().createAgent(session.orgId, {
+        workspaceId: workspace.id,
+        name: entry.storefront.name,
+        purpose: entry.storefront.tagline,
+        goal: entry.storefront.description,
+        planSteps: [],
+        scheduleDescription: null,
+        budgetCapUsd: settings.policies.defaultRunBudgetCapUsd,
+        sandboxTemplate: "convoy-devbox-python",
+        browserPolicy: null,
+        makeDefault: false,
+      })
+    ).id;
+
   const installedAgentId = await withOrgContext(ctx, async (client) => {
     const installed = await upsertInstalledRoutine(client, ctx, {
       name: entry.storefront.name,
@@ -110,7 +134,7 @@ export async function installEntry(
       systems: entry.requirements.systems.map((required) => required.systemId),
       budgetCapUsd: settings.policies.defaultRunBudgetCapUsd,
       workspaceId: workspace.id,
-      agentId: agent.id,
+      agentId,
       sourceEntryId: entry.id,
       sourceVersion: entry.version,
     });
@@ -127,6 +151,7 @@ export async function installEntry(
   });
   revalidatePath("/app/catalog");
   revalidatePath("/app/agents");
+  revalidatePath("/app/routines");
   revalidatePath(`/app/agents/${installedAgentId}`);
   return { pinnedVersion: entry.version, agentId: installedAgentId };
 }

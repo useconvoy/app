@@ -15,7 +15,7 @@ export function AgentCards({
     return (
       <EmptyState
         title="No agents yet"
-        body="Create an agent with a goal, connected workspace, and runtime."
+        body="Install an agent from the catalog; it arrives with its goal and runtime ready."
       />
     );
   }

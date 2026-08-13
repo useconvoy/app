@@ -45,13 +45,11 @@ export function CompatibilityReportView({ report, systemNames }: CompatibilityRe
             <Select
               name={`mapping-${choice.systemId}`}
               defaultValue={choice.options[0]}
-            >
-              {choice.options.map((option) => (
-                <option key={option} value={option}>
-                  {name(option)}
-                </option>
-              ))}
-            </Select>
+              options={choice.options.map((option) => ({
+                value: option,
+                label: name(option),
+              }))}
+            />
           </label>
         </div>
       ))}

@@ -92,13 +92,11 @@ export default async function MembersPage() {
             <TextField type="email" name="email" required className="md:w-64" />
           </Field>
           <Field label="Role">
-            <Select name="role" defaultValue="member">
-              {ROLES.map((role) => (
-                <option key={role} value={role}>
-                  {ROLE_LABELS[role]}
-                </option>
-              ))}
-            </Select>
+            <Select
+              name="role"
+              defaultValue="member"
+              options={ROLES.map((role) => ({ value: role, label: ROLE_LABELS[role] ?? role }))}
+            />
           </Field>
           <button
             type="submit"
@@ -184,13 +182,12 @@ export default async function MembersPage() {
                             name="role"
                             defaultValue={member.role}
                             className="w-auto py-1 text-xs"
-                          >
-                            {ROLES.map((role) => (
-                              <option key={role} value={role}>
-                                {ROLE_LABELS[role]}
-                              </option>
-                            ))}
-                          </Select>
+                            aria-label={`Role for ${member.name}`}
+                            options={ROLES.map((role) => ({
+                              value: role,
+                              label: ROLE_LABELS[role] ?? role,
+                            }))}
+                          />
                           <button
                             type="submit"
                             className="rounded-sm border border-line px-2 py-1 text-xs text-ink hover:border-pine"

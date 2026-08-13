@@ -4,7 +4,7 @@
  * report's four states: all green, mapping needed, connect prompt, and
  * the vendor-specific portability line.
  */
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { CatalogCards, type CatalogCardItem } from "@/app/(portal)/app/catalog/CatalogCards";
@@ -110,8 +110,13 @@ describe("CompatibilityReportView", () => {
         systemNames={systemNames}
       />,
     );
-    const picker = screen.getByLabelText("Choose which CRM this Agent should use");
-    expect(picker).toBeInTheDocument();
+    // The custom select: the wrapping label names the trigger button, which
+    // opens the design-system listbox with both candidates.
+    const trigger = screen.getByRole("button", {
+      name: "Choose which CRM this Agent should use",
+    });
+    expect(trigger).toHaveTextContent("Salesforce");
+    fireEvent.click(trigger);
     expect(screen.getByRole("option", { name: "Salesforce" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "HubSpot" })).toBeInTheDocument();
     expect(

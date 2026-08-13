@@ -77,14 +77,14 @@ export default async function NewRoutinePage({
 
       {configured.length === 0 ? (
         <EmptyState
-          title="No configured Agents"
-          body="Create an Agent with a goal before building a routine."
+          title="No Agents yet"
+          body="Install an agent from the catalog before building a routine."
           action={
             <Link
-              href="/app/agents"
+              href="/app/catalog"
               className="rounded-md border border-line bg-card px-3 py-1.5 text-sm font-medium text-ink hover:border-pine"
             >
-              Create an Agent
+              Browse the catalog
             </Link>
           }
         />
