@@ -259,11 +259,16 @@ jobs:
           docker compose pull
 
           # The registry's database and tables, idempotently, every release.
+          # Every docker command here gets </dev/null: this script arrives
+          # on stdin, and a command that attaches stdin swallows the rest
+          # of the script, which then "succeeds" without ever restarting
+          # anything. That is not hypothetical; it is what the first
+          # registry deploy did.
           docker compose exec -T postgres sh -c \
             'psql -U convoy_website_admin -d convoy_website -tc \
                "SELECT 1 FROM pg_database WHERE datname = '"'"'convoy_environments'"'"'" | grep -q 1 || \
-             createdb -U convoy_website_admin convoy_environments'
-          docker compose run --rm -T environments convoy-environments init-db
+             createdb -U convoy_website_admin convoy_environments' </dev/null
+          docker compose run --rm -T environments convoy-environments init-db </dev/null
 
           if [ "${RUN_MIGRATIONS}" = "true" ]; then
             # Both halves, in this order: the schema, then the app-role
@@ -271,7 +276,7 @@ jobs:
             # 0001_init.sql. Skipping the second leaves the console on a
             # published password.
             docker compose run --rm -T web sh -c \
-              'npm run db:migrate && node infra/db/sync-app-role.mjs'
+              'npm run db:migrate && node infra/db/sync-app-role.mjs' </dev/null
           fi
 
           docker compose up -d
