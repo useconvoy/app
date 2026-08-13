@@ -146,3 +146,14 @@ variable "github_repo_id" {
   type        = string
   default     = "1315891026"
 }
+
+variable "allowed_signup_emails" {
+  description = <<-EOT
+    Comma-separated early-access allowlist delivered as
+    CONVOY_ALLOWED_EMAILS: full emails or @domain.com entries. The env list
+    is the bootstrap and break-glass door; day-to-day invitations live in
+    the signup_allowlist table, managed from the console admin area.
+  EOT
+  type        = string
+  default     = "@deployconvoy.com"
+}
