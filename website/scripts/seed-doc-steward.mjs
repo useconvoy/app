@@ -15,9 +15,10 @@
  *     [--org <org name or uuid>] \
  *     [--folder <drive folder id>] [--repo <owner/repo>] [--channel <name>]
  *
- * Requires WEBSITE_PG_ADMIN_DSN. Publishing again updates the entry's
- * storefront in place without bumping the version; the entry stays at v1
- * until the definition meaningfully changes.
+ * Requires WEBSITE_PG_ADMIN_DSN. Safe to run on every release: an entry
+ * that already exists is left untouched unless --update is passed, so a
+ * manual republish with real watched sources survives later deploys. The
+ * entry stays at v1 until the definition meaningfully changes.
  */
 import pg from "pg";
 
@@ -79,7 +80,11 @@ try {
     `SELECT id FROM catalog_entries
       WHERE split_part(routine_version_ref, '@', 1) = 'doc-steward'`,
   );
-  if (existing.rows[0]) {
+  if (existing.rows[0] && !args.includes("--update")) {
+    console.log(
+      `catalog entry ${existing.rows[0].id} already published; pass --update to overwrite`,
+    );
+  } else if (existing.rows[0]) {
     await client.query(
       `UPDATE catalog_entries
           SET storefront = $2, capability_requirements = $3, eval_thresholds = $4
