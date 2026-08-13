@@ -166,6 +166,7 @@ class GatewayService:
                 "tokenUrl": base + "/google/oauth2/token",
                 "driveBaseUrl": base + "/google/drive/v3",
                 "sheetsBaseUrl": base + "/google/sheets/v4",
+                "docsBaseUrl": base + "/google/docs/v1",
                 "_requestHeaders": request_headers,
             }
             credential = self._google_sandbox_credential()

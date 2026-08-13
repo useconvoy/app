@@ -107,6 +107,8 @@ export async function getRoutine(orgId: string, routineId: string): Promise<Rout
 export interface InstallRoutineInput {
   name: string;
   descriptor: string;
+  /** The working goal the runtime plans from; defaults to the descriptor. */
+  goal?: string;
   systems: string[];
   budgetCapUsd: number;
   workspaceId: string;
@@ -134,21 +136,22 @@ export async function upsertInstalledRoutine(
     `UPDATE agents
         SET name = $2,
             purpose = $3,
-            goal = $3,
-            systems = $4,
-            budget_cap_usd = $5,
+            goal = $4,
+            systems = $5,
+            budget_cap_usd = $6,
             plan_steps = '[]',
-            workspace_id = $6,
-            source_entry_id = $7,
-            source_version = $8,
+            workspace_id = $7,
+            source_entry_id = $8,
+            source_version = $9,
             automation_configured = true,
             updated_at = now()
-      WHERE org_id = $1 AND id = $9
+      WHERE org_id = $1 AND id = $10
       RETURNING id`,
     [
       ctx.orgId,
       input.name,
       input.descriptor,
+      input.goal?.trim() || input.descriptor,
       input.systems,
       input.budgetCapUsd,
       input.workspaceId,

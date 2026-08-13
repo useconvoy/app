@@ -27,13 +27,21 @@ from .base import Connector, ConnectorError, raise_for_status, register
 _TOKEN_URL = "https://oauth2.googleapis.com/token"
 _DRIVE = "https://www.googleapis.com/drive/v3"
 _SHEETS = "https://sheets.googleapis.com/v4"
-_SCOPES = "https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets"
+_DOCS = "https://docs.googleapis.com/v1"
+_SCOPES = " ".join([
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/documents",
+])
 _TOKEN_TTL_SLACK_S = 120  # refresh a couple of minutes early
+
+_DOC_MIME = "application/vnd.google-apps.document"
 
 _TOOLS = [
     ToolSpec(
         name="google.drive_list_files", execution="inline", sideEffecting=False,
-        description="List files in a Drive folder (defaults to spreadsheets only).",
+        description="List files in a Drive folder. Defaults to spreadsheets; pass"
+                    " mimeType application/vnd.google-apps.document for Docs.",
         inputSchema={"type": "object",
                      "properties": {"folderId": {"type": "string"},
                                     "mimeType": {"type": "string"},
@@ -57,7 +65,45 @@ _TOOLS = [
                                     "range": {"type": "string", "default": "A1"}},
                      "required": ["spreadsheetId", "values"]},
     ),
+    ToolSpec(
+        name="google.docs_read", execution="inline", sideEffecting=False,
+        description="Read a Google Doc as plain text (title plus body).",
+        inputSchema={"type": "object",
+                     "properties": {"documentId": {"type": "string"}},
+                     "required": ["documentId"]},
+    ),
+    ToolSpec(
+        name="google.docs_update", execution="promoted", sideEffecting=True,
+        description="Replace a Google Doc's body with new plain text content.",
+        inputSchema={"type": "object",
+                     "properties": {"documentId": {"type": "string"},
+                                    "content": {"type": "string"}},
+                     "required": ["documentId", "content"]},
+    ),
 ]
+
+
+def _doc_text(document: Dict[str, Any]) -> str:
+    """Flatten a Docs API body into plain text: paragraph runs in order,
+    table cells traversed recursively. Formatting is out of scope; the
+    reader is a model deciding whether prose is stale."""
+    def walk(elements: Any) -> str:
+        text = []
+        for element in elements or []:
+            paragraph = element.get("paragraph")
+            if paragraph:
+                for part in paragraph.get("elements", []):
+                    run = part.get("textRun")
+                    if run:
+                        text.append(run.get("content", ""))
+            table = element.get("table")
+            if table:
+                for row in table.get("tableRows", []):
+                    for cell in row.get("tableCells", []):
+                        text.append(walk(cell.get("content")))
+        return "".join(text)
+
+    return walk(document.get("body", {}).get("content"))
 
 # (client_email, scopes, token_url) → (access_token, expires_at). Module-level so the
 # hourly exchange amortizes across the per-call connector instances.
@@ -68,14 +114,14 @@ _token_cache: Dict[Tuple[str, str, str], Tuple[str, float]] = {}
 class GoogleConnector(Connector):
     provider = "google"
     display_name = "Google Drive"
-    description = "List Drive files, read spreadsheets, and append rows."
+    description = "List Drive files, read and update documents, and work with spreadsheets."
     credential_label = "Service account key (JSON)"
     credential_placeholder = '{ "type": "service_account", ... }'
     credential_multiline = True
     credential_steps = (
         "In your Google Cloud console, create a service account and download its JSON key.",
-        "Turn on the Drive and Sheets APIs for that project.",
-        "Share the Drive folders and spreadsheets this organization works in with the service account's email address.",
+        "Turn on the Drive, Sheets, and Docs APIs for that project.",
+        "Share the Drive folders, documents, and spreadsheets this organization works in with the service account's email address.",
     )
 
     async def manifest(self, credential: Optional[str] = None) -> ConnectionManifest:
@@ -122,6 +168,7 @@ class GoogleConnector(Connector):
     async def invoke(self, tool: str, args: Dict[str, Any], credential: str) -> Any:
         drive_api = self._config_url(_DRIVE, "driveBaseUrl", "drive_base_url")
         sheets_api = self._config_url(_SHEETS, "sheetsBaseUrl", "sheets_base_url")
+        docs_api = self._config_url(_DOCS, "docsBaseUrl", "docs_base_url")
         async with self._client() as client:
             token = await self._access_token(client, credential)
             headers = {"Authorization": "Bearer %s" % token}
@@ -145,6 +192,40 @@ class GoogleConnector(Connector):
                     params={"valueInputOption": "USER_ENTERED",
                             "insertDataOption": "INSERT_ROWS"},
                     json={"values": [args["values"]]})
+            elif tool == "google.docs_read":
+                resp = await client.get(
+                    "%s/documents/%s" % (docs_api, args["documentId"]), headers=headers)
+                await raise_for_status(resp, "google")
+                document = resp.json()
+                return {"documentId": document.get("documentId", args["documentId"]),
+                        "title": document.get("title", ""),
+                        "text": _doc_text(document)}
+            elif tool == "google.docs_update":
+                # Replace-the-body semantics: read the current end index, then
+                # one batchUpdate that deletes the old body and inserts the new
+                # text. Whole-document replacement keeps the approval story
+                # honest (what was approved is exactly what lands) and stays
+                # idempotent under runtime retries via the gateway's keyed
+                # effects journal.
+                current = await client.get(
+                    "%s/documents/%s" % (docs_api, args["documentId"]), headers=headers)
+                await raise_for_status(current, "google")
+                body = current.json()
+                content = body.get("body", {}).get("content", [])
+                end_index = content[-1].get("endIndex", 1) if content else 1
+                requests = []
+                if end_index > 2:
+                    requests.append({"deleteContentRange": {
+                        "range": {"startIndex": 1, "endIndex": end_index - 1}}})
+                new_text = args["content"]
+                if new_text:
+                    requests.append({"insertText": {
+                        "location": {"index": 1}, "text": new_text}})
+                if not requests:
+                    return {"documentId": args["documentId"], "replies": []}
+                resp = await client.post(
+                    "%s/documents/%s:batchUpdate" % (docs_api, args["documentId"]),
+                    headers=headers, json={"requests": requests})
             else:
                 raise ConnectorError("google: unknown tool %s" % tool)
             await raise_for_status(resp, "google")

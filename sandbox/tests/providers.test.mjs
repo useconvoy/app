@@ -39,6 +39,29 @@ test("Google simulator enforces sharing and supports read and append", async () 
     token: "google-convoy-sandbox",
   }));
   assert.deepEqual(values.body.values[2], ["Sample task", "In progress", "Convoy"]);
+
+  const doc = await runtime.invoke("google", "google", providerRequest({
+    path: "/docs/v1/documents/doc-runbook",
+    token: "google-convoy-sandbox",
+  }));
+  assert.equal(doc.body.title, "Operations Runbook");
+  const originalText = doc.body.body.content[0].paragraph.elements[0].textRun.content;
+  assert.match(originalText, /nightly export/);
+  const updated = await runtime.invoke("google", "google", providerRequest({
+    method: "POST",
+    path: "/docs/v1/documents/doc-runbook:batchUpdate",
+    token: "google-convoy-sandbox",
+    body: { requests: [
+      { deleteContentRange: { range: { startIndex: 1, endIndex: originalText.length } } },
+      { insertText: { location: { index: 1 }, text: "Exports: the hourly-sync job runs every hour.\n" } },
+    ] },
+  }));
+  assert.equal(updated.status, 200);
+  const reread = await runtime.invoke("google", "google", providerRequest({
+    path: "/docs/v1/documents/doc-runbook",
+    token: "google-convoy-sandbox",
+  }));
+  assert.match(reread.body.body.content[0].paragraph.elements[0].textRun.content, /hourly-sync/);
 });
 
 test("GitHub simulator supports content reads and issue creation", async () => {

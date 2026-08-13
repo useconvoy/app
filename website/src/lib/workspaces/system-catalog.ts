@@ -77,9 +77,11 @@ export const systemCatalog: SystemDefinition[] = [
       tools: [
         { name: "google.drive_list_files", execution: "inline", sideEffecting: false },
         { name: "google.sheets_read_range", execution: "inline", sideEffecting: false },
+        { name: "google.docs_read", execution: "inline", sideEffecting: false },
         // Mutating, so promoted and flagged in the registry's conservative
         // vocabulary even though a write here stays inside the org.
         { name: "google.sheets_append_row", execution: "promoted", sideEffecting: true },
+        { name: "google.docs_update", execution: "promoted", sideEffecting: true },
       ],
     },
   },
