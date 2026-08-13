@@ -60,6 +60,8 @@ COPY --chown=convoy:convoy src ./src
 # the migrations themselves have to be in the image, not just in the repo.
 COPY --chown=convoy:convoy db ./db
 COPY --chown=convoy:convoy scripts/migrate.mjs ./scripts/migrate.mjs
+# The deploy publishes/refreshes the platform catalog entries each release.
+COPY --chown=convoy:convoy scripts/seed-doc-steward.mjs ./scripts/seed-doc-steward.mjs
 COPY --chown=convoy:convoy infra/db/sync-app-role.mjs ./infra/db/sync-app-role.mjs
 # RDS serves a certificate chained to Amazon's own roots, which Node does not
 # trust by default. Without this bundle a DSN asking for real verification

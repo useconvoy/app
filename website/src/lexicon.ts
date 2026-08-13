@@ -404,7 +404,6 @@ export const catalogCopy = {
   title: "Catalog",
   intro: "Agent templates published by Convoy, ready to add to an Agent in one of your workspaces.",
   installRoutine: "Install Agent template",
-  publishAction: "Publish to catalog",
   publishTitle: "Publish an Agent template",
   publishIntro:
     "Publishing takes a snapshot of an Agent's goal and requirements and puts it on the storefront.",

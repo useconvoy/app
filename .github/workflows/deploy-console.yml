@@ -279,6 +279,11 @@ jobs:
               'npm run db:migrate && node infra/db/sync-app-role.mjs' </dev/null
           fi
 
+          # Platform catalog entries, every release. The seed inserts only
+          # when the entry is absent, so a manual republish with real
+          # watched sources survives later deploys.
+          docker compose run --rm -T web node scripts/seed-doc-steward.mjs </dev/null
+
           docker compose up -d
           docker compose ps
 

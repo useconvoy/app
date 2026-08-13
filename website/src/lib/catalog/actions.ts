@@ -1,13 +1,14 @@
 /**
  * Server actions for the catalog. Org and actor derive from
  * the verified session, the permissions matrix is re-checked server-side,
- * and administrative writes land admin_audit rows. Publishing snapshots
- * into catalog_entries; installing enriches one Agent with the pinned template.
+ * and administrative writes land admin_audit rows. Publishing is
+ * platform-side only for now (the deploy seeds Convoy's entries through
+ * scripts/seed-doc-steward.mjs and its successors); a self-serve publish
+ * surface returns later on top of publishEntryCore.
  */
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 
 import { environmentsClient } from "@/lib/api/environments";
 import { requireOrgSession } from "@/lib/auth/session";
@@ -17,7 +18,7 @@ import { getOrgSettings } from "@/lib/orgs/settings";
 import { can, type Action } from "@/lib/permissions";
 import { upsertInstalledRoutine } from "@/lib/routines/queries";
 import { computeCompatibility, reportState } from "./compat";
-import { getEntry, publishEntryCore } from "./queries";
+import { getEntry } from "./queries";
 
 /** Session + matrix gate shared by the catalog actions. */
 async function requireCatalogAction(action: Action) {
@@ -31,46 +32,6 @@ async function requireCatalogAction(action: Action) {
     throw new Error("You cannot do that in this organization");
   }
   return { session, membership };
-}
-
-const publishSchema = z.object({
-  routineId: z.string().min(1).max(200),
-  version: z.number().int().positive().max(100_000),
-  storefront: z.object({
-    name: z.string().trim().min(2).max(120),
-    tagline: z.string().trim().min(2).max(160),
-    description: z.string().trim().min(2).max(2000),
-  }),
-  capabilityRequirements: z.object({
-    systems: z
-      .array(z.object({ systemId: z.string().min(1).max(120), scope: z.enum(["read", "write"]) }))
-      .max(50),
-    vendorSpecificTools: z
-      .array(z.object({ tool: z.string().min(1).max(120), vendorSystemId: z.string().min(1).max(120) }))
-      .max(200),
-  }),
-  evalThresholds: z.object({ minScore: z.number().min(0).max(100) }),
-  note: z.string().trim().max(500).optional(),
-});
-
-export type PublishEntryInput = z.infer<typeof publishSchema>;
-
-/**
- * Workshop-org publish: snapshot the routine version onto the storefront
- * with convoy visibility, appending to the entry's changelog.
- */
-export async function publishEntry(input: PublishEntryInput): Promise<{ id: string; version: number }> {
-  const { session } = await requireCatalogAction("publish_catalog");
-  const parsed = publishSchema.safeParse(input);
-  if (!parsed.success) {
-    throw new Error("Check the publish form: every field needs a sensible value");
-  }
-  const result = await publishEntryCore(
-    { orgId: session.orgId, userId: session.userId },
-    parsed.data,
-  );
-  revalidatePath("/app/catalog");
-  return result;
 }
 
 /**
