@@ -75,6 +75,21 @@ def simulate(
         return {"files": [], "nextPageToken": None}
     if tool == "google.sheets_read_range":
         return {"range": args.get("range", ""), "majorDimension": "ROWS", "values": []}
+    if tool == "google.docs_read":
+        return {
+            "documentId": args.get("documentId", effect_id),
+            "title": "Rehearsal document",
+            "text": "This is a rehearsal stand-in document. Its content is fixed.\n",
+            "simulated": True,
+        }
+    if tool == "google.docs_update":
+        return {
+            "documentId": args.get("documentId", ""),
+            "replies": [],
+            "writeControl": {},
+            "simulated": True,
+            "effectId": effect_id,
+        }
     if tool == "google.sheets_append_row":
         values = args.get("values") or []
         return {

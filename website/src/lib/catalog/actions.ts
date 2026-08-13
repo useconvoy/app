@@ -104,6 +104,9 @@ export async function installEntry(
     const installed = await upsertInstalledRoutine(client, ctx, {
       name: entry.storefront.name,
       descriptor: entry.storefront.tagline,
+      // The description is the working goal the runtime plans from; the
+      // tagline stays the one-line storefront descriptor.
+      goal: entry.storefront.description,
       systems: entry.requirements.systems.map((required) => required.systemId),
       budgetCapUsd: settings.policies.defaultRunBudgetCapUsd,
       workspaceId: workspace.id,

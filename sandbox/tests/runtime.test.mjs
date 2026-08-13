@@ -20,17 +20,18 @@ test("sandbox lifecycle is deterministic across snapshot, restore, reset, and fo
     token: "xoxb-convoy-sandbox",
     body: { channel: "C_OPERATIONS", text: "Second update" },
   }));
-  assert.equal((await runtime.inspect("lifecycle")).providers.slack.messages.length, 3);
+  // The fixture seeds two operations messages; counts below are fixture + writes.
+  assert.equal((await runtime.inspect("lifecycle")).providers.slack.messages.length, 4);
 
   await runtime.restore("lifecycle", snapshot.snapshotId);
-  assert.equal((await runtime.inspect("lifecycle")).providers.slack.messages.length, 2);
+  assert.equal((await runtime.inspect("lifecycle")).providers.slack.messages.length, 3);
 
   const forked = await runtime.fork("lifecycle", snapshot.snapshotId, "forked");
-  assert.equal(forked.providers.slack.messages.length, 2);
+  assert.equal(forked.providers.slack.messages.length, 3);
   assert.equal(forked.sandboxId, "forked");
 
   await runtime.reset("lifecycle");
-  assert.equal((await runtime.inspect("lifecycle")).providers.slack.messages.length, 1);
+  assert.equal((await runtime.inspect("lifecycle")).providers.slack.messages.length, 2);
 });
 
 test("webhooks are signed, queued, delivered, and audited on simulated time", async () => {
@@ -68,7 +69,8 @@ test("idempotency keys prevent promoted writes from executing twice", async () =
   ]);
   assert.deepEqual(second.body, first.body);
   const state = await runtime.inspect("idempotency");
-  assert.equal(state.providers.github.repositories[0].issues.length, 1);
+  // Two fixture issues plus exactly one write despite the duplicate call.
+  assert.equal(state.providers.github.repositories[0].issues.length, 3);
   assert.equal(state.webhooks.queue.length, 1);
   assert.equal(state.auditLog.at(-1).event, "provider.request_replayed");
 });

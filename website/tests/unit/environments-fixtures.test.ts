@@ -145,6 +145,7 @@ describe("toolIdsForRoutine", () => {
       { systemId: "messaging", scope: "write", useStandIn: true },
     ]);
     expect(toolIdsForRoutine(["document_store", "messaging"], grants)).toEqual([
+      "google.docs_read",
       "google.drive_list_files",
       "google.sheets_read_range",
       "slack.list_channels",
@@ -153,6 +154,9 @@ describe("toolIdsForRoutine", () => {
     ]);
     expect(toolIdsForRoutine(["document_store"], grants)).not.toContain(
       "google.sheets_append_row",
+    );
+    expect(toolIdsForRoutine(["document_store"], grants)).not.toContain(
+      "google.docs_update",
     );
   });
 

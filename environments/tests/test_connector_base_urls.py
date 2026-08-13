@@ -95,3 +95,49 @@ async def test_google_accepts_independent_token_drive_and_sheets_base_urls() -> 
         "http://sandboxes.test/s/run-1/google/sheets/v4/spreadsheets/"
         "sheet-renewals/values/Renewals!A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS"
     )
+
+
+@pytest.mark.asyncio
+async def test_google_docs_read_flattens_and_update_replaces_the_body() -> None:
+    document = {
+        "documentId": "doc-runbook",
+        "title": "Operations Runbook",
+        "body": {"content": [
+            {"endIndex": 19, "paragraph": {"elements": [
+                {"textRun": {"content": "Exports run nightly"}}]}},
+        ]},
+    }
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.method, str(request.url),
+                      request.content.decode() if request.method == "POST" else ""))
+        if request.method == "GET":
+            return httpx.Response(200, json=document)
+        return httpx.Response(200, json={"documentId": "doc-runbook", "replies": [{}]})
+
+    connector = GoogleConnector(
+        config={"docsBaseUrl": "http://sandboxes.test/s/run-1/google/docs/v1"},
+        transport=httpx.MockTransport(handler),
+    )
+
+    async def fake_access_token(self, client, credential):
+        return "ya29.sandbox"
+
+    connector._access_token = MethodType(fake_access_token, connector)
+
+    read = await connector.invoke("google.docs_read", {"documentId": "doc-runbook"}, "key")
+    assert read == {"documentId": "doc-runbook", "title": "Operations Runbook",
+                    "text": "Exports run nightly"}
+
+    await connector.invoke(
+        "google.docs_update",
+        {"documentId": "doc-runbook", "content": "Exports run hourly"},
+        "key",
+    )
+    method, url, body = calls[-1]
+    assert method == "POST"
+    assert url == "http://sandboxes.test/s/run-1/google/docs/v1/documents/doc-runbook:batchUpdate"
+    # One delete of the old body, then one insert of the approved text.
+    assert '"deleteContentRange"' in body and '"endIndex":18' in body
+    assert '"insertText"' in body and "Exports run hourly" in body

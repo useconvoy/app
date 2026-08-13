@@ -61,6 +61,7 @@ describe("toolAllowlistFor", () => {
     expect(toolAllowlistFor(documentStore.connection!, "read")).toEqual([
       "google.drive_list_files",
       "google.sheets_read_range",
+      "google.docs_read",
     ]);
   });
 
@@ -68,7 +69,9 @@ describe("toolAllowlistFor", () => {
     expect(toolAllowlistFor(documentStore.connection!, "write")).toEqual([
       "google.drive_list_files",
       "google.sheets_read_range",
+      "google.docs_read",
       "google.sheets_append_row",
+      "google.docs_update",
     ]);
   });
 });

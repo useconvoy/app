@@ -42,9 +42,16 @@
           "user": "U_OPERATOR",
           "text": "The sample task is ready for review.",
           "ts": "1767225600.000001"
+        },
+        {
+          "type": "message",
+          "channel": "C_OPERATIONS",
+          "user": "U_OPERATOR",
+          "text": "Heads up: we renamed the nightly export job to hourly-sync last week, the runbook still says nightly.",
+          "ts": "1767312000.000002"
         }
       ],
-      "nextSequence": 2
+      "nextSequence": 3
     },
     "google": {
       "files": [
@@ -55,6 +62,22 @@
           "parents": ["folder-shared"],
           "trashed": false,
           "sharedWith": ["convoy-agent@sandbox.invalid"]
+        },
+        {
+          "id": "doc-runbook",
+          "name": "Operations Runbook",
+          "mimeType": "application/vnd.google-apps.document",
+          "parents": ["folder-shared"],
+          "trashed": false,
+          "sharedWith": ["convoy-agent@sandbox.invalid"]
+        }
+      ],
+      "documents": [
+        {
+          "documentId": "doc-runbook",
+          "title": "Operations Runbook",
+          "sharedWith": ["convoy-agent@sandbox.invalid"],
+          "text": "Operations Runbook\n\nExports: the nightly export job runs at 02:00 UTC and writes to the shared bucket.\n\nRetries: failed exports are retried by hand the next morning.\n"
         }
       ],
       "spreadsheets": [
@@ -76,7 +99,20 @@
         {
           "fullName": "sandbox/example-service",
           "private": true,
-          "issues": [],
+          "issues": [
+            {
+              "number": 41,
+              "title": "Rename nightly export to hourly-sync",
+              "body": "The export job now runs hourly. Docs and runbooks still describe the nightly schedule.",
+              "state": "open"
+            },
+            {
+              "number": 42,
+              "title": "Auto-retry failed exports",
+              "body": "Failed exports are now retried automatically three times before paging anyone.",
+              "state": "open"
+            }
+          ],
           "files": [
             {
               "path": "README.md",

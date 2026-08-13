@@ -50,6 +50,7 @@ export const googleWorkspaceProvider = {
     return {
       files: structuredClone(fixture.files ?? []),
       spreadsheets: structuredClone(fixture.spreadsheets ?? []),
+      documents: structuredClone(fixture.documents ?? []),
       accessTokens: {},
       tokenSequence: 1,
     };
@@ -124,6 +125,53 @@ export const googleWorkspaceProvider = {
             updatedCells: rows.reduce((sum, row) => sum + row.length, 0),
           },
         }, { principalId });
+      }
+    }
+
+    // Docs API subset: read a document in the body/content shape the real
+    // API returns, and batchUpdate limited to the deleteContentRange +
+    // insertText pair the connector's replace-the-body write issues.
+    const docMatch = /^\/docs\/v1\/documents\/([^/:]+)(:batchUpdate)?$/.exec(pathname);
+    if (docMatch) {
+      const documentId = decodeURIComponent(docMatch[1]);
+      const document = state.documents.find((candidate) => candidate.documentId === documentId);
+      if (!document || !visible(document, principal)) {
+        return reply({ error: { code: 404, message: "Requested entity was not found.", status: "NOT_FOUND" } }, { status: 404, principalId });
+      }
+      const asBody = (text) => ({
+        content: [{
+          endIndex: text.length + 1,
+          paragraph: { elements: [{ textRun: { content: text } }] },
+        }],
+      });
+      if (request.method === "GET" && !docMatch[2]) {
+        return reply({ documentId, title: document.title, body: asBody(document.text ?? "") }, { principalId });
+      }
+      if (request.method === "POST" && docMatch[2]) {
+        const requests = request.body?.requests;
+        if (!Array.isArray(requests)) {
+          return reply({ error: { code: 400, message: "Invalid requests", status: "INVALID_ARGUMENT" } }, { status: 400, principalId });
+        }
+        // 1-based document indices: buffer position 0 is index 1.
+        let text = document.text ?? "";
+        for (const change of requests) {
+          if (change.deleteContentRange) {
+            const { startIndex, endIndex } = change.deleteContentRange.range ?? {};
+            text = text.slice(0, (startIndex ?? 1) - 1) + text.slice((endIndex ?? 1) - 1);
+          } else if (change.insertText) {
+            const at = (change.insertText.location?.index ?? 1) - 1;
+            text = text.slice(0, at) + (change.insertText.text ?? "") + text.slice(at);
+          } else {
+            return reply({ error: { code: 400, message: "Unsupported request", status: "INVALID_ARGUMENT" } }, { status: 400, principalId });
+          }
+        }
+        document.text = text;
+        emitWebhook({
+          type: "google.docs.updated",
+          occurredAt: clock.now,
+          payload: { documentId, title: document.title, principalId },
+        });
+        return reply({ documentId, replies: requests.map(() => ({})), writeControl: {} }, { principalId });
       }
     }
 
