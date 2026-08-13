@@ -87,7 +87,7 @@ describe("CreateAgentModal", () => {
 });
 
 describe("AgentCards", () => {
-  it("shows workspace, goal, runtime, browser policy, and schedule", () => {
+  it("shows workspace, goal, runtime, browser policy, and budget", () => {
     const agent: Agent = {
       id: "environment-1",
       workspaceId: "workspace-1",
@@ -128,6 +128,6 @@ describe("AgentCards", () => {
     expect(screen.getByText("convoy-devbox-python")).toBeInTheDocument();
     expect(screen.getByText("1 allowed domains")).toBeInTheDocument();
     expect(screen.getByText("Review renewals and post the recovery summary")).toBeInTheDocument();
-    expect(screen.getByText("Mondays at 9am")).toBeInTheDocument();
+    expect(screen.getByText("$75 per run")).toBeInTheDocument();
   });
 });

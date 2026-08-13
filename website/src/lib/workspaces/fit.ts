@@ -1,7 +1,7 @@
 /**
  * Pure workspace-fit logic, shared by the catalog install picker, the
- * routine detail reassignment, and run-time workspace resolution
- * (lib/routines/data). One definition of coverage lives here: a workspace
+ * routine builder's workspace choices, and run-time launch resolution
+ * (lib/routines/launch). One definition of coverage lives here: a workspace
  * covers a routine when every system id the routine needs is among the
  * workspace's granted system ids. That is the same exact-id rule
  * workspaceForRoutine (lib/api/environments) has always applied; scopes

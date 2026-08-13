@@ -13,6 +13,7 @@ import {
   listAgentApprovers,
   orgTenantId as agentOrgTenantId,
 } from "@/lib/agents/queries";
+import { agentIdForRoutine } from "./records";
 
 export interface RoutineRecord {
   id: string;
@@ -85,14 +86,19 @@ export async function listRoutines(orgId: string): Promise<RoutineRecord[]> {
   });
 }
 
-/** One configured Agent, or null when it does not exist in this org. */
+/**
+ * The configured Agent behind an attribution id, or null when it does not
+ * exist in this org. The id may be a routine id (resolved through the
+ * routines table) or a bare agent id from before routines returned.
+ */
 export async function getRoutine(orgId: string, routineId: string): Promise<RoutineRecord | null> {
   if (!UUID_PATTERN.test(routineId)) return null;
+  const agentId = await agentIdForRoutine(orgId, routineId);
   return withOrgContext({ orgId }, async (client) => {
     const { rows } = await client.query<RoutineRow>(
       `SELECT ${ROUTINE_COLUMNS} FROM agents
         WHERE org_id = $1 AND id = $2 AND automation_configured`,
-      [orgId, routineId],
+      [orgId, agentId],
     );
     return rows[0] ? toRecord(rows[0]) : null;
   });
@@ -152,6 +158,14 @@ export async function upsertInstalledRoutine(
     ],
   );
   if (!rows[0]) throw new Error("That agent no longer exists");
+  // An installed Agent must be runnable: make sure at least one routine
+  // pairs it with the chosen workspace. Reinstalls keep existing routines.
+  await client.query(
+    `INSERT INTO routines (org_id, agent_id, workspace_id, name, created_by)
+     SELECT $1, $2, $3, $4, $5
+      WHERE NOT EXISTS (SELECT 1 FROM routines WHERE agent_id = $2)`,
+    [ctx.orgId, rows[0]!.id, input.workspaceId, input.name, ctx.userId],
+  );
   return { id: rows[0]!.id };
 }
 
@@ -180,7 +194,7 @@ export interface ApproverAssignment {
 
 /** Approvers assigned to a routine, people and teams together. */
 export async function listApprovers(orgId: string, routineId: string): Promise<ApproverAssignment[]> {
-  return listAgentApprovers(orgId, routineId);
+  return listAgentApprovers(orgId, await agentIdForRoutine(orgId, routineId));
 }
 
 /**
@@ -193,7 +207,7 @@ export async function isAssignedToRoutine(
   userId: string,
   routineId: string,
 ): Promise<boolean> {
-  return isAssignedToAgent(orgId, userId, routineId);
+  return isAssignedToAgent(orgId, userId, await agentIdForRoutine(orgId, routineId));
 }
 
 /**

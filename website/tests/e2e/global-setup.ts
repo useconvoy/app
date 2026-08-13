@@ -64,7 +64,7 @@ async function seedAgent(adminDsn: string, orgName: string): Promise<void> {
        RETURNING id`,
       [orgId, systems, versions],
     );
-    await client.query(
+    const agent = await client.query<{ id: string }>(
       `INSERT INTO agents
          (org_id, workspace_id, name, purpose, production_binding_id,
           rehearsal_binding_id, sandbox_template, goal, systems,
@@ -72,7 +72,8 @@ async function seedAgent(adminDsn: string, orgName: string): Promise<void> {
        VALUES ($1, $2, 'Quarterly user access review',
                'Looks up people and their access, reconciles differences, and chases sign-offs.',
                'prod-local', 'stub-local', 'convoy-devbox-python',
-               'Reconcile access differences and collect sign-offs.', $3, 75, $4, true)`,
+               'Reconcile access differences and collect sign-offs.', $3, 75, $4, true)
+       RETURNING id`,
       [
         orgId,
         workspace.rows[0]!.id,
@@ -85,6 +86,13 @@ async function seedAgent(adminDsn: string, orgName: string): Promise<void> {
           "Assemble the final review packet",
         ]),
       ],
+    );
+    // Runs start from routines now: pair the seeded Agent with its
+    // workspace the same way the create-agent action does.
+    await client.query(
+      `INSERT INTO routines (org_id, agent_id, workspace_id, name)
+       VALUES ($1, $2, $3, 'Quarterly user access review')`,
+      [orgId, agent.rows[0]!.id, workspace.rows[0]!.id],
     );
   } finally {
     await client.end();

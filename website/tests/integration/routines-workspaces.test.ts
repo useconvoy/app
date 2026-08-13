@@ -24,6 +24,14 @@ import {
   setRoutineSchedule,
   upsertInstalledRoutine,
 } from "@/lib/routines/queries";
+import {
+  agentIdForRoutine,
+  getRoutineBinding,
+  insertRoutineBinding,
+  listRoutineBindings,
+  listRoutineBindingsForAgent,
+  storeRoutineSchedule,
+} from "@/lib/routines/records";
 
 const ADMIN_DSN = process.env.WEBSITE_PG_ADMIN_DSN;
 const APP_DSN =
@@ -244,6 +252,40 @@ describe.skipIf(!ADMIN_DSN)("agents and shared workspaces (real Postgres)", () =
     await setRoutineSchedule(orgA, routineId, "Mondays at 9am");
     const routine = await getRoutine(orgA, routineId);
     expect(routine?.scheduleDescription).toBe("Mondays at 9am");
+  });
+
+  it("installs guarantee a routine binding, and new bindings resolve to their agent", async () => {
+    // The install above ensured the agent's first routine.
+    const ensured = await listRoutineBindingsForAgent(orgA, agentId);
+    expect(ensured).toHaveLength(1);
+    expect(ensured[0]!.workspaceId).toBe(workspaceId);
+
+    // A second binding of the same agent gets a fresh id; attribution ids
+    // of both kinds resolve to the one agent behind them.
+    const { id: freshId } = await insertRoutineBinding(orgA, {
+      agentId,
+      workspaceId,
+      name: "Attestation chase, weekly",
+      createdBy: userA,
+    });
+    expect(freshId).not.toBe(agentId);
+    expect(await agentIdForRoutine(orgA, freshId)).toBe(agentId);
+    expect(await agentIdForRoutine(orgA, agentId)).toBe(agentId);
+    expect((await getRoutine(orgA, freshId))?.id).toBe(agentId);
+    expect(await listRoutineBindings(orgA)).toHaveLength(2);
+
+    await storeRoutineSchedule(orgA, freshId, {
+      cron: "0 9 * * 1",
+      timezone: "UTC",
+      target: "rehearsal",
+      enabled: true,
+    });
+    const stored = await getRoutineBinding(orgA, freshId);
+    expect((stored?.schedule as { cron?: string } | null)?.cron).toBe("0 9 * * 1");
+
+    // RLS: the other org resolves nothing through the routines table.
+    expect(await getRoutineBinding(orgB, freshId)).toBeNull();
+    expect(await agentIdForRoutine(orgB, freshId)).toBe(freshId);
   });
 
   it("score inserts append and read back in order, invisible to other orgs", async () => {

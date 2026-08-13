@@ -7,6 +7,7 @@ import { requireOrgSession } from "@/lib/auth/session";
 import { withOrgContext } from "@/lib/db";
 import { getMembership } from "@/lib/orgs/queries";
 import { can } from "@/lib/permissions";
+import { insertRoutineBinding } from "@/lib/routines/records";
 
 export interface CreateAgentPayload {
   workspaceId: string;
@@ -86,6 +87,16 @@ export async function createAgent(payload: CreateAgentPayload): Promise<{ id: st
     makeDefault: payload.makeDefault,
   });
 
+  // Every new Agent gets its first routine in the chosen workspace, so
+  // creating an Agent still ends with something runnable. More routines
+  // can pair the same Agent with other workspaces later.
+  await insertRoutineBinding(session.orgId, {
+    agentId: agent.id,
+    workspaceId: workspace.id,
+    name,
+    createdBy: session.userId,
+  });
+
   await withOrgContext({ orgId: session.orgId, userId: session.userId }, (client) =>
     client
       .query("INSERT INTO admin_audit (org_id, actor_id, action, subject) VALUES ($1, $2, $3, $4)", [
@@ -97,6 +108,7 @@ export async function createAgent(payload: CreateAgentPayload): Promise<{ id: st
       .then(() => undefined),
   );
   revalidatePath("/app/agents");
+  revalidatePath("/app/routines");
   revalidatePath(`/app/workspaces/${workspace.id}`);
   return { id: agent.id };
 }

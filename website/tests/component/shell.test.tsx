@@ -156,6 +156,7 @@ describe("NavItems", () => {
       "Checkpoints",
       "Runs",
       "Agents",
+      "Routines",
       "Workspaces",
       "Connectors",
       "Agent evaluation",
