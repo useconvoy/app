@@ -17,6 +17,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/Button";
+import { ModalShell } from "@/components/ModalShell";
+import { Checkbox } from "@/components/ui/choice";
 import type { CreateWorkspacePayload } from "@/lib/workspaces/actions";
 import { copy } from "@/lexicon";
 
@@ -169,13 +171,7 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
     <>
       <Button onClick={() => setOpen(true)}>New workspace</Button>
       {open && (
-        <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-ink/40 p-6">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={`${formId}-title`}
-            className="w-full max-w-lg rounded-lg border border-line bg-card p-6 shadow-lg"
-          >
+        <ModalShell labelledBy={`${formId}-title`} onClose={() => setOpen(false)}>
             <h2 id={`${formId}-title`} className="font-display text-xl text-ink">
               New workspace
             </h2>
@@ -250,33 +246,32 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
                     return (
                       <li key={system.id} className="border-b border-line-soft pb-3 last:border-b-0 last:pb-0">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <label
-                            className={`flex items-center gap-2 text-sm ${connectable ? "text-ink" : "text-muted"}`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={choice.included}
-                              disabled={!connectable}
-                              onChange={(event) =>
-                                updateChoice(system.id, { included: event.target.checked })
-                              }
-                            />
-                            {system.displayName}
-                            {system.status && (
-                              <span
-                                className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                                  system.status === "connected"
-                                    ? "border-pass-soft bg-pass-soft text-pass-text"
-                                    : system.status === "no_provider" ||
-                                        system.status === "not_connected"
-                                      ? "border-line bg-card text-muted"
-                                      : "border-hold-soft bg-hold-soft text-hold-text"
-                                }`}
-                              >
-                                {STATUS_LABEL[system.status]}
+                          <Checkbox
+                            checked={choice.included}
+                            disabled={!connectable}
+                            onChange={(event) =>
+                              updateChoice(system.id, { included: event.target.checked })
+                            }
+                            label={
+                              <span className={`inline-flex items-center gap-2 ${connectable ? "" : "text-muted"}`}>
+                                {system.displayName}
+                                {system.status && (
+                                  <span
+                                    className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                                      system.status === "connected"
+                                        ? "border-pass-soft bg-pass-soft text-pass-text"
+                                        : system.status === "no_provider" ||
+                                            system.status === "not_connected"
+                                          ? "border-line bg-card text-muted"
+                                          : "border-hold-soft bg-hold-soft text-hold-text"
+                                    }`}
+                                  >
+                                    {STATUS_LABEL[system.status]}
+                                  </span>
+                                )}
                               </span>
-                            )}
-                          </label>
+                            }
+                          />
                           {!connectable && (
                             <Link
                               href="/app/connectors"
@@ -292,21 +287,22 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
                             <ul className="m-0 mt-1 list-none space-y-1 p-0">
                               {(system.tools ?? []).map((tool) => (
                                 <li key={tool.name}>
-                                  <label className="flex items-center gap-2 text-xs text-ink">
-                                    <input
-                                      type="checkbox"
-                                      checked={Boolean(choice.tools[tool.name])}
-                                      onChange={(event) =>
-                                        toggleTool(system.id, tool.name, event.target.checked)
-                                      }
-                                    />
-                                    <span className="font-mono">{actionLabel(tool.name)}</span>
-                                    {tool.sideEffecting && (
-                                      <span className="rounded-full border border-hold-soft bg-hold-soft px-2 py-0.5 text-[11px] text-hold-text">
-                                        Makes changes
+                                  <Checkbox
+                                    checked={Boolean(choice.tools[tool.name])}
+                                    onChange={(event) =>
+                                      toggleTool(system.id, tool.name, event.target.checked)
+                                    }
+                                    label={
+                                      <span className="inline-flex items-center gap-2 text-xs">
+                                        <span className="font-mono">{actionLabel(tool.name)}</span>
+                                        {tool.sideEffecting && (
+                                          <span className="rounded-full border border-hold-soft bg-hold-soft px-2 py-0.5 text-[11px] text-hold-text">
+                                            Makes changes
+                                          </span>
+                                        )}
                                       </span>
-                                    )}
-                                  </label>
+                                    }
+                                  />
                                 </li>
                               ))}
                             </ul>
@@ -343,8 +339,7 @@ export function CreateWorkspaceModal({ systems, create }: CreateWorkspaceModalPr
                 </Button>
               </div>
             </form>
-          </div>
-        </div>
+        </ModalShell>
       )}
     </>
   );

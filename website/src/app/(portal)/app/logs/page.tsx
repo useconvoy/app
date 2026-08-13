@@ -87,14 +87,15 @@ export default async function LogsPage({
       {/* Filters stack full width on phones and sit in a row from md up. */}
       <form method="get" className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end">
         <Field label={logsCopy.filterEventType}>
-          <Select id="filter-type" name="type" defaultValue={filters.type}>
-            <option value="">{logsCopy.allEvents}</option>
-            {Object.entries(eventLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </Select>
+          <Select
+            id="filter-type"
+            name="type"
+            defaultValue={filters.type}
+            options={[
+              { value: "", label: logsCopy.allEvents },
+              ...Object.entries(eventLabels).map(([value, label]) => ({ value, label })),
+            ]}
+          />
         </Field>
         <Field label={logsCopy.filterRun}>
           <Select
@@ -102,21 +103,23 @@ export default async function LogsPage({
             name="run"
             defaultValue={filters.run}
             className="md:max-w-72"
-          >
-            <option value="">{logsCopy.allRuns}</option>
-            {runs.map((run) => (
-              <option key={run.run_id} value={run.run_id}>
-                {run.goal}
-              </option>
-            ))}
-          </Select>
+            options={[
+              { value: "", label: logsCopy.allRuns },
+              ...runs.map((run) => ({ value: run.run_id, label: run.goal })),
+            ]}
+          />
         </Field>
         <Field label={logsCopy.filterLens}>
-          <Select id="filter-lens" name="lens" defaultValue={filters.lens}>
-            <option value="">{logsCopy.allLenses}</option>
-            <option value="production">{copy.productionFilter}</option>
-            <option value="rehearsals">{copy.rehearsalsFilter}</option>
-          </Select>
+          <Select
+            id="filter-lens"
+            name="lens"
+            defaultValue={filters.lens}
+            options={[
+              { value: "", label: logsCopy.allLenses },
+              { value: "production", label: copy.productionFilter },
+              { value: "rehearsals", label: copy.rehearsalsFilter },
+            ]}
+          />
         </Field>
         <Button type="submit" variant="secondary" className="max-md:w-full">
           {logsCopy.apply}

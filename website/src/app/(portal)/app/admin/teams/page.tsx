@@ -133,13 +133,11 @@ export default async function TeamsPage() {
                   <Select
                     id={`add-${team.id}`}
                     name="userId"
-                  >
-                    {addable.map((member) => (
-                      <option key={member.userId} value={member.userId}>
-                        {member.name}
-                      </option>
-                    ))}
-                  </Select>
+                    options={addable.map((member) => ({
+                      value: member.userId,
+                      label: member.name,
+                    }))}
+                  />
                   <button
                     type="submit"
                     className="rounded-sm border border-line px-2 py-1 text-xs text-ink hover:border-pine"

@@ -32,7 +32,10 @@ const BOX =
 export function Checkbox({ label, hint, className, ...rest }: ChoiceProps) {
   return (
     <label className={["flex cursor-pointer gap-2.5", className ?? ""].join(" ")}>
-      <span className="relative mt-0.5 inline-flex shrink-0">
+      {/* self-start: the label is a stretch flex row, and a hint line makes
+          it taller than the box; without this the wrapper stretches and the
+          centered glyph lands below the box instead of inside it. */}
+      <span className="relative mt-0.5 inline-flex shrink-0 self-start">
         <input type="checkbox" {...rest} className={BOX} />
         <svg
           aria-hidden="true"
