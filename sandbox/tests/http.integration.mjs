@@ -67,7 +67,9 @@ try {
   const driveResponse = await request(`${baseUrl}/s/http-contract/google/drive/v3/files?q=${encodeURIComponent("'folder-shared' in parents and trashed = false")}`, {
     headers: { authorization: `Bearer ${token}` },
   });
-  assert.deepEqual((await driveResponse.json()).files.map((file) => file.id), ["sheet-operations"]);
+  // The unfiltered folder listing sees both fixture files: the tracker
+  // spreadsheet and the runbook document.
+  assert.deepEqual((await driveResponse.json()).files.map((file) => file.id), ["sheet-operations", "doc-runbook"]);
 
   const issueResponse = await request(`${baseUrl}/s/http-contract/github/repos/sandbox/example-service/issues`, {
     method: "POST",

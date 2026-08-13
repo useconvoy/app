@@ -47,13 +47,21 @@ async def main() -> None:
         "tokenUrl": f"{base}/google/oauth2/token",
         "driveBaseUrl": f"{base}/google/drive/v3",
         "sheetsBaseUrl": f"{base}/google/sheets/v4",
+        "docsBaseUrl": f"{base}/google/docs/v1",
     })
     files = await google.invoke(
         "google.drive_list_files",
         {"folderId": "folder-shared"},
         service_account,
     )
+    # The default listing filters to spreadsheets; the runbook doc stays out.
     assert [item["id"] for item in files["files"]] == ["sheet-operations"]
+    documents = await google.invoke(
+        "google.drive_list_files",
+        {"folderId": "folder-shared", "mimeType": "application/vnd.google-apps.document"},
+        service_account,
+    )
+    assert [item["id"] for item in documents["files"]] == ["doc-runbook"]
     appended = await google.invoke(
         "google.sheets_append_row",
         {
@@ -64,6 +72,23 @@ async def main() -> None:
         service_account,
     )
     assert appended["updates"]["updatedRows"] == 1
+
+    runbook = await google.invoke(
+        "google.docs_read", {"documentId": "doc-runbook"}, service_account,
+    )
+    assert runbook["title"] == "Operations Runbook"
+    assert "nightly export" in runbook["text"]
+    await google.invoke(
+        "google.docs_update",
+        {"documentId": "doc-runbook",
+         "content": "Operations Runbook\n\nExports: the hourly-sync job runs every hour.\n"},
+        service_account,
+    )
+    updated = await google.invoke(
+        "google.docs_read", {"documentId": "doc-runbook"}, service_account,
+    )
+    assert "hourly-sync" in updated["text"]
+    assert "nightly export" not in updated["text"]
 
     github = GitHubConnector(config={"apiBaseUrl": f"{base}/github"})
     file_result = await github.invoke(
@@ -77,7 +102,8 @@ async def main() -> None:
         {"repo": "sandbox/example-service", "title": "Created through the real Convoy connector"},
         "github-convoy-sandbox",
     )
-    assert issue["number"] == 1
+    # The fixture seeds issues 41 and 42; a new issue continues the sequence.
+    assert issue["number"] == 43
     print("Real Convoy connector integration passed")
 
 
