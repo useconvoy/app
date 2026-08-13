@@ -126,28 +126,35 @@ jobs:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # The repository has immutable tags, so re-running a deploy for a commit
-      # that is already built must skip the push rather than fail on it.
+      # The repositories have immutable tags, so re-running a deploy for a
+      # commit that is already built must skip the push rather than fail on
+      # it. The check is PER IMAGE: a run that pushed one image and then
+      # failed on the other must be able to finish the job on a re-run,
+      # rather than rebuilding the image that already landed and dying on
+      # its immutable tag.
       - name: Is this commit already in ECR?
         id: existing
         run: |
-          found=true
           for repo in website environments; do
-            aws ecr describe-images \
+            if aws ecr describe-images \
                  --repository-name "convoy-console-${STACK_NAME}/${repo}" \
-                 --image-ids "imageTag=${{ steps.meta.outputs.tag }}" >/dev/null 2>&1 || found=false
+                 --image-ids "imageTag=${{ steps.meta.outputs.tag }}" >/dev/null 2>&1; then
+              echo "${repo}=true" >>"$GITHUB_OUTPUT"
+              echo "::notice::${repo}:${{ steps.meta.outputs.tag }} already in ECR; not rebuilding it"
+            else
+              echo "${repo}=false" >>"$GITHUB_OUTPUT"
+            fi
           done
-          echo "found=${found}" >>"$GITHUB_OUTPUT"
-          if [ "${found}" = "true" ]; then
-            echo "::notice::${{ steps.meta.outputs.tag }} already in ECR; redeploying it without rebuilding"
-          fi
 
-      - name: Build and push
-        if: steps.existing.outputs.found == 'false'
+      - name: Build and push the console image
+        if: steps.existing.outputs.website == 'false'
+        run: website/infra/deploy/build-and-push.sh --tag "${{ steps.meta.outputs.tag }}"
+
+      # The environments service (connector registry) builds from the
+      # monorepo root so core/ is reachable, with its own Dockerfile.
+      - name: Build and push the environments image
+        if: steps.existing.outputs.environments == 'false'
         run: |
-          website/infra/deploy/build-and-push.sh --tag "${{ steps.meta.outputs.tag }}"
-          # The environments service (connector registry) builds from the
-          # monorepo root so core/ is reachable, with its own Dockerfile.
           website/infra/deploy/build-and-push.sh --tag "${{ steps.meta.outputs.tag }}" \
             --repo environments --context . --dockerfile environments/Dockerfile
 
@@ -297,6 +304,7 @@ jobs:
             echo "| field | value |"
             echo "|---|---|"
             echo "| tag | \`${{ steps.meta.outputs.tag }}\` |"
-            echo "| rebuilt | ${{ steps.existing.outputs.found == 'false' }} |"
+            echo "| console rebuilt | ${{ steps.existing.outputs.website == 'false' }} |"
+            echo "| registry rebuilt | ${{ steps.existing.outputs.environments == 'false' }} |"
             echo "| migrations | ${{ github.event_name == 'workflow_dispatch' && inputs.run_migrations || false }} |"
           } >>"$GITHUB_STEP_SUMMARY"
