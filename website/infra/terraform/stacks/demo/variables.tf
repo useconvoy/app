@@ -147,6 +147,22 @@ variable "github_repo_id" {
   default     = "1315891026"
 }
 
+variable "slack_client_id" {
+  description = <<-EOT
+    Slack app client id for the hosted Add to Slack install. Empty hides
+    the button and leaves paste-a-token as the only Slack door.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "slack_client_secret" {
+  description = "Slack app client secret for the hosted install."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "allowed_signup_emails" {
   description = <<-EOT
     Comma-separated early-access allowlist delivered as

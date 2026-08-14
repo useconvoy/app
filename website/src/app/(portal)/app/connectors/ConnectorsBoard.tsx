@@ -30,6 +30,8 @@ export interface ConnectorCard {
   /** Registry-served copy; when absent the static fallbacks apply. */
   blurb?: string;
   credential?: { label: string; placeholder: string; multiline: boolean; steps: string[] };
+  /** Hosted install door (e.g. Add to Slack); absent keeps paste-only. */
+  oauth?: { href: string; label: string };
 }
 
 export interface CustomConnectorCard {
@@ -298,6 +300,14 @@ export function ConnectorsBoard({
             {isConnected && connector.connectionId && (
               <HealthCheck connectionId={connector.connectionId} checkHealth={checkHealth} />
             )}
+            {connector.oauth && (
+              <a
+                href={connector.oauth.href}
+                className="rounded-sm bg-pine px-3 py-1.5 text-sm font-medium text-card-alt hover:bg-pine-deep"
+              >
+                {connector.oauth.label}
+              </a>
+            )}
             {help && (
               <Button
                 variant="secondary"
@@ -307,7 +317,9 @@ export function ConnectorsBoard({
                   ? "Reconnect"
                   : isConnected
                     ? "Replace credential"
-                    : "Connect"}
+                    : connector.oauth
+                      ? "Paste a token instead"
+                      : "Connect"}
               </Button>
             )}
           </div>
