@@ -123,21 +123,65 @@ class GoogleConnector(Connector):
         "Turn on the Drive, Sheets, and Docs APIs for that project.",
         "Share the Drive folders, documents, and spreadsheets this organization works in with the service account's email address.",
     )
+    oauth_authorize_url = "https://accounts.google.com/o/oauth2/v2/auth"
+    oauth_token_url = _TOKEN_URL
+    oauth_scopes = tuple(_SCOPES.split(" "))
+    oauth_scope_delimiter = " "
+    # offline + consent: Google only issues the refresh token the connection
+    # lives on when both are asked for explicitly.
+    oauth_extra_params = {
+        "response_type": "code",
+        "access_type": "offline",
+        "prompt": "consent",
+    }
 
     async def manifest(self, credential: Optional[str] = None) -> ConnectionManifest:
         return ConnectionManifest(tools=list(_TOOLS))
 
     async def _access_token(self, client, credential: str) -> str:
+        """Short-lived access token from either credential shape: a
+        service-account JSON key (JWT-bearer grant) or the hosted install's
+        authorized-user JSON (refresh-token grant, with the app client
+        pair sealed inside the stored credential so the refresh needs
+        nothing outside the vault)."""
         try:
             key = json.loads(credential)
-            client_email, private_key = key["client_email"], key["private_key"]
-        except (ValueError, KeyError) as err:
-            raise ConnectorError("google: secret is not a service-account JSON key (%s)" % err)
+        except ValueError as err:
+            raise ConnectorError("google: secret is not a JSON credential (%s)" % err)
 
         token_url = self._config_url(_TOKEN_URL, "tokenUrl", "token_url")
+        now = time.time()
+
+        if key.get("type") == "authorized_user" or "refresh_token" in key:
+            try:
+                refresh_token = key["refresh_token"]
+                client_id, client_secret = key["client_id"], key["client_secret"]
+            except KeyError as err:
+                raise ConnectorError("google: authorized-user credential is missing %s" % err)
+            cache_key = ("refresh:%s" % client_id, refresh_token[-12:], token_url)
+            cached = _token_cache.get(cache_key)
+            if cached and cached[1] > now + _TOKEN_TTL_SLACK_S:
+                return cached[0]
+            resp = await client.post(token_url, data={
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "client_id": client_id,
+                "client_secret": client_secret,
+            })
+            if resp.status_code != 200:
+                raise ConnectorError("google: credential rejected (token refresh %d: %s)"
+                                     % (resp.status_code, resp.text[:200]))
+            body = resp.json()
+            token = body["access_token"]
+            _token_cache[cache_key] = (token, now + int(body.get("expires_in", 3600)))
+            return token
+
+        try:
+            client_email, private_key = key["client_email"], key["private_key"]
+        except KeyError as err:
+            raise ConnectorError("google: secret is not a service-account JSON key (%s)" % err)
         cache_key = (client_email, _SCOPES, token_url)
         cached = _token_cache.get(cache_key)
-        now = time.time()
         if cached and cached[1] > now + _TOKEN_TTL_SLACK_S:
             return cached[0]
 
@@ -157,6 +201,43 @@ class GoogleConnector(Connector):
         token = body["access_token"]
         _token_cache[cache_key] = (token, now + int(body.get("expires_in", 3600)))
         return token
+
+    async def exchange_oauth_code(self, code: str, redirect_uri: str) -> Dict[str, str]:
+        """The hosted install's exchange. The stored credential is an
+        authorized-user JSON carrying the refresh token plus the app client
+        pair, so every later call (and refresh) is self-contained against
+        the vault; the granting person's consent can be revoked at
+        myaccount.google.com without touching Convoy."""
+        client_id, client_secret = self.oauth_client_env()
+        if not client_id:
+            raise ConnectorError("google: hosted install is not configured")
+        token_url = self._config_url(_TOKEN_URL, "tokenUrl", "token_url")
+        async with self._client() as client:
+            resp = await client.post(token_url, data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "redirect_uri": redirect_uri,
+            })
+            if resp.status_code != 200:
+                raise ConnectorError("google: install exchange rejected (%d: %s)"
+                                     % (resp.status_code, resp.text[:200]))
+            body = resp.json()
+        refresh_token = body.get("refresh_token")
+        if not refresh_token:
+            raise ConnectorError(
+                "google: no refresh token was granted; remove the app's access at"
+                " myaccount.google.com and install again")
+        return {
+            "secretValue": json.dumps({
+                "type": "authorized_user",
+                "refresh_token": refresh_token,
+                "client_id": client_id,
+                "client_secret": client_secret,
+            }),
+            "detail": "",
+        }
 
     async def verify_credential(self, credential: str) -> Optional[bool]:
         """The token exchange is the probe: a bad key or revoked service

@@ -45,4 +45,53 @@ describe("authorizeUrl", () => {
     );
     expect(url.searchParams.get("state")).toBe("state-1");
   });
+
+  it("honors the provider's scope delimiter and extra consent parameters", () => {
+    const url = new URL(
+      authorizeUrl(
+        {
+          authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+          clientId: "client-g",
+          scopes: [
+            "https://www.googleapis.com/auth/drive.readonly",
+            "https://www.googleapis.com/auth/documents",
+          ],
+          scopeDelimiter: " ",
+          extraParams: {
+            response_type: "code",
+            access_type: "offline",
+            prompt: "consent",
+          },
+        },
+        {
+          redirectUri: "https://example.com/api/connectors/google/callback",
+          state: "state-2",
+        },
+      ),
+    );
+    expect(url.searchParams.get("scope")).toBe(
+      "https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/documents",
+    );
+    expect(url.searchParams.get("access_type")).toBe("offline");
+    expect(url.searchParams.get("prompt")).toBe("consent");
+    expect(url.searchParams.get("response_type")).toBe("code");
+  });
+
+  it("skips the scope parameter when the install carries no scopes", () => {
+    const url = new URL(
+      authorizeUrl(
+        {
+          authorizeUrl: "https://github.com/apps/convoy/installations/new",
+          clientId: "4242",
+          scopes: [],
+        },
+        {
+          redirectUri: "https://example.com/api/connectors/github/callback",
+          state: "state-3",
+        },
+      ),
+    );
+    expect(url.searchParams.has("scope")).toBe(false);
+    expect(url.searchParams.get("state")).toBe("state-3");
+  });
 });

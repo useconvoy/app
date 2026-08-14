@@ -1,9 +1,10 @@
 /**
- * Start the org-level Slack install: admin-gated, mints the signed state
- * and its browser nonce cookie, then hands the browser to the consent
- * screen the registry's provider directory describes. The website adds no
- * provider knowledge of its own; when the registry offers no hosted
- * install for Slack, this quietly returns to the Connectors page.
+ * Start an org-level hosted install for a provider: admin-gated, mints the
+ * signed state and its browser nonce cookie, then hands the browser to the
+ * consent screen the registry's provider directory describes. The website
+ * adds no provider knowledge of its own; when the registry offers no
+ * hosted install for the provider, this quietly returns to the Connectors
+ * page.
  */
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -25,7 +26,12 @@ function back(): NextResponse {
   );
 }
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ provider: string }> },
+): Promise<NextResponse> {
+  const { provider } = await params;
+  if (!/^[a-z0-9_]+$/.test(provider)) return back();
   const session = await requireOrgSession();
   const membership = await getMembership(session.orgId, session.userId);
   if (
@@ -36,7 +42,7 @@ export async function GET(): Promise<NextResponse> {
     return back();
   }
   const directory = await listProviderDirectory(session.orgId).catch(() => null);
-  const oauth = directory?.find((entry) => entry.provider === "slack")?.oauth;
+  const oauth = directory?.find((entry) => entry.provider === provider)?.oauth;
   if (!oauth) return back();
 
   const nonce = newNonce();
@@ -53,6 +59,6 @@ export async function GET(): Promise<NextResponse> {
     path: "/api/connectors",
   });
   return NextResponse.redirect(
-    authorizeUrl(oauth, { redirectUri: installRedirectUri("slack"), state }),
+    authorizeUrl(oauth, { redirectUri: installRedirectUri(provider), state }),
   );
 }

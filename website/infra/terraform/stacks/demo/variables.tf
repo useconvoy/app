@@ -164,6 +164,46 @@ variable "slack_client_secret" {
   sensitive   = true
 }
 
+variable "google_client_id" {
+  description = <<-EOT
+    Google OAuth client id for the hosted Connect with Google install,
+    delivered to the environments registry (which owns the exchange).
+    Empty hides the button and leaves paste-a-key as the only Google door.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "google_client_secret" {
+  description = "Google OAuth client secret, held only by the environments registry."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "github_app_slug" {
+  description = <<-EOT
+    GitHub App slug (the name in github.com/apps/<slug>) for the hosted
+    install. Empty hides the button and leaves paste-a-token as the only
+    GitHub door. All three github_app_* values must be set together.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "github_app_id" {
+  description = "GitHub App numeric id, used as the issuer for app tokens."
+  type        = string
+  default     = ""
+}
+
+variable "github_app_private_key" {
+  description = "GitHub App private key PEM, held only by the environments registry."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "allowed_signup_emails" {
   description = <<-EOT
     Comma-separated early-access allowlist delivered as

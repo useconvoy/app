@@ -52,6 +52,11 @@ locals {
     CONVOY_ALLOWED_EMAILS              = var.allowed_signup_emails
     CONVOY_OAUTH_SLACK_CLIENT_ID       = var.slack_client_id
     CONVOY_OAUTH_SLACK_CLIENT_SECRET   = var.slack_client_secret
+    CONVOY_OAUTH_GOOGLE_CLIENT_ID      = var.google_client_id
+    CONVOY_OAUTH_GOOGLE_CLIENT_SECRET  = var.google_client_secret
+    CONVOY_GITHUB_APP_SLUG             = var.github_app_slug
+    CONVOY_GITHUB_APP_ID               = var.github_app_id
+    CONVOY_GITHUB_APP_PRIVATE_KEY      = var.github_app_private_key
     CONVOY_ENVIRONMENTS_URL            = "http://environments:8780/console"
     CONVOY_ENVIRONMENTS_INTERNAL_TOKEN = random_password.environments_internal_token.result
     CONVOY_ENVIRONMENTS_MASTER_KEY     = replace(replace(random_bytes.environments_master_key.base64, "+", "-"), "/", "_")

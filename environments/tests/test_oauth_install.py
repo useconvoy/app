@@ -25,18 +25,22 @@ class _FakeSlack:
 
     display_name = "Slack"
     fail = False
+    configured = True
     seen: list = []
 
     def __init__(self, *args, **kwargs) -> None:  # noqa: D107
         pass
 
+    @classmethod
+    def oauth_directory_entry(cls) -> Optional[Dict[str, str]]:
+        return {"authorizeUrl": "https://slack.test/authorize",
+                "clientId": "client-1", "scopes": []} if cls.configured else None
+
     async def manifest(self, credential: Optional[str] = None) -> ConnectionManifest:
         return ConnectionManifest(tools=[])
 
-    async def exchange_oauth_code(
-        self, code: str, redirect_uri: str, client_id: str, client_secret: str
-    ) -> Dict[str, str]:
-        _FakeSlack.seen.append((code, redirect_uri, client_id, client_secret))
+    async def exchange_oauth_code(self, code: str, redirect_uri: str) -> Dict[str, str]:
+        _FakeSlack.seen.append((code, redirect_uri))
         if _FakeSlack.fail:
             from convoy_environments.connectors import ConnectorError
 
@@ -60,6 +64,7 @@ def harness(monkeypatch) -> tuple:
     monkeypatch.setenv("CONVOY_OAUTH_SLACK_CLIENT_ID", "client-1")
     monkeypatch.setenv("CONVOY_OAUTH_SLACK_CLIENT_SECRET", "secret-1")
     _FakeSlack.fail = False
+    _FakeSlack.configured = True
     _FakeSlack.seen = []
     app = build_console_app(sessions, secrets, provisioning_token="test-internal-token")
     return TestClient(app), secrets
@@ -109,7 +114,6 @@ def test_exchange_creates_the_org_connection_and_reinstall_rotates(harness) -> N
     assert body["status"] == "active" and body["detail"] == "Acme HQ"
     assert _FakeSlack.seen[-1] == (
         "code-1", "https://console.example/api/connectors/slack/callback",
-        "client-1", "secret-1",
     )
 
     listed = client.get(f"/organizations/{org_id}/connections", headers=headers).json()
@@ -141,7 +145,8 @@ def test_exchange_fails_closed_without_config_or_on_rejection(harness, monkeypat
     assert rejected.status_code == 400
     assert "install exchange failed" in rejected.json()["detail"]
 
-    monkeypatch.delenv("CONVOY_OAUTH_SLACK_CLIENT_ID")
+    _FakeSlack.fail = False
+    _FakeSlack.configured = False
     unconfigured = client.post(
         f"/organizations/{org_id}/connections/oauth-exchange",
         headers=headers,

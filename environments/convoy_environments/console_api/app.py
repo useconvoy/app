@@ -157,19 +157,6 @@ class OAuthExchange(BaseModel):
     redirectUri: str = Field(min_length=8, max_length=512)
 
 
-def _oauth_client_credentials(provider: str) -> Optional[tuple]:
-    """The platform app's client id and secret for a provider's hosted
-    install, from this service's environment (CONVOY_OAUTH_SLACK_CLIENT_ID
-    and so on). None means the install is not configured and the directory
-    offers paste-only for that provider."""
-    prefix = "CONVOY_OAUTH_%s_" % provider.upper()
-    client_id = os.environ.get(prefix + "CLIENT_ID", "")
-    client_secret = os.environ.get(prefix + "CLIENT_SECRET", "")
-    if not client_id or not client_secret:
-        return None
-    return (client_id, client_secret)
-
-
 def build_console_app(session_factory, secrets: SecretsService,
                       auth: Optional[ConsoleAuth] = None,
                       provisioning_token: Optional[str] = None) -> FastAPI:
@@ -238,15 +225,11 @@ def build_console_app(session_factory, secrets: SecretsService,
                           for t in manifest.tools],
             }
             # The hosted install rides the directory only when the connector
-            # declares it AND this service holds the app's client
-            # credentials; the client id is public by OAuth's design.
-            oauth_client = _oauth_client_credentials(provider)
-            if cls.oauth_authorize_url and oauth_client:
-                entry["oauth"] = {
-                    "authorizeUrl": cls.oauth_authorize_url,
-                    "clientId": oauth_client[0],
-                    "scopes": list(cls.oauth_scopes),
-                }
+            # declares it AND this service holds the app's credentials; the
+            # advert is public by construction (client id, never a secret).
+            oauth = cls.oauth_directory_entry()
+            if oauth:
+                entry["oauth"] = oauth
             entries.append(entry)
         with session_factory() as s:
             rows = s.query(PlatformConnector).filter_by(enabled=True).all()
@@ -387,14 +370,14 @@ def build_console_app(session_factory, secrets: SecretsService,
         resulting credential is stored write-only."""
         with session_factory() as s:
             require_organization_role(s, org_id, user, "admin")
-        oauth_client = _oauth_client_credentials(req.provider)
-        if oauth_client is None:
-            raise HTTPException(400, "no hosted install is configured for %s" % req.provider)
         try:
             connector = get_connector(req.provider, config={})
-            exchange = await connector.exchange_oauth_code(
-                req.code, req.redirectUri, oauth_client[0], oauth_client[1]
-            )
+        except ConnectorError:
+            raise HTTPException(400, "no hosted install is configured for %s" % req.provider)
+        if type(connector).oauth_directory_entry() is None:
+            raise HTTPException(400, "no hosted install is configured for %s" % req.provider)
+        try:
+            exchange = await connector.exchange_oauth_code(req.code, req.redirectUri)
         except ConnectorError as err:
             raise HTTPException(400, "install exchange failed: %s" % err)
         secret_value, detail = exchange["secretValue"], exchange.get("detail", "")

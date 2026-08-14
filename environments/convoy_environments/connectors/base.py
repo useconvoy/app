@@ -14,6 +14,7 @@ default posture is a small wedge-driven set that grows by explicit decision.
 from __future__ import annotations
 
 import abc
+import os
 from typing import Any, Dict, Optional, Type
 
 import httpx
@@ -43,10 +44,15 @@ class Connector(abc.ABC):
     # the platform's app into a customer account declare the consent
     # screen, the exchange endpoint, and the scopes their tools need; the
     # console shows the install button only when this service also holds
-    # the provider app's client credentials. Empty means paste-only.
+    # the provider app's credentials (each connector reads its own from
+    # this service's environment). Empty means paste-only.
     oauth_authorize_url: str = ""
     oauth_token_url: str = ""
     oauth_scopes: tuple = ()
+    # How the authorize URL wants its scope list joined, and any extra
+    # fixed query parameters the provider's consent screen requires.
+    oauth_scope_delimiter: str = ","
+    oauth_extra_params: dict = {}
 
     def __init__(
         self,
@@ -94,13 +100,45 @@ class Connector(abc.ABC):
         then reports the credential as stored-but-unverified)."""
         return None
 
-    async def exchange_oauth_code(
-        self, code: str, redirect_uri: str, client_id: str, client_secret: str
-    ) -> Dict[str, str]:
+    @classmethod
+    def oauth_client_env(cls) -> tuple:
+        """The provider app's client id and secret from this service's
+        environment, or (None, None) while unconfigured. GitHub overrides
+        the whole advert instead; most OAuth providers use this pair."""
+        prefix = "CONVOY_OAUTH_%s_" % cls.provider.upper()
+        client_id = os.environ.get(prefix + "CLIENT_ID", "")
+        client_secret = os.environ.get(prefix + "CLIENT_SECRET", "")
+        if not client_id or not client_secret:
+            return (None, None)
+        return (client_id, client_secret)
+
+    @classmethod
+    def oauth_directory_entry(cls) -> Optional[Dict[str, Any]]:
+        """The public pieces of the hosted install for the provider
+        directory, or None while the connector declares no install or the
+        service holds no app credentials. Never includes any secret."""
+        if not cls.oauth_authorize_url:
+            return None
+        client_id, _ = cls.oauth_client_env()
+        if not client_id:
+            return None
+        entry: Dict[str, Any] = {
+            "authorizeUrl": cls.oauth_authorize_url,
+            "clientId": client_id,
+            "scopes": list(cls.oauth_scopes),
+        }
+        if cls.oauth_scope_delimiter != ",":
+            entry["scopeDelimiter"] = cls.oauth_scope_delimiter
+        if cls.oauth_extra_params:
+            entry["extraParams"] = dict(cls.oauth_extra_params)
+        return entry
+
+    async def exchange_oauth_code(self, code: str, redirect_uri: str) -> Dict[str, str]:
         """Exchange a hosted-install authorization code for the connection
-        credential. Returns {"secretValue": ..., "detail": ...} where detail
-        is a plain phrase for the audit row (the installed workspace's name,
-        say). Providers without a hosted install keep the default."""
+        credential, using the app credentials this service holds. Returns
+        {"secretValue": ..., "detail": ...} where detail is a plain phrase
+        for the audit row (the installed workspace's name, say). Providers
+        without a hosted install keep the default."""
         raise ConnectorError("%s has no hosted install" % (self.provider or "provider"))
 
 
