@@ -50,6 +50,8 @@ locals {
     # the same secret channel. The website reaches it over the compose
     # network; nothing is exposed publicly.
     CONVOY_ALLOWED_EMAILS              = var.allowed_signup_emails
+    CONVOY_OAUTH_SLACK_CLIENT_ID       = var.slack_client_id
+    CONVOY_OAUTH_SLACK_CLIENT_SECRET   = var.slack_client_secret
     CONVOY_ENVIRONMENTS_URL            = "http://environments:8780/console"
     CONVOY_ENVIRONMENTS_INTERNAL_TOKEN = random_password.environments_internal_token.result
     CONVOY_ENVIRONMENTS_MASTER_KEY     = replace(replace(random_bytes.environments_master_key.base64, "+", "-"), "/", "_")

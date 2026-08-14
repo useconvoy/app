@@ -1038,6 +1038,10 @@ export interface ProviderDirectoryEntry {
   mcpUrl?: string;
   credential: { label: string; placeholder: string; multiline: boolean; steps: string[] };
   tools: Array<{ name: string; execution?: string; sideEffecting: boolean; description?: string }>;
+  /** Hosted install pieces, present only when the registry holds the
+   * provider app's client credentials. The client id is public by
+   * OAuth's design; the secret never leaves the registry. */
+  oauth?: { authorizeUrl: string; clientId: string; scopes: string[] };
 }
 
 /**
@@ -1080,6 +1084,25 @@ export async function verifySystemConnection(
  * offline; the separate credential attach then runs the provider's
  * verification probe. Returns the surfaced verification state.
  */
+/**
+ * Complete a hosted install: hand the provider's authorization code to
+ * the registry, which holds the app's client secret, performs the
+ * exchange, and lands the credential on the org's one connection for the
+ * provider. The credential never passes through the website.
+ */
+export async function exchangeOAuthConnection(
+  orgId: string,
+  input: { provider: string; code: string; redirectUri: string },
+): Promise<{ connectionId: string; status: string; detail: string }> {
+  const ctx = await systemsContext(orgId);
+  if (!ctx) throw new Error("Hosted installs need the environments registry");
+  return registryFetch<{ connectionId: string; status: string; detail: string }>(
+    ctx.config,
+    `/organizations/${ctx.registryOrgId}/connections/oauth-exchange`,
+    { method: "POST", actsFor: ctx.actsFor, body: input },
+  );
+}
+
 export async function connectManagedSystem(
   orgId: string,
   input: { provider: string; displayName: string; manifest: DeclaredManifest; secretValue: string },

@@ -35,12 +35,21 @@ function connectionState(connection: SystemConnection | undefined): ConnectionSt
  * instead of pretending. Only catalog entries a provider actually serves
  * appear here; grants without a provider stay a workspace concern.
  */
-export default async function ConnectorsPage() {
+export default async function ConnectorsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ slack?: string }>;
+}) {
   const { session } = await requireWorkspacesPage();
+  const { slack: slackOutcome } = await searchParams;
   const [connections, directory] = await Promise.all([
     listSystemConnections(session.orgId),
     listProviderDirectory(session.orgId),
   ]);
+  // The hosted install door for the whole organization: the registry's
+  // directory says which providers offer one (it holds the app client
+  // credentials), and the resulting token lands on the org's connection.
+  const installLabel: Record<string, string> = { slack: "Add to Slack" };
 
   const byProvider = new Map((connections ?? []).map((connection) => [connection.provider, connection]));
   const catalogIdByProvider = new Map(
@@ -80,6 +89,14 @@ export default async function ConnectorsPage() {
         sideEffecting: entry.tools.some((tool) => tool.sideEffecting),
         blurb: entry.description || undefined,
         credential: entry.credential,
+        ...(entry.oauth && installLabel[entry.provider]
+          ? {
+              oauth: {
+                href: `/api/connectors/${entry.provider}/start`,
+                label: installLabel[entry.provider]!,
+              },
+            }
+          : {}),
       };
     });
     // Declarative connections render as directory cards, not custom rows.
@@ -122,6 +139,16 @@ export default async function ConnectorsPage() {
           shared connections.
         </p>
       </header>
+      {slackOutcome === "connected" && (
+        <p role="status" className="rounded-md border border-pass-soft bg-pass-soft p-3 text-sm text-pass-text">
+          Slack is connected for this organization.
+        </p>
+      )}
+      {slackOutcome === "failed" && (
+        <p role="alert" className="rounded-md border border-fail-soft bg-fail-soft p-3 text-sm text-fail">
+          The Slack install did not complete. Try again, or paste a bot token instead.
+        </p>
+      )}
       <ConnectorsBoard
         registryLinked={connections !== null}
         connectors={connectors}
