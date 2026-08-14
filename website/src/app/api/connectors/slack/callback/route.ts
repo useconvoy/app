@@ -1,26 +1,22 @@
 /**
  * Complete the org-level Slack install. Trust is layered: the state must
  * carry a valid signature and unexpired stamp, its nonce must match the
- * browser cookie set at start, the signed-in session must still be the
- * org and admin that initiated, and only then is the code exchanged and
- * the workspace bot token attached to the organization's one Slack
- * connection (write-only in the registry, same as a pasted token).
+ * browser cookie set at start, and the signed-in session must still be
+ * the org and admin that initiated. Only then does the code go to the
+ * environments registry, which holds the app's client secret, performs
+ * the exchange, and stores the workspace bot token write-only on the
+ * organization's one Slack connection. The credential never passes
+ * through the website.
  */
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { connectManagedSystem } from "@/lib/api/environments";
-import { declaredManifest } from "@/lib/api/environments-mapping";
+import { exchangeOAuthConnection } from "@/lib/api/environments";
 import { requireOrgSession } from "@/lib/auth/session";
-import {
-  exchangeSlackCode,
-  slackRedirectUri,
-  verifyState,
-} from "@/lib/connectors/slack-oauth";
+import { installRedirectUri, verifyState } from "@/lib/connectors/oauth-install";
 import { withOrgContext } from "@/lib/db";
 import { getMembership } from "@/lib/orgs/queries";
 import { can } from "@/lib/permissions";
-import { catalogSystem } from "@/lib/workspaces/system-catalog";
 
 function done(outcome: "connected" | "failed"): NextResponse {
   const base = process.env.APP_URL ?? "http://localhost:3000";
@@ -36,8 +32,8 @@ export async function GET(request: Request): Promise<NextResponse> {
   const parsed = verifyState(state, process.env.SESSION_SECRET ?? "");
   if (!parsed) return done("failed");
   const jar = await cookies();
-  const nonce = jar.get("slack_oauth_nonce")?.value;
-  jar.delete("slack_oauth_nonce");
+  const nonce = jar.get("connector_install_nonce")?.value;
+  jar.delete("connector_install_nonce");
   if (!nonce || nonce !== parsed.nonce) return done("failed");
 
   const session = await requireOrgSession();
@@ -51,15 +47,11 @@ export async function GET(request: Request): Promise<NextResponse> {
     return done("failed");
   }
 
-  const system = catalogSystem("messaging");
-  if (!system?.connection) return done("failed");
   try {
-    const exchange = await exchangeSlackCode({ code, redirectUri: slackRedirectUri() });
-    await connectManagedSystem(session.orgId, {
-      provider: system.connection.provider,
-      displayName: system.displayName,
-      manifest: declaredManifest(system.connection),
-      secretValue: exchange.botToken,
+    const result = await exchangeOAuthConnection(session.orgId, {
+      provider: "slack",
+      code,
+      redirectUri: installRedirectUri("slack"),
     });
     await withOrgContext({ orgId: session.orgId, userId: session.userId }, (client) =>
       client
@@ -69,7 +61,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             session.orgId,
             session.userId,
             "connector.connected",
-            `messaging (workspace install${exchange.teamName ? `: ${exchange.teamName}` : ""})`,
+            `messaging (workspace install${result.detail ? `: ${result.detail}` : ""})`,
           ],
         )
         .then(() => undefined),

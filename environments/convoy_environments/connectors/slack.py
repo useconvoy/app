@@ -42,9 +42,35 @@ class SlackConnector(Connector):
         "Give it the channel read and write scopes your Agents need.",
         "Paste the bot token that starts with xoxb.",
     )
+    oauth_authorize_url = "https://slack.com/oauth/v2/authorize"
+    oauth_token_url = "https://slack.com/api/oauth.v2.access"
+    oauth_scopes = ("channels:read", "channels:history", "chat:write")
 
     async def manifest(self, credential: Optional[str] = None) -> ConnectionManifest:
         return ConnectionManifest(tools=list(_TOOLS))
+
+    async def exchange_oauth_code(
+        self, code: str, redirect_uri: str, client_id: str, client_secret: str
+    ) -> Dict[str, str]:
+        """The hosted install's exchange: the code becomes the workspace bot
+        token, org-level by nature (it belongs to the installed app, not to
+        whoever clicked)."""
+        token_url = self._config_url(self.oauth_token_url, "oauthTokenUrl")
+        async with self._client() as client:
+            resp = await client.post(token_url, data={
+                "code": code,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "redirect_uri": redirect_uri,
+            })
+            await raise_for_status(resp, "slack")
+            body = resp.json()
+        token = body.get("access_token")
+        if not body.get("ok", False) or not token:
+            raise ConnectorError(
+                "slack: install exchange rejected (%s)" % body.get("error", "unknown_error")
+            )
+        return {"secretValue": token, "detail": (body.get("team") or {}).get("name", "")}
 
     async def verify_credential(self, credential: str) -> Optional[bool]:
         """Prove the bot token against Slack without reading or mutating data."""

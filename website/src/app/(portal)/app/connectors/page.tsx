@@ -11,7 +11,6 @@ import {
   connectProvider,
   reattachCredential,
 } from "@/lib/connectors/actions";
-import { slackOAuthConfigured } from "@/lib/connectors/slack-oauth";
 import { requireWorkspacesPage } from "@/lib/workspaces/gate";
 import { systemCatalog } from "@/lib/workspaces/system-catalog";
 import { ConnectorsBoard, type ConnectionState, type ConnectorCard } from "./ConnectorsBoard";
@@ -47,11 +46,10 @@ export default async function ConnectorsPage({
     listSystemConnections(session.orgId),
     listProviderDirectory(session.orgId),
   ]);
-  // The hosted install door for the whole organization: the resulting
-  // workspace bot token lands on the org's one Slack connection.
-  const slackInstall = slackOAuthConfigured()
-    ? { href: "/api/connectors/slack/start", label: "Add to Slack" }
-    : undefined;
+  // The hosted install door for the whole organization: the registry's
+  // directory says which providers offer one (it holds the app client
+  // credentials), and the resulting token lands on the org's connection.
+  const installLabel: Record<string, string> = { slack: "Add to Slack" };
 
   const byProvider = new Map((connections ?? []).map((connection) => [connection.provider, connection]));
   const catalogIdByProvider = new Map(
@@ -91,7 +89,14 @@ export default async function ConnectorsPage({
         sideEffecting: entry.tools.some((tool) => tool.sideEffecting),
         blurb: entry.description || undefined,
         credential: entry.credential,
-        ...(entry.provider === "slack" && slackInstall ? { oauth: slackInstall } : {}),
+        ...(entry.oauth && installLabel[entry.provider]
+          ? {
+              oauth: {
+                href: `/api/connectors/${entry.provider}/start`,
+                label: installLabel[entry.provider]!,
+              },
+            }
+          : {}),
       };
     });
     // Declarative connections render as directory cards, not custom rows.
@@ -112,9 +117,6 @@ export default async function ConnectorsPage({
           state: connectionState(connection),
           toolCount: connection?.toolCount ?? system.connection?.tools.length ?? 0,
           sideEffecting: system.sideEffecting,
-          ...(system.connection?.provider === "slack" && slackInstall
-            ? { oauth: slackInstall }
-            : {}),
         };
       });
     customSource = (connections ?? []).filter((connection) => connection.kind === "mcp_custom");

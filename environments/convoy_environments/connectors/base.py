@@ -39,6 +39,15 @@ class Connector(abc.ABC):
     credential_multiline: bool = False
     credential_steps: tuple = ()
 
+    # Hosted install (OAuth) metadata. Providers that support installing
+    # the platform's app into a customer account declare the consent
+    # screen, the exchange endpoint, and the scopes their tools need; the
+    # console shows the install button only when this service also holds
+    # the provider app's client credentials. Empty means paste-only.
+    oauth_authorize_url: str = ""
+    oauth_token_url: str = ""
+    oauth_scopes: tuple = ()
+
     def __init__(
         self,
         config: Optional[Dict[str, Any]] = None,
@@ -84,6 +93,15 @@ class Connector(abc.ABC):
         returns None when the provider has no cheap safe probe (the console
         then reports the credential as stored-but-unverified)."""
         return None
+
+    async def exchange_oauth_code(
+        self, code: str, redirect_uri: str, client_id: str, client_secret: str
+    ) -> Dict[str, str]:
+        """Exchange a hosted-install authorization code for the connection
+        credential. Returns {"secretValue": ..., "detail": ...} where detail
+        is a plain phrase for the audit row (the installed workspace's name,
+        say). Providers without a hosted install keep the default."""
+        raise ConnectorError("%s has no hosted install" % (self.provider or "provider"))
 
 
 _REGISTRY: Dict[str, Type[Connector]] = {}

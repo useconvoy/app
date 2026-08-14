@@ -149,15 +149,16 @@ variable "github_repo_id" {
 
 variable "slack_client_id" {
   description = <<-EOT
-    Slack app client id for the hosted Add to Slack install. Empty hides
-    the button and leaves paste-a-token as the only Slack door.
+    Slack app client id for the hosted Add to Slack install, delivered to
+    the environments registry (which owns the exchange). Empty hides the
+    button and leaves paste-a-token as the only Slack door.
   EOT
   type        = string
   default     = ""
 }
 
 variable "slack_client_secret" {
-  description = "Slack app client secret for the hosted install."
+  description = "Slack app client secret, held only by the environments registry."
   type        = string
   default     = ""
   sensitive   = true
