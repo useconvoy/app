@@ -49,12 +49,13 @@ class SlackConnector(Connector):
     async def manifest(self, credential: Optional[str] = None) -> ConnectionManifest:
         return ConnectionManifest(tools=list(_TOOLS))
 
-    async def exchange_oauth_code(
-        self, code: str, redirect_uri: str, client_id: str, client_secret: str
-    ) -> Dict[str, str]:
+    async def exchange_oauth_code(self, code: str, redirect_uri: str) -> Dict[str, str]:
         """The hosted install's exchange: the code becomes the workspace bot
         token, org-level by nature (it belongs to the installed app, not to
         whoever clicked)."""
+        client_id, client_secret = self.oauth_client_env()
+        if not client_id:
+            raise ConnectorError("slack: hosted install is not configured")
         token_url = self._config_url(self.oauth_token_url, "oauthTokenUrl")
         async with self._client() as client:
             resp = await client.post(token_url, data={

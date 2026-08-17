@@ -1,12 +1,16 @@
 /**
- * Complete the org-level Slack install. Trust is layered: the state must
+ * Complete an org-level hosted install. Trust is layered: the state must
  * carry a valid signature and unexpired stamp, its nonce must match the
  * browser cookie set at start, and the signed-in session must still be
  * the org and admin that initiated. Only then does the code go to the
- * environments registry, which holds the app's client secret, performs
- * the exchange, and stores the workspace bot token write-only on the
- * organization's one Slack connection. The credential never passes
- * through the website.
+ * environments registry, which holds the provider app's client secret,
+ * performs the exchange, and stores the credential write-only on the
+ * organization's one connection for the provider. The credential never
+ * passes through the website.
+ *
+ * Most providers return ?code=...; the GitHub App install returns
+ * ?installation_id=..., which plays the same role and rides the same
+ * exchange.
  */
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -18,14 +22,20 @@ import { withOrgContext } from "@/lib/db";
 import { getMembership } from "@/lib/orgs/queries";
 import { can } from "@/lib/permissions";
 
-function done(outcome: "connected" | "failed"): NextResponse {
-  const base = process.env.APP_URL ?? "http://localhost:3000";
-  return NextResponse.redirect(new URL(`/app/connectors?slack=${outcome}`, base));
-}
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ provider: string }> },
+): Promise<NextResponse> {
+  const { provider } = await params;
+  const safeProvider = /^[a-z0-9_]+$/.test(provider) ? provider : "connector";
+  const done = (outcome: "connected" | "failed"): NextResponse => {
+    const base = process.env.APP_URL ?? "http://localhost:3000";
+    return NextResponse.redirect(new URL(`/app/connectors?${safeProvider}=${outcome}`, base));
+  };
+  if (safeProvider !== provider) return done("failed");
 
-export async function GET(request: Request): Promise<NextResponse> {
   const url = new URL(request.url);
-  const code = url.searchParams.get("code");
+  const code = url.searchParams.get("code") ?? url.searchParams.get("installation_id");
   const state = url.searchParams.get("state");
   if (!code || !state) return done("failed");
 
@@ -49,9 +59,9 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   try {
     const result = await exchangeOAuthConnection(session.orgId, {
-      provider: "slack",
+      provider,
       code,
-      redirectUri: installRedirectUri("slack"),
+      redirectUri: installRedirectUri(provider),
     });
     await withOrgContext({ orgId: session.orgId, userId: session.userId }, (client) =>
       client
@@ -61,7 +71,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             session.orgId,
             session.userId,
             "connector.connected",
-            `messaging (workspace install${result.detail ? `: ${result.detail}` : ""})`,
+            `${provider} (organization install${result.detail ? `: ${result.detail}` : ""})`,
           ],
         )
         .then(() => undefined),
@@ -72,7 +82,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       client
         .query(
           "INSERT INTO admin_audit (org_id, actor_id, action, subject) VALUES ($1, $2, $3, $4)",
-          [session.orgId, session.userId, "connector.connect_failed", "messaging (workspace install)"],
+          [session.orgId, session.userId, "connector.connect_failed", `${provider} (organization install)`],
         )
         .then(() => undefined),
     );

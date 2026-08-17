@@ -28,6 +28,11 @@ export interface DirectoryOAuth {
   authorizeUrl: string;
   clientId: string;
   scopes: string[];
+  /** How the provider wants multiple scopes joined; comma by default. */
+  scopeDelimiter?: string;
+  /** Provider-specific consent parameters the registry declares, like
+   * Google's offline access and forced consent. */
+  extraParams?: Record<string, string>;
 }
 
 export function newNonce(): string {
@@ -82,9 +87,14 @@ export function authorizeUrl(
 ): string {
   const url = new URL(oauth.authorizeUrl);
   url.searchParams.set("client_id", oauth.clientId);
-  url.searchParams.set("scope", oauth.scopes.join(","));
+  if (oauth.scopes.length > 0) {
+    url.searchParams.set("scope", oauth.scopes.join(oauth.scopeDelimiter ?? ","));
+  }
   url.searchParams.set("redirect_uri", input.redirectUri);
   url.searchParams.set("state", input.state);
+  for (const [key, value] of Object.entries(oauth.extraParams ?? {})) {
+    url.searchParams.set(key, value);
+  }
   return url.toString();
 }
 

@@ -38,18 +38,31 @@ function connectionState(connection: SystemConnection | undefined): ConnectionSt
 export default async function ConnectorsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ slack?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { session } = await requireWorkspacesPage();
-  const { slack: slackOutcome } = await searchParams;
+  const outcomes = await searchParams;
   const [connections, directory] = await Promise.all([
     listSystemConnections(session.orgId),
     listProviderDirectory(session.orgId),
   ]);
   // The hosted install door for the whole organization: the registry's
   // directory says which providers offer one (it holds the app client
-  // credentials), and the resulting token lands on the org's connection.
-  const installLabel: Record<string, string> = { slack: "Add to Slack" };
+  // credentials), and the resulting credential lands on the org's
+  // connection.
+  const installLabel: Record<string, string> = {
+    slack: "Add to Slack",
+    google: "Connect with Google",
+    github: "Install the GitHub App",
+  };
+  // The install callback reports back as ?provider=connected|failed.
+  const reported = Object.keys(installLabel).find(
+    (provider) => outcomes[provider] === "connected" || outcomes[provider] === "failed",
+  );
+  const reportedName = reported
+    ? (directory?.find((entry) => entry.provider === reported)?.displayName ??
+      reported.charAt(0).toUpperCase() + reported.slice(1))
+    : null;
 
   const byProvider = new Map((connections ?? []).map((connection) => [connection.provider, connection]));
   const catalogIdByProvider = new Map(
@@ -139,14 +152,14 @@ export default async function ConnectorsPage({
           shared connections.
         </p>
       </header>
-      {slackOutcome === "connected" && (
+      {reported && outcomes[reported] === "connected" && (
         <p role="status" className="rounded-md border border-pass-soft bg-pass-soft p-3 text-sm text-pass-text">
-          Slack is connected for this organization.
+          {reportedName} is connected for this organization.
         </p>
       )}
-      {slackOutcome === "failed" && (
+      {reported && outcomes[reported] === "failed" && (
         <p role="alert" className="rounded-md border border-fail-soft bg-fail-soft p-3 text-sm text-fail">
-          The Slack install did not complete. Try again, or paste a bot token instead.
+          The {reportedName} install did not complete. Try again, or paste a credential instead.
         </p>
       )}
       <ConnectorsBoard

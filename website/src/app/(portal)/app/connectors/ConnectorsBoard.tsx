@@ -332,8 +332,9 @@ export function ConnectorsBoard({
               ))}
             </ol>
             <p className="mt-2 text-xs text-muted">
-              Hosted sign-in with the provider is a later step; pasting a credential your
-              admin controls is the server-to-server way.
+              {connector.oauth
+                ? `${connector.oauth.label} above is the quickest path; pasting a credential your admin controls works the same way.`
+                : "Pasting a credential your admin controls is the server-to-server way."}
             </p>
             <CredentialForm
               label={help.label}

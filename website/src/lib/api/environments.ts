@@ -1041,7 +1041,13 @@ export interface ProviderDirectoryEntry {
   /** Hosted install pieces, present only when the registry holds the
    * provider app's client credentials. The client id is public by
    * OAuth's design; the secret never leaves the registry. */
-  oauth?: { authorizeUrl: string; clientId: string; scopes: string[] };
+  oauth?: {
+    authorizeUrl: string;
+    clientId: string;
+    scopes: string[];
+    scopeDelimiter?: string;
+    extraParams?: Record<string, string>;
+  };
 }
 
 /**
