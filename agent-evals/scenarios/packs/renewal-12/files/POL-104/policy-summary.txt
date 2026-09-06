@@ -1,9 +1,0 @@
-AMS POLICY SUMMARY
-policy_number: POL-104
-insured_name: Redwood Logistics Inc
-contact: Yuki Kowalski <yuki.kowalski@redwoodlogisticsinc.example>
-carrier: Harborline Underwriters
-premium: 94553
-expiring_date: {{t0+26d}}
-prior_carrier_contact: Ingrid Ops <ingrid@keystonenational.example>
-renewal_status: pending

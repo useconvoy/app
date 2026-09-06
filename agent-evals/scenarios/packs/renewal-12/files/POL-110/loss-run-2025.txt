@@ -1,7 +1,0 @@
-LOSS RUN REPORT — Harborline Underwriters
-policy_number: POL-110
-expected_year: 2025
-year: 2025
-losses:
-- 2025-10-05  auto glass  paid $4,837
-- 2025-03-06  property damage  paid $1,611

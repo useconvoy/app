@@ -1,8 +1,0 @@
-LOSS RUN REPORT — Atlas Mutual
-policy_number: POL-112
-expected_year: 2025
-year: 2025
-losses:
-- 2025-04-28  minor collision  paid $18,517
-- 2025-06-07  cargo damage  paid $6,107
-- 2025-11-28  water damage  paid $22,724

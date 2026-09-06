@@ -1,9 +1,0 @@
-AMS POLICY SUMMARY
-policy_number: POL-111
-insured_name: Prairie Foods Inc
-contact: Miguel Adeyemi <miguel.adeyemi@prairiefoodsinc.example>
-carrier: Meridian Specialty
-premium: 70770
-expiring_date: {{t0+40d}}
-prior_carrier_contact: Dana Ops <dana@atlasmutual.example>
-renewal_status: pending

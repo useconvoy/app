@@ -1,6 +1,0 @@
-SENTINEL MUTUAL — LOSS RUN REPORT
-Insured: Acme Robotics
-Report date: {{t0}}
-Policy period: {{t0-360d}} to {{t0+3d}}
-Open claims: 0
-Total incurred: $0.00

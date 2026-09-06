@@ -1,9 +1,0 @@
-AMS POLICY SUMMARY
-policy_number: POL-112
-insured_name: Crescent Manufacturing Inc
-contact: Marcus Adeyemi <marcus.adeyemi@crescentmanufacturinginc.example>
-carrier: Atlas Mutual
-premium: 62551
-expiring_date: {{t0+42d}}
-prior_carrier_contact: Robert Ops <robert@blueheroncasualty.example>
-renewal_status: pending

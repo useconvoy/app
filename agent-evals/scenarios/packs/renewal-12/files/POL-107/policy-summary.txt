@@ -1,9 +1,0 @@
-AMS POLICY SUMMARY
-policy_number: POL-107
-insured_name: Granite Mechanical Co
-contact: Ingrid Marsh <ingrid.marsh@granitemechanicalco.example>
-carrier: Blue Heron Casualty
-premium: 65191
-expiring_date: {{t0+32d}}
-prior_carrier_contact: Carla Ops <carla@keystonenational.example>
-renewal_status: pending

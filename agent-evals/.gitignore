@@ -1,5 +1,0 @@
-.venv/
-__pycache__/
-*.egg-info/
-results/
-node_modules/

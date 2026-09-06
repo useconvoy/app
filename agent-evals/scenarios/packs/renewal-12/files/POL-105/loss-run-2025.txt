@@ -1,6 +1,0 @@
-LOSS RUN REPORT — Meridian Specialty
-policy_number: POL-105
-expected_year: 2025
-year: 2025
-losses:
-- 2025-11-28  minor collision  paid $4,930

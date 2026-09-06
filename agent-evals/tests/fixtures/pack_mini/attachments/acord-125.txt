@@ -1,3 +1,0 @@
-ACORD 125 — COMMERCIAL INSURANCE APPLICATION (stub)
-Applicant: Acme Robotics
-Effective date requested: {{t0+3d}}

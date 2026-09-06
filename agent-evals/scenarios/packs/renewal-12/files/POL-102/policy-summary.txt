@@ -1,9 +1,0 @@
-AMS POLICY SUMMARY
-policy_number: POL-102
-insured_name: Redwood Dairy Co
-contact: Dana Hardin <dana.hardin@redwooddairyco.example>
-carrier: Keystone National
-premium: 39057
-expiring_date: {{t0+22d}}
-prior_carrier_contact: Dana Ops <dana@harborlineunderwriters.example>
-renewal_status: pending

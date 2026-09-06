@@ -1,9 +1,0 @@
-AMS POLICY SUMMARY
-policy_number: POL-101
-insured_name: Pioneer Mechanical LLC
-contact: Marcus Kowalski <marcus.kowalski@pioneermechanicalllc.example>
-carrier: Blue Heron Casualty
-premium: 30430
-expiring_date: {{t0+20d}}
-prior_carrier_contact: Owen Ops <owen@keystonenational.example>
-renewal_status: pending

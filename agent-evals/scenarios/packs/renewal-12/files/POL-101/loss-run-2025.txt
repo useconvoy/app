@@ -1,6 +1,0 @@
-LOSS RUN REPORT — Blue Heron Casualty
-policy_number: POL-101
-expected_year: 2025
-year: 2025
-losses:
-- 2025-07-09  property damage  paid $6,618
