@@ -1,9 +1,9 @@
-import { HERO, SITE } from "@/content/homepage";
+import { HERO } from "@/content/homepage";
 import { ReleaseEnvelope } from "./ReleaseEnvelope";
 
 /**
- * Category, headline, explanation, two actions and the development-stage
- * line, beside the release envelope. The three-object path from the brief
+ * Category, headline, explanation, two actions and the invitation, beside
+ * the release envelope. The three-object path from the brief
  * reads top to bottom on the figure side: the trained model enters the
  * release, and the release is deployed to the robot controller. Desktop is
  * a 5/7 split; below 900px the copy comes first. Nothing is animated.
@@ -27,25 +27,19 @@ export function Hero() {
               {HERO.secondary.label}
             </a>
           </div>
-          <div className="mt-6 border-t border-subtle pt-4">
-            <span className="inline-flex items-center gap-2 rounded-sm bg-information-tint px-3 py-1 font-mono text-[13px] font-medium text-information">
-              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-current" />
-              Stage: {SITE.stage}
-            </span>
-            <p className="type-small mt-2 text-secondary">{HERO.stage.replace(/^In development\.\s*/, "")}</p>
-          </div>
+          <p className="type-body mt-6 border-t border-subtle pt-4 text-secondary">{HERO.invitation}</p>
         </div>
 
-        <figure className="md:col-span-7" aria-labelledby="hero-diagram-title">
-          <figcaption className="sr-only" id="hero-diagram-title">
-            {HERO.diagramLabel}: a trained model enters a Convoy release, which is deployed to the robot controller.
-          </figcaption>
+        <figure className="md:col-span-7" aria-labelledby="hero-diagram-title" aria-describedby="hero-diagram-caption">
+          <p id="hero-diagram-title" className="type-eyebrow mb-4">
+            {HERO.diagramHeading}
+          </p>
           <Endpoint kind="model" />
           <ReleaseEnvelope />
           <Endpoint kind="robot" />
-          <p className="type-small mt-4 text-muted">
-            <span className="font-medium text-secondary">{HERO.diagramLabel}.</span> {HERO.caption}
-          </p>
+          <figcaption id="hero-diagram-caption" className="type-small mt-4 text-secondary">
+            {HERO.caption}
+          </figcaption>
         </figure>
       </div>
     </section>

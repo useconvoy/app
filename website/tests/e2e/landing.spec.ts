@@ -9,6 +9,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const VIEWPORTS = [
   { name: "desktop-1440", width: 1440, height: 900 },
+  { name: "desktop-1280", width: 1280, height: 800 },
   { name: "tablet-768", width: 768, height: 1024 },
   { name: "mobile-390", width: 390, height: 844 },
   { name: "mobile-320", width: 320, height: 568 },
@@ -28,7 +29,10 @@ test.describe("landing page", () => {
     await expect(page).toHaveTitle("Convoy | AI Model Deployment for Robots");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Deploy AI models to real robots.");
     await expect(page.getByText(/Convoy is building the runtime and release workflow/)).toBeVisible();
-    await expect(page.getByText("Stage: In development")).toBeVisible();
+    await expect(page.getByText("Help shape the next robot deployment workflow.")).toBeVisible();
+    await expect(page.getByText("Stage:")).toHaveCount(0);
+    await expect(page.getByText(/preview/i)).toHaveCount(0);
+    await expect(page.locator("header")).not.toContainText("Precision Release");
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /^https:\/\/deployconvoy\.com\/?$/);
     await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", "Deploy AI models to real robots.");
     const ogImage = await page.locator('meta[property="og:image"]').getAttribute("content");
@@ -47,16 +51,17 @@ test.describe("landing page", () => {
       "Package the system. Qualify the release.",
       "Designed around your robot’s execution path.",
       "Start with one model. One robot configuration. One clear deployment goal.",
-      "A few important boundaries.",
-      "What does your next robot deployment need?",
+      "Questions about Convoy",
+      "Tell us about your next robot deployment.",
     ]);
     await expect(page.getByRole("heading", { level: 3, name: /^Package$/ })).toBeVisible();
     await expect(page.getByRole("heading", { level: 3, name: /^Qualify$/ })).toBeVisible();
     await expect(page.getByRole("heading", { level: 3, name: /^Release$/ })).toBeVisible();
-    // The release envelope repeats with the same illustrative identifier.
+    // The release envelope repeats: the full object in the hero, the identity strip in the workflow.
     expect(await page.locator("[data-envelope]").count()).toBeGreaterThanOrEqual(2);
-    const ids = await page.locator("[data-envelope]").filter({ hasText: "release v0.3" }).count();
-    expect(ids).toBeGreaterThanOrEqual(2);
+    await expect(page.locator("[data-envelope]").filter({ hasText: "Robot-policy release" })).toHaveCount(1);
+    expect(await page.locator("[data-envelope]").filter({ hasText: "Release identity" }).count()).toBeGreaterThanOrEqual(1);
+    await expect(page.getByText(/v0\.3|proposed|illustrative|not an API/i)).toHaveCount(0);
     // Six FAQ boundaries, the first open.
     const faq = page.locator("#faq details");
     await expect(faq).toHaveCount(6);
@@ -117,35 +122,42 @@ test.describe("landing page", () => {
     await expect(page.getByRole("button", { name: "Menu" })).toHaveAttribute("aria-expanded", "false");
   });
 
-  test("contact form validates, announces errors, keeps values, and never claims receipt", async ({ page }) => {
+  test("contact block opens the visitor's email app with the subject filled in", async ({ page }) => {
     await page.goto("/#contact");
-    const form = page.locator("form");
-    await expect(page.getByText("Sending is not available yet")).toBeVisible();
-    await form.getByRole("button", { name: "Send deployment details" }).click();
-    const alert = form.getByRole("alert");
-    await expect(alert).toBeVisible();
-    await expect(alert).toBeFocused();
-    await expect(alert).toContainText("Work email");
-    await expect(alert).toContainText("Company or team");
-    await expect(form.locator("#contact-email")).toHaveAttribute("aria-invalid", "true");
+    const link = page.locator("[data-contact-link]");
+    await expect(link).toBeVisible();
+    const href = (await link.getAttribute("href"))!;
+    expect(href.startsWith("mailto:aws@deployconvoy.com?")).toBe(true);
+    const params = new URLSearchParams(href.slice(href.indexOf("?") + 1));
+    expect(params.get("subject")).toBe("Convoy deployment inquiry");
+    expect(params.get("body")).toContain("Model:");
+    expect(params.get("body")).toContain("Robot configuration:");
+    expect(params.get("body")).toContain("Deployment challenge:");
+    // The address is visible, selectable text with its own plain mailto.
+    const address = page.locator("[data-contact-address]");
+    await expect(address).toHaveText("aws@deployconvoy.com");
+    await expect(address).toHaveAttribute("href", "mailto:aws@deployconvoy.com");
+    await expect(page.getByText("Opens your email app")).toBeVisible();
+    // No form, no fields, nothing to submit or store.
+    await expect(page.locator("form")).toHaveCount(0);
+    await expect(page.getByText(/received|sending is not available/i)).toHaveCount(0);
+    // Every primary action on the page lands on the contact section.
+    const ctas = page.getByRole("link", { name: "Discuss your deployment" });
+    for (const href of await ctas.evaluateAll((links) => links.map((a) => a.getAttribute("href")))) {
+      expect(href).toBe("#contact");
+    }
+  });
 
-    await form.locator("#contact-email").fill("engineer@example.com");
-    await form.locator("#contact-company").fill("Example Robotics");
-    await form.locator("#contact-blocker").fill("A trained pick policy; the action interface changed with the last model release.");
-    await form.locator("summary", { hasText: "Optional details" }).click();
-    await form.locator("#contact-hardware").fill("Illustrative arm and onboard compute");
-    await form.getByRole("button", { name: "Send deployment details" }).click();
-
-    const status = form.getByRole("status");
-    await expect(status).toContainText("were not sent");
-    await expect(status).toContainText("Nothing was stored");
-    await expect(status).toBeFocused();
-    await expect(page.getByText("have been received")).toHaveCount(0);
-    // Everything typed is still there.
-    await expect(form.locator("#contact-email")).toHaveValue("engineer@example.com");
-    await expect(form.locator("#contact-company")).toHaveValue("Example Robotics");
-    await expect(form.locator("#contact-blocker")).toHaveValue(/action interface changed/);
-    await expect(form.locator("#contact-hardware")).toHaveValue("Illustrative arm and onboard compute");
+  test("legacy marketing paths redirect home and the old console paths do not", async ({ page }) => {
+    for (const path of ["/platform", "/solutions", "/demo", "/privacy"]) {
+      const response = await page.request.get(path, { maxRedirects: 0 });
+      expect(response.status(), path).toBe(308);
+      expect(response.headers()["location"], path).toBe("/");
+    }
+    for (const path of ["/app", "/sign-in", "/api/auth/workos"]) {
+      const response = await page.request.get(path, { maxRedirects: 0 });
+      expect(response.status(), path).toBe(404);
+    }
   });
 
   test("reduced motion renders the complete static page with no transitions", async ({ page }) => {
@@ -157,6 +169,63 @@ test.describe("landing page", () => {
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(page.locator("#execution figure")).toBeVisible();
     await page.screenshot({ path: "tests/screenshots/desktop-1440-reduced-motion.png", fullPage: true });
+  });
+
+  test("interactive controls meet 44px targets on mobile and desktop", async ({ page }) => {
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/");
+      if (width < 900) await page.getByRole("button", { name: "Menu" }).click();
+      const small = await page
+        .locator("a.btn, button, header nav a, footer nav a, summary, [data-contact-link]")
+        .evaluateAll((els) =>
+          els
+            .filter((el) => (el as HTMLElement).offsetParent !== null)
+            .map((el) => ({ text: (el.textContent || "").trim().slice(0, 40), h: el.getBoundingClientRect().height }))
+            .filter((m) => m.h < 44),
+        );
+      expect(small, `controls under 44px at ${width}`).toEqual([]);
+    }
+  });
+
+  test("diagrams reflow to a vertical, ordered structure on mobile with the boundary intact", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    // Execution path: nodes keep their flow order top to bottom, no sideways scroll.
+    const nodes = page.locator('#execution ol[aria-label="Execution path nodes"] > li:not([aria-hidden])');
+    await expect(nodes).toHaveCount(5);
+    const boxes = await nodes.evaluateAll((els) => els.map((el) => el.getBoundingClientRect()).map((r) => ({ top: r.top, width: r.width })));
+    for (let i = 1; i < boxes.length; i += 1) expect(boxes[i].top, "nodes stack vertically in order").toBeGreaterThan(boxes[i - 1].top);
+    for (const box of boxes) expect(box.width).toBeGreaterThan(250);
+    await expect(nodes.nth(0)).toContainText("Sensors");
+    await expect(nodes.nth(4)).toContainText("Robot controller");
+    await expect(nodes.nth(4)).toContainText("outside Convoy");
+    await expect(page.locator("#execution")).toContainText("Convoy runtime scope");
+    // Hero: model, release, controller read top to bottom.
+    const hero = page.locator("#top figure");
+    const order = await hero.locator("[data-envelope], .type-label").evaluateAll((els) => els.map((el) => el.textContent?.trim().slice(0, 18)));
+    expect(order[0]).toContain("Trained model");
+    expect(order[order.length - 1]).toContain("Robot controller");
+    await noHorizontalOverflow(page);
+  });
+
+  test("200% zoom reflow and a narrow 320px column keep the page readable", async ({ page }) => {
+    // 1440px at 200% zoom is a 720px CSS viewport; 320px is the reflow floor.
+    for (const width of [720, 320]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/");
+      await page.locator("details:not([open]) > summary").evaluateAll((summaries) =>
+        summaries.forEach((s) => ((s.parentElement as HTMLDetailsElement).open = true)),
+      );
+      await noHorizontalOverflow(page);
+      const address = page.locator("[data-contact-address]");
+      const fits = await address.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const c = el.closest("div")!.getBoundingClientRect();
+        return r.right <= c.right + 1 && r.left >= c.left - 1;
+      });
+      expect(fits, `contact address stays inside its block at ${width}`).toBe(true);
+    }
   });
 
   for (const viewport of VIEWPORTS) {

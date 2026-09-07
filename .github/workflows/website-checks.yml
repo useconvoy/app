@@ -1,0 +1,40 @@
+name: website-checks
+
+# Pull-request checks for the landing page: typecheck, lint, token check,
+# production build, and the Playwright release gates (accessibility,
+# keyboard, mobile menu, responsive reflow, contact link). One standard
+# Linux job, no caches persisted, no artifacts kept.
+
+on:
+  pull_request:
+    paths: ["website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/website-checks.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm run lint
+      - run: pnpm run check:tokens
+      - run: pnpm run build
+        env:
+          NEXT_PUBLIC_SITE_URL: https://deployconvoy.com
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run test:e2e
+        env:
+          CI: "true"

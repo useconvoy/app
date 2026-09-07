@@ -15,12 +15,11 @@ analytics.
 
 ```
 src/app/                 layout, page, 404, robots, sitemap, link-preview image
-src/app/actions/         the contact server action
-src/components/          one component per page section plus header, footer, envelope
+src/components/          one component per page section plus header, footer, envelope, contact
 src/content/homepage.ts  every public sentence on the page
 src/content/claims.ts    the claims ledger: text, stage, evidence, approval
 src/content/support.ts   the supported-configuration matrix (empty until tested)
-src/lib/contact/         validation and the delivery boundary
+infra/deploy/            the release script that runs on the instance
 src/styles/tokens.css    the only file that may contain a hex color
 src/styles/globals.css   Tailwind theme bridge, type scale, controls
 tests/e2e/               Playwright: accessibility, keyboard, form, screenshots
@@ -45,50 +44,61 @@ pnpm run test:e2e         # against the production build; writes tests/screensho
 pnpm run verify           # all of the above, in order
 ```
 
-The e2e suite runs axe on desktop and mobile, checks the skip link, the
-mobile menu (aria-expanded, Escape, focus return), every on-page anchor,
-reduced-motion rendering, the contact form's validation and preview state,
-and captures full-page screenshots at 1440, 768, 390 and 320 CSS pixels
-while asserting the page never scrolls sideways. In this session's image the
+The e2e suite is the desktop-and-mobile release gate: axe at 1440, 1280,
+768, 390 and 320 with every disclosure open; no sideways scroll at any
+width; 44px control targets; the skip link; the mobile menu (aria-expanded,
+Escape, focus return); every on-page anchor; the diagrams reflowing to an
+ordered vertical structure on mobile with the controller and safety
+boundary intact; 200% zoom reflow and the contact address wrapping at 320;
+reduced-motion rendering; the mailto link's address, subject and template;
+and the legacy redirects. It writes full-page screenshots to
+`tests/screenshots/`. In this session's image the
 pinned Chromium is supplied through `PLAYWRIGHT_CHROMIUM_PATH`.
 
-## Contact form: what is still needed
+## Contact
 
-The form is complete but runs in a **preview state**: it validates, keeps
-what was typed, and tells the person plainly that sending is not available
-yet. It never shows the success state and never stores a submission. To turn
-it on:
+Inquiries go by email. The contact section carries a mailto link that opens
+the visitor's own mail app with the subject "Convoy deployment inquiry" and a
+three-line template (model, robot configuration, deployment challenge), plus
+the address as selectable text. Nothing is collected or stored on the site.
 
-1. Choose the receiving inbox and a sending provider.
-2. Implement that provider in `src/lib/contact/delivery.ts`. The function
-   must confirm the destination accepted the message before returning
-   `sent`; anything less is `failed`, and the form says so.
-3. Set `CONTACT_DELIVERY=<provider id>` and `CONTACT_TO_EMAIL=<inbox>` in the
-   runtime environment, then rebuild.
-4. Before enabling collection: rate limiting at the edge, a privacy notice,
-   and a retention and access policy. The honeypot field is the only spam
-   control today.
+The address is one constant, `CONTACT_EMAIL` in `src/content/homepage.ts`,
+and `NEXT_PUBLIC_CONTACT_EMAIL` overrides it at build time. Changing it is a
+one-line edit and a redeploy.
 
-## Deployment note (Lightsail)
+## Deployment (Lightsail)
 
-The previous console ran on one Lightsail instance under docker compose
-behind Caddy, which terminates TLS with Let's Encrypt and proxies to the
-`web` container on port 3000, with Route 53 A records for the apex and `www`
-pointing at the instance's static IP. This image fits that box unchanged:
+The site runs on the existing Lightsail instance `convoy-console-demo`
+(us-west-2a, static IP, Caddy terminating TLS with Let's Encrypt, Route 53 A
+records for the apex and `www`). Nothing about that box, its DNS, or its
+certificate changes for a release.
 
-```bash
-docker build -t convoy-website .
-docker run --rm -p 3000:3000 convoy-website
-```
+`.github/workflows/deploy-website.yml` runs on every push to `main` that
+touches `website/` (and by hand from the Actions tab). It builds the
+standalone Next.js output on a standard Linux runner, copies one tarball to
+the instance over SSH, and runs `infra/deploy/remote-release.sh`, which:
 
-Nothing in this package deploys itself. The old `deploy-console` workflow
-assumed the console image (migrations, a catalog seed, an environments
-service); it is not carried forward, and a release of this site needs a
-simpler compose service: this image as `web`, Caddy in front, no database.
-DNS is untouched by this change.
+1. copies `compose.yaml`, `compose.override.yaml`, `.env` and `Caddyfile` to
+   `/opt/convoy/rollback/<timestamp>/` together with the image the `web`
+   service was running;
+2. unpacks the release into `/opt/convoy/releases/<sha>/`;
+3. rewrites only the `web` service in `compose.yaml` to run that directory
+   with the stock `node:22-alpine` image (`node server.js`, read-only bind
+   mount, unprivileged user);
+4. recreates `web`, checks it through the compose network the way Caddy
+   reaches it, and restores the backup if the check fails.
 
-**Historical paths.** The previous site served `/platform`, `/solutions`,
-`/security`, `/company`, `/writing`, `/changelog`, `/demo`, `/terms`,
-`/privacy`, sign-in and `/app`. They return an ordinary 404 now. Whether to
-redirect any of them to `/` is a deployment decision; `next.config.ts`
-`redirects()` or a Caddy `redir` block are both fine places for it.
+The previous console's image stays in ECR and in the local Docker cache, and
+its other services (postgres, notifier, the environments override) are left
+exactly as they were. **Rollback:** run the workflow with `rollback` checked,
+or on the instance `sudo bash /tmp/remote-release.sh rollback`, which restores
+the newest backup and recreates `web`.
+
+No registry push, snapshot, or new AWS resource is involved. The GitHub
+Actions minutes come from the organization's included allowance.
+
+**Historical paths.** `/platform`, `/solutions`, `/security`, `/company`,
+`/writing`, `/changelog`, `/demo`, `/early-access`, `/terms` and `/privacy`
+redirect permanently to `/` (see `next.config.ts`). The old authenticated
+console routes (`/app`, `/sign-in`, `/api/...`) return an ordinary 404 and
+are not recreated.

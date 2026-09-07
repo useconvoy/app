@@ -4,9 +4,9 @@ import { ReleaseEnvelope } from "./ReleaseEnvelope";
 import { Section, SectionHeading } from "./Section";
 
 /**
- * Package, Qualify, Release as three rule-topped columns, each stage tagged
- * proposed. The envelope strip above carries the same version tag across
- * all three; each stage can expand into what goes in and what comes out.
+ * Package, Qualify, Release as three rule-topped columns. The envelope strip
+ * above carries the release identity across all three; each stage can expand
+ * into what goes in and what comes out.
  * Three columns from 900px, a numbered vertical process below.
  */
 export function ReleaseWorkflow() {
@@ -16,15 +16,7 @@ export function ReleaseWorkflow() {
         id="workflow-heading"
         eyebrow={WORKFLOW.eyebrow}
         heading={WORKFLOW.heading}
-        lead={
-          <>
-            {WORKFLOW.lead}{" "}
-            <span className="ml-1 inline-flex items-center gap-2 rounded-sm bg-warning-tint px-3 py-1 align-middle font-mono text-[13px] font-medium text-warning">
-              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-current" />
-              {WORKFLOW.badge}
-            </span>
-          </>
-        }
+        lead={WORKFLOW.lead}
       />
 
       <div className="mt-10">
@@ -35,9 +27,7 @@ export function ReleaseWorkflow() {
       <ol className="mt-10 grid gap-8 md:grid-cols-3 md:gap-8" aria-label="Release workflow stages">
         {WORKFLOW.stages.map((stage) => (
           <li key={stage.number} className="flex min-w-0 flex-col border-t border-strong pt-6">
-            <p className="font-mono text-[14px] font-medium tracking-[0.04em] text-accent">
-              {stage.number} <span className="text-muted">·</span> {WORKFLOW.stageTag}
-            </p>
+            <p className="font-mono text-[14px] font-medium tracking-[0.04em] text-accent">{stage.number}</p>
             <h3 className="type-h3 mt-3 text-primary">{stage.title}</h3>
             <p className="type-body mt-3 mb-4 text-secondary">{stage.body}</p>
             <Disclosure summary={WORKFLOW.detailLabel} summaryClassName="type-label text-primary" className="mt-auto border-t border-subtle pt-1">
@@ -63,7 +53,6 @@ export function ReleaseWorkflow() {
         ))}
       </ol>
 
-      <p className="type-small mt-10 max-w-[820px] border-l-2 border-warning pl-4 text-secondary">{WORKFLOW.disclaimer}</p>
     </Section>
   );
 }

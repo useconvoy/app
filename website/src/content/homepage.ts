@@ -1,9 +1,12 @@
 /**
- * The public copy of the landing page, verbatim from the approved brief
- * (Part XIII). Layout lives in the components; words live here so a copy
- * change never touches markup. Everything describes a product in
- * development: nothing on this page claims shipped functionality.
+ * The public copy of the landing page. Layout lives in the components; words
+ * live here so a copy change never touches markup. Everything describes a
+ * product in development: nothing on this page claims shipped functionality,
+ * pass states, timing, compatibility, or customers.
  */
+
+/** The inbox inquiries go to. Override at build time with NEXT_PUBLIC_CONTACT_EMAIL. */
+export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || "aws@deployconvoy.com";
 
 export const SITE = {
   name: "Convoy",
@@ -16,7 +19,6 @@ export const SITE = {
   ogDescription:
     "Convoy is building the runtime and release workflow for learned robot models. Starting with manipulation.",
   category: "Deployment infrastructure for physical AI",
-  tagline: "Precision Release",
   stage: "In development",
 } as const;
 
@@ -33,35 +35,30 @@ export const HERO = {
   eyebrow: SITE.category,
   headline: "Deploy AI models to real robots.",
   lede:
-    "Convoy is building the runtime and release workflow that connects trained models to robot sensors, compute, and controllers—starting with learned manipulation.",
+    "Convoy is building the runtime and release workflow that connects trained models to robot sensors, compute, and controllers, starting with learned manipulation.",
   primary: { href: "#contact", label: "Discuss your deployment" },
   secondary: { href: "#workflow", label: "Explore the workflow" },
-  stage:
-    "In development. We’re inviting robotics teams to help shape a focused deployment workflow.",
+  invitation: "Help shape the next robot deployment workflow.",
+  diagramHeading: "The robot-policy release",
   caption:
-    "A model is one part of the release. Convoy’s proposed workflow keeps its execution pipeline and target configuration together.",
-  diagramLabel: "Illustrative architecture",
+    "Conceptual architecture: a robot-policy release brings together the model, input and action processing, runtime, target configuration, and evaluation evidence.",
   endpoints: {
     model: { title: "Trained model", note: "weights and required assets", edge: "into the release" },
     robot: { title: "Robot controller", note: "your existing control and safety", edge: "deployed to" },
   },
 } as const;
 
-/** The release envelope: five field groups and one persistent identifier. */
+/** The release envelope: five field groups under one release identity. */
 export const ENVELOPE = {
-  title: "Convoy release",
-  /* An illustrative version tag. It is labeled as an example everywhere it
-   * appears and never changes across the page, which is the point being made. */
-  version: "release v0.3",
-  versionNote: "example",
+  label: "Robot-policy release",
+  identityLabel: "Release identity",
   fields: [
     { key: "model", label: "Model assets", note: "what was trained", items: ["policy weights", "preprocessing spec", "action space"] },
     { key: "processing", label: "Input / action processing", note: "how signals are shaped", items: ["sensor sync", "normalisation", "command limits"] },
     { key: "runtime", label: "Runtime", note: "what executes it", items: ["inference loop", "timing budget", "health checks"] },
     { key: "target", label: "Target configuration", note: "where it runs", items: ["robot config", "compute placement", "controller interface"] },
-    { key: "evidence", label: "Qualification evidence", note: "why it may be released", items: ["test runs", "checks passed", "sign-off"] },
+    { key: "evidence", label: "Evaluation evidence", note: "why it may be released", items: ["test conditions", "recorded results", "sign-off"] },
   ],
-  caption: "Labels are conceptual examples. Robot controller and safety remain outside Convoy ownership.",
 } as const;
 
 export type EnvelopeFieldKey = (typeof ENVELOPE.fields)[number]["key"];
@@ -104,7 +101,7 @@ export const WORKFLOW = {
   id: "workflow",
   eyebrow: "How it works",
   heading: "Package the system. Qualify the release.",
-  lead: "We’re building a workflow around the complete robot-policy release—not the model weights alone.",
+  lead: "We’re building a workflow around the complete robot-policy release.",
   stages: [
     {
       number: "01",
@@ -121,7 +118,7 @@ export const WORKFLOW = {
       body: "Check that release against defined task and runtime criteria. Keep the conditions and results connected to the configuration that was tested.",
       detail: {
         in: ["The identified release", "Defined task and runtime criteria", "Recorded test conditions"],
-        out: ["Qualification evidence attached to that release"],
+        out: ["Evaluation evidence attached to that release"],
       },
     },
     {
@@ -134,11 +131,7 @@ export const WORKFLOW = {
       },
     },
   ],
-  stageTag: "proposed",
-  badge: "Proposed workflow",
   detailLabel: "What goes in and what comes out",
-  disclaimer:
-    "This is the workflow we are building. Availability and support will be defined for each design partnership.",
   identityNote: "The same release identity carries through every stage.",
 } as const;
 
@@ -159,24 +152,23 @@ export const EXECUTION = {
   ],
   edges: ["observations", "tensors", "model outputs", "commands"],
   feedback: "new observations / robot state",
-  scope: "Convoy runtime scope · placement is configuration-dependent",
+  scope: "Convoy runtime scope",
   legend: [
     { kind: "execution", label: "Execution" },
     { kind: "release", label: "Release · configuration · evidence" },
-    { kind: "optional", label: "Optional, configuration-dependent placement" },
+    { kind: "optional", label: "Configuration-dependent placement" },
   ],
-  diagramLabel:
-    "Conceptual execution path. Placement of processing and model differs per configuration; repeatability of the release, not identical physical behaviour, is the goal. Not a hard real-time guarantee.",
+  caption: "Execution placement depends on the task’s compute, timing, and failure requirements.",
   placement: {
     question: "Where does inference run?",
     answer:
-      "That depends on the task. Robot-local, site-local, and cloud execution have different compute, timing, and failure requirements. Placement should be part of a defined deployment configuration—not an assumption.",
+      "Execution placement depends on the task’s compute, timing, and failure requirements. Robot-local, site-local, and cloud execution differ on all three, so placement is part of a defined deployment configuration rather than an assumption.",
     options: [
       { label: "Robot-local compute", note: "onboard the machine" },
       { label: "Site-local compute", note: "on the same network as the robot" },
       { label: "Cloud compute", note: "remote, with the network in the loop" },
     ],
-    rule: "Choose a defined path against the task’s measured requirements. These are not automatically migrating workloads or interchangeable targets.",
+    rule: "Each path is chosen against the task’s measured requirements. Workloads do not migrate between them on their own.",
   },
   repeatable: {
     question: "What makes a release repeatable?",
@@ -185,13 +177,12 @@ export const EXECUTION = {
   },
   boundaryDisclosure: {
     label: "Explore the release boundary",
-    intro:
-      "What one identified release keeps together. Field groups are shown as an illustrative example; this is not a product schema or an API.",
-    panelLabel: "Release record · conceptual",
-    panelStatus: "not an API",
-    panelFooter: "Field names are illustrative. They show what a release must carry, not a schema or command.",
+    intro: "What one identified release keeps together.",
+    panelLabel: "Release record",
+    panelStatus: "Conceptual",
+    panelFooter: "Field names are descriptive. They show what a release must carry.",
     fields: [
-      { key: "release", value: `${ENVELOPE.version.replace("release ", "")} · ${ENVELOPE.versionNote}`, note: "illustrative identifier" },
+      { key: "release", value: "one identity for the whole configuration" },
       { key: "model", value: "policy weights and required assets, by revision" },
       { key: "inputs", value: "which sensors, how frames and state are prepared" },
       { key: "actions", value: "output meaning: units, frame, and ordering for the controller" },
@@ -207,9 +198,10 @@ export const PARTNERSHIP = {
   id: "partnership",
   eyebrow: "Design partnership",
   heading: "Start with one model. One robot configuration. One clear deployment goal.",
+  lead: "Each partnership starts with a defined model, robot configuration, and deployment goal.",
   body: [
     "We’re looking for robotics teams working on learned manipulation: picking, packing, sorting, assembly, and related tasks.",
-    "A useful starting point is a trained policy, a defined robot setup, and a concrete deployment problem—such as changing model interfaces, target-runtime constraints, or a release process that is difficult to reproduce.",
+    "A useful starting point is a trained policy, a defined robot setup, and a concrete deployment problem, such as changing model interfaces, target-runtime constraints, or a release process that is difficult to reproduce.",
     "Together, we can define what the deployment includes, how it should be evaluated, and what a successful integration would need to demonstrate.",
   ],
   fitTitle: "A good fit usually has",
@@ -219,13 +211,12 @@ export const PARTNERSHIP = {
     { label: "A concrete deployment problem", note: "the part that is getting in the way today" },
   ],
   cta: { href: "#contact", label: "Discuss your deployment" },
-  note: "We do not assume that every model or robot configuration is supported. Compatibility and scope come first.",
 } as const;
 
 export const FAQ = {
   id: "faq",
-  eyebrow: "Boundaries",
-  heading: "A few important boundaries.",
+  eyebrow: "FAQ",
+  heading: "Questions about Convoy",
   items: [
     {
       question: "Is Convoy a robot manufacturer?",
@@ -253,7 +244,7 @@ export const FAQ = {
     {
       question: "What can I use today?",
       answer:
-        "Convoy is in development. The next step is a technical conversation about your deployment needs and whether a focused design partnership is a fit.",
+        "Convoy is in development. We’re speaking with robotics teams about focused design partnerships, with compatibility and scope defined around each deployment.",
     },
   ],
 } as const;
@@ -261,33 +252,26 @@ export const FAQ = {
 export const CONTACT = {
   id: "contact",
   eyebrow: "Contact",
-  heading: "What does your next robot deployment need?",
-  lead: "Tell us about the model, the robot, and the part that is getting in the way.",
-  formTitle: "Discuss your deployment",
-  fields: {
-    email: { label: "Work email", required: true },
-    company: { label: "Company or team", required: true },
-    blocker: { label: "What are you trying to deploy, and what is blocking you?", required: true },
-    name: { label: "Name", required: false },
-    hardware: { label: "Model and hardware", required: false },
-  },
-  optionalLabel: "Optional details",
-  privacyNote:
-    "Please do not include proprietary model files, credentials, or sensitive operational data.",
-  submit: "Send deployment details",
-  states: {
-    success: "Your deployment details have been received.",
-    error: "Your details could not be sent. Please try again. Your message is still here.",
-    /* The preview state: no verified delivery destination exists yet, so the
-     * form never claims receipt and never stores what was typed. */
-    unavailableTitle: "Sending is not available yet",
-    unavailable:
-      "This form is in preview while a receiving inbox is being set up. Nothing you enter here is sent or stored. Your details stay in the form.",
-    unavailableAfterSubmit:
-      "Your details were not sent, because sending is not available yet. Nothing was stored. Your message is still here.",
-    invalidSummary: "Please check the highlighted fields.",
-  },
+  heading: "Tell us about your next robot deployment.",
+  lead: "Share your model, robot configuration, and the deployment challenge you’re working through.",
+  blockTitle: "Discuss your deployment",
+  guidanceIntro: "A short note is enough. Useful things to include:",
+  guidance: [
+    { label: "Model", note: "what it was trained to do, and its input and output interfaces" },
+    { label: "Robot configuration", note: "the arm, sensors, compute, and controller it runs on" },
+    { label: "Deployment challenge", note: "what is getting in the way of the next release" },
+  ],
+  email: CONTACT_EMAIL,
+  subject: "Convoy deployment inquiry",
+  body: "Model:\n\nRobot configuration:\n\nDeployment challenge:\n",
+  button: "Email us about your deployment",
+  opens: "Opens your email app with the subject filled in.",
+  addressLabel: "Or write to us directly at",
+  privacyNote: "Please do not include proprietary model files, credentials, or sensitive operational data.",
 } as const;
+
+/** The mailto link, assembled once so the subject and template stay in step with the copy. */
+export const CONTACT_MAILTO = `mailto:${CONTACT.email}?subject=${encodeURIComponent(CONTACT.subject)}&body=${encodeURIComponent(CONTACT.body)}`;
 
 export const FOOTER = {
   wordmark: SITE.name,

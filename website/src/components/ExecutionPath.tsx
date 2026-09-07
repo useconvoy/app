@@ -89,7 +89,7 @@ function PathDiagram() {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        <span className="max-w-[60ch] font-mono text-[12px] tracking-[0.02em] text-muted">{EXECUTION.diagramLabel}</span>
+        <span className="max-w-[60ch] font-mono text-[12px] tracking-[0.02em] text-muted">{EXECUTION.caption}</span>
         <ul className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-secondary" aria-label="Diagram legend">
           {EXECUTION.legend.map((item) => (
             <li key={item.kind} className="inline-flex items-center gap-2">
@@ -163,7 +163,6 @@ function ReleaseRecordPanel() {
               <dt className="text-code-keyword">{field.key}</dt>
               <dd className="mb-1 sm:mb-0">
                 <span className={field.key === "release" ? "text-code-value" : "text-code-string"}>{field.value}</span>
-                {"note" in field && field.note ? <span className="text-inverse-muted"> · {field.note}</span> : null}
               </dd>
             </div>
           ))}

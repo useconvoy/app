@@ -8,7 +8,7 @@ export function DesignPartnerSection() {
     <Section id={PARTNERSHIP.id} labelledBy="partnership-heading">
       <div className="grid gap-10 rounded-lg border border-subtle bg-surface p-6 sm:p-10 md:grid-cols-2 md:gap-12 lg:p-14">
         <div>
-          <SectionHeading id="partnership-heading" eyebrow={PARTNERSHIP.eyebrow} heading={PARTNERSHIP.heading} />
+          <SectionHeading id="partnership-heading" eyebrow={PARTNERSHIP.eyebrow} heading={PARTNERSHIP.heading} lead={PARTNERSHIP.lead} />
           <div className="prose-measure mt-6 space-y-4 text-secondary type-body">
             {PARTNERSHIP.body.map((paragraph) => (
               <p key={paragraph}>{paragraph}</p>
@@ -29,7 +29,6 @@ export function DesignPartnerSection() {
               </li>
             ))}
           </ul>
-          <p className="type-small mt-5 text-secondary">{PARTNERSHIP.note}</p>
         </div>
       </div>
     </Section>

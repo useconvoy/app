@@ -6,7 +6,7 @@
  * Stage vocabulary:
  *   building   — what Convoy is building; the page may say "is building".
  *   intended   — an intended design or boundary, not shipped behavior.
- *   planned    — roadmap; must be labeled Planned wherever it appears.
+ *   planned    — roadmap; must be labeled as such wherever it appears.
  *   verified   — backed by evidence at `evidence`; none exist yet.
  */
 export type ClaimStage = "building" | "intended" | "planned" | "verified";
@@ -25,16 +25,16 @@ export interface Claim {
 export const CLAIMS: readonly Claim[] = [
   {
     id: "hero-building",
-    text: "Convoy is building the runtime and release workflow that connects trained models to robot sensors, compute, and controllers—starting with learned manipulation.",
+    text: "Convoy is building the runtime and release workflow that connects trained models to robot sensors, compute, and controllers, starting with learned manipulation.",
     stage: "building",
     surface: "hero",
     evidence: null,
     approved: true,
   },
   {
-    id: "workflow-intended",
-    text: "Package, Qualify, Release is the workflow being built; availability and support are defined per design partnership.",
-    stage: "intended",
+    id: "workflow-building",
+    text: "Package, Qualify, Release is the workflow being built around the complete robot-policy release.",
+    stage: "building",
     surface: "workflow",
     evidence: null,
     approved: true,
@@ -49,7 +49,7 @@ export const CLAIMS: readonly Claim[] = [
   },
   {
     id: "placement-conditional",
-    text: "Robot-local, site-local, and cloud placement are defined per deployment configuration, never assumed or automatically migrated.",
+    text: "Execution placement depends on the task’s compute, timing, and failure requirements; workloads do not migrate on their own.",
     stage: "intended",
     surface: "execution",
     evidence: null,
@@ -60,6 +60,14 @@ export const CLAIMS: readonly Claim[] = [
     text: "No universal compatibility is assumed; support must be defined per model, processing pipeline, runtime, hardware, and controller configuration.",
     stage: "intended",
     surface: "faq, partnership",
+    evidence: null,
+    approved: true,
+  },
+  {
+    id: "availability",
+    text: "Convoy is in development and is speaking with robotics teams about focused design partnerships, with compatibility and scope defined around each deployment.",
+    stage: "building",
+    surface: "faq",
     evidence: null,
     approved: true,
   },

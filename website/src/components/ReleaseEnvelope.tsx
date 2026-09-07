@@ -2,27 +2,26 @@ import { ENVELOPE, type EnvelopeFieldKey } from "@/content/homepage";
 
 /**
  * The release envelope, the page's one persistent brand object: a dashed
- * oxide boundary with its version tag on the border, holding five field
- * groups. Each group names its role in mono and carries a few conceptual
- * example chips; the evidence group takes the release line style, because
- * evidence is what lets a release move. `highlight` marks the groups a
- * neighbouring section is talking about; `compact` is the one-line strip.
+ * oxide boundary with a descriptive tag on the border, holding five field
+ * groups. Each group names its role in mono and carries a few example
+ * chips; the evidence group takes the release line style, because evidence
+ * is what lets a release move. `highlight` marks the groups a neighbouring
+ * section is talking about; `compact` is the one-line strip, tagged with
+ * the release identity that every stage shares.
  */
 export function ReleaseEnvelope({
   highlight = [],
   compact = false,
-  caption = true,
   className = "",
 }: {
   highlight?: readonly EnvelopeFieldKey[];
   compact?: boolean;
-  caption?: boolean;
   className?: string;
 }) {
   if (compact) {
     return (
       <div className={`relative rounded-lg border-[1.5px] border-dashed border-accent bg-surface px-5 pt-5 pb-4 ${className}`} data-envelope>
-        <Tag />
+        <Tag label={ENVELOPE.identityLabel} />
         <ul className="flex flex-wrap gap-x-5 gap-y-2" aria-label="Release field groups">
           {ENVELOPE.fields.map((field) => {
             const on = highlight.includes(field.key);
@@ -39,9 +38,9 @@ export function ReleaseEnvelope({
   }
 
   return (
-    <figure className={`m-0 ${className}`}>
+    <div className={className}>
       <div className="relative rounded-lg border-[1.5px] border-dashed border-accent bg-surface px-4 pt-7 pb-4 sm:px-6 sm:pb-6" data-envelope>
-        <Tag />
+        <Tag label={ENVELOPE.label} />
         <ul className="grid gap-3 sm:grid-cols-2" aria-label="Release field groups">
           {ENVELOPE.fields.map((field) => {
             const evidence = field.key === "evidence";
@@ -73,25 +72,15 @@ export function ReleaseEnvelope({
           })}
         </ul>
       </div>
-      {caption ? (
-        <figcaption className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-          <span className="font-mono text-[12px] tracking-[0.02em] text-muted">{ENVELOPE.caption}</span>
-          <span className="inline-flex items-center gap-2 text-[13px] text-secondary">
-            <i aria-hidden="true" className="inline-block w-7 border-t-[1.5px] border-dashed border-accent" />
-            Release · configuration · evidence
-          </span>
-        </figcaption>
-      ) : null}
-    </figure>
+    </div>
   );
 }
 
-/** The version tag, sitting on the envelope's top border. */
-function Tag() {
+/** The descriptive tag, sitting on the envelope's top border. */
+function Tag({ label }: { label: string }) {
   return (
-    <span className="absolute -top-[11px] left-4 inline-flex items-center gap-2 bg-surface px-2 font-mono text-[13px] font-medium tracking-[0.02em] text-accent sm:left-6">
-      <span>{ENVELOPE.version}</span>
-      <span className="font-normal text-muted">· {ENVELOPE.versionNote}</span>
+    <span className="absolute -top-[11px] left-4 inline-flex items-center bg-surface px-2 font-mono text-[13px] font-medium tracking-[0.02em] text-accent sm:left-6">
+      {label}
     </span>
   );
 }

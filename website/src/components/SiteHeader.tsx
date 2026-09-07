@@ -6,8 +6,8 @@ import { NAV, SITE } from "@/content/homepage";
 
 /**
  * 72px header on desktop, 64px on mobile, in flow rather than sticky so
- * nothing ever covers an anchor target or a focused control. Wordmark and
- * its mono tag left, native anchor links and one primary action right.
+ * nothing ever covers an anchor target or a focused control. Wordmark left,
+ * native anchor links and one primary action right.
  * Below 900px only the wordmark, Contact, and a real menu button remain;
  * the button reports aria-expanded, the menu closes on Escape and hands
  * focus back to the button, and links close it on click.
@@ -34,11 +34,8 @@ export function SiteHeader() {
   return (
     <header className="relative border-b border-subtle bg-background">
       <div className="mx-auto flex h-16 w-full max-w-(--content-max) items-center justify-between gap-6 px-5 sm:px-8 md:h-[72px] md:px-10 lg:px-16">
-        <a href="#top" className="inline-flex items-baseline gap-3 text-primary no-underline" aria-label={`${SITE.name} home`}>
-          <span className="text-[20px] font-semibold tracking-[-0.02em]">{SITE.name}</span>
-          <span className="hidden whitespace-nowrap font-mono text-[12px] font-medium uppercase tracking-[0.06em] text-muted sm:inline">
-            {SITE.tagline}
-          </span>
+        <a href="#top" className="text-[20px] font-semibold tracking-[-0.02em] text-primary no-underline" aria-label={`${SITE.name} home`}>
+          {SITE.name}
         </a>
 
         <nav aria-label="Main" className="hidden items-center gap-2 md:flex">
