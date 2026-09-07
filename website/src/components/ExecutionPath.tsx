@@ -72,12 +72,12 @@ function PathDiagram() {
       {/* The runtime scope bracket: dashed oxide under the three middle nodes, from 900px. */}
       <div aria-hidden="true" className="relative mt-3 hidden h-10 md:block">
         <div className="absolute top-0 right-[calc(20%+20px)] left-[calc(20%+20px)] h-3 rounded-b border-x-[1.5px] border-b-[1.5px] border-dashed border-accent">
-          <span className="absolute top-3 left-1/2 -translate-x-1/2 whitespace-nowrap bg-background px-2 pt-1 font-mono text-[11px] tracking-[0.02em] text-accent">
+          <span className="absolute top-3 left-1/2 -translate-x-1/2 whitespace-nowrap bg-background px-2 pt-1 font-mono text-[13px] tracking-[0.02em] text-accent">
             {EXECUTION.scope}
           </span>
         </div>
       </div>
-      <p className="mt-3 font-mono text-[11px] tracking-[0.02em] text-accent md:hidden">{EXECUTION.scope}</p>
+      <p data-scope-text className="mt-3 font-mono text-[13px] tracking-[0.02em] text-accent md:sr-only">{EXECUTION.scope}</p>
 
       {/* Feedback: new observations and robot state travel back to the sensors. */}
       <div className="mt-2 flex items-center gap-3 type-small text-secondary">
@@ -89,8 +89,8 @@ function PathDiagram() {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        <span className="max-w-[60ch] font-mono text-[12px] tracking-[0.02em] text-muted">{EXECUTION.caption}</span>
-        <ul className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-secondary" aria-label="Diagram legend">
+        <span className="max-w-[60ch] font-mono text-[13px] tracking-[0.02em] text-secondary">{EXECUTION.caption}</span>
+        <ul className="flex flex-wrap gap-x-6 gap-y-2 text-[14px] text-secondary" aria-label="Diagram legend">
           {EXECUTION.legend.map((item) => (
             <li key={item.kind} className="inline-flex items-center gap-2">
               <i
@@ -123,11 +123,11 @@ function NodeAndEdge({ node, edge }: { node: (typeof EXECUTION.nodes)[number]; e
                 : "border-strong bg-surface-subtle text-primary"
           }`}
         >
-          <span className="type-small font-medium">{node.label}</span>
-          <span className="font-mono text-[11px] tracking-[0.02em] text-secondary">{node.note}</span>
+          <span className="text-[16px] leading-snug font-medium">{node.label}</span>
+          <span className="font-mono text-[13px] tracking-[0.02em] text-secondary">{node.note}</span>
         </div>
         <span
-          className={`text-center font-mono text-[11px] tracking-[0.02em] ${
+          className={`text-center font-mono text-[13px] tracking-[0.02em] ${
             node.optional ? "border-t-[1.5px] border-dotted border-muted pt-2 text-muted" : "text-muted"
           }`}
         >
@@ -152,7 +152,7 @@ function ReleaseRecordPanel() {
   const { panelLabel, panelStatus, panelFooter, fields } = EXECUTION.boundaryDisclosure;
   return (
     <div className="mt-5 rounded-lg bg-inverse text-inverse-text">
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-inverse-muted/30 px-4 py-3 font-mono text-[12px] uppercase tracking-[0.06em] text-inverse-muted">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-inverse-muted/30 px-4 py-3 font-mono text-[13px] uppercase tracking-[0.06em] text-inverse-muted">
         <span>{panelLabel}</span>
         <span>{panelStatus}</span>
       </div>
@@ -168,7 +168,7 @@ function ReleaseRecordPanel() {
           ))}
         </dl>
       </div>
-      <div className="border-t border-inverse-muted/30 px-4 py-3 font-mono text-[12px] tracking-[0.02em] text-inverse-muted">{panelFooter}</div>
+      <div className="border-t border-inverse-muted/30 px-4 py-3 font-mono text-[13px] tracking-[0.02em] text-inverse-muted">{panelFooter}</div>
     </div>
   );
 }

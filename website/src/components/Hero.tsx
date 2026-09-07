@@ -58,9 +58,12 @@ function Endpoint({ kind }: { kind: "model" | "robot" }) {
     </span>
   );
   const node = (
-    <div className={`flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded border px-4 py-3 ${kind === "robot" ? "border-dashed border-strong bg-transparent" : "border-strong bg-surface-subtle"}`}>
-      <span className="type-label text-primary">{copy.title}</span>
-      <span className="font-mono text-[11px] tracking-[0.02em] text-secondary">{copy.note}</span>
+    <div
+      data-endpoint={kind}
+      className={`flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded border px-4 py-3 ${kind === "robot" ? "border-dashed border-strong bg-transparent" : "border-strong bg-surface-subtle"}`}
+    >
+      <span className="text-[16px] leading-snug font-medium text-primary">{copy.title}</span>
+      <span className="font-mono text-[13px] tracking-[0.02em] text-secondary">{copy.note}</span>
     </div>
   );
   return kind === "model" ? (

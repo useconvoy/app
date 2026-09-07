@@ -25,7 +25,7 @@ export function Problem() {
         </div>
 
         <div className="md:col-span-7 md:pt-2">
-          <div className="grid grid-cols-[minmax(160px,3fr)_9fr] gap-6 border-t border-strong py-3 font-mono text-[12px] uppercase tracking-[0.06em] text-muted max-sm:hidden">
+          <div className="grid grid-cols-[minmax(160px,3fr)_9fr] gap-6 border-t border-strong py-3 font-mono text-[13px] uppercase tracking-[0.06em] text-muted max-sm:hidden">
             <span aria-hidden="true" />
             <span>{PROBLEM.columnLabel}</span>
           </div>

@@ -200,12 +200,24 @@ test.describe("landing page", () => {
     await expect(nodes.nth(0)).toContainText("Sensors");
     await expect(nodes.nth(4)).toContainText("Robot controller");
     await expect(nodes.nth(4)).toContainText("outside Convoy");
-    await expect(page.locator("#execution")).toContainText("Convoy runtime scope");
+    await expect(page.locator("[data-scope-text]")).toBeVisible();
+    await expect(page.locator("[data-scope-text]")).toHaveText("Convoy runtime scope");
+    // Node labels stay readable on mobile: 16px labels, 13px metadata.
+    const sizes = await nodes.first().locator("span").evaluateAll((els) => els.map((el) => parseFloat(getComputedStyle(el).fontSize)));
+    expect(sizes[0]).toBeGreaterThanOrEqual(16);
+    expect(sizes[1]).toBeGreaterThanOrEqual(13);
+    // And on desktop the same scope text is exposed to assistive technology.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const exposed = await page.locator("[data-scope-text]").evaluate((el) => el.closest("[aria-hidden='true']") === null && getComputedStyle(el).display !== "none");
+    expect(exposed, "scope text stays in the accessibility tree on desktop").toBe(true);
     // Hero: model, release, controller read top to bottom.
     const hero = page.locator("#top figure");
-    const order = await hero.locator("[data-envelope], .type-label").evaluateAll((els) => els.map((el) => el.textContent?.trim().slice(0, 18)));
-    expect(order[0]).toContain("Trained model");
-    expect(order[order.length - 1]).toContain("Robot controller");
+    const order = await hero.locator("[data-endpoint], [data-envelope]").evaluateAll((els) =>
+      els.map((el) => ({ kind: el.getAttribute("data-endpoint") ?? "release", top: el.getBoundingClientRect().top })),
+    );
+    expect(order.map((o) => o.kind)).toEqual(["model", "release", "robot"]);
+    expect(order[0].top).toBeLessThan(order[1].top);
+    expect(order[1].top).toBeLessThan(order[2].top);
     await noHorizontalOverflow(page);
   });
 

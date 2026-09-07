@@ -28,7 +28,7 @@ export function ReleaseEnvelope({
             return (
               <li key={field.key} className="flex items-center gap-2" data-field={field.key}>
                 <span aria-hidden="true" className={`h-2 w-2 flex-none rounded-full ${on ? "bg-accent" : "bg-strong"}`} />
-                <span className={`type-small ${on ? "font-medium text-primary" : "text-secondary"}`}>{field.label}</span>
+                <span className={`text-[15px] leading-snug ${on ? "font-medium text-primary" : "text-secondary"}`}>{field.label}</span>
               </li>
             );
           })}
@@ -52,14 +52,14 @@ export function ReleaseEnvelope({
                 className={`flex min-w-0 flex-col gap-2 rounded border bg-surface px-4 py-3 ${evidence ? "border-dashed border-accent sm:col-span-2" : on ? "border-accent" : "border-subtle"}`}
               >
                 <div>
-                  <p className="type-small font-medium text-primary">{field.label}</p>
-                  <p className="font-mono text-[11px] leading-snug tracking-[0.02em] text-secondary">{field.note}</p>
+                  <p className="text-[16px] leading-snug font-medium text-primary">{field.label}</p>
+                  <p className="mt-[2px] font-mono text-[13px] leading-snug tracking-[0.02em] text-secondary">{field.note}</p>
                 </div>
                 <ul className="flex flex-wrap gap-2" aria-label={`${field.label} examples`}>
                   {field.items.map((item) => (
                     <li
                       key={item}
-                      className={`whitespace-nowrap rounded-sm border px-2 py-[3px] font-mono text-[12px] leading-[1.4] ${
+                      className={`whitespace-nowrap rounded-sm border px-2 py-[3px] font-mono text-[13px] leading-[1.4] ${
                         evidence ? "border-transparent bg-accent-tint text-accent-hover" : "border-subtle bg-surface-subtle text-secondary"
                       }`}
                     >
