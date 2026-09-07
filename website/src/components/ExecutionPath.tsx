@@ -68,14 +68,14 @@ function ReleaseRecordPanel() {
   const { panelLabel, panelStatus, panelFooter, groups } = EXECUTION.boundaryDisclosure;
   return (
     <div className="mt-5 rounded-lg bg-inverse text-inverse-text">
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-inverse-muted/30 px-4 py-3 font-mono text-[0.8125rem] uppercase tracking-[0.06em] text-inverse-muted">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-inverse-muted/30 px-4 py-3 font-mono text-sm uppercase tracking-[0.06em] text-inverse-muted">
         <span>{panelLabel}</span>
         <span>{panelStatus}</span>
       </div>
       <div className="px-4 py-4">
         <dl className="type-code grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-[136px_minmax(0,1fr)]">
           {groups.flatMap((group) => [
-            <dt key={group.title} className="mt-3 font-mono text-xs uppercase tracking-[0.06em] text-inverse-muted first:mt-0 sm:col-span-2">
+            <dt key={group.title} className="mt-3 font-mono text-sm uppercase tracking-[0.06em] text-inverse-muted first:mt-0 sm:col-span-2">
               {group.title}
             </dt>,
             ...group.rows.flatMap((row) => [
@@ -89,7 +89,7 @@ function ReleaseRecordPanel() {
           ])}
         </dl>
       </div>
-      <div className="border-t border-inverse-muted/30 px-4 py-3 font-mono text-[0.8125rem] tracking-[0.02em] text-inverse-muted">{panelFooter}</div>
+      <div className="border-t border-inverse-muted/30 px-4 py-3 font-mono text-sm tracking-[0.02em] text-inverse-muted">{panelFooter}</div>
     </div>
   );
 }

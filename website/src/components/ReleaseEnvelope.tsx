@@ -14,7 +14,7 @@ export function ReleaseEnvelope({ className = "" }: { className?: string }) {
   return (
     <div className={className}>
       <div className="relative rounded-lg border-[1.5px] border-dashed border-accent bg-surface px-4 pt-6 pb-3 sm:px-5" data-envelope>
-        <span className="absolute -top-[11px] left-4 inline-flex items-center bg-surface px-2 font-mono text-[0.8125rem] font-medium tracking-[0.02em] text-accent sm:left-5">
+        <span className="absolute -top-[11px] left-4 inline-flex items-center bg-surface px-2 font-mono text-sm font-medium tracking-[0.02em] text-accent sm:left-5">
           {ENVELOPE.label}
         </span>
         <ul className="grid gap-x-6 sm:grid-cols-2" aria-label="Parts of a release">
@@ -53,7 +53,7 @@ export function ReleaseDetails({ className = "" }: { className?: string }) {
                 {field.items.map((item) => (
                   <li
                     key={item}
-                    className={`rounded-sm border px-2 py-[2px] font-mono text-[0.8125rem] leading-[1.4] ${
+                    className={`rounded-sm border px-2 py-[2px] font-mono text-sm leading-[1.4] ${
                       field.key === "evidence" ? "border-transparent bg-accent-tint text-accent-hover" : "border-subtle bg-surface-subtle text-secondary"
                     }`}
                   >

@@ -223,7 +223,7 @@ export const PARTNERSHIP = {
   id: "partnership",
   eyebrow: "Design partnership",
   heading: "Start with one deployment.",
-  lead: "We work with robotics teams on learned manipulation: picking, packing, sorting, assembly, and related tasks. Each partnership starts with a defined model, robot configuration, and deployment goal.",
+  lead: "We’re speaking with robotics teams working on learned manipulation: picking, packing, sorting, assembly, and related tasks. Each potential partnership starts with a defined model, robot configuration, and deployment goal.",
   fitTitle: "A good fit usually has",
   fit: [
     { label: "A trained policy", note: "a model that already performs the task in some setting" },

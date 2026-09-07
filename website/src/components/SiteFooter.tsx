@@ -25,7 +25,7 @@ export function SiteFooter() {
             </ul>
           </nav>
         </div>
-        <div className="mt-8 flex flex-wrap justify-between gap-x-6 gap-y-2 border-t border-subtle pt-4 font-mono text-[0.8125rem] tracking-[0.02em] text-muted">
+        <div className="mt-8 flex flex-wrap justify-between gap-x-6 gap-y-2 border-t border-subtle pt-4 font-mono text-sm tracking-[0.02em] text-muted">
           <span>{FOOTER.copyright(year)}</span>
           <Link href="/" className="hover:text-primary hover:underline">
             {FOOTER.domain}

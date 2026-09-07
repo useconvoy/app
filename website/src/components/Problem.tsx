@@ -13,7 +13,7 @@ export function Problem() {
           {PROBLEM.dependencies.map((item, index) => (
             <li key={item.label} className="grid gap-1 border-b border-subtle py-3.5 sm:grid-cols-[minmax(150px,3fr)_9fr] sm:gap-6 sm:py-5">
               <h3 className="flex items-baseline gap-3 type-body font-medium text-primary">
-                <span className="font-mono text-[0.8125rem] font-medium text-muted" aria-hidden="true">
+                <span className="font-mono text-sm font-medium text-muted" aria-hidden="true">
                   {String(index + 1).padStart(2, "0")}
                 </span>
                 {item.label}
