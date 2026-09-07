@@ -41,6 +41,7 @@ pnpm run lint
 pnpm run check:tokens     # hex literals only in tokens.css
 pnpm run build
 pnpm run test:e2e         # against the production build; writes tests/screenshots/
+node scripts/measure-page.mjs http://127.0.0.1:3100   # section heights, visible words, hero CTA position
 pnpm run verify           # all of the above, in order
 ```
 

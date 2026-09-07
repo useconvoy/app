@@ -38,7 +38,6 @@ export const HERO = {
     "Convoy is building the runtime and release workflow that connects trained models to robot sensors, compute, and controllers, starting with learned manipulation.",
   primary: { href: "#contact", label: "Discuss your deployment" },
   secondary: { href: "#workflow", label: "Explore the workflow" },
-  invitation: "Help shape the next robot deployment workflow.",
   diagramHeading: "The robot-policy release",
   caption:
     "Conceptual architecture: a robot-policy release brings together the model, input and action processing, runtime, target configuration, and evaluation evidence.",
@@ -55,6 +54,8 @@ export const ENVELOPE = {
   label: "Robot-policy release",
   identityLabel: "Release identity",
   identityNote: "name · configuration · evidence reference",
+  detailsLabel: "See release details",
+  detailsIntro: "Examples of what each part of a release covers. Names are conceptual, not a schema.",
   fields: [
     { key: "model", label: "Model assets", note: "the trained policy", items: ["policy weights", "preprocessing spec", "action space"] },
     { key: "processing", label: "Input / action processing", note: "how signals are shaped", items: ["sensor alignment", "normalisation", "command translation"] },
@@ -70,11 +71,7 @@ export const PROBLEM = {
   id: "problem",
   eyebrow: "The gap",
   heading: "A trained model is not a robot deployment.",
-  lead: "A model can learn a task without carrying everything a robot needs to perform it.",
-  body: [
-    "The camera inputs must match. The actions must make sense to the controller. The runtime must fit the compute. And the resulting system needs to be evaluated for the task.",
-    "When the model changes, those assumptions can change with it.",
-  ],
+  lead: "A model can learn a task without carrying everything a robot needs to perform it. When the model changes, those assumptions change with it.",
   columnLabel: "What the deployment must carry",
   dependencies: [
     {
@@ -103,13 +100,13 @@ export const PROBLEM = {
 export const WORKFLOW = {
   id: "workflow",
   eyebrow: "How it works",
-  heading: "Package the system. Qualify the release.",
-  lead: "We’re building a workflow around the complete robot-policy release.",
+  heading: "Package. Qualify. Release.",
+  lead: "One release identity carries the model, processing, runtime, target configuration, and evidence through every step.",
   stages: [
     {
       number: "01",
       title: "Package",
-      body: "Bring the model, input and action processing, runtime dependencies, and target configuration together.",
+      body: "Bring the model, input and action processing, runtime dependencies, and target configuration together as one identified release.",
       detail: {
         in: ["Model revision and assets", "Input and action processing definitions", "Runtime dependencies", "Target configuration"],
         out: ["One identified release"],
@@ -118,7 +115,7 @@ export const WORKFLOW = {
     {
       number: "02",
       title: "Qualify",
-      body: "Check that release against defined task and runtime criteria. Keep the conditions and results connected to the configuration that was tested.",
+      body: "Check that release against defined task and runtime criteria, and keep the conditions and results attached to it.",
       detail: {
         in: ["The identified release", "Defined task and runtime criteria", "Recorded test conditions"],
         out: ["Evaluation evidence attached to that release"],
@@ -127,15 +124,14 @@ export const WORKFLOW = {
     {
       number: "03",
       title: "Release",
-      body: "Carry the identified configuration into deployment, with a clear basis for observing behavior and managing subsequent changes.",
+      body: "Carry the identified configuration into deployment, with a clear basis for observing behavior and managing the next change.",
       detail: {
         in: ["The qualified release", "Activation preconditions for the target"],
         out: ["A deployed, identified configuration", "A basis for observation and the next revision"],
       },
     },
   ],
-  detailLabel: "What goes in and what comes out",
-  identityNote: "The same release identity carries through every stage.",
+  detailLabel: (title: string) => `What goes in and out of ${title}`,
 } as const;
 
 export const EXECUTION = {
@@ -145,7 +141,7 @@ export const EXECUTION = {
   lead: "From an observation to a controller command, the details matter.",
   path: "Sensors → Input processing → Model → Action processing → Robot controller",
   boundary:
-    "Convoy’s intended runtime sits around model execution and its interfaces. Your robot’s controller and safety systems remain explicit parts of the system.",
+    "Convoy’s intended runtime covers input processing, the model, and action processing. Your controller and safety systems stay outside it.",
   nodes: [
     { key: "sensors", label: "Sensors", note: "cameras · joints · force", site: "on the robot", owner: "robot", optional: false },
     { key: "input", label: "Input processing", note: "align · normalise", site: "placement varies", owner: "convoy", optional: true },
@@ -164,11 +160,12 @@ export const EXECUTION = {
     { kind: "release", label: "Release · configuration · evidence" },
     { kind: "optional", label: "Configuration-dependent placement" },
   ],
-  caption: "Execution placement depends on the task’s compute, timing, and failure requirements.",
+  caption:
+    "Convoy’s intended runtime covers input processing, the model, and action processing; your controller and safety systems stay outside it. Where each step runs depends on the task’s compute, timing, and failure requirements.",
   placement: {
     question: "Where does inference run?",
     answer:
-      "Execution placement depends on the task’s compute, timing, and failure requirements. Robot-local, site-local, and cloud execution differ on all three, so placement is part of a defined deployment configuration rather than an assumption.",
+      "Robot-local, site-local, and cloud execution differ in compute, timing, and failure behavior, so placement is part of a defined deployment configuration rather than an assumption.",
     options: [
       { label: "Robot-local compute", note: "onboard the machine" },
       { label: "Site-local compute", note: "on the same network as the robot" },
@@ -225,13 +222,8 @@ export const EXECUTION = {
 export const PARTNERSHIP = {
   id: "partnership",
   eyebrow: "Design partnership",
-  heading: "Start with one model. One robot configuration. One clear deployment goal.",
-  lead: "Each partnership starts with a defined model, robot configuration, and deployment goal.",
-  body: [
-    "We’re looking for robotics teams working on learned manipulation: picking, packing, sorting, assembly, and related tasks.",
-    "A useful starting point is a trained policy, a defined robot setup, and a concrete deployment problem, such as changing model interfaces, target-runtime constraints, or a release process that is difficult to reproduce.",
-    "Together, we can define what the deployment includes, how it should be evaluated, and what a successful integration would need to demonstrate.",
-  ],
+  heading: "Start with one deployment.",
+  lead: "We work with robotics teams on learned manipulation: picking, packing, sorting, assembly, and related tasks. Each partnership starts with a defined model, robot configuration, and deployment goal.",
   fitTitle: "A good fit usually has",
   fit: [
     { label: "A trained policy", note: "a model that already performs the task in some setting" },
@@ -247,12 +239,9 @@ export const FAQ = {
   heading: "Questions about Convoy",
   items: [
     {
-      question: "Is Convoy a robot manufacturer?",
-      answer: "No. Convoy is building software infrastructure for deploying learned models onto robots.",
-    },
-    {
-      question: "Does Convoy train the model?",
-      answer: "Our initial focus is deployment: the execution pipeline and release workflow around a trained policy.",
+      question: "What can I use today?",
+      answer:
+        "Convoy is in development. We’re speaking with robotics teams about focused design partnerships, with compatibility and scope defined around each deployment.",
     },
     {
       question: "Will it work with any model or robot?",
@@ -260,19 +249,21 @@ export const FAQ = {
         "No universal compatibility is assumed. Support must be defined for the model, processing pipeline, runtime, hardware, and controller configuration.",
     },
     {
-      question: "Does inference have to run in the cloud?",
-      answer:
-        "No. The appropriate placement depends on the target system and task. We are not promising automatic movement between edge and cloud.",
-    },
-    {
       question: "Does Convoy replace the robot’s controller or safety system?",
       answer:
         "No. Those responsibilities need explicit interfaces and boundaries. Release evaluation is not a substitute for the robot’s safety system or a safety certification.",
     },
     {
-      question: "What can I use today?",
-      answer:
-        "Convoy is in development. We’re speaking with robotics teams about focused design partnerships, with compatibility and scope defined around each deployment.",
+      question: "Does inference have to run in the cloud?",
+      answer: "No. The appropriate placement depends on the target system and task. We are not promising automatic movement between edge and cloud.",
+    },
+    {
+      question: "Does Convoy train the model?",
+      answer: "Our initial focus is deployment: the execution pipeline and release workflow around a trained policy.",
+    },
+    {
+      question: "Is Convoy a robot manufacturer?",
+      answer: "No. Convoy is building software infrastructure for deploying learned models onto robots.",
     },
   ],
 } as const;
@@ -282,19 +273,18 @@ export const CONTACT = {
   eyebrow: "Contact",
   heading: "Tell us about your next robot deployment.",
   lead: "Share your model, robot configuration, and the deployment challenge you’re working through.",
-  blockTitle: "Discuss your deployment",
-  guidanceIntro: "A short note is enough. Useful things to include:",
-  guidance: [
-    { label: "Model", note: "what it was trained to do, and its input and output interfaces" },
-    { label: "Robot configuration", note: "the arm, sensors, compute, and controller it runs on" },
-    { label: "Deployment challenge", note: "what is getting in the way of the next release" },
-  ],
   email: CONTACT_EMAIL,
   subject: "Convoy deployment inquiry",
   body: "Model:\n\nRobot configuration:\n\nDeployment challenge:\n",
   button: "Email us about your deployment",
   opens: "Opens your email app with the subject filled in.",
   addressLabel: "Email",
+  guidanceIntro: "Helpful to include",
+  guidance: [
+    { label: "Model", note: "what it does and its interfaces" },
+    { label: "Robot configuration", note: "arm, sensors, compute, controller" },
+    { label: "Deployment challenge", note: "what blocks the next release" },
+  ],
   privacyNote: "Please do not include proprietary model files, credentials, or sensitive operational data.",
 } as const;
 

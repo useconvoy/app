@@ -77,8 +77,8 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-subtle bg-background">
-      <div className="mx-auto flex h-16 w-full max-w-(--content-max) items-center justify-between gap-6 px-5 sm:px-8 md:h-[72px] md:px-10 lg:px-16">
-        <a href="#top" className="text-[20px] font-semibold tracking-[-0.02em] text-primary no-underline" aria-label={`${SITE.name} home`}>
+      <div className="mx-auto flex min-h-16 w-full max-w-(--content-max) flex-wrap items-center justify-between gap-x-6 gap-y-2 px-5 py-2 sm:px-8 md:min-h-[72px] md:px-10 lg:px-16">
+        <a href="#top" className="text-xl font-semibold tracking-[-0.02em] text-primary no-underline" aria-label={`${SITE.name} home`}>
           {SITE.name}
         </a>
 
@@ -88,7 +88,7 @@ export function SiteHeader() {
               key={link.href}
               href={link.href}
               aria-current={isCurrent(link.href)}
-              className="inline-flex min-h-12 items-center rounded px-3 text-[16px] font-medium text-secondary transition-colors duration-(--duration-feedback) hover:bg-surface-subtle hover:text-primary aria-[current]:text-primary aria-[current]:underline aria-[current]:decoration-accent aria-[current]:decoration-1 aria-[current]:underline-offset-[6px]"
+              className="inline-flex min-h-12 items-center rounded px-3 text-base font-medium text-secondary transition-colors duration-(--duration-feedback) hover:bg-surface-subtle hover:text-primary aria-[current]:text-primary aria-[current]:underline aria-[current]:decoration-accent aria-[current]:decoration-1 aria-[current]:underline-offset-[6px]"
             >
               {link.label}
             </a>
@@ -105,7 +105,7 @@ export function SiteHeader() {
           <button
             ref={buttonRef}
             type="button"
-            className="btn btn-secondary min-w-12 gap-2 px-3 text-[14px]"
+            className="btn btn-secondary min-w-12 gap-2 px-3 text-sm"
             aria-expanded={open}
             aria-controls={menuId}
             onClick={() => setOpen((value) => !value)}
