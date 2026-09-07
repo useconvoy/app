@@ -484,6 +484,7 @@ test.describe("landing page", () => {
     await button.click();
     await expect(trace).toHaveAttribute("data-trace", "done");
     await expect(button).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator("[data-trace-status]")).toHaveText("Highlight cleared");
     await expect(page.getByRole("group", { name: "Convoy runtime boundary" })).toBeVisible();
     // Hero: no autoplay, same toggle.
     await page.evaluate(() => window.scrollTo(0, 0));
@@ -506,13 +507,19 @@ test.describe("landing page", () => {
     const trace = page.locator("[data-trace]");
     const button = page.locator("[data-trace-button]");
     const status = page.locator("[data-trace-status]");
+    const progress = page.locator("[data-trace-progress]");
     await trace.scrollIntoViewIfNeeded();
     await expect(trace).toHaveAttribute("data-trace", "done", { timeout: 6000 });
     await page.screenshot({ path: "tests/screenshots/trace-1440-before.png" });
     await button.click();
     await expect(button).toHaveText("Tracing…");
-    await expect(status).toContainText("Tracing");
-    await page.waitForTimeout(1100);
+    await expect(status).toHaveText("Tracing the path");
+    await expect(progress).toContainText("Tracing");
+    // The visible progress names successive nodes; the live announcement does not change between them.
+    await page.waitForTimeout(300);
+    const earlyProgress = await progress.textContent();
+    const earlyLive = await status.textContent();
+    await page.waitForTimeout(800);
     await page.screenshot({ path: "tests/screenshots/trace-1440-mid.png" });
     const mid = await trace.evaluate((root) => {
       const nodes = Array.from(root.querySelectorAll<HTMLElement>(".trace-node")).map((el) => ({
@@ -530,10 +537,15 @@ test.describe("landing page", () => {
     expect(mid.nodes.filter((n) => n.border !== "rgb(166, 61, 34)").length, "nodes not yet reached are still at base").toBeGreaterThanOrEqual(1);
     const drawn = mid.overlays.filter((o) => o.opacity === "1" && o.offset < 0.5);
     expect(drawn.length, "at least one connector is drawn in terracotta at the midpoint").toBeGreaterThanOrEqual(1);
-    await expect(status).toContainText(/Input processing|Model|Action processing/);
+    await expect(progress).toContainText(/Input processing|Model|Action processing/);
+    expect(await progress.textContent()).not.toBe(earlyProgress);
+    expect(await status.textContent(), "intermediate nodes are not announced").toBe(earlyLive);
+    expect(await status.evaluate((el) => el.getAttribute("aria-live"))).toBe("polite");
+    expect(await progress.evaluate((el) => el.getAttribute("aria-live"))).toBeNull();
     await expect(trace).toHaveAttribute("data-trace", "done", { timeout: 4000 });
     await expect(button).toHaveText("Trace again");
     await expect(status).toHaveText("Trace complete");
+    await expect(progress).toHaveText("Trace complete");
     await page.waitForTimeout(600);
     await page.screenshot({ path: "tests/screenshots/trace-1440-after.png" });
     const after = await trace.locator(".trace-node").evaluateAll((els) => els.map((el) => getComputedStyle(el).borderColor));
@@ -565,7 +577,7 @@ test.describe("landing page", () => {
     expect(visible, "several animated nodes are inside the viewport when the run starts").toBeGreaterThanOrEqual(3);
     await page.waitForTimeout(700);
     await page.screenshot({ path: "tests/screenshots/trace-393-mid.png" });
-    await expect(page.locator("[data-trace-status]")).toContainText("Tracing");
+    await expect(page.locator("[data-trace-progress]")).toContainText("Tracing");
     await expect(page.locator("[data-trace]")).toHaveAttribute("data-trace", "done", { timeout: 4000 });
     await noHorizontalOverflow(page);
     await context.close();

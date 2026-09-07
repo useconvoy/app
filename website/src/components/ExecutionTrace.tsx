@@ -13,7 +13,9 @@ import { useTrace } from "@/lib/use-trace";
  * the trace is CSS keyframes on an overlay stroke and the node surfaces.
  *
  * The control gives immediate feedback: its label changes while a run is
- * in progress and a status line names the node the trace has reached. On a
+ * in progress and a visible progress line names the node the trace has
+ * reached, while the polite screen-reader status changes only at start,
+ * completion, highlight and clear so intermediate nodes are not read out. On a
  * narrow container the control row sits at the top of the figure, so a tap
  * plays the nodes directly beneath it; on a wide one it sits with the
  * caption. Lifecycle (autoplay once from the start marker, cancellation,
@@ -60,11 +62,26 @@ export function ExecutionTrace() {
       : phase === "done"
         ? copy.again
         : copy.start;
-  const status =
+  // Visible progress (non-live) names the node the trace has reached; the
+  // screen-reader status changes only at start, completion, highlight and
+  // clear, so intermediate nodes are never announced.
+  const progress =
     phase === "playing"
       ? `${copy.statusPlaying}${shown ? ` · ${shown}` : ""}`
       : phase === "done"
-        ? copy.statusDone
+        ? reduced
+          ? copy.statusCleared
+          : copy.statusDone
+        : phase === "emphasis"
+          ? copy.statusHighlighted
+          : "";
+  const announcement =
+    phase === "playing"
+      ? copy.announcePlaying
+      : phase === "done"
+        ? reduced
+          ? copy.statusCleared
+          : copy.statusDone
         : phase === "emphasis"
           ? copy.statusHighlighted
           : "";
@@ -90,8 +107,11 @@ export function ExecutionTrace() {
           <span aria-hidden="true" className="trace-dot" />
           {label}
         </button>
-        <span role="status" aria-live="polite" className="type-meta min-h-6 w-full text-accent-hover @4xl:w-auto" data-trace-status>
-          {status}
+        <span aria-hidden="true" className="type-meta min-h-6 w-full text-accent-hover @4xl:w-auto" data-trace-progress>
+          {progress}
+        </span>
+        <span role="status" aria-live="polite" className="sr-only" data-trace-status>
+          {announcement}
         </span>
       </div>
 

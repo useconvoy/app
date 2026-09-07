@@ -168,8 +168,10 @@ export const EXECUTION = {
     highlight: "Highlight the path",
     clearHighlight: "Clear highlight",
     statusPlaying: "Tracing",
+    announcePlaying: "Tracing the path",
     statusDone: "Trace complete",
     statusHighlighted: "Path highlighted",
+    statusCleared: "Highlight cleared",
   },
   description:
     "Sensors, then Input processing, then Model, then Action processing, then Robot controller. Convoy runtime boundary: Input processing, Model, Action processing. Outside Convoy: Sensors and Robot controller.",
