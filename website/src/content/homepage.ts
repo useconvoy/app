@@ -70,15 +70,6 @@ export const HERO = {
     model: { title: "Trained model", note: "weights and required assets", ownership: "your team", edge: "into the release" },
     robot: { title: "Robot controller", note: "your existing control and safety", ownership: "outside Convoy", edge: "deployed to" },
   },
-  replay: {
-    replay: "Replay",
-    playing: "Playing…",
-    highlight: "Highlight the release",
-    clearHighlight: "Clear highlight",
-    statusPlaying: "Model → release → controller",
-    statusDone: "Sequence complete",
-    statusHighlighted: "Release highlighted",
-  },
   description:
     "A trained model, delivered by your team, enters the robot-policy release. The release is the dashed boundary Convoy is building: release identity, model assets, input and action processing, runtime, target configuration, and evaluation evidence. The release hands processed actions to the robot and its existing controller and safety system, which remain outside Convoy.",
 } as const;
@@ -186,18 +177,6 @@ export const EXECUTION = {
   edges: ["observations", "tensors", "model outputs", "commands"],
   feedback: "new observations / robot state",
   scope: "Convoy runtime boundary",
-  trace: {
-    start: "Trace the path",
-    playing: "Tracing…",
-    again: "Trace again",
-    highlight: "Highlight the path",
-    clearHighlight: "Clear highlight",
-    statusPlaying: "Tracing",
-    announcePlaying: "Tracing the path",
-    statusDone: "Trace complete",
-    statusHighlighted: "Path highlighted",
-    statusCleared: "Highlight cleared",
-  },
   description:
     "Sensors, then Input processing, then Model, then Action processing, then Robot controller. Convoy runtime boundary: Input processing, Model, Action processing. Outside Convoy: Sensors and Robot controller.",
   legend: [

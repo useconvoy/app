@@ -83,7 +83,9 @@ width; 44px control targets; the skip link; the mobile menu (aria-expanded,
 Escape, focus return); every on-page anchor; the diagrams reflowing to an
 ordered vertical structure on mobile with the controller and safety
 boundary intact; 200% zoom reflow and the contact address wrapping at 320;
-reduced-motion rendering; the mailto link's address, subject and template;
+both diagrams static and complete at first paint in normal and
+reduced motion at 1440, 393 and 430 with no control, live region or
+animation remnants; the mailto link's address, subject and template;
 and the legacy redirects. It writes full-page screenshots to
 `tests/screenshots/`. In this session's image the
 pinned Chromium is supplied through `PLAYWRIGHT_CHROMIUM_PATH`.

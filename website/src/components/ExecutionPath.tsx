@@ -1,6 +1,6 @@
 import { EXECUTION } from "@/content/homepage";
 import { Disclosure } from "./Disclosure";
-import { ExecutionTrace } from "./ExecutionTrace";
+import { ExecutionDiagram } from "./ExecutionDiagram";
 import { Section, SectionHeading } from "./Section";
 
 /**
@@ -12,9 +12,9 @@ import { Section, SectionHeading } from "./Section";
  * keeps its label in the vertical layout below 900px; a visually hidden
  * sentence states the same relationships in words. Placement labels under
  * each node say where it may run, dotted where that is configuration
- * dependent. The figure itself, including its one-shot trace, is the
- * client component ExecutionTrace. Then the two questions (placement,
- * repeatability) and the release-boundary disclosure with the dark panel.
+ * dependent. The figure is static (ExecutionDiagram). Then the two questions
+ * (placement, repeatability) and the release-boundary disclosure with the
+ * dark panel.
  */
 export function ExecutionPath() {
   return (
@@ -29,7 +29,7 @@ export function ExecutionPath() {
           {EXECUTION.description}
         </p>
         <div className="mt-2">
-          <ExecutionTrace />
+          <ExecutionDiagram />
         </div>
       </figure>
 
