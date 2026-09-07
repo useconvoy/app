@@ -127,7 +127,7 @@ jobs:
           TITLE=$(grep -o '<title>[^<]*</title>' /tmp/apex.html | head -1)
           check "title" "<title>Convoy | AI Model Deployment for Robots</title>" "$TITLE"
           check "hero"   1 "$(grep -c 'Deploy AI models to real robots.' /tmp/apex.html)"
-          check "mailto" 1 "$(grep -c 'mailto:aws@deployconvoy.com?subject=' /tmp/apex.html)"
+          check "mailto" 1 "$(grep -c 'mailto:founders@deployconvoy.com?subject=' /tmp/apex.html)"
           CSS=$(grep -oE '/_next/static/[^"]+\.css' /tmp/apex.html | head -1)
           check "stylesheet"  200 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE$CSS")"
           check "og image"    200 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$SITE/opengraph-image")"

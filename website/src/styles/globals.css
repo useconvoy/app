@@ -49,6 +49,8 @@
 
 html {
   scroll-behavior: smooth;
+  /* Anchor targets and focused controls land below the sticky header. */
+  scroll-padding-top: calc(var(--header-height) + var(--space-4));
 }
 
 body {
@@ -74,9 +76,9 @@ body {
   --text-muted: var(--text-secondary);
 }
 
-/* Anchored sections must not land under the header. */
+/* Anchored sections must not land under the sticky header. */
 [id] {
-  scroll-margin-top: var(--space-6);
+  scroll-margin-top: calc(var(--header-height) + var(--space-4));
 }
 
 :focus-visible {
@@ -142,6 +144,17 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+.type-caption {
+  font-size: 0.875rem;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+.type-meta {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
 }
 .type-code {
   font-family: var(--font-mono);

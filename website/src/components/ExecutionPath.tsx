@@ -3,26 +3,29 @@ import { Disclosure } from "./Disclosure";
 import { Section, SectionHeading } from "./Section";
 
 /**
- * The execution path in the design system's diagram grammar: linen nodes
+ * The execution path in the design system's diagram grammar. Nodes are linen
  * with a meaningful border, the model node white with an ink border, and
  * anything outside Convoy (sensors, controller) dashed grey. Solid arrows
- * carry execution; the Convoy runtime scope is a dashed oxide bracket under
- * the middle nodes; placement labels under each node say where it may run,
- * dotted where that is configuration-dependent. Then the two questions
- * (placement, repeatability) and the release-boundary disclosure that opens
- * the page's one dark diagnostic panel. Nodes stack vertically below 900px.
+ * carry execution. The three Convoy-scoped nodes sit inside a labelled
+ * dashed oxide boundary that is a real group in the accessibility tree and
+ * keeps its label in the vertical layout below 900px; a visually hidden
+ * sentence states the same relationships in words. Placement labels under
+ * each node say where it may run, dotted where that is configuration
+ * dependent. Then the two questions (placement, repeatability) and the
+ * release-boundary disclosure with the page's one dark panel.
  */
 export function ExecutionPath() {
   return (
     <Section id={EXECUTION.id} labelledBy="execution-heading">
       <SectionHeading id="execution-heading" eyebrow={EXECUTION.eyebrow} heading={EXECUTION.heading} lead={EXECUTION.lead} />
 
-      <figure className="mt-10" aria-labelledby="execution-diagram-title" aria-describedby="execution-diagram-text">
+      <figure className="mt-10" aria-labelledby="execution-diagram-title" aria-describedby="execution-diagram-description execution-diagram-caption">
         <figcaption id="execution-diagram-title" className="type-label text-primary">
           {EXECUTION.path}
         </figcaption>
-        <p id="execution-diagram-text" className="type-body prose-measure mt-2 text-secondary">
-          {EXECUTION.boundary}
+        <p className="type-body prose-measure mt-2 text-secondary">{EXECUTION.boundary}</p>
+        <p id="execution-diagram-description" className="sr-only">
+          {EXECUTION.description}
         </p>
         <div className="mt-8">
           <PathDiagram />
@@ -59,28 +62,57 @@ export function ExecutionPath() {
   );
 }
 
+type Node = (typeof EXECUTION.nodes)[number];
+
+/** Consecutive nodes with the same owner form one run; the Convoy run is the labelled boundary. */
+function runs(): { owner: Node["owner"]; nodes: Node[] }[] {
+  const out: { owner: Node["owner"]; nodes: Node[] }[] = [];
+  for (const node of EXECUTION.nodes) {
+    const last = out[out.length - 1];
+    if (last && last.owner === node.owner) last.nodes.push(node);
+    else out.push({ owner: node.owner, nodes: [node] });
+  }
+  return out;
+}
+
 function PathDiagram() {
-  const nodes = EXECUTION.nodes;
+  const groups = runs();
+  let edgeIndex = 0;
   return (
     <div>
-      <ol className="flex flex-col gap-2 md:flex-row md:items-stretch md:gap-0" aria-label="Execution path nodes">
-        {nodes.map((node, index) => (
-          <NodeAndEdge key={node.key} node={node} edge={EXECUTION.edges[index]} />
-        ))}
-      </ol>
-
-      {/* The runtime scope bracket: dashed oxide under the three middle nodes, from 900px. */}
-      <div aria-hidden="true" className="relative mt-3 hidden h-10 md:block">
-        <div className="absolute top-0 right-[calc(20%+20px)] left-[calc(20%+20px)] h-3 rounded-b border-x-[1.5px] border-b-[1.5px] border-dashed border-accent">
-          <span className="absolute top-3 left-1/2 -translate-x-1/2 whitespace-nowrap bg-background px-2 pt-1 font-mono text-[13px] tracking-[0.02em] text-accent">
-            {EXECUTION.scope}
-          </span>
-        </div>
+      <div className="flex flex-col gap-2 md:flex-row md:items-stretch md:gap-0" data-execution-path>
+        {groups.map((group, groupIndex) => {
+          const convoy = group.owner === "convoy";
+          const body = group.nodes.map((node, nodeIndex) => {
+            const edge = nodeIndex < group.nodes.length - 1 ? EXECUTION.edges[edgeIndex++] : undefined;
+            return <NodeAndEdge key={node.key} node={node} edge={edge} />;
+          });
+          const between = groupIndex < groups.length - 1 ? <Edge key={`edge-${groupIndex}`} label={EXECUTION.edges[edgeIndex++]} /> : null;
+          return (
+            <div key={group.owner + groupIndex} className="contents">
+              {convoy ? (
+                <div
+                  role="group"
+                  aria-label={EXECUTION.scope}
+                  data-runtime-boundary
+                  className="relative my-3 flex flex-col gap-2 rounded-lg border-2 border-dashed border-accent px-3 pt-8 pb-3 md:my-0 md:mx-1 md:flex-[3_1_auto] md:flex-row md:items-stretch md:gap-0"
+                >
+                  <span className="absolute -top-[11px] left-3 bg-background px-2 font-mono text-[14px] font-medium tracking-[0.02em] text-accent">
+                    {EXECUTION.scope}
+                  </span>
+                  {body}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 md:flex-[1_1_auto] md:flex-row md:items-stretch md:gap-0 md:pt-8">{body}</div>
+              )}
+              {between}
+            </div>
+          );
+        })}
       </div>
-      <p data-scope-text className="mt-3 font-mono text-[13px] tracking-[0.02em] text-accent md:sr-only">{EXECUTION.scope}</p>
 
       {/* Feedback: new observations and robot state travel back to the sensors. */}
-      <div className="mt-2 flex items-center gap-3 type-small text-secondary">
+      <div className="mt-4 flex items-center gap-3 type-small text-secondary">
         <svg viewBox="0 0 120 20" className="h-5 w-[120px] flex-none text-strong" aria-hidden="true" focusable="false">
           <path d="M115 4v8H8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 4" />
           <path d="M13 8l-6 4 6 4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -89,7 +121,9 @@ function PathDiagram() {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        <span className="max-w-[60ch] font-mono text-[13px] tracking-[0.02em] text-secondary">{EXECUTION.caption}</span>
+        <span id="execution-diagram-caption" className="type-caption max-w-[60ch] text-secondary">
+          {EXECUTION.caption}
+        </span>
         <ul className="flex flex-wrap gap-x-6 gap-y-2 text-[14px] text-secondary" aria-label="Diagram legend">
           {EXECUTION.legend.map((item) => (
             <li key={item.kind} className="inline-flex items-center gap-2">
@@ -108,48 +142,53 @@ function PathDiagram() {
   );
 }
 
-function NodeAndEdge({ node, edge }: { node: (typeof EXECUTION.nodes)[number]; edge?: string }) {
+function NodeAndEdge({ node, edge }: { node: Node; edge?: string }) {
   const external = node.owner === "robot";
   const model = "model" in node && node.model;
   return (
     <>
-      <li className="flex min-w-0 flex-1 flex-col gap-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-2" data-node={node.key}>
         <div
-          className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-[2px] rounded border px-4 py-3 text-center ${
+          className={`flex min-h-16 flex-1 flex-col items-center justify-center gap-[2px] rounded border px-4 py-3 text-center ${
             external
-              ? "border-dashed border-strong bg-transparent text-secondary"
+              ? "border-dashed border-strong bg-transparent text-primary"
               : model
                 ? "border-primary bg-surface text-primary"
                 : "border-strong bg-surface-subtle text-primary"
           }`}
         >
           <span className="text-[16px] leading-snug font-medium">{node.label}</span>
-          <span className="font-mono text-[13px] tracking-[0.02em] text-secondary">{node.note}</span>
+          <span className="type-meta text-secondary">{node.note}</span>
         </div>
         <span
-          className={`text-center font-mono text-[13px] tracking-[0.02em] ${
-            node.optional ? "border-t-[1.5px] border-dotted border-muted pt-2 text-muted" : "text-muted"
+          className={`type-meta text-center text-secondary [text-wrap:balance] ${
+            node.optional ? "border-t-2 border-dotted border-muted pt-2" : ""
           }`}
         >
           {node.site}
         </span>
-      </li>
-      {edge ? (
-        <li aria-hidden="true" className="flex items-center gap-2 pl-4 md:h-14 md:w-10 md:flex-none md:flex-col md:justify-center md:gap-0 md:pl-0">
-          <svg viewBox="0 0 40 16" className="h-4 w-10 rotate-90 text-primary md:rotate-0" focusable="false">
-            <path d="M1 8h32" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            <path d="M29 3.5 34.5 8 29 12.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <span className="type-small whitespace-nowrap text-muted md:sr-only">{edge}</span>
-        </li>
-      ) : null}
+      </div>
+      {edge ? <Edge label={edge} /> : null}
     </>
   );
 }
 
-/** The one dark diagnostic surface: an illustrative release record, field by field. */
+/** A solid execution arrow with its noun. Vertical below 900px, horizontal above. */
+function Edge({ label }: { label: string }) {
+  return (
+    <div aria-hidden="true" className="flex items-center gap-2 pl-4 md:h-16 md:w-10 md:flex-none md:flex-col md:justify-center md:gap-0 md:pl-0">
+      <svg viewBox="0 0 40 16" className="h-4 w-10 rotate-90 text-primary md:rotate-0" focusable="false">
+        <path d="M1 8h32" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <path d="M29 3.5 34.5 8 29 12.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <span className="type-small whitespace-nowrap text-muted md:sr-only">{label}</span>
+    </div>
+  );
+}
+
+/** The one dark surface: the conceptual categories a release carries, no values. */
 function ReleaseRecordPanel() {
-  const { panelLabel, panelStatus, panelFooter, fields } = EXECUTION.boundaryDisclosure;
+  const { panelLabel, panelStatus, panelFooter, groups } = EXECUTION.boundaryDisclosure;
   return (
     <div className="mt-5 rounded-lg bg-inverse text-inverse-text">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-inverse-muted/30 px-4 py-3 font-mono text-[13px] uppercase tracking-[0.06em] text-inverse-muted">
@@ -157,15 +196,20 @@ function ReleaseRecordPanel() {
         <span>{panelStatus}</span>
       </div>
       <div className="px-4 py-4">
-        <dl className="type-code grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-[120px_minmax(0,1fr)] sm:gap-y-2">
-          {fields.map((field) => (
-            <div key={field.key} className="contents">
-              <dt className="text-code-keyword">{field.key}</dt>
-              <dd className="mb-1 sm:mb-0">
-                <span className={field.key === "release" ? "text-code-value" : "text-code-string"}>{field.value}</span>
-              </dd>
-            </div>
-          ))}
+        <dl className="type-code grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-[136px_minmax(0,1fr)]">
+          {groups.flatMap((group) => [
+            <dt key={group.title} className="mt-3 font-mono text-[12px] uppercase tracking-[0.06em] text-inverse-muted first:mt-0 sm:col-span-2">
+              {group.title}
+            </dt>,
+            ...group.rows.flatMap((row) => [
+              <dt key={`${group.title}-${row.key}`} className="text-code-keyword">
+                {row.key}
+              </dt>,
+              <dd key={`${group.title}-${row.key}-value`} className="mb-1 text-code-string sm:mb-0">
+                {row.value}
+              </dd>,
+            ]),
+          ])}
         </dl>
       </div>
       <div className="border-t border-inverse-muted/30 px-4 py-3 font-mono text-[13px] tracking-[0.02em] text-inverse-muted">{panelFooter}</div>

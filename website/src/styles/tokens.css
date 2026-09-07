@@ -58,6 +58,9 @@
   --radius-badge: 3px;
   --radius-lg: 6px;
 
+  /* Header height, for scroll padding under the sticky header */
+  --header-height: 72px;
+
   /* Measure and grid */
   --content-max: 1280px;
   --prose-max: 66ch;
@@ -76,4 +79,10 @@
   --focus-offset: 3px;
 
   color-scheme: light;
+}
+
+@media (max-width: 899px) {
+  :root {
+    --header-height: 64px;
+  }
 }

@@ -1,0 +1,13 @@
+<!-- @dsCard group="Landing page" viewport="390x1400" name="Mobile 390" subtitle="Full page in a real 390px-wide frame (media queries evaluate at 390), unscaled, height follows content" -->
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Convoy landing — Mobile 390</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>html,body{margin:0;background:var(--color-surface-subtle)}#wrap{width:390px;transform-origin:0 0;margin:0 auto}iframe{display:block;width:390px;border:0;box-shadow:0 0 0 1px var(--color-border-strong);background:var(--color-bg)}</style></head>
+<body><div id="wrap"><iframe id="f" src="index.html" title="Convoy landing page at 390px"></iframe></div>
+<script>
+/* Real 390 CSS-px document: media queries inside evaluate at 390. The frame tracks its content height with a ResizeObserver (FAQ expansion, menu), and keeps native scrolling as a fallback. */
+var f=document.getElementById('f'),w=document.getElementById('wrap'),W=390;
+function fit(){var z=1;w.style.transform='scale('+z+')';w.style.marginLeft=Math.max(0,(innerWidth-W*z)/2)+'px';document.body.style.height=(f.offsetHeight*z)+'px'}
+function size(){try{var d=f.contentDocument;f.style.height=d.documentElement.scrollHeight+'px'}catch(e){f.style.height='100vh'}fit()}
+f.addEventListener('load',function(){size();try{new ResizeObserver(size).observe(f.contentDocument.documentElement);new ResizeObserver(size).observe(f.contentDocument.body)}catch(e){}});
+addEventListener('resize',fit);
+</script></body></html>

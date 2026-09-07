@@ -1,8 +1,7 @@
 import * as React from "react";
 
 /**
- * The one permitted dark panel: a mono list of conceptual release-contract fields. Never a terminal, never a real API.
- * @startingPoint section="Diagrams" subtitle="Dark conceptual release-contract panel" viewport="700x360"
+ * Dark conceptual release-contents panel (categories only). Documented; not used on the launch landing page.
  */
 export interface DiagnosticPanelProps {
   title?: string;

@@ -30,14 +30,17 @@ export function Hero() {
           <p className="type-body mt-6 border-t border-subtle pt-4 text-secondary">{HERO.invitation}</p>
         </div>
 
-        <figure className="md:col-span-7" aria-labelledby="hero-diagram-title" aria-describedby="hero-diagram-caption">
+        <figure className="md:col-span-7" aria-labelledby="hero-diagram-title" aria-describedby="hero-diagram-description hero-diagram-caption">
           <p id="hero-diagram-title" className="type-eyebrow mb-4">
             {HERO.diagramHeading}
+          </p>
+          <p id="hero-diagram-description" className="sr-only">
+            {HERO.description}
           </p>
           <Endpoint kind="model" />
           <ReleaseEnvelope />
           <Endpoint kind="robot" />
-          <figcaption id="hero-diagram-caption" className="type-small mt-4 text-secondary">
+          <figcaption id="hero-diagram-caption" className="type-caption mt-4 text-secondary">
             {HERO.caption}
           </figcaption>
         </figure>
@@ -49,21 +52,25 @@ export function Hero() {
 /** The model above the envelope and the controller below it, each with its edge noun. */
 function Endpoint({ kind }: { kind: "model" | "robot" }) {
   const copy = HERO.endpoints[kind];
+  /* The model enters the release along the release line (dashed oxide); the
+   * release reaches the controller along the execution line (solid ink). */
+  const release = kind === "model";
   const arrow = (
-    <span className="flex items-center gap-2 py-2 pl-4 type-small text-muted">
-      <svg viewBox="0 0 16 40" className="h-8 w-4 text-primary" aria-hidden="true" focusable="false">
-        <path d="M8 1v32M3.5 29 8 34.5 12.5 29" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <span className="flex items-center gap-2 py-2 pl-4 type-small text-secondary">
+      <svg viewBox="0 0 16 40" className={`h-8 w-4 ${release ? "text-accent" : "text-primary"}`} aria-hidden="true" focusable="false">
+        <path d="M8 1v32" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeDasharray={release ? "5 4" : undefined} />
+        <path d="M3.5 29 8 34.5 12.5 29" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
       {copy.edge}
     </span>
   );
   const node = (
-    <div
-      data-endpoint={kind}
-      className={`flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded border px-4 py-3 ${kind === "robot" ? "border-dashed border-strong bg-transparent" : "border-strong bg-surface-subtle"}`}
-    >
-      <span className="text-[16px] leading-snug font-medium text-primary">{copy.title}</span>
-      <span className="font-mono text-[13px] tracking-[0.02em] text-secondary">{copy.note}</span>
+    <div data-endpoint={kind} className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded border border-dashed border-strong px-4 py-3">
+        <span className="text-[16px] leading-snug font-medium text-primary">{copy.title}</span>
+        <span className="type-meta text-secondary">{copy.note}</span>
+      </div>
+      <span className="type-meta text-secondary">{copy.ownership}</span>
     </div>
   );
   return kind === "model" ? (

@@ -1,11 +1,11 @@
 # Landing page UI kit — deployconvoy.com
 
-Reference implementation of the Convoy landing page composed entirely from design-system components.
+Reference implementation of the Convoy landing page composed from design-system components.
 
-- `index.html` — the page (React + bundle). Sections: header, hero + release envelope, dependency rows, proposed workflow + diagnostic panel, execution path, design partnership, boundaries FAQ, contact form (preview only), footer.
-- `LandingPage.jsx` — section components (`Hero`, `Gap`, `How`, `Path`, `Partners`, `Boundaries`, `Contact`) and the client-side validation of the preview form.
-- `responsive.html` — the same page framed at 1440, 768, 390 and 320px.
+- `index.html` — responsive reference (React + compiled bundle). Append `?w=768|390|320` to force breakpoint styles at any preview width (design-review simulation, not a real viewport).
+- `Desktop-1440.html` / `Mobile-390.html` — the page inside a real 1440px / 390px iframe so media queries evaluate at that width; open in a browser to review full pages unscaled (desktop scales to fit narrower windows).
+- `state-board.html` — paired desktop / mobile specimens for every responsive component with closed/open/focus/hover/pressed/current/long-label states.
+- `LandingPage.jsx` — sections (`Hero`, `Gap`, `How`, `Path`, `Partners`, `Faq`, `Contact`) and `CONTACT_EMAIL`, the single place the receiver is set.
+- `landing.css` — the only page-level layout CSS (`lp-*`).
 
-Page-level layout classes (`lp-*`) live in `index.html`; they are the only CSS not in `styles.css`. Copy them into the production stylesheet or convert to the app's layout primitives.
-
-Content rules: hero, lead, CTA labels and stage line are verbatim from the brief. Everything about the workflow is marked proposed. The contact form validates but sends nothing; the notice says so.
+Contact is a direct email panel (address + mailto to `CONTACT_EMAIL`). Hero uses the vertical `ReleaseComposition`; the horizontal variant is reserved for full-width figures.

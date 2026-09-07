@@ -1,11 +1,12 @@
-WorkflowSteps renders the proposed Package → Qualify → Release sequence as numbered, rule-topped columns.
+WorkflowSteps (alias WorkflowSequence) renders the Package → Qualify → Release sequence as numbered, rule-topped columns that stack on mobile.
 
 ```jsx
 <WorkflowSteps steps={[
-  {title:"Package", tag:"proposed", body:"Group model assets, processing, runtime and target configuration in one versioned envelope.", items:["Model assets","Input and action processing"]},
-  {title:"Qualify", tag:"proposed", body:"Run the envelope against the target configuration and record evidence."},
-  {title:"Release", tag:"proposed", body:"Promote a qualified envelope; roll back to a previous one."},
+  {title:"Package", body:"Bring the model, input and action processing, runtime dependencies, and target configuration together."},
+  {title:"Qualify", body:"Check that release against defined task and runtime criteria. Keep the conditions and results connected to the configuration that was tested."},
+  {title:"Release", body:"Carry the identified configuration into deployment, with a clear basis for observing behavior and managing subsequent changes."},
 ]} />
 ```
 
-- Always mark steps that are not shipped with `tag:"proposed"`.
+- Approved launch copy above. No "proposed" tags; stage is communicated once, in the availability FAQ.
+- `detail` adds a compact Disclosure per step for secondary input/output detail; unused on the launch page.

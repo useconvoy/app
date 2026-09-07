@@ -1,16 +1,18 @@
 import * as React from "react";
 
-/**
- * The recurring brand device: a versioned, dashed-oxide envelope grouping the five parts of a release.
- * @startingPoint section="Diagrams" subtitle="Versioned release envelope with the five default groups" viewport="700x420"
- */
+/** Versioned-looking but value-free release envelope: identity group + five conceptual groups. Desktop 2-column grid; single column ≤640px. */
 export interface ReleaseEnvelopeProps {
-  /** Mono tag text, e.g. "release v0.3". */
-  version?: string;
-  /** Muted suffix after the version. Default "example" — keep it unless the data is real. */
-  label?: string;
+  /** Envelope tag. Default "Robot-policy release". */
+  tag?: string;
+  /** Identity group title. Default "Release identity"; "" hides the group. */
+  identity?: string;
+  identityNote?: string;
   groups?: { key?: string; title: string; note?: string; items?: string[]; wide?: boolean; evidence?: boolean }[];
-  legend?: boolean;
+  /** Figure caption (also the accessible description). Default is the approved conceptual-architecture sentence. */
   caption?: string;
+  /** Small mono label above the figure, e.g. "The robot-policy release". */
+  title?: string;
+  describedBy?: string;
 }
 export declare function ReleaseEnvelope(props: ReleaseEnvelopeProps): JSX.Element;
+export declare const RELEASE_ENVELOPE_CAPTION: string;

@@ -1,9 +1,7 @@
-DiagnosticPanel is the single dark surface allowed on a Convoy page: a conceptual list of what a release must carry, in mono, with keyword/string/value colours.
+DiagnosticPanel is the single dark surface permitted in the system: a mono list of conceptual release-content categories. It is documented for future use and is NOT part of the launch landing page.
 
 ```jsx
 <DiagnosticPanel />
-<DiagnosticPanel title="Target configuration · conceptual" rows={[{group:"target"},{k:"robot",v:"arm-a",t:"s"}]} />
 ```
 
-- Use at most once per page. Keep the "not an API" status and the footer disclaimer unless the data is real.
-- No prompts, no `$`, no commands, no fake responses.
+- Categories only. No values, rates, counts, pass results, prompts, `$`, commands or fake responses.
