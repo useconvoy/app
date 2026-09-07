@@ -31,7 +31,6 @@ test.describe("landing page", () => {
     await expect(page).toHaveTitle("Convoy | AI Model Deployment for Robots");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Deploy AI models to real robots.");
     await expect(page.getByText(/Convoy is building the runtime and release workflow/)).toBeVisible();
-    await expect(page.getByText("Help shape the next robot deployment workflow.")).toBeVisible();
     await expect(page.getByText("Stage:")).toHaveCount(0);
     await expect(page.getByText(/preview/i)).toHaveCount(0);
     await expect(page.locator("header")).not.toContainText("Precision Release");
@@ -50,25 +49,45 @@ test.describe("landing page", () => {
     const headings = await page.locator("h2").allTextContents();
     expect(headings).toEqual([
       "A trained model is not a robot deployment.",
-      "Package the system. Qualify the release.",
+      "Package. Qualify. Release.",
       "Designed around your robot’s execution path.",
-      "Start with one model. One robot configuration. One clear deployment goal.",
+      "Start with one deployment.",
       "Questions about Convoy",
       "Tell us about your next robot deployment.",
     ]);
     await expect(page.getByRole("heading", { level: 3, name: /^Package$/ })).toBeVisible();
     await expect(page.getByRole("heading", { level: 3, name: /^Qualify$/ })).toBeVisible();
     await expect(page.getByRole("heading", { level: 3, name: /^Release$/ })).toBeVisible();
-    // The release envelope repeats: the full object in the hero, the identity strip in the workflow.
-    expect(await page.locator("[data-envelope]").count()).toBeGreaterThanOrEqual(2);
-    await expect(page.locator("[data-envelope]").filter({ hasText: "Robot-policy release" })).toHaveCount(1);
-    expect(await page.locator("[data-envelope]").filter({ hasText: "Release identity" }).count()).toBeGreaterThanOrEqual(1);
+    // One release envelope, in the hero, with all six parts as rows and the examples behind one disclosure.
+    const envelope = page.locator("[data-envelope]");
+    await expect(envelope).toHaveCount(1);
+    await expect(envelope).toContainText("Robot-policy release");
+    await expect(envelope.locator("[data-field]")).toHaveCount(6);
+    for (const part of ["Release identity", "Model assets", "Input / action processing", "Runtime", "Target configuration", "Evaluation evidence"]) {
+      await expect(envelope.getByText(part, { exact: true })).toBeVisible();
+    }
+    const details = page.locator("#top details");
+    await expect(details).toHaveCount(1);
+    await expect(details).not.toHaveAttribute("open", "");
+    await expect(page.locator("[data-release-details]")).toBeHidden();
+    await details.locator("summary").focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("[data-release-details]")).toBeVisible();
+    await expect(page.locator("[data-release-details]")).toContainText("policy weights");
+    await expect(page.locator("[data-release-details]")).toContainText("what executes it");
+    // Ownership stays visible in the compact figure without opening anything.
+    await expect(page.locator("[data-endpoint='model']")).toContainText("your team");
+    await expect(page.locator("[data-endpoint='robot']")).toContainText("outside Convoy");
+    await page.keyboard.press("Space");
+    await expect(page.locator("[data-release-details]")).toBeHidden();
     await expect(page.getByText(/v0\.3|proposed|NOT AN API|Precision Release|illustrative ID/)).toHaveCount(0);
     await expect(page.locator("[data-envelope]").first().getByText("Release identity")).toBeVisible();
-    // Six FAQ boundaries, the first open.
+    // Six FAQ items; availability comes first and starts open.
     const faq = page.locator("#faq details");
     await expect(faq).toHaveCount(6);
     await expect(faq.first()).toHaveAttribute("open", "");
+    await expect(faq.first()).toContainText("What can I use today?");
+    await expect(faq.first()).toContainText("Convoy is in development");
   });
 
   test("every on-page anchor resolves to an element", async ({ page }) => {
@@ -163,6 +182,13 @@ test.describe("landing page", () => {
     await expect(address).toHaveText("founders@deployconvoy.com");
     await expect(address).toHaveAttribute("href", "mailto:founders@deployconvoy.com");
     await expect(page.getByText("Opens your email app")).toBeVisible();
+    // The action comes before the guidance in reading order.
+    const order = await page.locator("#contact").evaluate((el) => {
+      const link = el.querySelector("[data-contact-link]")!.getBoundingClientRect().top;
+      const guide = Array.from(el.querySelectorAll("p")).find((p) => p.textContent?.trim() === "Helpful to include")!.getBoundingClientRect().top;
+      return link < guide;
+    });
+    expect(order).toBe(true);
     // No form, no fields, nothing to submit or store.
     await expect(page.locator("form")).toHaveCount(0);
     await expect(page.getByText(/received|sending is not available/i)).toHaveCount(0);
@@ -450,6 +476,73 @@ test.describe("landing page", () => {
     await expect(trace).toHaveAttribute("data-trace", "emphasis");
     await expect(trace).toHaveAttribute("data-trace", "done", { timeout: 4000 });
     await expect(page.getByRole("group", { name: "Convoy runtime boundary" })).toBeVisible();
+  });
+
+  test("WCAG text-spacing overrides and 200% text enlargement do not clip, truncate, or overflow", async ({ page }) => {
+    const clipped = () =>
+      page.evaluate(() => {
+        const bad: string[] = [];
+        for (const el of Array.from(document.querySelectorAll<HTMLElement>("h1, h2, h3, p, li, a, button, summary, dt, dd, span"))) {
+          if (el.closest(".sr-only") || el.closest("details:not([open]) > :not(summary)")) continue;
+          const cs = getComputedStyle(el);
+          if (cs.display === "none") continue;
+          // Visually hidden text (the sr-only pattern: 1px box, absolute, clipped) is not a clipping defect.
+          if (cs.position === "absolute" && el.clientWidth <= 1 && el.clientHeight <= 1) continue;
+          if ((cs.overflow === "hidden" || cs.overflowX === "hidden") && el.scrollWidth > el.clientWidth + 1) bad.push(el.tagName + ":" + (el.textContent || "").trim().slice(0, 30));
+        }
+        return bad;
+      });
+    for (const width of [1440, 393]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/");
+      // WCAG 1.4.12 text spacing, applied as a user stylesheet would.
+      await page.addStyleTag({
+        content: "* { line-height: 1.5 !important; letter-spacing: 0.12em !important; word-spacing: 0.16em !important; } p { margin-bottom: 2em !important; }",
+      });
+      await page.locator("details:not([open]) > summary").evaluateAll((summaries) => summaries.forEach((s) => ((s.parentElement as HTMLDetailsElement).open = true)));
+      await noHorizontalOverflow(page);
+      expect(await clipped(), `text-spacing clips nothing at ${width}`).toEqual([]);
+      // 200% text enlargement: the type scale is in rem, so doubling the root size doubles the text.
+      await page.goto("/");
+      await page.evaluate(() => (document.documentElement.style.fontSize = "200%"));
+      await page.locator("details:not([open]) > summary").evaluateAll((summaries) => summaries.forEach((s) => ((s.parentElement as HTMLDetailsElement).open = true)));
+      await noHorizontalOverflow(page);
+      expect(await clipped(), `200% text clips nothing at ${width}`).toEqual([]);
+      const h1 = await page.locator("h1").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+      expect(h1).toBeGreaterThanOrEqual(80);
+      await expect(page.getByRole("group", { name: "Convoy runtime boundary" })).toBeVisible();
+      await expect(page.locator("[data-contact-address]")).toBeVisible();
+      // The header may be taller now; anchors still land below it, and the menu still closes on Escape.
+      const headerHeight = await page.locator("header").evaluate((el) => el.getBoundingClientRect().height);
+      const padding = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop));
+      expect(padding, `scroll padding follows the measured header at ${width}`).toBeGreaterThanOrEqual(headerHeight);
+      if (width < 900) {
+        await page.getByRole("button", { name: "Menu" }).click();
+        const menu = page.locator("[data-mobile-menu]");
+        await expect(menu).toBeVisible();
+        const fits = await menu.evaluate((el) => el.getBoundingClientRect().bottom <= window.innerHeight + 1 || getComputedStyle(el).overflowY === "auto");
+        expect(fits).toBe(true);
+        await page.keyboard.press("Escape");
+        await expect(page.getByRole("button", { name: "Menu" })).toBeFocused();
+        await page.getByRole("button", { name: "Menu" }).click();
+        await menu.getByRole("link", { name: "Contact" }).click();
+      } else {
+        await page.locator("header nav").first().getByRole("link", { name: "Contact" }).click();
+      }
+      await expect(page).toHaveURL(/#contact$/);
+      const top = await page.locator("#contact").evaluate((el) => el.getBoundingClientRect().top);
+      expect(top, `contact anchor clears the enlarged header at ${width}`).toBeGreaterThanOrEqual(headerHeight - 1);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.locator(width < 900 ? "[data-mobile-menu]" : "header nav").first().evaluate(() => {});
+      if (width < 900) {
+        await page.getByRole("button", { name: "Menu" }).click();
+        await page.locator("[data-mobile-menu]").getByRole("link", { name: "How it works" }).click();
+      } else {
+        await page.locator("header nav").first().getByRole("link", { name: "How it works" }).click();
+      }
+      const workflowTop = await page.locator("#workflow").evaluate((el) => el.getBoundingClientRect().top);
+      expect(workflowTop, `workflow anchor clears the enlarged header at ${width}`).toBeGreaterThanOrEqual(headerHeight - 1);
+    }
   });
 
   for (const viewport of VIEWPORTS) {

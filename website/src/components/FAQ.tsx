@@ -6,7 +6,7 @@ import { Section, SectionHeading } from "./Section";
 export function FAQ() {
   return (
     <Section id={COPY.id} labelledBy="faq-heading">
-      <div className="grid gap-8 md:grid-cols-12 md:gap-8">
+      <div className="grid gap-6 md:grid-cols-12 md:gap-10">
         <div className="md:col-span-5">
           <SectionHeading id="faq-heading" eyebrow={COPY.eyebrow} heading={COPY.heading} />
         </div>

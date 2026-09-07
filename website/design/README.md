@@ -48,12 +48,12 @@ the same behaviour in `src/components/`. This table is the map.
 | `DependencyRows` | `src/components/Problem.tsx` | Four aligned rows under one mono column label; ordered stack below 640px. |
 | `WorkflowSteps` / `WorkflowSequence` | `src/components/ReleaseWorkflow.tsx` | Three rule-topped columns from 900px, vertical below; optional in/out disclosure; no stage tags. |
 | `Disclosure` | `src/components/Disclosure.tsx` | Native `details`/`summary` with a plus-to-cross mark. |
-| `ReleaseComposition` | `src/components/Hero.tsx` figure | Production keeps the vertical model → release → controller stack inside the 7-column hero at every width (the horizontal variant does not fit that column); endpoint ownership labels and a visually hidden relationship sentence come from the design. |
-| `ReleaseEnvelope` | `src/components/ReleaseEnvelope.tsx` | Dashed oxide boundary, "Robot-policy release" tag, release-identity group, five field groups with 16px labels and 14px mono metadata; the compact strip carries "Release identity". |
-| `ExecutionPath` | `src/components/ExecutionPath.tsx`, `src/components/ExecutionTrace.tsx` | The three Convoy nodes sit in a `role="group"` labelled "Convoy runtime boundary" that stays visible in the vertical layout; sr-only relationship sentence; 16/14px node text; placement caption; the one-shot trace described under Motion below. |
+| `ReleaseComposition` | `src/components/Hero.tsx` figure | Production keeps the vertical model → release → controller stack in the hero's balanced second column at every width (the horizontal variant does not fit a half-width column); endpoint ownership labels and a visually hidden relationship sentence come from the design. |
+| `ReleaseEnvelope` (compact) | `src/components/ReleaseEnvelope.tsx` | Dashed oxide boundary, "Robot-policy release" tag, six labels (release identity plus the five field groups) in two columns when there is room and one on a phone. Each part's definition and example chips live in one "See release details" disclosure (`ReleaseDetails`) under the hero figure. The full envelope appears once, in the hero. |
+| `ExecutionPath` | `src/components/ExecutionPath.tsx`, `src/components/ExecutionTrace.tsx` | The three Convoy nodes sit in a `role="group"` labelled "Convoy runtime boundary" that stays visible in the vertical layout; sr-only relationship sentence; 16/14px node text; one caption; the row layout is a 56rem container query so the path stacks under text enlargement; the one-shot trace described under Motion below. |
 | `DiagramArrow`, `DiagramLegend` | inline SVG in `ExecutionPath.tsx` and `Hero.tsx` | Solid ink for execution, dashed oxide for release, dotted for configuration-dependent placement. |
-| `PartnershipPanel` | `src/components/DesignPartnerSection.tsx` | One bordered white panel; heading, lead and action left, fit list right. |
-| `ContactEmailPanel` | `src/components/ContactSection.tsx` | Mailto link with subject and template, address as large selectable mono text, guidance list. Receiver is `CONTACT_EMAIL` in `src/content/homepage.ts`. |
+| `PartnershipPanel` | `src/components/DesignPartnerSection.tsx` | One bordered white panel; "Start with one deployment." with one lead and the action left, the three fit items right. |
+| `ContactEmailPanel` | `src/components/ContactSection.tsx` | Action first: the mailto link with subject and template, then the address as large selectable mono text (wrapping before the @ on narrow screens), then a three-line "Helpful to include" note. Receiver is `CONTACT_EMAIL` in `src/content/homepage.ts`. |
 | `DiagnosticPanel` | `ReleaseRecordPanel` in `ExecutionPath.tsx` | Categories only, no values; on the page behind the "Explore the release boundary" disclosure the brief asks for. |
 | `StatusBadge`, `Notice`, `TextField`, `TextArea`, `Checkbox` | not used | Outside launch scope; there is no form on the site. |
 
@@ -101,3 +101,20 @@ Rules the implementation follows (`ExecutionTrace.tsx`, `globals.css`):
   hijacking, loops, or layout shift.
 - The trace is the reading order of a conceptual diagram. Nothing about it
   suggests live robot execution or guaranteed safety.
+
+## Reading density and pacing
+
+The page follows the layer-cake reading pattern: each section leads with a
+descriptive heading and a one- or two-sentence answer, then short grouped
+rows; longer detail (release examples, step inputs and outputs, placement,
+the release record) sits behind native disclosures that are closed by
+default. The availability question opens the FAQ, expanded. Nothing is
+repeated across sections: the release inventory appears once (hero), the
+fit list once (partnership), and the execution figure carries one caption.
+
+Heights are content-led. Section gaps are 40 / 56 / 80px; page padding
+20 / 32 / 40 / 64; body text 17–18px at 1.6, all type in rem so browser
+text preferences apply; diagram labels 16px with 14px metadata at every
+width. `scripts/measure-page.mjs` reports page and section heights,
+visible word counts and the hero action position at the review viewports;
+it is review evidence, not a constraint.

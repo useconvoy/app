@@ -22,19 +22,18 @@ export function ExecutionPath() {
       <SectionHeading id="execution-heading" eyebrow={EXECUTION.eyebrow} heading={EXECUTION.heading} lead={EXECUTION.lead} />
 
       <figure className="mt-10" aria-labelledby="execution-diagram-title" aria-describedby="execution-diagram-description execution-diagram-caption">
-        <figcaption id="execution-diagram-title" className="type-label text-primary">
+        <figcaption id="execution-diagram-title" className="sr-only">
           {EXECUTION.path}
         </figcaption>
-        <p className="type-body prose-measure mt-2 text-secondary">{EXECUTION.boundary}</p>
         <p id="execution-diagram-description" className="sr-only">
           {EXECUTION.description}
         </p>
-        <div className="mt-8">
+        <div className="mt-2">
           <ExecutionTrace />
         </div>
       </figure>
 
-      <div className="mt-12 grid gap-x-8 gap-y-2 md:grid-cols-2">
+      <div className="mt-8 grid gap-x-8 gap-y-2 md:grid-cols-2">
         <Disclosure summary={EXECUTION.placement.question} className="border-t border-strong">
           <p className="type-body">{EXECUTION.placement.answer}</p>
           <ul className="mt-4 grid gap-2" aria-label="Deployment placement options">
@@ -53,7 +52,7 @@ export function ExecutionPath() {
         </Disclosure>
       </div>
 
-      <div className="mt-6 border-t border-strong">
+      <div className="mt-4 border-t border-strong">
         <Disclosure summary={EXECUTION.boundaryDisclosure.label} summaryClassName="type-h4 text-accent">
           <p className="type-body prose-measure">{EXECUTION.boundaryDisclosure.intro}</p>
           <ReleaseRecordPanel />
@@ -69,14 +68,14 @@ function ReleaseRecordPanel() {
   const { panelLabel, panelStatus, panelFooter, groups } = EXECUTION.boundaryDisclosure;
   return (
     <div className="mt-5 rounded-lg bg-inverse text-inverse-text">
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-inverse-muted/30 px-4 py-3 font-mono text-[13px] uppercase tracking-[0.06em] text-inverse-muted">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-inverse-muted/30 px-4 py-3 font-mono text-sm uppercase tracking-[0.06em] text-inverse-muted">
         <span>{panelLabel}</span>
         <span>{panelStatus}</span>
       </div>
       <div className="px-4 py-4">
         <dl className="type-code grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-[136px_minmax(0,1fr)]">
           {groups.flatMap((group) => [
-            <dt key={group.title} className="mt-3 font-mono text-[12px] uppercase tracking-[0.06em] text-inverse-muted first:mt-0 sm:col-span-2">
+            <dt key={group.title} className="mt-3 font-mono text-sm uppercase tracking-[0.06em] text-inverse-muted first:mt-0 sm:col-span-2">
               {group.title}
             </dt>,
             ...group.rows.flatMap((row) => [
@@ -90,7 +89,7 @@ function ReleaseRecordPanel() {
           ])}
         </dl>
       </div>
-      <div className="border-t border-inverse-muted/30 px-4 py-3 font-mono text-[13px] tracking-[0.02em] text-inverse-muted">{panelFooter}</div>
+      <div className="border-t border-inverse-muted/30 px-4 py-3 font-mono text-sm tracking-[0.02em] text-inverse-muted">{panelFooter}</div>
     </div>
   );
 }
