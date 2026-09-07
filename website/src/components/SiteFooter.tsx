@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { FOOTER } from "@/content/homepage";
 
 /** One top rule, the wordmark and category, real links, and a mono legal row. */
@@ -25,7 +27,9 @@ export function SiteFooter() {
         </div>
         <div className="mt-8 flex flex-wrap justify-between gap-x-6 gap-y-2 border-t border-subtle pt-4 font-mono text-[13px] tracking-[0.02em] text-muted">
           <span>{FOOTER.copyright(year)}</span>
-          <span>{FOOTER.domain}</span>
+          <Link href="/" className="hover:text-primary hover:underline">
+            {FOOTER.domain}
+          </Link>
         </div>
       </div>
     </footer>

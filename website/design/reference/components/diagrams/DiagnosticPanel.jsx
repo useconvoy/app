@@ -1,21 +1,24 @@
 import React from "react";
 
 const DEFAULT_ROWS = [
-  { group: "envelope" },
-  { k: "release", v: "v0.3 · example", t: "s" },
-  { k: "target", v: "arm-a / site-1 (conceptual)", t: "s" },
+  { group: "release identity" },
+  { k: "release", v: "name and configuration reference", t: "m" },
   { group: "model assets" },
-  { k: "policy", v: "manipulation-policy · one artifact", t: "n" },
-  { k: "action_space", v: "joint velocity · 7 dof", t: "n" },
-  { group: "processing" },
-  { k: "inputs", v: "wrist camera 30 Hz · joint state 100 Hz", t: "n" },
-  { k: "limits", v: "velocity · acceleration · workspace", t: "m" },
-  { group: "qualification evidence" },
-  { k: "runs", v: "3 recorded · checks pass", t: "s" },
-  { k: "sign_off", v: "required before release", t: "m" },
+  { k: "policy", v: "artifact and preprocessing specification", t: "m" },
+  { k: "action_space", v: "units, coordinates, and command form", t: "m" },
+  { group: "input and action processing" },
+  { k: "inputs", v: "sensor set and alignment", t: "m" },
+  { k: "limits", v: "command bounds and translation", t: "m" },
+  { group: "runtime and target" },
+  { k: "runtime", v: "dependencies and timing budget", t: "m" },
+  { k: "target", v: "robot configuration and compute placement", t: "m" },
+  { group: "evaluation evidence" },
+  { k: "criteria", v: "task and runtime criteria", t: "m" },
+  { k: "results", v: "conditions and results for the tested configuration", t: "m" },
 ];
 
-export function DiagnosticPanel({ title = "Release contract · conceptual", status = "not an API", rows = DEFAULT_ROWS, footer = "Field names are illustrative. They show what a release must carry, not a schema or command." }) {
+/** Dark panel listing conceptual field categories of a release. Not used on the launch landing page. Never a terminal or API. */
+export function DiagnosticPanel({ title = "Release contents · conceptual categories", status = "not a schema", rows = DEFAULT_ROWS, footer = "Category names are illustrative. They show what a release carries, not an API, schema, or command." }) {
   return (
     <div className="cv-diag">
       <div className="cv-diag__head"><span>{title}</span><span>{status}</span></div>

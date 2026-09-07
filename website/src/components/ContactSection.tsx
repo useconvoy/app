@@ -38,16 +38,16 @@ export function ContactSection() {
               <span className="type-small text-muted">{CONTACT.opens}</span>
             </div>
 
-            <p className="type-body mt-6 text-secondary">
-              {CONTACT.addressLabel}{" "}
+            <div className="mt-6 border-t border-subtle pt-5">
+              <p className="type-eyebrow">{CONTACT.addressLabel}</p>
               <a
                 href={`mailto:${CONTACT.email}`}
-                className="type-code text-link font-medium select-all [overflow-wrap:anywhere]"
+                className="mt-2 inline-block font-mono text-[22px] leading-tight tracking-[-0.01em] text-primary underline decoration-accent decoration-2 underline-offset-[6px] select-all [overflow-wrap:anywhere] hover:text-accent-hover sm:text-[26px]"
                 data-contact-address
               >
                 {CONTACT.email}
               </a>
-            </p>
+            </div>
             <p className="type-small mt-4 text-muted">{CONTACT.privacyNote}</p>
           </div>
         </div>

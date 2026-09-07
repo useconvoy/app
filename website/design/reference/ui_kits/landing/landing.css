@@ -1,0 +1,12 @@
+/* Landing page layout (lp-*). Everything else comes from styles.css. */
+.lp-hero.cv-section{padding-top:var(--space-80);padding-bottom:var(--layout-section-gap)}
+.lp-hero__grid{display:grid;grid-template-columns:5fr 7fr;gap:var(--space-48) var(--layout-gutter);align-items:start}
+.lp-hero__copy{display:flex;flex-direction:column;gap:var(--space-24);min-width:0;padding-top:var(--space-24)}
+.lp-hero__invite{color:var(--color-text-secondary);padding-top:var(--space-16);border-top:1px solid var(--color-border)}
+.lp-hero__figure{min-width:0}
+/* Chosen layout: 5/7 split ≥1200 (1440); single column at 1200 and below (1024, 768, mobile). */
+@media (max-width:1200px){.lp-hero__grid{grid-template-columns:1fr;gap:var(--space-48)}.lp-hero__copy{padding-top:0}}
+@media (max-width:900px){.lp-hero.cv-section{padding-top:var(--space-48)}}
+.cv-viewport-md .lp-hero__grid{grid-template-columns:1fr;gap:var(--space-48)}.cv-viewport-md .lp-hero.cv-section{padding-top:var(--space-48)}
+/* QA frame for ?w= simulation */
+html.qa-frame body{max-width:var(--qa-w);margin:0 auto;border-right:1px solid var(--color-border-strong);min-height:100vh}

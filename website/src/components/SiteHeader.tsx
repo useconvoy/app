@@ -5,34 +5,78 @@ import { useEffect, useId, useRef, useState } from "react";
 import { NAV, SITE } from "@/content/homepage";
 
 /**
- * 72px header on desktop, 64px on mobile, in flow rather than sticky so
- * nothing ever covers an anchor target or a focused control. Wordmark left,
- * native anchor links and one primary action right.
- * Below 900px only the wordmark, Contact, and a real menu button remain;
- * the button reports aria-expanded, the menu closes on Escape and hands
- * focus back to the button, and links close it on click.
+ * Sticky header, 72px on desktop and 64px on mobile; scroll padding on the
+ * root keeps anchor targets and focused controls out from under it.
+ * Wordmark left, ordinary anchor links and one primary action right. Below
+ * 900px the wordmark, Contact, and a real menu button remain: a disclosure
+ * (aria-expanded / aria-controls) that Escape closes with focus returned to
+ * the button, a pointer-down outside closes, and a link click closes. The
+ * link for the section in view carries aria-current="true" in both navs.
  */
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState<string | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLElement>(null);
   const menuId = useId();
 
   useEffect(() => {
     if (!open) return;
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        event.preventDefault();
         setOpen(false);
         buttonRef.current?.focus();
       }
     }
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target as Node;
+      if (menuRef.current?.contains(target) || buttonRef.current?.contains(target)) return;
+      setOpen(false);
+    }
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
   }, [open]);
 
+  // The current link follows the section that occupies the reading band of
+  // the viewport. Sections that are not linked from the nav clear it.
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return;
+    const linked = new Set(NAV.links.map((link) => link.href.slice(1)));
+    const sections = Array.from(document.querySelectorAll<HTMLElement>("main section[id]"));
+    if (sections.length === 0) return;
+    const visible = new Map<string, number>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) visible.set(entry.target.id, entry.intersectionRatio);
+          else visible.delete(entry.target.id);
+        }
+        let best: string | null = null;
+        let bestRatio = 0;
+        for (const [id, ratio] of visible) {
+          if (ratio > bestRatio) {
+            best = id;
+            bestRatio = ratio;
+          }
+        }
+        setCurrent(best && linked.has(best) ? `#${best}` : null);
+      },
+      { rootMargin: "-25% 0px -55% 0px", threshold: [0, 0.1, 0.25, 0.5, 0.75, 1] },
+    );
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, []);
+
   const contact = NAV.links[NAV.links.length - 1];
+  const isCurrent = (href: string) => (current === href ? true : undefined);
 
   return (
-    <header className="relative border-b border-subtle bg-background">
+    <header className="sticky top-0 z-30 border-b border-subtle bg-background">
       <div className="mx-auto flex h-16 w-full max-w-(--content-max) items-center justify-between gap-6 px-5 sm:px-8 md:h-[72px] md:px-10 lg:px-16">
         <a href="#top" className="text-[20px] font-semibold tracking-[-0.02em] text-primary no-underline" aria-label={`${SITE.name} home`}>
           {SITE.name}
@@ -43,7 +87,8 @@ export function SiteHeader() {
             <a
               key={link.href}
               href={link.href}
-              className="inline-flex min-h-12 items-center rounded px-3 text-[16px] font-medium text-secondary transition-colors duration-(--duration-feedback) hover:bg-surface-subtle hover:text-primary"
+              aria-current={isCurrent(link.href)}
+              className="inline-flex min-h-12 items-center rounded px-3 text-[16px] font-medium text-secondary transition-colors duration-(--duration-feedback) hover:bg-surface-subtle hover:text-primary aria-[current]:text-primary aria-[current]:underline aria-[current]:decoration-accent aria-[current]:decoration-1 aria-[current]:underline-offset-[6px]"
             >
               {link.label}
             </a>
@@ -77,6 +122,7 @@ export function SiteHeader() {
 
       <nav
         id={menuId}
+        ref={menuRef}
         aria-label="Main"
         hidden={!open}
         data-mobile-menu
@@ -87,8 +133,9 @@ export function SiteHeader() {
             <li key={link.href}>
               <a
                 href={link.href}
+                aria-current={isCurrent(link.href)}
                 onClick={() => setOpen(false)}
-                className="type-body flex min-h-14 items-center border-b border-subtle font-medium text-primary hover:bg-surface-subtle"
+                className="type-body flex min-h-14 items-center border-b border-subtle font-medium text-primary hover:bg-surface-subtle aria-[current]:underline aria-[current]:decoration-accent aria-[current]:decoration-1 aria-[current]:underline-offset-[6px]"
               >
                 {link.label}
               </a>

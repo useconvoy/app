@@ -1,0 +1,40 @@
+/* GENERATED from components/components.css responsive blocks + token overrides. Do not edit by hand.
+   Wrap any specimen in .cv-viewport-md (≤900 layout) and/or .cv-viewport-sm (≤640 layout) to force that breakpoint at any real width.
+   Design-review helper only (state board, ?w= QA switch). NOT a production integration requirement; media queries do this in the app. */
+.cv-viewport-md{--layout-columns:8; /* @kind other */
+--layout-gutter:24px;--layout-page-padding:32px;--layout-section-gap:72px}
+.cv-viewport-sm{--layout-columns:4; /* @kind other */
+--layout-gutter:16px;--layout-page-padding:20px;--layout-section-gap:56px;--header-height:64px;--text-h1-size:44px;--text-h1-line:1.08;--text-h2-size:32px;--text-h3-size:24px;--text-lead-size:18px;--text-body-size:17px}
+.cv-viewport-md .cv-header__nav{display:none}
+.cv-viewport-md .cv-header__toggle{display:inline-flex}
+.cv-viewport-md .cv-header__menu{display:block;position:absolute;left:0;right:0;top:100%;z-index:20;background:var(--color-surface);border-bottom:1px solid var(--color-border);box-shadow:var(--shadow-menu)}
+.cv-viewport-md .cv-header__menu[hidden]{display:none}
+.cv-viewport-md .cv-section__grid,.cv-viewport-md .cv-section__grid--wide-left,.cv-viewport-md .cv-panel--grid{grid-template-columns:1fr}
+.cv-viewport-md .cv-panel{padding:var(--space-32)}
+.cv-viewport-md .cv-dep__head{display:none}
+.cv-viewport-md .cv-dep__row,.cv-viewport-md .cv-dep--1 .cv-dep__row{grid-template-columns:1fr;gap:var(--space-12)}
+.cv-viewport-md .cv-dep__cell-label{display:block;font-family:var(--font-mono);font-size:var(--text-small-size);letter-spacing:.04em;text-transform:uppercase;color:var(--color-text-secondary);margin-bottom:var(--space-4)}
+.cv-viewport-md .cv-steps{grid-template-columns:1fr;gap:var(--space-32)}
+.cv-viewport-md .cv-comp{grid-template-columns:minmax(0,1fr)}
+.cv-viewport-md .cv-comp__arrow{justify-self:center;height:40px;width:40px}
+.cv-viewport-md .cv-comp__arrow svg{transform:rotate(90deg)}
+.cv-viewport-sm .cv-header__tag{display:none}
+.cv-viewport-sm .cv-header__brand{font-size:18px}
+.cv-viewport-sm .cv-actions{flex-direction:column;align-items:stretch}
+.cv-viewport-sm .cv-actions .cv-btn{width:100%;white-space:normal;text-wrap:pretty}
+.cv-viewport-sm .cv-section__grid--even{grid-template-columns:1fr}
+.cv-viewport-sm .cv-panel{padding:var(--space-24) var(--space-16)}
+.cv-viewport-sm .cv-env{padding:var(--space-32) var(--space-12) var(--space-12)}
+.cv-viewport-sm .cv-env__grid{grid-template-columns:1fr}
+.cv-viewport-sm .cv-env__group--wide{grid-column:auto}
+.cv-viewport-sm .cv-path{flex-direction:column}
+.cv-viewport-sm .cv-path__group{flex-direction:column}
+.cv-viewport-sm .cv-path__group--scope{margin:var(--space-12) 0;padding:var(--space-32) var(--space-12) var(--space-12)}
+.cv-viewport-sm .cv-path__group--external{padding-top:0}
+.cv-viewport-sm .cv-path__node{flex:none}
+.cv-viewport-sm .cv-path__arrow{flex:none;height:40px;width:100%;align-self:auto}
+.cv-viewport-sm .cv-path__arrow svg{transform:rotate(90deg)}
+.cv-viewport-sm .cv-diag__body{grid-template-columns:1fr;gap:0}
+.cv-viewport-sm .cv-diag__k{margin-top:var(--space-8)}
+.cv-viewport-sm .cv-email__value{font-size:18px}
+.cv-viewport-sm .cv-email .cv-btn{width:100%;white-space:normal;text-wrap:pretty}

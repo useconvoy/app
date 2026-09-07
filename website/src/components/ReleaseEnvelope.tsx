@@ -42,6 +42,10 @@ export function ReleaseEnvelope({
       <div className="relative rounded-lg border-[1.5px] border-dashed border-accent bg-surface px-4 pt-7 pb-4 sm:px-6 sm:pb-6" data-envelope>
         <Tag label={ENVELOPE.label} />
         <ul className="grid gap-3 sm:grid-cols-2" aria-label="Release field groups">
+          <li className="flex min-w-0 flex-col rounded border border-strong bg-surface-subtle px-4 py-3 sm:col-span-2" data-field="identity">
+            <p className="text-[16px] leading-snug font-medium text-primary">{ENVELOPE.identityLabel}</p>
+            <p className="type-meta mt-[2px] text-secondary">{ENVELOPE.identityNote}</p>
+          </li>
           {ENVELOPE.fields.map((field) => {
             const evidence = field.key === "evidence";
             const on = highlight.includes(field.key);
@@ -53,13 +57,13 @@ export function ReleaseEnvelope({
               >
                 <div>
                   <p className="text-[16px] leading-snug font-medium text-primary">{field.label}</p>
-                  <p className="mt-[2px] font-mono text-[13px] leading-snug tracking-[0.02em] text-secondary">{field.note}</p>
+                  <p className="type-meta mt-[2px] text-secondary">{field.note}</p>
                 </div>
                 <ul className="flex flex-wrap gap-2" aria-label={`${field.label} examples`}>
                   {field.items.map((item) => (
                     <li
                       key={item}
-                      className={`whitespace-nowrap rounded-sm border px-2 py-[3px] font-mono text-[13px] leading-[1.4] ${
+                      className={`rounded-sm border px-2 py-[3px] font-mono text-[14px] leading-[1.4] ${
                         evidence ? "border-transparent bg-accent-tint text-accent-hover" : "border-subtle bg-surface-subtle text-secondary"
                       }`}
                     >

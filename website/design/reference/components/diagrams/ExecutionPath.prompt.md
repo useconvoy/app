@@ -1,10 +1,11 @@
-ExecutionPath draws the robot's execution path and shows where Convoy's runtime sits without claiming the controller or safety system.
+ExecutionPath draws the robot's execution path and shows which nodes sit inside Convoy's runtime boundary without claiming the controller or safety system.
 
 ```jsx
-<ExecutionPath traceable />
-<ExecutionPath scope="" legend={false} />
+<ExecutionPath />
+<ExecutionPath traceable legend={false} />
 ```
 
-- Defaults are canonical; external nodes (Sensors, Robot controller) render dashed and stay outside the scope bracket.
-- Dotted site labels mark configuration-dependent placement (local · site · cloud).
-- `traceable` is the only motion in the system beyond hover: user-triggered, 520ms per node, static toggle under reduced motion.
+- Order is fixed: Sensors → Input processing → Model → Action processing → Robot controller; vertical below 640px in the same order.
+- The boundary is a real labelled group (`role="group"` + visible label) in both layouts; a visually hidden sentence lists the relationships.
+- Dotted site labels = configuration-dependent placement. No rates, frequencies, or placement guarantees.
+- `traceable` is optional; under reduced motion it toggles the complete highlighted state instead of animating.

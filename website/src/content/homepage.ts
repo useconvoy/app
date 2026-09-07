@@ -6,7 +6,7 @@
  */
 
 /** The inbox inquiries go to. Override at build time with NEXT_PUBLIC_CONTACT_EMAIL. */
-export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || "aws@deployconvoy.com";
+export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || "founders@deployconvoy.com";
 
 export const SITE = {
   name: "Convoy",
@@ -43,21 +43,24 @@ export const HERO = {
   caption:
     "Conceptual architecture: a robot-policy release brings together the model, input and action processing, runtime, target configuration, and evaluation evidence.",
   endpoints: {
-    model: { title: "Trained model", note: "weights and required assets", edge: "into the release" },
-    robot: { title: "Robot controller", note: "your existing control and safety", edge: "deployed to" },
+    model: { title: "Trained model", note: "weights and required assets", ownership: "your team", edge: "into the release" },
+    robot: { title: "Robot controller", note: "your existing control and safety", ownership: "outside Convoy", edge: "deployed to" },
   },
+  description:
+    "A trained model, delivered by your team, enters the robot-policy release. The release is the dashed boundary Convoy is building: release identity, model assets, input and action processing, runtime, target configuration, and evaluation evidence. The release hands processed actions to the robot and its existing controller and safety system, which remain outside Convoy.",
 } as const;
 
 /** The release envelope: five field groups under one release identity. */
 export const ENVELOPE = {
   label: "Robot-policy release",
   identityLabel: "Release identity",
+  identityNote: "name · configuration · evidence reference",
   fields: [
-    { key: "model", label: "Model assets", note: "what was trained", items: ["policy weights", "preprocessing spec", "action space"] },
-    { key: "processing", label: "Input / action processing", note: "how signals are shaped", items: ["sensor sync", "normalisation", "command limits"] },
-    { key: "runtime", label: "Runtime", note: "what executes it", items: ["inference loop", "timing budget", "health checks"] },
-    { key: "target", label: "Target configuration", note: "where it runs", items: ["robot config", "compute placement", "controller interface"] },
-    { key: "evidence", label: "Evaluation evidence", note: "why it may be released", items: ["test conditions", "recorded results", "sign-off"] },
+    { key: "model", label: "Model assets", note: "the trained policy", items: ["policy weights", "preprocessing spec", "action space"] },
+    { key: "processing", label: "Input / action processing", note: "how signals are shaped", items: ["sensor alignment", "normalisation", "command translation"] },
+    { key: "runtime", label: "Runtime", note: "what executes it", items: ["inference loop", "dependencies", "timing budget"] },
+    { key: "target", label: "Target configuration", note: "where it runs", items: ["robot configuration", "compute placement", "controller interface"] },
+    { key: "evidence", label: "Evaluation evidence", note: "why it may be released", items: ["task criteria", "runtime criteria", "tested configuration", "conditions and results"] },
   ],
 } as const;
 
@@ -144,15 +147,18 @@ export const EXECUTION = {
   boundary:
     "Convoy’s intended runtime sits around model execution and its interfaces. Your robot’s controller and safety systems remain explicit parts of the system.",
   nodes: [
-    { key: "sensors", label: "Sensors", note: "cameras · joints · force", site: "robot", owner: "robot", optional: false },
-    { key: "input", label: "Input processing", note: "sync · normalise", site: "local · site · cloud", owner: "convoy", optional: true },
-    { key: "model", label: "Model", note: "learned policy", site: "local · site · cloud", owner: "convoy", optional: true, model: true },
-    { key: "action", label: "Action processing", note: "limits · rates", site: "local", owner: "convoy", optional: false },
-    { key: "controller", label: "Robot controller", note: "outside Convoy", site: "robot · safety", owner: "robot", optional: false },
+    { key: "sensors", label: "Sensors", note: "cameras · joints · force", site: "on the robot", owner: "robot", optional: false },
+    { key: "input", label: "Input processing", note: "align · normalise", site: "placement varies", owner: "convoy", optional: true },
+    { key: "model", label: "Model", note: "learned policy", site: "placement varies", owner: "convoy", optional: true, model: true },
+    { key: "action", label: "Action processing", note: "translate · limit", site: "near the controller", owner: "convoy", optional: false },
+    { key: "controller", label: "Robot controller", note: "controller · safety system", site: "on the robot", owner: "robot", optional: false },
   ],
   edges: ["observations", "tensors", "model outputs", "commands"],
   feedback: "new observations / robot state",
-  scope: "Convoy runtime scope",
+  scope: "Convoy runtime boundary",
+  traceLabel: "Trace the path",
+  description:
+    "Sensors, then Input processing, then Model, then Action processing, then Robot controller. Convoy runtime boundary: Input processing, Model, Action processing. Outside Convoy: Sensors and Robot controller.",
   legend: [
     { kind: "execution", label: "Execution" },
     { kind: "release", label: "Release · configuration · evidence" },
@@ -178,19 +184,41 @@ export const EXECUTION = {
   boundaryDisclosure: {
     label: "Explore the release boundary",
     intro: "What one identified release keeps together.",
-    panelLabel: "Release record",
-    panelStatus: "Conceptual",
-    panelFooter: "Field names are descriptive. They show what a release must carry.",
-    fields: [
-      { key: "release", value: "one identity for the whole configuration" },
-      { key: "model", value: "policy weights and required assets, by revision" },
-      { key: "inputs", value: "which sensors, how frames and state are prepared" },
-      { key: "actions", value: "output meaning: units, frame, and ordering for the controller" },
-      { key: "runtime", value: "inference runtime and pinned dependencies" },
-      { key: "target", value: "compute, drivers, and the controller interface" },
-      { key: "evidence", value: "criteria, conditions, and results for this release" },
+    panelLabel: "Release contents · conceptual categories",
+    panelStatus: "not a schema",
+    panelFooter: "Category names are illustrative. They show what a release carries, not an API, schema, or command.",
+    groups: [
+      { title: "release identity", rows: [{ key: "release", value: "name and configuration reference" }] },
+      {
+        title: "model assets",
+        rows: [
+          { key: "policy", value: "artifact and preprocessing specification" },
+          { key: "action_space", value: "units, coordinates, and command form" },
+        ],
+      },
+      {
+        title: "input and action processing",
+        rows: [
+          { key: "inputs", value: "sensor set and alignment" },
+          { key: "limits", value: "command bounds and translation" },
+        ],
+      },
+      {
+        title: "runtime and target",
+        rows: [
+          { key: "runtime", value: "dependencies and timing budget" },
+          { key: "target", value: "robot configuration and compute placement" },
+        ],
+      },
+      {
+        title: "evaluation evidence",
+        rows: [
+          { key: "criteria", value: "task and runtime criteria" },
+          { key: "results", value: "conditions and results for the tested configuration" },
+        ],
+      },
     ],
-    note: "A policy here means a trained model that maps observations to actions. The record ties each of these to one release so a change in any of them is visible.",
+    note: "A policy here means a trained model that maps observations to actions. One release ties each of these together so a change in any of them is visible.",
   },
 } as const;
 
@@ -266,7 +294,7 @@ export const CONTACT = {
   body: "Model:\n\nRobot configuration:\n\nDeployment challenge:\n",
   button: "Email us about your deployment",
   opens: "Opens your email app with the subject filled in.",
-  addressLabel: "Or write to us directly at",
+  addressLabel: "Email",
   privacyNote: "Please do not include proprietary model files, credentials, or sensitive operational data.",
 } as const;
 

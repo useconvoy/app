@@ -1,10 +1,10 @@
-ReleaseEnvelope is Convoy's signature diagram: one versioned dashed envelope grouping Model assets, Input and action processing, Runtime, Target configuration and Qualification evidence.
+ReleaseEnvelope is Convoy's signature diagram: one dashed envelope grouping Release identity, Model assets, Input and action processing, Runtime, Target configuration and Evaluation evidence.
 
 ```jsx
-<ReleaseEnvelope />
-<ReleaseEnvelope version="release v1.2" label="example" legend={false} />
+<ReleaseEnvelope title="The robot-policy release" />
+<ReleaseEnvelope caption="" />   // when the caption is provided by the surrounding composition
 ```
 
-- Defaults carry the canonical five groups with conceptual item labels; override `groups` only to change wording, never to add products.
-- Keep the `label` suffix ("example") whenever contents are illustrative.
-- The controller and safety system are never drawn inside the envelope.
+- No version numbers, test counts, rates, pass results or API-like fields. Item labels are conceptual categories only.
+- The robot controller and safety system are never drawn inside the envelope (see ReleaseComposition for the outside context).
+- Labels 16px, metadata 14px; on mobile the grid stacks, labels never shrink.

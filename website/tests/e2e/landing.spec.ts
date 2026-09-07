@@ -10,7 +10,9 @@ import { expect, test, type Page } from "@playwright/test";
 const VIEWPORTS = [
   { name: "desktop-1440", width: 1440, height: 900 },
   { name: "desktop-1280", width: 1280, height: 800 },
+  { name: "desktop-1024", width: 1024, height: 768 },
   { name: "tablet-768", width: 768, height: 1024 },
+  { name: "landscape-844x390", width: 844, height: 390 },
   { name: "mobile-390", width: 390, height: 844 },
   { name: "mobile-320", width: 320, height: 568 },
 ] as const;
@@ -61,7 +63,8 @@ test.describe("landing page", () => {
     expect(await page.locator("[data-envelope]").count()).toBeGreaterThanOrEqual(2);
     await expect(page.locator("[data-envelope]").filter({ hasText: "Robot-policy release" })).toHaveCount(1);
     expect(await page.locator("[data-envelope]").filter({ hasText: "Release identity" }).count()).toBeGreaterThanOrEqual(1);
-    await expect(page.getByText(/v0\.3|proposed|illustrative|not an API/i)).toHaveCount(0);
+    await expect(page.getByText(/v0\.3|proposed|NOT AN API|Precision Release|illustrative ID/)).toHaveCount(0);
+    await expect(page.locator("[data-envelope]").first().getByText("Release identity")).toBeVisible();
     // Six FAQ boundaries, the first open.
     const faq = page.locator("#faq details");
     await expect(faq).toHaveCount(6);
@@ -81,6 +84,22 @@ test.describe("landing page", () => {
     await page.getByRole("navigation", { name: "Main" }).first().getByRole("link", { name: "Discuss your deployment" }).click();
     await expect(page).toHaveURL(/#contact$/);
     await expect(page.locator("#contact")).toBeInViewport();
+  });
+
+  test("sticky header marks the current section and never covers anchor targets", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+    const header = page.locator("header");
+    expect(await header.evaluate((el) => getComputedStyle(el).position)).toBe("sticky");
+    const headerHeight = await header.evaluate((el) => el.getBoundingClientRect().height);
+    const padding = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop));
+    expect(padding).toBeGreaterThanOrEqual(headerHeight);
+    await page.locator("header nav").first().getByRole("link", { name: "How it works" }).click();
+    await expect(page).toHaveURL(/#workflow$/);
+    const top = await page.locator("#workflow").evaluate((el) => el.getBoundingClientRect().top);
+    expect(top, "section starts below the sticky header").toBeGreaterThanOrEqual(headerHeight);
+    await expect(page.locator("header nav").first().getByRole("link", { name: "How it works" })).toHaveAttribute("aria-current", "true");
+    await expect(page.locator("header nav").first().getByRole("link", { name: "Contact" })).not.toHaveAttribute("aria-current", "true");
   });
 
   test("skip link and keyboard reach the content and the form", async ({ page }) => {
@@ -115,6 +134,12 @@ test.describe("landing page", () => {
     await expect(page.getByRole("button", { name: "Menu" })).toHaveAttribute("aria-expanded", "false");
     await expect(page.getByRole("button", { name: "Menu" })).toBeFocused();
     await expect(menu).toBeHidden();
+    // A pointer-down outside the menu closes it.
+    await page.getByRole("button", { name: "Menu" }).click();
+    await expect(menu).toBeVisible();
+    await page.mouse.click(200, 700);
+    await expect(menu).toBeHidden();
+    await expect(page.getByRole("button", { name: "Menu" })).toHaveAttribute("aria-expanded", "false");
     // A menu link navigates to its section and closes the menu.
     await page.getByRole("button", { name: "Menu" }).click();
     await menu.getByRole("link", { name: "Design partnership" }).click();
@@ -127,7 +152,7 @@ test.describe("landing page", () => {
     const link = page.locator("[data-contact-link]");
     await expect(link).toBeVisible();
     const href = (await link.getAttribute("href"))!;
-    expect(href.startsWith("mailto:aws@deployconvoy.com?")).toBe(true);
+    expect(href.startsWith("mailto:founders@deployconvoy.com?")).toBe(true);
     const params = new URLSearchParams(href.slice(href.indexOf("?") + 1));
     expect(params.get("subject")).toBe("Convoy deployment inquiry");
     expect(params.get("body")).toContain("Model:");
@@ -135,8 +160,8 @@ test.describe("landing page", () => {
     expect(params.get("body")).toContain("Deployment challenge:");
     // The address is visible, selectable text with its own plain mailto.
     const address = page.locator("[data-contact-address]");
-    await expect(address).toHaveText("aws@deployconvoy.com");
-    await expect(address).toHaveAttribute("href", "mailto:aws@deployconvoy.com");
+    await expect(address).toHaveText("founders@deployconvoy.com");
+    await expect(address).toHaveAttribute("href", "mailto:founders@deployconvoy.com");
     await expect(page.getByText("Opens your email app")).toBeVisible();
     // No form, no fields, nothing to submit or store.
     await expect(page.locator("form")).toHaveCount(0);
@@ -192,24 +217,33 @@ test.describe("landing page", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
     // Execution path: nodes keep their flow order top to bottom, no sideways scroll.
-    const nodes = page.locator('#execution ol[aria-label="Execution path nodes"] > li:not([aria-hidden])');
+    const nodes = page.locator("#execution [data-node]");
     await expect(nodes).toHaveCount(5);
     const boxes = await nodes.evaluateAll((els) => els.map((el) => el.getBoundingClientRect()).map((r) => ({ top: r.top, width: r.width })));
     for (let i = 1; i < boxes.length; i += 1) expect(boxes[i].top, "nodes stack vertically in order").toBeGreaterThan(boxes[i - 1].top);
     for (const box of boxes) expect(box.width).toBeGreaterThan(250);
     await expect(nodes.nth(0)).toContainText("Sensors");
     await expect(nodes.nth(4)).toContainText("Robot controller");
-    await expect(nodes.nth(4)).toContainText("outside Convoy");
-    await expect(page.locator("[data-scope-text]")).toBeVisible();
-    await expect(page.locator("[data-scope-text]")).toHaveText("Convoy runtime scope");
-    // Node labels stay readable on mobile: 16px labels, 13px metadata.
+    await expect(nodes.nth(4)).toContainText("safety system");
+    // The Convoy runtime boundary is a labelled group holding exactly the three Convoy nodes, visible at 390 and 1440.
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const boundary = page.getByRole("group", { name: "Convoy runtime boundary" });
+      await expect(boundary).toBeVisible();
+      await expect(boundary.locator("[data-node]")).toHaveCount(3);
+      await expect(boundary).toContainText("Input processing");
+      await expect(boundary).toContainText("Action processing");
+      await expect(boundary).not.toContainText("Robot controller");
+      await expect(boundary.getByText("Convoy runtime boundary")).toBeVisible();
+      expect(await boundary.evaluate((el) => el.closest("[aria-hidden='true']") === null)).toBe(true);
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    // Node labels stay readable on mobile: 16px labels, 14px metadata.
     const sizes = await nodes.first().locator("span").evaluateAll((els) => els.map((el) => parseFloat(getComputedStyle(el).fontSize)));
     expect(sizes[0]).toBeGreaterThanOrEqual(16);
-    expect(sizes[1]).toBeGreaterThanOrEqual(13);
-    // And on desktop the same scope text is exposed to assistive technology.
-    await page.setViewportSize({ width: 1440, height: 900 });
-    const exposed = await page.locator("[data-scope-text]").evaluate((el) => el.closest("[aria-hidden='true']") === null && getComputedStyle(el).display !== "none");
-    expect(exposed, "scope text stays in the accessibility tree on desktop").toBe(true);
+    expect(sizes[1]).toBeGreaterThanOrEqual(14);
+    // The figure carries a written description of the same relationships.
+    await expect(page.locator("#execution-diagram-description")).toContainText("Outside Convoy: Sensors and Robot controller");
     // Hero: model, release, controller read top to bottom.
     const hero = page.locator("#top figure");
     const order = await hero.locator("[data-endpoint], [data-envelope]").evaluateAll((els) =>
@@ -240,11 +274,135 @@ test.describe("landing page", () => {
     }
   });
 
+  test("execution trace: complete at first paint, plays once in view, replays on request, cleans up", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+    const trace = page.locator("[data-trace]");
+    // The whole diagram is static and complete before anything moves.
+    await expect(trace).toHaveAttribute("data-trace", "idle");
+    const overlays = trace.locator(".trace-overlay");
+    await expect(overlays).toHaveCount(4);
+    const base = await trace.locator(".trace-edge svg > path:first-child").evaluateAll((els) => els.map((el) => getComputedStyle(el).opacity));
+    expect(base).toEqual(["1", "1", "1", "1"]);
+    expect(await overlays.evaluateAll((els) => els.map((el) => getComputedStyle(el).opacity))).toEqual(["0", "0", "0", "0"]);
+    await expect(page.getByRole("group", { name: "Convoy runtime boundary" })).toHaveCount(1);
+    // One autoplay when the figure comes into view.
+    await trace.scrollIntoViewIfNeeded();
+    await expect(trace).toHaveAttribute("data-trace", "playing", { timeout: 3000 });
+    await expect(trace).toHaveAttribute("data-trace", "done", { timeout: 5000 });
+    // Leaving and returning does not play it again.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(300);
+    await trace.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(700);
+    await expect(trace).toHaveAttribute("data-trace", "done");
+    // Pointer movement over the figure does not restart it.
+    const box = (await trace.boundingBox())!;
+    await page.mouse.move(box.x + 60, box.y + 60);
+    await page.mouse.move(box.x + 400, box.y + 90, { steps: 8 });
+    await page.waitForTimeout(250);
+    await expect(trace).toHaveAttribute("data-trace", "done");
+    // A real button replays it: click, Enter, Space.
+    const button = page.locator("[data-trace-button]");
+    await expect(button).toHaveText("Trace the path");
+    expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(48);
+    await button.click();
+    await expect(trace).toHaveAttribute("data-trace", "playing");
+    await expect(trace).toHaveAttribute("data-trace", "done", { timeout: 5000 });
+    await button.focus();
+    await page.keyboard.press("Enter");
+    await expect(trace).toHaveAttribute("data-trace", "playing");
+    await expect(trace).toHaveAttribute("data-trace", "done", { timeout: 5000 });
+    await page.keyboard.press("Space");
+    await expect(trace).toHaveAttribute("data-trace", "playing");
+    // Rapid repeats settle to done, once, without errors.
+    await button.click();
+    await button.click();
+    await button.click();
+    await expect(trace).toHaveAttribute("data-trace", "done", { timeout: 5000 });
+    await page.waitForTimeout(400);
+    await expect(trace).toHaveAttribute("data-trace", "done");
+    // Hiding the document cancels a run in progress.
+    await button.click();
+    await expect(trace).toHaveAttribute("data-trace", "playing");
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await expect(trace).toHaveAttribute("data-trace", "idle");
+    // Node labels are never focusable; only the button is.
+    await expect(trace.locator("[data-node] [tabindex], [data-node] a, [data-node] button")).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test("execution trace in a short viewport: starts from the path's start, interruption never restarts it", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.setViewportSize({ width: 320, height: 568 });
+    await page.goto("/");
+    const trace = page.locator("[data-trace]");
+    const figureHeight = await trace.evaluate((el) => el.getBoundingClientRect().height);
+    expect(figureHeight, "the figure is taller than this viewport").toBeGreaterThan(568);
+    // Bring the start of the path into the viewport with room below it.
+    await page.evaluate(() => {
+      const start = document.querySelector("[data-trace-start]")!;
+      window.scrollTo(0, start.getBoundingClientRect().top + window.scrollY - 120);
+    });
+    await expect(trace).toHaveAttribute("data-trace", "playing", { timeout: 3000 });
+    // Scrolling fully away mid-run cancels it back to the static state.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(trace).toHaveAttribute("data-trace", "idle", { timeout: 2000 });
+    // Coming back does not restart it: the one autoplay was consumed.
+    await page.evaluate(() => {
+      const start = document.querySelector("[data-trace-start]")!;
+      window.scrollTo(0, start.getBoundingClientRect().top + window.scrollY - 120);
+    });
+    await page.waitForTimeout(800);
+    await expect(trace).toHaveAttribute("data-trace", "idle");
+    // The explicit replay still works, and a rotation mid-run settles.
+    const button = page.locator("[data-trace-button]");
+    await button.scrollIntoViewIfNeeded();
+    await button.click();
+    await expect(trace).toHaveAttribute("data-trace", "playing");
+    await page.setViewportSize({ width: 568, height: 320 });
+    await expect(trace).toHaveAttribute("data-trace", "idle", { timeout: 2000 });
+    await noHorizontalOverflow(page);
+    expect(errors).toEqual([]);
+  });
+
+  test("execution trace under reduced motion: no autoplay, complete path, quiet emphasis on request", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    const trace = page.locator("[data-trace]");
+    await trace.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(900);
+    await expect(trace).toHaveAttribute("data-trace", "idle");
+    const base = await trace.locator(".trace-edge svg > path:first-child").evaluateAll((els) => els.map((el) => getComputedStyle(el).opacity));
+    expect(base).toEqual(["1", "1", "1", "1"]);
+    await page.locator("[data-trace-button]").click();
+    await expect(trace).toHaveAttribute("data-trace", "emphasis");
+    await expect(trace).toHaveAttribute("data-trace", "done", { timeout: 4000 });
+    await expect(page.getByRole("group", { name: "Convoy runtime boundary" })).toBeVisible();
+  });
+
   for (const viewport of VIEWPORTS) {
     test(`no accessibility violations and no sideways scroll at ${viewport.name}`, async ({ page }) => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await page.goto("/");
       await noHorizontalOverflow(page);
+      const figure = page.locator("#execution figure");
+      expect(await figure.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), "the execution figure does not clip sideways").toBe(true);
+      const geometry = await page.getByRole("group", { name: "Convoy runtime boundary" }).evaluate((group) => {
+        const g = group.getBoundingClientRect();
+        return Array.from(group.querySelectorAll("[data-node]")).map((n) => {
+          const r = n.getBoundingClientRect();
+          return r.left >= g.left && r.right <= g.right && r.top >= g.top && r.bottom <= g.bottom;
+        });
+      });
+      expect(geometry, "Convoy nodes sit inside the boundary").toEqual([true, true, true]);
       // Open every disclosure so hidden content is checked and photographed too.
       await page.locator("details:not([open]) > summary").evaluateAll((summaries) =>
         summaries.forEach((s) => (s.parentElement as HTMLDetailsElement).open = true),
