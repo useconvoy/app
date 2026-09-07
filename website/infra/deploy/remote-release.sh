@@ -7,7 +7,10 @@
 # script changes is copied to rollback/<timestamp>/ first.
 #
 #   remote-release.sh deploy <sha> /tmp/release-<sha>.tar.gz
-#   remote-release.sh rollback            # restore the newest backup
+#   remote-release.sh rollback [backup]   # restore the newest backup, or the
+#                                         # named one under rollback/
+#
+# The pre-launch state of the previous console is rollback/20260907T015223Z.
 set -euo pipefail
 
 APP_DIR=/opt/convoy
@@ -18,10 +21,10 @@ cd "$APP_DIR"
 
 health() {
   # Ask through the compose network, the same way Caddy reaches the app.
+  local body
   for _ in $(seq 1 30); do
-    if docker compose exec -T caddy wget -qO- --timeout=5 http://web:3000/ 2>/dev/null | grep -q "<title>Convoy"; then
-      return 0
-    fi
+    body=$(docker compose exec -T caddy wget -qO- --timeout=5 http://web:3000/ 2>/dev/null </dev/null || true)
+    case "$body" in *"<title>Convoy"*) return 0 ;; esac
     sleep 2
   done
   return 1
@@ -101,18 +104,24 @@ PYEOF
       restore_from "$BACKUP"
       exit 1
     fi
-    # Keep the newest three releases on disk (the active one is among them).
-    ls -1dt "$RELEASES"/*/ 2>/dev/null | tail -n +4 | grep -v "/$SHA/" | xargs -r rm -rf
+    # Keep the newest three releases on disk; never the one just activated.
+    for old in $(ls -1dt "$RELEASES"/*/ 2>/dev/null | tail -n +4 || true); do
+      case "$old" in */"$SHA"/) ;; *) rm -rf "$old" ;; esac
+    done
     docker compose ps </dev/null
     ;;
   rollback)
-    LATEST=$(ls -1d "$ROLLBACK"/*/ 2>/dev/null | sort | tail -1)
-    test -n "$LATEST" || { echo "no backups under $ROLLBACK"; exit 1; }
-    echo "restoring $LATEST"
-    restore_from "$LATEST"
+    if [ -n "${2:-}" ]; then
+      TARGET="$ROLLBACK/${2%/}"
+    else
+      TARGET=$(ls -1d "$ROLLBACK"/*/ 2>/dev/null | sort | tail -1)
+    fi
+    test -n "$TARGET" && test -d "$TARGET" || { echo "no such backup: ${TARGET:-none under $ROLLBACK}"; ls -1 "$ROLLBACK" 2>/dev/null || true; exit 1; }
+    echo "restoring $TARGET"
+    restore_from "$TARGET"
     health && echo "healthy after rollback" || { echo "::error::web is not healthy after rollback"; docker compose logs --tail 60 web </dev/null; exit 1; }
     docker compose ps </dev/null
     ;;
   *)
-    echo "usage: $0 deploy <sha> <tarball> | rollback"; exit 2 ;;
+    echo "usage: $0 deploy <sha> <tarball> | rollback [backup]"; exit 2 ;;
 esac

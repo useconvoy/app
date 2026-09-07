@@ -20,9 +20,13 @@ on:
   workflow_dispatch:
     inputs:
       rollback:
-        description: "Restore the previous web release from the newest backup on the instance instead of deploying"
+        description: "Restore a previous web release from a backup on the instance instead of deploying"
         type: boolean
         default: false
+      rollback_to:
+        description: "Backup to restore (a directory name under /opt/convoy/rollback/, e.g. 20260907T015223Z for the pre-launch console). Empty means the newest."
+        type: string
+        default: ""
 
 concurrency:
   group: deploy-website
@@ -107,7 +111,7 @@ jobs:
         run: |
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking="${STRICT}" \
             website/infra/deploy/remote-release.sh "ubuntu@${{ vars.DEPLOY_HOST }}:/tmp/"
-          $SSH sudo -n bash /tmp/remote-release.sh rollback
+          $SSH sudo -n bash /tmp/remote-release.sh rollback "${{ inputs.rollback_to }}"
 
       - name: Verify the public site
         run: |

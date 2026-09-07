@@ -90,9 +90,10 @@ the instance over SSH, and runs `infra/deploy/remote-release.sh`, which:
 
 The previous console's image stays in ECR and in the local Docker cache, and
 its other services (postgres, notifier, the environments override) are left
-exactly as they were. **Rollback:** run the workflow with `rollback` checked,
-or on the instance `sudo bash /tmp/remote-release.sh rollback`, which restores
-the newest backup and recreates `web`.
+exactly as they were. **Rollback:** run the workflow with `rollback` checked
+(and `rollback_to` naming a backup directory, or empty for the newest), or on
+the instance `sudo bash /tmp/remote-release.sh rollback [backup]`. The
+pre-launch state of the previous console is `rollback/20260907T015223Z`.
 
 No registry push, snapshot, or new AWS resource is involved. The GitHub
 Actions minutes come from the organization's included allowance.
