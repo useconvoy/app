@@ -69,7 +69,6 @@
   /* Motion. Proposals, not facts about attention. */
   --duration-feedback: 120ms;
   --duration-control: 160ms;
-  --duration-trace: 2000ms;
   --duration-state: 180ms;
   --duration-disclosure: 240ms;
   --duration-diagram: 480ms;

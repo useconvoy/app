@@ -3,7 +3,7 @@ import { HeroFigure } from "./HeroFigure";
 
 /**
  * Category, headline, lead and two actions in one column; the compact
- * release figure (HeroFigure, with its one quiet sequence) in the other.
+ * release figure (HeroFigure, static) in the other.
  * Balanced columns from 900px; below that the copy and the primary action
  * come first and the figure follows.
  */

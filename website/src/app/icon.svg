@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <!-- Provisional mark: three aligned release layers on the text-primary
-       token (#18221F) in the background token (#F6F4EF). A favicon cannot read
-       CSS variables, so these two values are copied from tokens.css. -->
-  <rect width="64" height="64" rx="8" fill="#18221F"/>
-  <rect x="14" y="16" width="36" height="8" rx="2" fill="#F6F4EF"/>
-  <rect x="14" y="28" width="36" height="8" rx="2" fill="#F6F4EF"/>
-  <rect x="14" y="40" width="26" height="8" rx="2" fill="#F6F4EF"/>
-</svg>

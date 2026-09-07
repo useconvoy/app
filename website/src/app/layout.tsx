@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 
-import { SITE } from "@/content/homepage";
+import { BRAND, SITE } from "@/content/homepage";
+import { serializeStructuredData } from "@/lib/structured-data";
 import { color } from "@/lib/tokens";
 import "@/styles/globals.css";
 
@@ -30,26 +31,52 @@ const plexMono = localFont({
   fallback: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
 });
 
+/**
+ * Public origin for absolute URLs (link-preview images, the logo in the
+ * structured data). Production builds pass the real one; a local build uses
+ * the canonical site so the tags are identical to what ships.
+ */
+const ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL ?? SITE.url).replace(/\/$/, "");
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? SITE.url),
+  metadataBase: new URL(ORIGIN),
   title: { absolute: SITE.title },
   description: SITE.description,
   applicationName: SITE.name,
-  alternates: { canonical: "/" },
+  // Canonical, og:url and the sitemap entry are the same string on purpose.
+  alternates: { canonical: SITE.canonical },
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: BRAND.favicon, sizes: "48x48 32x32 16x16", type: "image/x-icon" },
+      { url: BRAND.iconSvg, type: "image/svg+xml" },
+      { url: BRAND.icon96, sizes: "96x96", type: "image/png" },
+      { url: BRAND.icon192, sizes: "192x192", type: "image/png" },
+      { url: BRAND.icon512, sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: BRAND.appleTouch, sizes: "180x180", type: "image/png" }],
+  },
   openGraph: {
     title: SITE.ogTitle,
     description: SITE.ogDescription,
     siteName: SITE.name,
     type: "website",
     locale: "en_US",
-    url: "/",
+    url: SITE.canonical,
+    images: [{ url: `${ORIGIN}${BRAND.shareCard}`, width: 1200, height: 630, type: "image/png", alt: BRAND.shareCardAlt }],
   },
   twitter: {
     card: "summary_large_image",
     title: SITE.ogTitle,
     description: SITE.ogDescription,
+    images: [{ url: `${ORIGIN}${BRAND.shareCard}`, width: 1200, height: 630, type: "image/png", alt: BRAND.shareCardAlt }],
   },
-  robots: { index: true, follow: true },
+  robots: {
+    index: true,
+    follow: true,
+    "max-image-preview": "large",
+    googleBot: { index: true, follow: true, "max-image-preview": "large" },
+  },
 };
 
 export const viewport: Viewport = {
@@ -61,7 +88,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeStructuredData(ORIGIN) }} />
+      </body>
     </html>
   );
 }

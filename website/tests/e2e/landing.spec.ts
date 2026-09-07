@@ -34,14 +34,8 @@ test.describe("landing page", () => {
     await expect(page.getByText("Stage:")).toHaveCount(0);
     await expect(page.getByText(/preview/i)).toHaveCount(0);
     await expect(page.locator("header")).not.toContainText("Precision Release");
-    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /^https:\/\/deployconvoy\.com\/?$/);
-    await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", "Deploy AI models to real robots.");
-    const ogImage = await page.locator('meta[property="og:image"]').getAttribute("content");
-    expect(ogImage).toContain("/opengraph-image");
-    // The tag carries the absolute production URL; fetch the same path from the server under test.
-    const image = await page.request.get(new URL(ogImage!).pathname);
-    expect(image.status()).toBe(200);
-    expect(image.headers()["content-type"]).toContain("image/png");
+    // Head tags, icons, JSON-LD and the share card are covered in metadata.spec.ts.
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://deployconvoy.com/");
   });
 
   test("section order and headings follow the brief", async ({ page }) => {
@@ -219,6 +213,7 @@ test.describe("landing page", () => {
     expect(parseFloat(duration)).toBeLessThanOrEqual(0.0001);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(page.locator("#execution figure")).toBeVisible();
+    await expect(page.locator("#top figure button, #execution figure button")).toHaveCount(0);
     await page.screenshot({ path: "tests/screenshots/desktop-1440-reduced-motion.png", fullPage: true });
   });
 
@@ -309,333 +304,69 @@ test.describe("landing page", () => {
     }
   });
 
-  test("execution trace: complete at first paint, plays once in view, replays on request, cleans up", async ({ page }) => {
-    const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/");
-    const trace = page.locator("[data-trace]");
-    // The whole diagram is static and complete before anything moves.
-    await expect(trace).toHaveAttribute("data-trace", "idle");
-    const overlays = trace.locator(".trace-overlay");
-    await expect(overlays).toHaveCount(4);
-    const base = await trace.locator(".trace-edge svg > path:first-child").evaluateAll((els) => els.map((el) => getComputedStyle(el).opacity));
-    expect(base).toEqual(["1", "1", "1", "1"]);
-    expect(await overlays.evaluateAll((els) => els.map((el) => getComputedStyle(el).opacity))).toEqual(["0", "0", "0", "0"]);
-    await expect(page.getByRole("group", { name: "Convoy runtime boundary" })).toHaveCount(1);
-    // One autoplay when the figure comes into view.
-    await trace.scrollIntoViewIfNeeded();
-    await expect(trace).toHaveAttribute("data-trace", "playing", { timeout: 3000 });
-    await expect(trace).toHaveAttribute("data-trace", "done", { timeout: 5000 });
-    // Leaving and returning does not play it again.
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await page.waitForTimeout(300);
-    await trace.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(700);
-    await expect(trace).toHaveAttribute("data-trace", "done");
-    // Pointer movement over the figure does not restart it.
-    const box = (await trace.boundingBox())!;
-    await page.mouse.move(box.x + 60, box.y + 60);
-    await page.mouse.move(box.x + 400, box.y + 90, { steps: 8 });
-    await page.waitForTimeout(250);
-    await expect(trace).toHaveAttribute("data-trace", "done");
-    // A real button replays it: click, Enter, Space.
-    const button = page.locator("[data-trace-button]");
-    await expect(button).toHaveText("Trace again");
-    expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(48);
-    await button.click();
-    await expect(trace).toHaveAttribute("data-trace", "playing");
-    await expect(trace).toHaveAttribute("data-trace", "done", { timeout: 5000 });
-    await button.focus();
-    await page.keyboard.press("Enter");
-    await expect(trace).toHaveAttribute("data-trace", "playing");
-    await expect(trace).toHaveAttribute("data-trace", "done", { timeout: 5000 });
-    await page.keyboard.press("Space");
-    await expect(trace).toHaveAttribute("data-trace", "playing");
-    // Rapid repeats settle to done, once, without errors.
-    await button.click();
-    await button.click();
-    await button.click();
-    await expect(trace).toHaveAttribute("data-trace", "done", { timeout: 5000 });
-    await page.waitForTimeout(400);
-    await expect(trace).toHaveAttribute("data-trace", "done");
-    // Hiding the document cancels a run in progress.
-    await button.click();
-    await expect(trace).toHaveAttribute("data-trace", "playing");
-    await page.evaluate(() => {
-      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
-    await expect(trace).toHaveAttribute("data-trace", "idle");
-    // Node labels are never focusable; only the button is.
-    await expect(trace.locator("[data-node] [tabindex], [data-node] a, [data-node] button")).toHaveCount(0);
-    expect(errors).toEqual([]);
-  });
-
-  test("execution trace in a short viewport: starts from the path's start, interruption never restarts it", async ({ page }) => {
-    const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
-    await page.setViewportSize({ width: 320, height: 568 });
-    await page.goto("/");
-    const trace = page.locator("[data-trace]");
-    const figureHeight = await trace.evaluate((el) => el.getBoundingClientRect().height);
-    expect(figureHeight, "the figure is taller than this viewport").toBeGreaterThan(568);
-    // Bring the start of the path into the viewport with room below it.
-    await page.evaluate(() => {
-      const start = document.querySelector("[data-trace-start]")!;
-      window.scrollTo(0, start.getBoundingClientRect().top + window.scrollY - 120);
-    });
-    await expect(trace).toHaveAttribute("data-trace", "playing", { timeout: 3000 });
-    // Scrolling fully away mid-run cancels it back to the static state.
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await expect(trace).toHaveAttribute("data-trace", "idle", { timeout: 2000 });
-    // Coming back does not restart it: the one autoplay was consumed.
-    await page.evaluate(() => {
-      const start = document.querySelector("[data-trace-start]")!;
-      window.scrollTo(0, start.getBoundingClientRect().top + window.scrollY - 120);
-    });
-    await page.waitForTimeout(800);
-    await expect(trace).toHaveAttribute("data-trace", "idle");
-    // The explicit replay still works, and a rotation mid-run settles.
-    const button = page.locator("[data-trace-button]");
-    await button.scrollIntoViewIfNeeded();
-    await button.click();
-    await expect(trace).toHaveAttribute("data-trace", "playing");
-    await page.setViewportSize({ width: 568, height: 320 });
-    await expect(trace).toHaveAttribute("data-trace", "idle", { timeout: 2000 });
-    await noHorizontalOverflow(page);
-    expect(errors).toEqual([]);
-  });
-
-  test("execution trace lifecycle: cancellation before the scheduled frame wins, same-frame repeats collapse, manual play consumes autoplay", async ({ page }) => {
-    const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/");
-    const trace = page.locator("[data-trace]");
-    await expect(trace).toHaveAttribute("data-trace", "idle");
-    // Activate and hide the document synchronously, before the frame that would start playback.
-    await page.evaluate(() => {
-      (document.querySelector("[data-trace-button]") as HTMLButtonElement).click();
-      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
-    await page.waitForTimeout(400);
-    await expect(trace).toHaveAttribute("data-trace", "idle");
-    await page.evaluate(() => {
-      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
-    await page.waitForTimeout(300);
-    await expect(trace).toHaveAttribute("data-trace", "idle");
-    // Three activations in the same frame produce one run that ends once and stays ended.
-    await page.evaluate(() => {
-      const button = document.querySelector("[data-trace-button]") as HTMLButtonElement;
-      button.click();
-      button.click();
-      button.click();
-    });
-    await expect(trace).toHaveAttribute("data-trace", "playing");
-    await expect(trace).toHaveAttribute("data-trace", "done", { timeout: 5000 });
-    const flips = await trace.evaluate(
-      (el) =>
-        new Promise<number>((resolve) => {
-          let count = 0;
-          const observer = new MutationObserver(() => {
-            count += 1;
-          });
-          observer.observe(el, { attributes: true, attributeFilter: ["data-trace"] });
-          setTimeout(() => {
-            observer.disconnect();
-            resolve(count);
-          }, 1200);
-        }),
-    );
-    expect(flips, "no further state changes after done").toBe(0);
-    // The manual activations above consumed the autoplay: entering the start marker now does not replay.
-    await page.evaluate(() => {
-      const start = document.querySelector("[data-trace-start]")!;
-      window.scrollTo(0, start.getBoundingClientRect().top + window.scrollY - 200);
-    });
-    await page.waitForTimeout(800);
-    await expect(trace).toHaveAttribute("data-trace", "done");
-    expect(errors).toEqual([]);
-  });
-
-  test("reduced motion: no autoplay, complete path, and a truthful highlight toggle on both figures", async ({ page }) => {
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/");
-    const trace = page.locator("[data-trace]");
-    await trace.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(900);
-    await expect(trace).toHaveAttribute("data-trace", "idle");
-    const base = await trace.locator(".trace-edge svg > path:first-child").evaluateAll((els) => els.map((el) => getComputedStyle(el).opacity));
-    expect(base).toEqual(["1", "1", "1", "1"]);
-    const button = page.locator("[data-trace-button]");
-    await expect(button).toHaveText("Highlight the path");
-    await button.click();
-    await expect(trace).toHaveAttribute("data-trace", "emphasis");
-    await expect(button).toHaveText("Clear highlight");
-    await expect(button).toHaveAttribute("aria-pressed", "true");
-    const lit = await trace.locator(".trace-node").evaluateAll((els) => els.map((el) => getComputedStyle(el).borderColor));
-    expect(lit.every((c) => c === "rgb(166, 61, 34)")).toBe(true);
-    await expect(page.locator("[data-trace-status]")).toHaveText("Path highlighted");
-    await button.click();
-    await expect(trace).toHaveAttribute("data-trace", "done");
-    await expect(button).toHaveAttribute("aria-pressed", "false");
-    await expect(page.locator("[data-trace-status]")).toHaveText("Highlight cleared");
-    await expect(page.getByRole("group", { name: "Convoy runtime boundary" })).toBeVisible();
-    // Hero: no autoplay, same toggle.
-    await page.evaluate(() => window.scrollTo(0, 0));
-    const hero = page.locator("[data-trace-hero]");
-    await hero.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(600);
-    await expect(hero).toHaveAttribute("data-trace-hero", "idle");
-    const replay = page.locator("[data-hero-replay]");
-    await expect(replay).toHaveText("Highlight the release");
-    await replay.click();
-    await expect(hero).toHaveAttribute("data-trace-hero", "emphasis");
-    expect(await page.locator("[data-envelope]").evaluate((el) => getComputedStyle(el).borderStyle)).toBe("solid");
-    await replay.click();
-    await expect(hero).toHaveAttribute("data-trace-hero", "done");
-  });
-
-  test("execution trace is visibly drawn: terracotta stroke and node fill at the midpoint, immediate control feedback, release at the end", async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/");
-    const trace = page.locator("[data-trace]");
-    const button = page.locator("[data-trace-button]");
-    const status = page.locator("[data-trace-status]");
-    const progress = page.locator("[data-trace-progress]");
-    await trace.scrollIntoViewIfNeeded();
-    await expect(trace).toHaveAttribute("data-trace", "done", { timeout: 6000 });
-    await page.screenshot({ path: "tests/screenshots/trace-1440-before.png" });
-    await button.click();
-    await expect(button).toHaveText("Tracing…");
-    await expect(status).toHaveText("Tracing the path");
-    await expect(progress).toContainText("Tracing");
-    // The visible progress names successive nodes; the live announcement does not change between them.
-    await page.waitForTimeout(300);
-    const earlyProgress = await progress.textContent();
-    const earlyLive = await status.textContent();
-    await page.waitForTimeout(800);
-    await page.screenshot({ path: "tests/screenshots/trace-1440-mid.png" });
-    const mid = await trace.evaluate((root) => {
-      const nodes = Array.from(root.querySelectorAll<HTMLElement>(".trace-node")).map((el) => ({
-        border: getComputedStyle(el).borderColor,
-        background: getComputedStyle(el).backgroundColor,
-      }));
-      const overlays = Array.from(root.querySelectorAll<SVGPathElement>(".trace-overlay")).map((el) => ({
-        opacity: getComputedStyle(el).opacity,
-        offset: parseFloat(getComputedStyle(el).strokeDashoffset),
-      }));
-      return { nodes, overlays };
-    });
-    const litNodes = mid.nodes.filter((n) => n.border === "rgb(166, 61, 34)" && n.background === "rgb(249, 233, 225)");
-    expect(litNodes.length, "nodes already reached are filled and outlined in terracotta").toBeGreaterThanOrEqual(2);
-    expect(mid.nodes.filter((n) => n.border !== "rgb(166, 61, 34)").length, "nodes not yet reached are still at base").toBeGreaterThanOrEqual(1);
-    const drawn = mid.overlays.filter((o) => o.opacity === "1" && o.offset < 0.5);
-    expect(drawn.length, "at least one connector is drawn in terracotta at the midpoint").toBeGreaterThanOrEqual(1);
-    await expect(progress).toContainText(/Input processing|Model|Action processing/);
-    expect(await progress.textContent()).not.toBe(earlyProgress);
-    expect(await status.textContent(), "intermediate nodes are not announced").toBe(earlyLive);
-    expect(await status.evaluate((el) => el.getAttribute("aria-live"))).toBe("polite");
-    expect(await progress.evaluate((el) => el.getAttribute("aria-live"))).toBeNull();
-    await expect(trace).toHaveAttribute("data-trace", "done", { timeout: 4000 });
-    await expect(button).toHaveText("Trace again");
-    await expect(status).toHaveText("Trace complete");
-    await expect(progress).toHaveText("Trace complete");
-    await page.waitForTimeout(600);
-    await page.screenshot({ path: "tests/screenshots/trace-1440-after.png" });
-    const after = await trace.locator(".trace-node").evaluateAll((els) => els.map((el) => getComputedStyle(el).borderColor));
-    expect(after.every((c) => c !== "rgb(166, 61, 34)"), "nodes release after the run").toBe(true);
-    const overlaysAfter = await trace.locator(".trace-overlay").evaluateAll((els) => els.map((el) => getComputedStyle(el).opacity));
-    expect(overlaysAfter.every((o) => o === "0")).toBe(true);
-  });
-
-  test("on a phone the trace control sits at the top of the figure and a tap plays nodes that are on screen", async ({ browser }) => {
-    const context = await browser.newContext({ viewport: { width: 393, height: 700 }, hasTouch: true });
-    const page = await context.newPage();
-    await page.goto("/");
-    const button = page.locator("[data-trace-button]");
-    const controls = page.locator("[data-trace-controls]");
-    const firstNode = page.locator("[data-node]").first();
-    // Scroll the control to the top of the viewport, under the sticky header, as a reader would.
-    await controls.evaluate((el) => el.scrollIntoView({ block: "start", behavior: "instant" }));
-    const before = await page.evaluate(() => window.scrollY);
-    expect((await controls.boundingBox())!.y).toBeLessThan((await firstNode.boundingBox())!.y);
-    await page.touchscreen.tap((await button.boundingBox())!.x + 20, (await button.boundingBox())!.y + 20);
-    await expect(page.locator("[data-trace]")).toHaveAttribute("data-trace", "playing");
-    expect(await page.evaluate(() => window.scrollY), "no scroll hijack").toBe(before);
-    const visible = await page.locator("[data-node] .trace-node").evaluateAll((els) =>
-      els.filter((el) => {
-        const r = el.getBoundingClientRect();
-        return r.top >= 0 && r.bottom <= window.innerHeight;
-      }).length,
-    );
-    expect(visible, "several animated nodes are inside the viewport when the run starts").toBeGreaterThanOrEqual(3);
-    await page.waitForTimeout(700);
-    await page.screenshot({ path: "tests/screenshots/trace-393-mid.png" });
-    await expect(page.locator("[data-trace-progress]")).toContainText("Tracing");
-    await expect(page.locator("[data-trace]")).toHaveAttribute("data-trace", "done", { timeout: 4000 });
-    await noHorizontalOverflow(page);
-    await context.close();
-  });
-
-  test("hero sequence: complete at first paint, plays once when the figure enters view, no layout shift, replay by pointer and keyboard", async ({ page }) => {
-    const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
-    // Phone: the figure starts below the first screen, so nothing plays until it is reached.
-    await page.setViewportSize({ width: 393, height: 700 });
-    await page.goto("/");
-    const hero = page.locator("[data-trace-hero]");
-    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    await page.waitForTimeout(500);
-    await expect(hero).toHaveAttribute("data-trace-hero", "idle");
-    const heightBefore = await hero.evaluate((el) => el.getBoundingClientRect().height);
-    await hero.scrollIntoViewIfNeeded();
-    await expect(hero).toHaveAttribute("data-trace-hero", "playing", { timeout: 3000 });
-    await page.waitForTimeout(1200);
-    await page.screenshot({ path: "tests/screenshots/hero-393-mid.png" });
-    const mid = await hero.evaluate((root) => ({
-      model: getComputedStyle(root.querySelector("[data-endpoint='model']")!).backgroundColor,
-      parts: Array.from(root.querySelectorAll(".hero-part")).map((el) => getComputedStyle(el).backgroundColor),
-      height: root.getBoundingClientRect().height,
-    }));
-    expect(mid.model).toBe("rgb(249, 233, 225)");
-    expect(mid.parts.filter((c) => c === "rgb(249, 233, 225)").length, "some release parts have taken their accent").toBeGreaterThanOrEqual(2);
-    expect(mid.parts.filter((c) => c !== "rgb(249, 233, 225)").length, "and some have not yet").toBeGreaterThanOrEqual(1);
-    expect(Math.abs(mid.height - heightBefore), "no layout shift while playing").toBeLessThan(1);
-    await page.waitForTimeout(1300);
-    const late = await page.locator("[data-envelope]").evaluate((el) => ({ style: getComputedStyle(el).borderStyle, color: getComputedStyle(el).borderColor }));
-    expect(late.style).toBe("solid");
-    expect(late.color).toBe("rgb(166, 61, 34)");
-    await expect(hero).toHaveAttribute("data-trace-hero", "done", { timeout: 3000 });
-    await page.waitForTimeout(600);
-    expect(await page.locator("[data-envelope]").evaluate((el) => getComputedStyle(el).borderStyle)).toBe("dashed");
-    expect(Math.abs((await hero.evaluate((el) => el.getBoundingClientRect().height)) - heightBefore)).toBeLessThan(1);
-    // Replay control: pointer, then keyboard; label and status give immediate feedback.
-    const replay = page.locator("[data-hero-replay]");
-    expect((await replay.boundingBox())!.height).toBeGreaterThanOrEqual(48);
-    await replay.click();
-    await expect(replay).toHaveText("Playing…");
-    await expect(page.locator("[data-hero-status]")).toContainText("Model");
-    await expect(hero).toHaveAttribute("data-trace-hero", "done", { timeout: 4000 });
-    await replay.focus();
-    await page.keyboard.press("Enter");
-    await expect(hero).toHaveAttribute("data-trace-hero", "playing");
-    await page.keyboard.press("Space");
-    await expect(hero).toHaveAttribute("data-trace-hero", "playing");
-    await expect(hero).toHaveAttribute("data-trace-hero", "done", { timeout: 4000 });
-    // Desktop: the figure is in view at load, so it plays once on its own.
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/");
-    await expect(page.locator("[data-trace-hero]")).toHaveAttribute("data-trace-hero", "playing", { timeout: 3000 });
-    await page.waitForTimeout(1200);
-    await page.screenshot({ path: "tests/screenshots/hero-1440-mid.png" });
-    await expect(page.locator("[data-trace-hero]")).toHaveAttribute("data-trace-hero", "done", { timeout: 4000 });
-    expect(errors).toEqual([]);
+  test("both diagrams are static and complete at first paint, in normal and reduced motion, on desktop and phones", async ({ page }) => {
+    const sizes = [
+      { name: "desktop-1440", width: 1440, height: 900 },
+      { name: "iphone-pro-393", width: 393, height: 852 },
+      { name: "iphone-pro-max-430", width: 430, height: 932 },
+    ];
+    for (const reducedMotion of ["no-preference", "reduce"] as const) {
+      await page.emulateMedia({ reducedMotion });
+      for (const size of sizes) {
+        const label = `${size.name} (${reducedMotion})`;
+        await page.setViewportSize({ width: size.width, height: size.height });
+        await page.goto("/");
+        const hero = page.locator("#top figure");
+        const execution = page.locator("#execution figure");
+        // No control, live region, progress line or sequence state inside either figure.
+        for (const figure of [hero, execution]) {
+          await expect(figure.locator("button, [role='status'], [aria-live], [data-trace], [data-trace-hero], [data-trace-button], [data-hero-replay], [data-trace-progress]"), `no motion remnants in ${label}`).toHaveCount(0);
+          await expect(figure.getByText(/replay|playing|trace the path|tracing|trace again|highlight/i)).toHaveCount(0);
+          // Nothing in the figure runs an animation, and every visible element is fully opaque at first paint.
+          const moving = await figure.evaluate((root) =>
+            Array.from(root.querySelectorAll("*"))
+              .filter((el) => {
+                const cs = getComputedStyle(el);
+                return cs.animationName !== "none" || (cs.display !== "none" && parseFloat(cs.opacity) < 1);
+              })
+              .map((el) => el.tagName + "." + el.className),
+          );
+          expect(moving, `nothing animates or is hidden in ${label}`).toEqual([]);
+        }
+        // Every node label, note and placement is readable now; the boundary holds its three nodes.
+        const nodes = execution.locator("[data-node]");
+        await expect(nodes).toHaveCount(5);
+        for (const text of ["Sensors", "Input processing", "Model", "Action processing", "Robot controller"]) {
+          await expect(execution.getByText(text, { exact: true }).first(), `${text} visible in ${label}`).toBeVisible();
+        }
+        const boundary = page.getByRole("group", { name: "Convoy runtime boundary" });
+        await expect(boundary).toBeVisible();
+        await expect(boundary.locator("[data-node]")).toHaveCount(3);
+        await expect(execution.getByText("new observations / robot state")).toBeVisible();
+        // Hero: model, six release parts, controller, all visible, in order.
+        for (const text of ["Trained model", "your team", "Robot controller", "outside Convoy"]) {
+          await expect(hero.getByText(text, { exact: true }), `${text} visible in ${label}`).toBeVisible();
+        }
+        await expect(hero.locator("[data-field]")).toHaveCount(6);
+        for (const part of await hero.locator("[data-field]").all()) await expect(part).toBeVisible();
+        const order = await hero.locator("[data-endpoint], [data-envelope]").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().top));
+        expect(order[0]).toBeLessThan(order[1]);
+        expect(order[1]).toBeLessThan(order[2]);
+        // Nothing moves after paint: the same geometry a moment later.
+        const before = await execution.evaluate((el) => JSON.stringify(el.getBoundingClientRect()));
+        await page.waitForTimeout(700);
+        expect(await execution.evaluate((el) => JSON.stringify(el.getBoundingClientRect())), `no layout movement in ${label}`).toBe(before);
+        await noHorizontalOverflow(page);
+        // The page's real interactions still work: the details disclosure in the hero and the contact link.
+        const details = page.locator("#top details");
+        await details.locator("summary").click();
+        await expect(page.locator("[data-release-details]")).toBeVisible();
+        await details.locator("summary").click();
+        await expect(page.locator("[data-release-details]")).toBeHidden();
+        await expect(page.locator("[data-contact-link]")).toHaveAttribute("href", /^mailto:founders@deployconvoy\.com\?subject=/);
+        if (reducedMotion === "no-preference") await page.screenshot({ path: `tests/screenshots/static-${size.name}.png`, fullPage: true });
+      }
+    }
   });
 
   test("WCAG text-spacing overrides and 200% text enlargement do not clip, truncate, or overflow", async ({ page }) => {

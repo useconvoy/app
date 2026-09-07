@@ -194,14 +194,6 @@ body {
     border-color var(--duration-control) var(--ease-state),
     color var(--duration-control) var(--ease-state);
 }
-/* The arrow on a primary action moves 2px on hover or focus, and no further. */
-.btn .btn-arrow {
-  transition: transform var(--duration-control) var(--ease-state);
-}
-.btn:hover .btn-arrow,
-.btn:focus-visible .btn-arrow {
-  transform: translateX(2px);
-}
 .btn-primary {
   background: var(--accent);
   color: var(--surface);
@@ -217,9 +209,6 @@ body {
 .btn-secondary:hover {
   background: var(--surface-subtle);
   border-color: var(--text-primary);
-}
-.btn:active {
-  transform: translateY(1px);
 }
 .btn[aria-disabled="true"] {
   cursor: not-allowed;
@@ -289,151 +278,6 @@ details.disclosure[open] > summary .disclosure-mark {
 }
 .field-input::placeholder {
   color: var(--text-muted);
-}
-
-/* --- The execution-path trace and the hero sequence. Both diagrams are
- * complete at first paint. A run draws a terracotta overlay along each
- * connector and fills each node as the trace reaches it (staggered by --i);
- * the traced state holds until the run ends, then releases through the
- * normal transitions. Hover and focus only give static feedback. --- */
-.trace-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--border-strong);
-  transition: background-color var(--duration-control) var(--ease-state);
-}
-[data-trace="playing"] .trace-dot,
-[data-trace-hero="playing"] .trace-dot {
-  background: var(--accent);
-  animation: trace-dot 900ms var(--ease-state) infinite alternate;
-}
-[data-trace="emphasis"] .trace-dot,
-[data-trace-hero="emphasis"] .trace-dot,
-[data-trace="done"] .trace-dot,
-[data-trace-hero="done"] .trace-dot {
-  background: var(--accent);
-}
-@keyframes trace-dot {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0.35;
-  }
-}
-
-.trace-overlay {
-  color: var(--accent);
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  opacity: 0;
-  transition: opacity 400ms var(--ease-state);
-}
-.trace-node,
-.hero-node,
-.hero-part,
-.hero-envelope {
-  transition:
-    border-color 400ms var(--ease-state),
-    background-color 400ms var(--ease-state),
-    box-shadow 400ms var(--ease-state),
-    color 400ms var(--ease-state);
-}
-.trace .trace-node:hover {
-  border-color: var(--text-primary);
-}
-
-/* Execution: node i lights at i*450ms; the connector after it draws from i*450+200ms. */
-.trace[data-trace="playing"] .trace-node {
-  animation: trace-node-in 300ms var(--ease-state) forwards;
-  animation-delay: calc(var(--i) * 450ms);
-}
-.trace[data-trace="playing"] .trace-overlay {
-  animation: trace-edge-in 300ms linear forwards;
-  animation-delay: calc(var(--i) * 450ms + 200ms);
-}
-.trace[data-trace="emphasis"] .trace-node {
-  border-color: var(--accent);
-  background-color: var(--accent-tint);
-  box-shadow: 0 0 0 2px var(--accent);
-}
-.trace[data-trace="emphasis"] .trace-overlay {
-  stroke-dashoffset: 0;
-  opacity: 1;
-}
-
-/* Hero: model at 0, connector at 300ms, six parts from 650ms every 160ms,
- * connector at 1750ms, controller at 2050ms, boundary at 2250ms. */
-.hero-trace[data-trace-hero="playing"] [data-endpoint="model"] {
-  animation: trace-node-in 300ms var(--ease-state) forwards;
-}
-.hero-trace[data-trace-hero="playing"] .hero-edge-model .trace-overlay {
-  animation: trace-edge-in 350ms linear forwards;
-  animation-delay: 300ms;
-}
-.hero-trace[data-trace-hero="playing"] .hero-part {
-  animation: hero-part-in 260ms var(--ease-state) forwards;
-  animation-delay: calc(650ms + var(--i) * 160ms);
-}
-.hero-trace[data-trace-hero="playing"] .hero-edge-robot .trace-overlay {
-  animation: trace-edge-in 350ms linear forwards;
-  animation-delay: 1750ms;
-}
-.hero-trace[data-trace-hero="playing"] [data-endpoint="robot"] {
-  animation: trace-node-in 300ms var(--ease-state) forwards;
-  animation-delay: 2050ms;
-}
-.hero-trace[data-trace-hero="playing"] .hero-envelope {
-  animation: hero-boundary-in 300ms var(--ease-state) forwards;
-  animation-delay: 2250ms;
-}
-.hero-trace[data-trace-hero="emphasis"] [data-endpoint],
-.hero-trace[data-trace-hero="emphasis"] .hero-part {
-  border-color: var(--accent);
-  background-color: var(--accent-tint);
-  color: var(--accent-hover);
-}
-.hero-trace[data-trace-hero="emphasis"] .hero-envelope {
-  border-style: solid;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-tint);
-}
-.hero-trace[data-trace-hero="emphasis"] .trace-overlay {
-  stroke-dashoffset: 0;
-  opacity: 1;
-}
-
-@keyframes trace-node-in {
-  to {
-    border-color: var(--accent);
-    background-color: var(--accent-tint);
-    box-shadow: 0 0 0 2px var(--accent);
-  }
-}
-@keyframes trace-edge-in {
-  from {
-    stroke-dashoffset: 1;
-    opacity: 1;
-  }
-  to {
-    stroke-dashoffset: 0;
-    opacity: 1;
-  }
-}
-@keyframes hero-part-in {
-  to {
-    background-color: var(--accent-tint);
-    color: var(--accent-hover);
-  }
-}
-@keyframes hero-boundary-in {
-  to {
-    border-style: solid;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 4px var(--accent-tint);
-  }
 }
 
 /* Only the code panel may scroll sideways; the page body never does. */

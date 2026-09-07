@@ -14,7 +14,9 @@ SIL Open Font License. No component library, no animation framework, no
 analytics.
 
 ```
-src/app/                 layout, page, 404, robots, sitemap, link-preview image
+src/app/                 layout (metadata, JSON-LD), page, 404, robots, sitemap, manifest
+src/assets/brand/        the mark (SVG) and the share card (HTML); scripts/build-brand.mjs renders public/
+public/                  favicon.ico, icons/, share/: versioned static brand assets
 src/components/          one component per page section plus header, footer, envelope, contact
 src/content/homepage.ts  every public sentence on the page
 src/content/claims.ts    the claims ledger: text, stage, evidence, approval
@@ -43,7 +45,37 @@ pnpm run build
 pnpm run test:e2e         # against the production build; writes tests/screenshots/
 node scripts/measure-page.mjs http://127.0.0.1:3100   # section heights, visible words, hero CTA position
 pnpm run verify           # all of the above, in order
+node scripts/build-brand.mjs [review-dir]   # re-render favicon.ico, icons/ and the share card from src/assets/brand/
 ```
+
+`tests/e2e/metadata.spec.ts` checks the crawler-facing surface on the raw
+HTML and the static endpoints: title, description, canonical, robots
+directives, Open Graph and Twitter tags with an absolute 1200 × 630 PNG,
+every declared icon served at its stated size and type (including the
+16/32/48 ICO), the browser-mode manifest, valid WebSite and Organization
+JSON-LD limited to facts the page states, robots.txt and sitemap agreeing
+with the canonical URL, and the www host answered with a 308 to the apex.
+
+## Brand assets and metadata
+
+The mark and the link-preview card were finalized in Claude Design and live
+as sources in `src/assets/brand/`. `scripts/build-brand.mjs` renders them
+with the pinned Chromium into `public/`: `favicon.ico` (16, 32 and 48 px
+PNGs in one container, at the root where browsers and crawlers look first),
+an SVG, and 96, 180, 192 and 512 px PNGs under `icons/`, plus the 1200 × 630
+card under `share/`. Paths carry `BRAND_VERSION` from
+`src/content/homepage.ts`; bump it when the artwork changes so link-preview
+caches fetch the new card instead of the one they stored. `favicon.ico`
+keeps its stable URL. The icons are not padded for maskable use and are not
+declared as such.
+
+The canonical URL is `https://deployconvoy.com/` (apex, https, trailing
+slash) and the same string appears in the canonical link, `og:url`, the
+sitemap and the JSON-LD ids. `next.config.ts` sets `trailingSlash` so the
+framework emits that form, with `skipTrailingSlashRedirect` so no
+normalizing hop is added; the legacy paths still redirect straight to `/`.
+The `www` host is answered by the app with a 308 to the apex (Caddy passes
+the original Host header); DNS and TLS are unchanged.
 
 The e2e suite is the desktop-and-mobile release gate: axe at 1440, 1280,
 768, 390 and 320 with every disclosure open; no sideways scroll at any
@@ -51,7 +83,9 @@ width; 44px control targets; the skip link; the mobile menu (aria-expanded,
 Escape, focus return); every on-page anchor; the diagrams reflowing to an
 ordered vertical structure on mobile with the controller and safety
 boundary intact; 200% zoom reflow and the contact address wrapping at 320;
-reduced-motion rendering; the mailto link's address, subject and template;
+both diagrams static and complete at first paint in normal and
+reduced motion at 1440, 393 and 430 with no control, live region or
+animation remnants; the mailto link's address, subject and template;
 and the legacy redirects. It writes full-page screenshots to
 `tests/screenshots/`. In this session's image the
 pinned Chromium is supplied through `PLAYWRIGHT_CHROMIUM_PATH`.
