@@ -1,4 +1,6 @@
 import { CONTACT, CONTACT_MAILTO } from "@/content/homepage";
+
+const [CONTACT_LOCAL, CONTACT_DOMAIN] = CONTACT.email.split("@");
 import { ArrowGlyph } from "./Hero";
 import { Section, SectionHeading } from "./Section";
 
@@ -40,12 +42,19 @@ export function ContactSection() {
 
             <div className="mt-6 border-t border-subtle pt-5">
               <p className="type-eyebrow">{CONTACT.addressLabel}</p>
+              {/* On a narrow screen the address wraps before the @ and keeps the
+                  domain whole; the text content and the href stay one contiguous
+                  address, so copying or selecting it is unaffected. */}
               <a
                 href={`mailto:${CONTACT.email}`}
-                className="mt-2 inline-block font-mono text-[22px] leading-tight tracking-[-0.01em] text-primary underline decoration-accent decoration-2 underline-offset-[6px] select-all [overflow-wrap:anywhere] hover:text-accent-hover sm:text-[26px]"
+                className="mt-2 inline-block font-mono text-[22px] leading-tight tracking-[-0.01em] text-primary underline decoration-accent decoration-2 underline-offset-[6px] select-all hover:text-accent-hover sm:text-[26px]"
                 data-contact-address
               >
-                {CONTACT.email}
+                {CONTACT_LOCAL}
+                <wbr />
+                <span className="whitespace-nowrap" data-contact-domain>
+                  @{CONTACT_DOMAIN}
+                </span>
               </a>
             </div>
             <p className="type-small mt-4 text-muted">{CONTACT.privacyNote}</p>

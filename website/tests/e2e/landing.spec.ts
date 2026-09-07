@@ -271,6 +271,15 @@ test.describe("landing page", () => {
         return r.right <= c.right + 1 && r.left >= c.left - 1;
       });
       expect(fits, `contact address stays inside its block at ${width}`).toBe(true);
+      // The address is one contiguous string; if it wraps, it wraps before the @ and the domain stays whole.
+      await expect(address).toHaveText("founders@deployconvoy.com");
+      await expect(address).toHaveAttribute("href", "mailto:founders@deployconvoy.com");
+      const lines = await address.evaluate((el) => {
+        const rows = (node: Element) => new Set(Array.from(node.getClientRects()).map((r) => Math.round(r.top))).size;
+        return { address: rows(el), domain: rows(el.querySelector("[data-contact-domain]")!) };
+      });
+      expect(lines.domain, `domain never splits at ${width}`).toBe(1);
+      expect(lines.address, `address takes at most two lines at ${width}`).toBeLessThanOrEqual(2);
     }
   });
 
@@ -369,6 +378,61 @@ test.describe("landing page", () => {
     await page.setViewportSize({ width: 568, height: 320 });
     await expect(trace).toHaveAttribute("data-trace", "idle", { timeout: 2000 });
     await noHorizontalOverflow(page);
+    expect(errors).toEqual([]);
+  });
+
+  test("execution trace lifecycle: cancellation before the scheduled frame wins, same-frame repeats collapse, manual play consumes autoplay", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+    const trace = page.locator("[data-trace]");
+    await expect(trace).toHaveAttribute("data-trace", "idle");
+    // Activate and hide the document synchronously, before the frame that would start playback.
+    await page.evaluate(() => {
+      (document.querySelector("[data-trace-button]") as HTMLButtonElement).click();
+      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await page.waitForTimeout(400);
+    await expect(trace).toHaveAttribute("data-trace", "idle");
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await page.waitForTimeout(300);
+    await expect(trace).toHaveAttribute("data-trace", "idle");
+    // Three activations in the same frame produce one run that ends once and stays ended.
+    await page.evaluate(() => {
+      const button = document.querySelector("[data-trace-button]") as HTMLButtonElement;
+      button.click();
+      button.click();
+      button.click();
+    });
+    await expect(trace).toHaveAttribute("data-trace", "playing");
+    await expect(trace).toHaveAttribute("data-trace", "done", { timeout: 5000 });
+    const flips = await trace.evaluate(
+      (el) =>
+        new Promise<number>((resolve) => {
+          let count = 0;
+          const observer = new MutationObserver(() => {
+            count += 1;
+          });
+          observer.observe(el, { attributes: true, attributeFilter: ["data-trace"] });
+          setTimeout(() => {
+            observer.disconnect();
+            resolve(count);
+          }, 1200);
+        }),
+    );
+    expect(flips, "no further state changes after done").toBe(0);
+    // The manual activations above consumed the autoplay: entering the start marker now does not replay.
+    await page.evaluate(() => {
+      const start = document.querySelector("[data-trace-start]")!;
+      window.scrollTo(0, start.getBoundingClientRect().top + window.scrollY - 200);
+    });
+    await page.waitForTimeout(800);
+    await expect(trace).toHaveAttribute("data-trace", "done");
     expect(errors).toEqual([]);
   });
 

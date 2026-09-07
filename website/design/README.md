@@ -82,13 +82,18 @@ Rules the implementation follows (`ExecutionTrace.tsx`, `globals.css`):
   first paint. The trace is an overlay on each connector drawn by CSS
   keyframes, about 2s end to end, staggered across the four connectors with
   a brief border emphasis on each node as it is reached; then it lets go.
-- It plays once when at least 60% of the figure is in view, unless the
-  visitor prefers reduced motion or has Save-Data on. A 48px "Trace the
-  path" button replays it by click, tap, Enter or Space. Pointer movement
-  never starts it; hover only darkens a node border.
-- Leaving the viewport, hiding the document, or unmounting cancels a run.
-  One timeout marks the end; there is no requestAnimationFrame loop and no
-  idle timer.
+- It plays once when the start of the path enters the viewport (a marker
+  just before the first node, so a figure taller than a short or landscape
+  viewport still qualifies), unless the visitor prefers reduced motion or
+  has Save-Data on. Any activation, including the button, uses up that one
+  autoplay. A 48px "Trace the path" button replays it by click, tap, Enter
+  or Space. Pointer movement never starts it; hover only darkens a node
+  border.
+- Leaving the viewport entirely, hiding the document, a change of motion
+  preference, a resize or rotation, or unmounting cancels a run. Each
+  activation carries a run id; its one pending frame is tracked and
+  cancelled, and a frame or timeout from a superseded run does nothing.
+  There is no requestAnimationFrame loop and no idle timer.
 - Under reduced motion the button applies a quiet static emphasis to the
   path for about a second instead of animating it.
 - Primary actions move their arrow 2px on hover or focus; colour and border
