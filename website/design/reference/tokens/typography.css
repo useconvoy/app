@@ -1,0 +1,19 @@
+:root{
+--text-h1-size:72px;--text-h1-line:1.04;--text-h1-tracking:-0.035em;--text-h1-weight:500;
+--text-h2-size:48px;--text-h2-line:1.12;--text-h2-tracking:-0.025em;--text-h2-weight:500;
+--text-h3-size:28px;--text-h3-line:1.25;--text-h3-tracking:-0.015em;--text-h3-weight:500;
+--text-lead-size:20px;--text-lead-line:1.5;
+--text-body-size:18px;--text-body-line:1.6;
+--text-small-size:14px;--text-small-line:1.5;
+--text-button-size:16px;--text-button-weight:500;
+--text-eyebrow-size:13px;--text-eyebrow-tracking:0.08em;
+--text-mono-size:14px;--text-mono-line:1.55;
+--weight-regular:400;--weight-medium:500;--weight-semibold:600;
+}
+@media (max-width:640px){:root{
+--text-h1-size:44px;--text-h1-line:1.08;
+--text-h2-size:32px;
+--text-h3-size:24px;
+--text-lead-size:18px;
+--text-body-size:17px;
+}}

@@ -1,0 +1,19 @@
+<!-- @dsCard group="Components" viewport="700x760" name="Content" subtitle="StatusBadge, SectionHeading, DependencyRows, WorkflowSteps, Disclosure, Notice" -->
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{padding:24px;display:flex;flex-direction:column;gap:32px}.row{display:flex;flex-wrap:wrap;gap:8px}</style></head>
+<body><div id="root"></div>
+<script type="text/babel">
+const { StatusBadge, SectionHeading, DependencyRows, WorkflowSteps, Disclosure, Notice } = window.ConvoyDesignSystem_29acff;
+ReactDOM.createRoot(document.getElementById("root")).render(<>
+<div className="row"><StatusBadge tone="info">Stage: In development</StatusBadge><StatusBadge tone="warning">Proposed workflow</StatusBadge><StatusBadge tone="accent">release v0.3 · example</StatusBadge><StatusBadge tone="neutral" dot={false}>Conceptual example</StatusBadge><StatusBadge tone="success">Qualified</StatusBadge><StatusBadge tone="error">Blocked</StatusBadge></div>
+<SectionHeading eyebrow="How it works" title="Package the system. Qualify the release." lead="A proposed three-step workflow for getting a trained model onto one robot configuration." />
+<DependencyRows rows={[{term:"Inputs",body:"Images, sensor data, and robot state prepared the way the model expects."},{term:"Actions",body:"Model outputs translated into the units, coordinates, and commands the controller understands."}]} />
+<WorkflowSteps steps={[{title:"Package",tag:"proposed",body:"Group model assets, processing, runtime and target configuration in one versioned envelope.",items:["Model assets","Input and action processing"]},{title:"Qualify",tag:"proposed",body:"Run the envelope against the target configuration and record evidence."},{title:"Release",tag:"proposed",body:"Promote a qualified envelope; roll back to a previous one."}]} />
+<div><Disclosure summary="Does Convoy replace the robot controller?" name="faq" open>No. The controller and safety system stay with the robot maker or integrator.</Disclosure><Disclosure summary="Is the cloud required?" name="faq">No. Placement is configuration-dependent.</Disclosure></div>
+<div style={{display:"grid",gap:8}}><Notice tone="info">Preview: this form is not connected. Nothing is sent.</Notice><Notice tone="error">Fix the three highlighted fields.</Notice></div>
+</>);
+</script></body></html>

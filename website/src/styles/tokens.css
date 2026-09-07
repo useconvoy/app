@@ -1,0 +1,79 @@
+/* Convoy semantic tokens. The only file where hex values may appear;
+ * `npm run check:tokens` enforces it. Values and roles come from the design
+ * system (brief Part XII). Every color is a role, never a decoration, and
+ * each is tested only on the background named beside it. */
+:root {
+  /* Surfaces */
+  --background: #f6f4ef; /* page */
+  --surface: #ffffff; /* raised panels, form fields */
+  --surface-subtle: #ece9e1; /* quiet bands, envelope fill */
+
+  /* Text on the page background */
+  --text-primary: #18221f; /* 14.84:1 on background */
+  --text-secondary: #45534d; /* 7.36:1 */
+  --text-muted: #647168; /* 4.66:1, captions only, recheck on other surfaces */
+
+  /* Boundaries */
+  --border-subtle: #d3d8d1; /* 1.32:1, decorative rules only */
+  --border-strong: #78867d; /* 3.47:1, inputs, meaningful diagram outlines */
+
+  /* Action */
+  --accent: #a63d22; /* oxide: primary buttons, links (5.77:1 on background) */
+  --accent-hover: #852f19;
+  --accent-tint: #f9e9e1;
+
+  /* Status, each paired with its own tint */
+  --success: #21633f;
+  --success-tint: #e5f1e8;
+  --warning: #775100;
+  --warning-tint: #fff1c8;
+  --error: #a72f32;
+  --error-tint: #fce9e9;
+  --information: #265b94;
+  --information-tint: #e7eff9;
+
+  /* The one dark diagnostic region */
+  --inverse-background: #16201c;
+  --inverse-text: #f3f5f0; /* 15.21:1 on inverse-background */
+  --inverse-muted: #bac6bc; /* 9.46:1 */
+  --code-keyword: #f4b897;
+  --code-string: #b7d8b8;
+  --code-value: #abcded;
+
+  /* Spacing scale, px: 0 4 8 12 16 24 32 48 64 80 112 144 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-28: 112px;
+  --space-36: 144px;
+
+  /* Shape */
+  --radius: 4px;
+  --radius-badge: 3px;
+  --radius-lg: 6px;
+
+  /* Measure and grid */
+  --content-max: 1280px;
+  --prose-max: 66ch;
+  --lead-max: 52ch;
+
+  /* Motion. Proposals, not facts about attention. */
+  --duration-feedback: 120ms;
+  --duration-state: 180ms;
+  --duration-disclosure: 240ms;
+  --duration-diagram: 480ms;
+  --ease-state: cubic-bezier(0.2, 0, 0, 1);
+  --ease-entrance: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Focus */
+  --focus-ring: 2px solid var(--accent);
+  --focus-offset: 3px;
+
+  color-scheme: light;
+}

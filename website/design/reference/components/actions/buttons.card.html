@@ -1,0 +1,17 @@
+<!-- @dsCard group="Components" viewport="700x300" name="Button" subtitle="Primary, secondary, text, inverse · sizes · disabled · focus" -->
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{padding:24px;display:flex;flex-direction:column;gap:20px}.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}.lbl{font-family:var(--font-mono);font-size:11px;color:var(--color-text-muted);letter-spacing:.06em;text-transform:uppercase;width:80px;flex:none}.dark{background:var(--color-surface-inverse);padding:12px;border-radius:4px;display:inline-flex}</style></head>
+<body><div id="root"></div>
+<script type="text/babel">
+const { Button } = window.ConvoyDesignSystem_29acff;
+ReactDOM.createRoot(document.getElementById("root")).render(<>
+<div className="row"><span className="lbl">Default</span><Button arrow>Discuss your deployment</Button><Button variant="secondary">Explore the workflow</Button><Button variant="text">Reset form</Button><span className="dark"><Button variant="inverse" size="sm">Copy contract</Button></span></div>
+<div className="row"><span className="lbl">Small</span><Button size="sm">Send</Button><Button variant="secondary" size="sm">Cancel</Button><Button variant="text" size="sm">Learn more</Button></div>
+<div className="row"><span className="lbl">Disabled</span><Button disabled>Discuss your deployment</Button><Button variant="secondary" disabled>Explore the workflow</Button><Button variant="text" disabled>Reset form</Button></div>
+<div className="row"><span className="lbl">Focus</span><Button autoFocus>Keyboard focus ring</Button><span style={{fontSize:13,color:"var(--color-text-muted)"}}>2px oxide outline, 3px offset</span></div>
+</>);
+</script></body></html>
