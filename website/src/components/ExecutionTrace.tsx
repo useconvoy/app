@@ -49,9 +49,17 @@ export function ExecutionTrace() {
   const rootRef = useRef<HTMLDivElement>(null);
   const startRef = useRef<HTMLDivElement>(null);
   const timer = useRef<number | null>(null);
+  const frame = useRef<number | null>(null);
   const autoplayed = useRef(false);
+  /* Each activation gets a run id; a frame or timeout from an earlier run
+   * finds the id has moved on and does nothing. */
+  const run = useRef(0);
 
-  const clearTimer = useCallback(() => {
+  const clearPending = useCallback(() => {
+    if (frame.current !== null) {
+      window.cancelAnimationFrame(frame.current);
+      frame.current = null;
+    }
     if (timer.current !== null) {
       window.clearTimeout(timer.current);
       timer.current = null;
@@ -66,31 +74,43 @@ export function ExecutionTrace() {
   };
 
   const cancel = useCallback(() => {
-    clearTimer();
+    run.current += 1;
+    clearPending();
     setPhase((current) => (current === "playing" || current === "emphasis" ? "idle" : current));
-  }, [clearTimer]);
+  }, [clearPending]);
 
   const play = useCallback(() => {
-    clearTimer();
+    // Any activation, including the button, uses up the one autoplay so a
+    // later entry of the start marker never replays unasked.
+    autoplayed.current = true;
+    const id = (run.current += 1);
+    clearPending();
+    if (document.visibilityState === "hidden") return;
     if (reducedMotion()) {
       setPhase("emphasis");
       timer.current = window.setTimeout(() => {
         timer.current = null;
+        if (run.current !== id) return;
         setPhase("done");
       }, EMPHASIS_MS);
       return;
     }
     // Restarting a running trace: drop the animation for one frame so the
-    // keyframes begin again from the start.
+    // keyframes begin again from the start. The frame is tracked so a
+    // cancellation before it fires wins, and it re-checks the conditions.
     setPhase("idle");
-    window.requestAnimationFrame(() => {
+    frame.current = window.requestAnimationFrame(() => {
+      frame.current = null;
+      if (run.current !== id) return;
+      if (document.visibilityState === "hidden" || reducedMotion()) return;
       setPhase("playing");
       timer.current = window.setTimeout(() => {
         timer.current = null;
+        if (run.current !== id) return;
         setPhase("done");
       }, TRACE_MS);
     });
-  }, [clearTimer]);
+  }, [clearPending]);
 
   // Autoplay once when the start of the path is inside the viewport with a
   // little room below it. The figure as a whole only has to be partly in
@@ -149,9 +169,10 @@ export function ExecutionTrace() {
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
-      clearTimer();
+      run.current += 1;
+      clearPending();
     };
-  }, [cancel, clearTimer]);
+  }, [cancel, clearPending]);
 
   const groups = runs();
   let edgeIndex = 0;
