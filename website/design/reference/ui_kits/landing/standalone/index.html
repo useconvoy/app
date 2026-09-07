@@ -1,0 +1,43 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Convoy — Deploy AI models to real robots (design reference)</title>
+<link rel="stylesheet" href="convoy.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+.lp-skip{position:absolute;left:var(--space-16);top:-100px;z-index:50;background:var(--color-surface);color:var(--color-text);padding:var(--space-12) var(--space-16);border:1px solid var(--color-border-strong);border-radius:var(--radius);text-decoration:none}.lp-skip:focus{top:var(--space-16)}
+.lp-hero{display:grid;grid-template-columns:5fr 7fr;gap:var(--space-64) var(--layout-gutter);align-items:center;padding-top:var(--space-80);padding-bottom:var(--layout-section-gap)}
+.lp-hero__copy{display:flex;flex-direction:column;gap:var(--space-24);min-width:0}
+.lp-hero__actions{display:flex;flex-wrap:wrap;gap:var(--space-12);margin-top:var(--space-8)}
+.lp-hero__stage{display:flex;flex-wrap:wrap;gap:var(--space-12) var(--space-16);align-items:center;padding-top:var(--space-16);border-top:1px solid var(--color-border)}
+.lp-hero__figure{min-width:0;padding-top:var(--space-16)}
+.lp-block{margin-top:var(--space-48)}
+.lp-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-32) var(--layout-gutter)}.lp-cols h3{margin-bottom:var(--space-12)}
+.lp-diag{display:grid;grid-template-columns:5fr 7fr;gap:var(--space-32) var(--layout-gutter);align-items:start;margin-top:var(--space-64)}.lp-diag__copy h3{margin-bottom:var(--space-12)}
+.lp-partner{display:grid;grid-template-columns:7fr 5fr;gap:var(--space-48) var(--layout-gutter);align-items:start;padding:var(--space-48);background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg)}
+.lp-partner__actions{margin-top:var(--space-32)}
+.lp-partner__fit{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}.lp-partner__fit li{padding:var(--space-16) 0;border-top:1px solid var(--color-border);display:flex;flex-direction:column;gap:var(--space-8)}.lp-partner__fit li:last-child{border-bottom:1px solid var(--color-border)}.lp-partner__fit p{color:var(--color-text-secondary);text-wrap:pretty}
+.lp-faq{display:grid;grid-template-columns:5fr 7fr;gap:var(--space-48) var(--layout-gutter);align-items:start}
+.lp-contact{display:grid;grid-template-columns:5fr 7fr;gap:var(--space-48) var(--layout-gutter);align-items:start}
+.lp-form{display:flex;flex-direction:column;gap:var(--space-24);padding:var(--space-32);background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg)}
+.lp-form__grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-24)}
+.lp-form__actions{display:flex;flex-wrap:wrap;gap:var(--space-16);align-items:center}
+section.cv-section{border-top:1px solid var(--color-border)}
+@media (max-width:1200px){.lp-hero{grid-template-columns:6fr 6fr}}
+@media (max-width:900px){.lp-hero,.lp-diag,.lp-partner,.lp-faq,.lp-contact{grid-template-columns:1fr}.lp-hero{padding-top:var(--space-48)}.lp-partner{padding:var(--space-32)}.lp-form{padding:var(--space-24)}}
+@media (max-width:640px){.lp-cols,.lp-form__grid{grid-template-columns:1fr}.lp-partner{padding:var(--space-24) var(--space-20,20px)}.lp-form{padding:var(--space-16)}.lp-hero__actions .cv-btn{width:100%}}
+/* QA-only: ?w=768|390|320 forces the breakpoint styles at any viewport (mirrors the media queries above and in tokens/components). Not for production. */
+html.qa-lt1200{--layout-page-padding:40px}html.qa-lt1200 .lp-hero{grid-template-columns:6fr 6fr}
+html.qa-lt900{--layout-columns:8;--layout-gutter:24px;--layout-page-padding:32px;--layout-section-gap:72px}html.qa-lt900 .lp-hero,html.qa-lt900 .lp-diag,html.qa-lt900 .lp-partner,html.qa-lt900 .lp-faq,html.qa-lt900 .lp-contact{grid-template-columns:1fr}html.qa-lt900 .lp-hero{padding-top:var(--space-48)}html.qa-lt900 .lp-partner{padding:var(--space-32)}html.qa-lt900 .lp-form{padding:var(--space-24)}
+html.qa-lt900 .cv-header__nav{display:none}html.qa-lt900 .cv-header__toggle{display:inline-flex}html.qa-lt900 .cv-header__menu{display:block;position:absolute;left:0;right:0;top:100%;z-index:20;background:var(--color-surface);border-bottom:1px solid var(--color-border);box-shadow:0 12px 24px -16px rgba(24,34,31,.25)}html.qa-lt900 .cv-header__menu[hidden]{display:none}html.qa-lt900 .cv-header__menu-list{list-style:none;margin:0;padding:var(--space-8) 0 var(--space-16);display:flex;flex-direction:column}html.qa-lt900 .cv-header__menu-list a{display:flex;align-items:center;min-height:56px;padding:0 var(--layout-page-padding);color:var(--color-text);text-decoration:none;font-size:var(--text-body-size);font-weight:var(--weight-medium);border-bottom:1px solid var(--color-border)}html.qa-lt900 .cv-header__menu-cta{padding:var(--space-16) var(--layout-page-padding) 0}
+html.qa-lt900 .cv-dep__head{display:none}html.qa-lt900 .cv-dep__row{grid-template-columns:1fr!important;gap:var(--space-12)}html.qa-lt900 .cv-dep__cell-label{display:block;font-family:var(--font-mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-text-muted);margin-bottom:var(--space-4)}html.qa-lt900 .cv-steps{grid-template-columns:1fr;gap:var(--space-32)}
+html.qa-lt640{--layout-columns:4;--layout-gutter:16px;--layout-page-padding:20px;--layout-section-gap:56px;--text-h1-size:44px;--text-h1-line:1.08;--text-h2-size:32px;--text-h3-size:24px;--text-lead-size:18px;--text-body-size:17px}html.qa-lt640 .lp-cols,html.qa-lt640 .lp-form__grid{grid-template-columns:1fr}html.qa-lt640 .lp-partner{padding:var(--space-24) 20px}html.qa-lt640 .lp-form{padding:var(--space-16)}html.qa-lt640 .lp-hero__actions .cv-btn{width:100%}
+html.qa-lt640 .cv-header__tag{display:none}html.qa-lt640 .cv-env{padding:var(--space-32) var(--space-16) var(--space-16)}html.qa-lt640 .cv-env__grid{grid-template-columns:1fr}html.qa-lt640 .cv-env__group--wide{grid-column:auto}html.qa-lt640 .cv-path{flex-direction:column}html.qa-lt640 .cv-path__node{flex:none}html.qa-lt640 .cv-path__arrow{flex:none;height:40px;width:100%}html.qa-lt640 .cv-path__arrow svg{transform:rotate(90deg)}html.qa-lt640 .cv-path__scope{display:none}html.qa-lt640 .cv-diag__body{grid-template-columns:1fr;gap:0}html.qa-lt640 .cv-diag__k{margin-top:var(--space-8)}
+html[class*="qa-"] body{max-width:var(--qa-w);margin:0 auto;border-right:1px solid var(--color-border-strong);min-height:100vh}
+</style>
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" fill="#A63D22"/><rect x="36" y="36" width="48" height="48" rx="4" fill="none" stroke="#F9E9E1" stroke-width="3" stroke-dasharray="6 4"/></svg></template>
+</head><body><div id="root"></div>
+<script>(function(){var w=+new URLSearchParams(location.search).get('w');if(!w)return;var h=document.documentElement;h.style.setProperty('--qa-w',w+'px');if(w<=1200)h.classList.add('qa-lt1200');if(w<=900)h.classList.add('qa-lt900');if(w<=640)h.classList.add('qa-lt640');})();</script>
+<script type="text/babel" src="convoy-components.jsx"></script>
+<script type="text/babel" src="landing-page.jsx"></script>
+<script type="text/babel">ReactDOM.createRoot(document.getElementById("root")).render(<LandingPage />);</script>
+</body></html>

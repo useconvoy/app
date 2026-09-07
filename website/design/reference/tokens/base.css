@@ -1,0 +1,23 @@
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-sans);font-size:var(--text-body-size);line-height:var(--text-body-line);font-feature-settings:"ss01","cv05"}
+h1,h2,h3,h4,p{margin:0}
+a{color:var(--color-accent);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;transition:color var(--dur-fast) var(--ease)}
+a:hover{color:var(--color-accent-hover)}
+:focus-visible{outline:2px solid var(--color-focus);outline-offset:3px;border-radius:var(--radius-sm)}
+button,input,select,textarea{font:inherit;color:inherit}
+summary{list-style:none;cursor:pointer}summary::-webkit-details-marker{display:none}
+code,kbd,pre{font-family:var(--font-mono);font-size:var(--text-mono-size);line-height:var(--text-mono-line)}
+.cv-container{max-width:var(--layout-max);margin:0 auto;padding-left:var(--layout-page-padding);padding-right:var(--layout-page-padding)}
+.cv-section{padding-top:var(--layout-section-gap);padding-bottom:var(--layout-section-gap)}
+.cv-prose{max-width:var(--layout-prose);text-wrap:pretty}
+.cv-h1{font-size:var(--text-h1-size);line-height:var(--text-h1-line);letter-spacing:var(--text-h1-tracking);font-weight:var(--text-h1-weight);text-wrap:balance}
+.cv-h2{font-size:var(--text-h2-size);line-height:var(--text-h2-line);letter-spacing:var(--text-h2-tracking);font-weight:var(--text-h2-weight);text-wrap:balance}
+.cv-h3{font-size:var(--text-h3-size);line-height:var(--text-h3-line);letter-spacing:var(--text-h3-tracking);font-weight:var(--text-h3-weight)}
+.cv-lead{font-size:var(--text-lead-size);line-height:var(--text-lead-line);color:var(--color-text-secondary)}
+.cv-body{font-size:var(--text-body-size);line-height:var(--text-body-line)}
+.cv-small{font-size:var(--text-small-size);line-height:var(--text-small-line)}
+.cv-eyebrow{font-family:var(--font-mono);font-size:var(--text-eyebrow-size);letter-spacing:var(--text-eyebrow-tracking);text-transform:uppercase;color:var(--color-text-muted);font-weight:var(--weight-medium)}
+.cv-mono{font-family:var(--font-mono);font-size:var(--text-mono-size);line-height:var(--text-mono-line)}
+.cv-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
