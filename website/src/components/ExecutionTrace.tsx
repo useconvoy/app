@@ -1,36 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState, type AnimationEvent } from "react";
 
 import { EXECUTION } from "@/content/homepage";
+import { useTrace } from "@/lib/use-trace";
 
 /**
- * The execution-path figure with its one motion: a trace that travels the
- * connectors from Sensors to Robot controller once, with a brief border
- * emphasis on each node as it is reached. The complete static diagram
- * (labels, connectors, boundary) is rendered at first paint and the trace
- * is an overlay drawn by CSS keyframes; no requestAnimationFrame loop, no
- * idle timer.
+ * The execution-path figure with its one motion: a terracotta trace that
+ * travels the connectors from Sensors to Robot controller, filling each
+ * node as it is reached, over about 2.5 seconds, then releases. The complete
+ * static diagram (labels, connectors, boundary) is rendered at first paint;
+ * the trace is CSS keyframes on an overlay stroke and the node surfaces.
  *
- * It plays once when the start of the path comes into view (a marker just
- * before the first node, so a figure taller than a short viewport still
- * qualifies), unless the person prefers reduced motion or has asked to
- * save data. The single autoplay is consumed the moment it starts, so an
- * interrupted run never restarts on re-entry. It can be replayed with the
- * Trace the path button (click, tap, Enter, Space); pointer movement never
- * starts it. A run is cancelled, back to the complete static diagram, when
- * the figure leaves the viewport entirely, the document is hidden, the
- * reduced-motion preference changes, the viewport is resized or rotated,
- * or the component unmounts. Under reduced motion the button briefly
- * emphasises the path instead of animating it.
+ * The control gives immediate feedback: its label changes while a run is
+ * in progress and a status line names the node the trace has reached. On a
+ * narrow container the control row sits at the top of the figure, so a tap
+ * plays the nodes directly beneath it; on a wide one it sits with the
+ * caption. Lifecycle (autoplay once from the start marker, cancellation,
+ * reduced motion as a static highlight toggle) is useTrace.
  *
  * Nothing here suggests live robot execution: the trace is the reading
- * order of the diagram, and the caption says what placement depends on.
+ * order of a conceptual diagram, and the caption says what placement
+ * depends on.
  */
-type Phase = "idle" | "playing" | "done" | "emphasis";
-
-const TRACE_MS = 2000;
-const EMPHASIS_MS = 1200;
+const TRACE_MS = 2500;
 
 type Node = (typeof EXECUTION.nodes)[number];
 
@@ -45,149 +38,70 @@ function runs(): { owner: Node["owner"]; nodes: Node[] }[] {
 }
 
 export function ExecutionTrace() {
-  const [phase, setPhase] = useState<Phase>("idle");
-  const rootRef = useRef<HTMLDivElement>(null);
-  const startRef = useRef<HTMLDivElement>(null);
-  const timer = useRef<number | null>(null);
-  const frame = useRef<number | null>(null);
-  const autoplayed = useRef(false);
-  /* Each activation gets a run id; a frame or timeout from an earlier run
-   * finds the id has moved on and does nothing. */
-  const run = useRef(0);
-
-  const clearPending = useCallback(() => {
-    if (frame.current !== null) {
-      window.cancelAnimationFrame(frame.current);
-      frame.current = null;
-    }
-    if (timer.current !== null) {
-      window.clearTimeout(timer.current);
-      timer.current = null;
-    }
-  }, []);
-
-  const reducedMotion = () =>
-    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const saveData = () => {
-    const nav = typeof navigator === "undefined" ? undefined : (navigator as Navigator & { connection?: { saveData?: boolean } });
-    return Boolean(nav?.connection?.saveData);
+  const { phase, play, reduced, rootRef, startRef } = useTrace(TRACE_MS);
+  // The node the trace has reached, from the node's own animation start; only shown while playing.
+  const [reached, setReached] = useState<string | null>(null);
+  const shown = phase === "playing" ? reached : null;
+  const start = () => {
+    setReached(null);
+    play();
+  };
+  const onNodeAnimationStart = (label: string) => (event: AnimationEvent<HTMLDivElement>) => {
+    if (event.animationName.startsWith("trace-node")) setReached(label);
   };
 
-  const cancel = useCallback(() => {
-    run.current += 1;
-    clearPending();
-    setPhase((current) => (current === "playing" || current === "emphasis" ? "idle" : current));
-  }, [clearPending]);
-
-  const play = useCallback(() => {
-    // Any activation, including the button, uses up the one autoplay so a
-    // later entry of the start marker never replays unasked.
-    autoplayed.current = true;
-    const id = (run.current += 1);
-    clearPending();
-    if (document.visibilityState === "hidden") return;
-    if (reducedMotion()) {
-      setPhase("emphasis");
-      timer.current = window.setTimeout(() => {
-        timer.current = null;
-        if (run.current !== id) return;
-        setPhase("done");
-      }, EMPHASIS_MS);
-      return;
-    }
-    // Restarting a running trace: drop the animation for one frame so the
-    // keyframes begin again from the start. The frame is tracked so a
-    // cancellation before it fires wins, and it re-checks the conditions.
-    setPhase("idle");
-    frame.current = window.requestAnimationFrame(() => {
-      frame.current = null;
-      if (run.current !== id) return;
-      if (document.visibilityState === "hidden" || reducedMotion()) return;
-      setPhase("playing");
-      timer.current = window.setTimeout(() => {
-        timer.current = null;
-        if (run.current !== id) return;
-        setPhase("done");
-      }, TRACE_MS);
-    });
-  }, [clearPending]);
-
-  // Autoplay once when the start of the path is inside the viewport with a
-  // little room below it. The figure as a whole only has to be partly in
-  // view, so a tall figure in a short or landscape viewport still qualifies.
-  useEffect(() => {
-    const start = startRef.current;
-    if (!start || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting || autoplayed.current) return;
-        if (reducedMotion() || saveData()) return;
-        autoplayed.current = true;
-        play();
-      },
-      { rootMargin: "0px 0px -15% 0px", threshold: 0 },
-    );
-    observer.observe(start);
-    return () => observer.disconnect();
-  }, [play]);
-
-  // A run is cancelled only when the figure is entirely out of view.
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) cancel();
-      },
-      { threshold: 0 },
-    );
-    observer.observe(root);
-    return () => observer.disconnect();
-  }, [cancel]);
-
-  // A change of motion preference cancels at once; a resize or rotation
-  // during a run settles back to the static diagram.
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const onChange = () => cancel();
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
-  }, [cancel]);
-
-  useEffect(() => {
-    if (phase !== "playing") return;
-    const onResize = () => cancel();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [phase, cancel]);
-
-  // A hidden document cancels a run; unmount clears the timer.
-  useEffect(() => {
-    function onVisibility() {
-      if (document.visibilityState === "hidden") cancel();
-    }
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      run.current += 1;
-      clearPending();
-    };
-  }, [cancel, clearPending]);
+  const copy = EXECUTION.trace;
+  const label = reduced
+    ? phase === "emphasis"
+      ? copy.clearHighlight
+      : copy.highlight
+    : phase === "playing"
+      ? copy.playing
+      : phase === "done"
+        ? copy.again
+        : copy.start;
+  const status =
+    phase === "playing"
+      ? `${copy.statusPlaying}${shown ? ` · ${shown}` : ""}`
+      : phase === "done"
+        ? copy.statusDone
+        : phase === "emphasis"
+          ? copy.statusHighlighted
+          : "";
 
   const groups = runs();
   let edgeIndex = 0;
   let nodeIndex = 0;
 
   return (
-    <div ref={rootRef} data-trace={phase} className="trace @container">
+    <div ref={rootRef} data-trace={phase} className="trace @container flex flex-col">
       <div ref={startRef} aria-hidden="true" data-trace-start className="h-px w-px" />
+
+      {/* The control and its progress line: first on a narrow container, with the caption on a wide one. */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 @4xl:order-last @4xl:mt-3 @4xl:mb-0" data-trace-controls>
+        <button
+          type="button"
+          className="btn btn-secondary min-h-12 px-5 text-[0.9375rem]"
+          onClick={start}
+          aria-describedby="execution-diagram-caption"
+          aria-pressed={reduced ? phase === "emphasis" : undefined}
+          data-trace-button
+        >
+          <span aria-hidden="true" className="trace-dot" />
+          {label}
+        </button>
+        <span role="status" aria-live="polite" className="type-meta min-h-6 w-full text-accent-hover @4xl:w-auto" data-trace-status>
+          {status}
+        </span>
+      </div>
+
       <div className="flex flex-col gap-1 @4xl:flex-row @4xl:items-stretch @4xl:gap-0" data-execution-path>
         {groups.map((group, groupIndex) => {
           const convoy = group.owner === "convoy";
           const body = group.nodes.map((node, i) => {
             const order = nodeIndex++;
             const edge = i < group.nodes.length - 1 ? { label: EXECUTION.edges[edgeIndex], order: edgeIndex++ } : undefined;
-            return <NodeAndEdge key={node.key} node={node} order={order} edge={edge} />;
+            return <NodeAndEdge key={node.key} node={node} order={order} edge={edge} onStart={onNodeAnimationStart(node.label)} />;
           });
           const between =
             groupIndex < groups.length - 1 ? <Edge key={`edge-${groupIndex}`} label={EXECUTION.edges[edgeIndex]} order={edgeIndex++} /> : null;
@@ -227,36 +141,35 @@ export function ExecutionTrace() {
         <span id="execution-diagram-caption" className="type-caption max-w-[66ch] text-secondary">
           {EXECUTION.caption}
         </span>
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-          <ul className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-secondary" aria-label="Diagram legend">
-            {EXECUTION.legend.map((item) => (
-              <li key={item.kind} className="inline-flex items-center gap-2">
-                <i
-                  aria-hidden="true"
-                  className={`inline-block w-7 border-t-[1.5px] ${
-                    item.kind === "execution" ? "border-solid border-primary" : item.kind === "release" ? "border-dashed border-accent" : "border-dotted border-muted"
-                  }`}
-                />
-                {item.label}
-              </li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            className="btn btn-secondary min-h-12 px-5 text-[0.9375rem]"
-            onClick={play}
-            aria-describedby="execution-diagram-caption"
-            data-trace-button
-          >
-            {EXECUTION.traceLabel}
-          </button>
-        </div>
+        <ul className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-secondary" aria-label="Diagram legend">
+          {EXECUTION.legend.map((item) => (
+            <li key={item.kind} className="inline-flex items-center gap-2">
+              <i
+                aria-hidden="true"
+                className={`inline-block w-7 border-t-[1.5px] ${
+                  item.kind === "execution" ? "border-solid border-primary" : item.kind === "release" ? "border-dashed border-accent" : "border-dotted border-muted"
+                }`}
+              />
+              {item.label}
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );
 }
 
-function NodeAndEdge({ node, order, edge }: { node: Node; order: number; edge?: { label: string; order: number } }) {
+function NodeAndEdge({
+  node,
+  order,
+  edge,
+  onStart,
+}: {
+  node: Node;
+  order: number;
+  edge?: { label: string; order: number };
+  onStart: (event: AnimationEvent<HTMLDivElement>) => void;
+}) {
   const external = node.owner === "robot";
   const model = "model" in node && node.model;
   return (
@@ -264,6 +177,7 @@ function NodeAndEdge({ node, order, edge }: { node: Node; order: number; edge?: 
       <div className="flex min-w-0 flex-1 flex-col gap-1.5" data-node={node.key}>
         <div
           style={{ ["--i" as string]: order }}
+          onAnimationStart={onStart}
           className={`trace-node flex min-h-14 flex-1 flex-col items-center justify-center gap-[2px] rounded border px-4 py-2.5 text-center @4xl:min-h-16 ${
             external
               ? "border-dashed border-strong bg-transparent text-primary"
@@ -289,9 +203,9 @@ function NodeAndEdge({ node, order, edge }: { node: Node; order: number; edge?: 
 }
 
 /**
- * A solid execution arrow with its noun. Vertical below 900px, horizontal
- * above. The base line is always drawn; the trace overlay on top is
- * invisible until a run draws it in, then fades out again.
+ * A solid execution arrow with its noun. Vertical below the container
+ * breakpoint, horizontal above. The base line is always drawn; the trace
+ * overlay on top is invisible until a run draws it in terracotta.
  */
 function Edge({ label, order }: { label: string; order: number }) {
   return (
@@ -300,10 +214,10 @@ function Edge({ label, order }: { label: string; order: number }) {
       style={{ ["--i" as string]: order }}
       className="trace-edge flex items-center gap-2 py-0.5 pl-4 @4xl:h-16 @4xl:w-10 @4xl:flex-none @4xl:flex-col @4xl:justify-center @4xl:gap-0 @4xl:py-0 @4xl:pl-0"
     >
-      <svg viewBox="0 0 40 16" className="h-4 w-10 rotate-90 text-primary @4xl:rotate-0" focusable="false">
+      <svg viewBox="0 0 40 16" className="h-4 w-10 rotate-90 overflow-visible text-primary @4xl:rotate-0" focusable="false">
         <path d="M1 8h32" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         <path d="M29 3.5 34.5 8 29 12.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path className="trace-overlay" d="M1 8h32" pathLength={1} stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+        <path className="trace-overlay" d="M1 8h33" pathLength={1} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
       </svg>
       <span className="type-small whitespace-nowrap text-muted @4xl:sr-only">{label}</span>
     </div>

@@ -13,16 +13,25 @@ import { Disclosure } from "./Disclosure";
 export function ReleaseEnvelope({ className = "" }: { className?: string }) {
   return (
     <div className={className}>
-      <div className="relative rounded-lg border-[1.5px] border-dashed border-accent bg-surface px-4 pt-6 pb-3 sm:px-5" data-envelope>
+      <div className="hero-envelope relative rounded-lg border-[1.5px] border-dashed border-accent bg-surface px-4 pt-6 pb-3 sm:px-5" data-envelope>
         <span className="absolute -top-[11px] left-4 inline-flex items-center bg-surface px-2 font-mono text-sm font-medium tracking-[0.02em] text-accent sm:left-5">
           {ENVELOPE.label}
         </span>
         <ul className="grid gap-x-6 sm:grid-cols-2" aria-label="Parts of a release">
-          <li className="border-b border-subtle py-2 text-base leading-snug font-medium text-primary" data-field="identity">
+          <li
+            className="hero-part border-b border-subtle px-1 py-2 text-base leading-snug font-medium text-primary"
+            data-field="identity"
+            style={{ ["--i" as string]: 0 }}
+          >
             {ENVELOPE.identityLabel}
           </li>
-          {ENVELOPE.fields.map((field) => (
-            <li key={field.key} data-field={field.key} className="border-b border-subtle py-2 text-base leading-snug font-medium text-primary last:border-b-0 sm:nth-last-[-n+2]:border-b-0">
+          {ENVELOPE.fields.map((field, index) => (
+            <li
+              key={field.key}
+              data-field={field.key}
+              style={{ ["--i" as string]: index + 1 }}
+              className="hero-part border-b border-subtle px-1 py-2 text-base leading-snug font-medium text-primary last:border-b-0 sm:nth-last-[-n+2]:border-b-0"
+            >
               {field.label}
             </li>
           ))}

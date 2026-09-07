@@ -76,26 +76,38 @@ robot footage; $1.4B Series C, skild.ai/blogs/series-c). Convoy takes the
 restrained diagram-trace idea and none of the rest: no WebGL, no footage,
 no metrics, and the figure stays on mobile.
 
-Rules the implementation follows (`ExecutionTrace.tsx`, `globals.css`):
+Rules the implementation follows (`src/lib/use-trace.ts`, `ExecutionTrace.tsx`,
+`HeroFigure.tsx`, `globals.css`):
 
-- The complete static diagram (labels, connectors, boundary) is rendered at
-  first paint. The trace is an overlay on each connector drawn by CSS
-  keyframes, about 2s end to end, staggered across the four connectors with
-  a brief border emphasis on each node as it is reached; then it lets go.
-- It plays once when the start of the path enters the viewport (a marker
-  just before the first node, so a figure taller than a short or landscape
-  viewport still qualifies), unless the visitor prefers reduced motion or
-  has Save-Data on. Any activation, including the button, uses up that one
-  autoplay. A 48px "Trace the path" button replays it by click, tap, Enter
-  or Space. Pointer movement never starts it; hover only darkens a node
-  border.
+- Two sequences share one lifecycle hook. **Execution path:** a terracotta
+  overlay stroke travels each connector and each node fills with the accent
+  tint and takes an accent outline as the trace reaches it (nodes every
+  450ms, connectors 200ms after their node), the traced state holds, then
+  releases at 2.5s. **Hero:** the trained model lights, the release connector
+  travels, the six release parts take their accent in turn (from 650ms,
+  every 160ms), the connector to the controller travels, the controller
+  lights, and the boundary takes a final solid emphasis before everything
+  lets go at 2.7s. Both diagrams are complete at first paint and nothing
+  moves in layout.
+- Each plays once when its figure comes into view (the execution path from a
+  marker at the path's start; the hero once its figure is well into the
+  viewport), never under reduced motion or Save-Data. Any activation uses up
+  that one autoplay.
+- Each has a 48px control with immediate feedback: the label changes while
+  a run is in progress ("Tracing…", "Playing…") and a status line names the
+  node the trace has reached or the stage of the sequence. On a narrow
+  container the execution control sits at the top of the figure, so a tap
+  plays the nodes directly beneath it; nothing scrolls the page.
+- Click, tap, Enter and Space replay; pointer movement never starts a run;
+  hover only darkens a node border.
 - Leaving the viewport entirely, hiding the document, a change of motion
   preference, a resize or rotation, or unmounting cancels a run. Each
   activation carries a run id; its one pending frame is tracked and
   cancelled, and a frame or timeout from a superseded run does nothing.
   There is no requestAnimationFrame loop and no idle timer.
-- Under reduced motion the button applies a quiet static emphasis to the
-  path for about a second instead of animating it.
+- Under reduced motion the control becomes a truthful toggle ("Highlight the
+  path" / "Highlight the release", then "Clear highlight", with
+  `aria-pressed`) that shows the complete traced state statically.
 - Primary actions move their arrow 2px on hover or focus; colour and border
   transitions are 160ms. No parallax, tilt, cursor tracking, scroll
   hijacking, loops, or layout shift.
