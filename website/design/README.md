@@ -130,3 +130,14 @@ text preferences apply; diagram labels 16px with 14px metadata at every
 width. `scripts/measure-page.mjs` reports page and section heights,
 visible word counts and the hero action position at the review viewports;
 it is review evidence, not a constraint.
+
+## Brand mark and share card
+
+Finalized in Claude Design after the reference package: an open release
+frame read as a bold geometric C, paper on oxide, `rx` 14 on a 64-unit
+square, the same geometry at every size. The stroke's visible bounds run
+roughly x 11.5–48.5 / y 11.5–52.5; the mark is not inset for maskable
+icons and is not declared maskable. The 1200 × 630 card keeps the brand,
+headline, descriptor and domain inside the central x 285–915 square so a
+square crop loses only the dashed motif on the left. Sources:
+`src/assets/brand/`; renderer: `scripts/build-brand.mjs`.

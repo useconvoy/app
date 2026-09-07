@@ -1,0 +1,27 @@
+<!doctype html>
+<!-- Link-preview card, 1200 x 630, finalized in Claude Design. Rendered to
+     public/share/ by scripts/build-brand.mjs with the self-hosted IBM Plex
+     faces (the __FONTS__ paths are rewritten by that script). Colors are the
+     design tokens: paper, ink, oxide, secondary and muted text, subtle border.
+     Brand, headline, descriptor and domain sit inside the central x 285–915
+     square, so a square crop loses only the decorative motif on the left. -->
+<html lang="en"><head><meta charset="utf-8"><style>
+  @font-face { font-family: "Plex Sans"; font-weight: 600; src: url("__FONTS__/ibm-plex-sans-latin-600-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Plex Sans"; font-weight: 500; src: url("__FONTS__/ibm-plex-sans-latin-500-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Plex Mono"; font-weight: 400; src: url("__FONTS__/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Plex Mono"; font-weight: 500; src: url("__FONTS__/ibm-plex-mono-latin-500-normal.woff2") format("woff2"); }
+  :root { --font-sans: "Plex Sans", sans-serif; --font-mono: "Plex Mono", monospace; }
+  * { margin: 0; box-sizing: border-box; }
+  html, body { margin: 0; background: #F6F4EF; width: 1200px; height: 630px; overflow: hidden; -webkit-font-smoothing: antialiased; }
+  .card{position:relative;width:1200px;height:630px;background:#F6F4EF;color:#18221F;font-family:var(--font-sans);overflow:hidden}
+  .motif{position:absolute}
+  .brand{position:absolute;left:300px;top:84px;display:flex;align-items:center;gap:20px}
+  .brand svg{width:64px;height:64px}
+  .brand span{font-weight:600;font-size:40px;letter-spacing:-.02em}
+  .h1{position:absolute;left:300px;width:600px;top:232px;font-size:76px;line-height:1.02;letter-spacing:-.03em;font-weight:500}
+  .desc{position:absolute;left:300px;top:452px;font-family:var(--font-mono);font-size:22px;letter-spacing:.05em;text-transform:uppercase;color:#45534D}
+  .rule{position:absolute;left:300px;right:300px;top:534px;height:1px;background:#D3D8D1}
+  .dom{position:absolute;left:300px;top:556px;font-family:var(--font-mono);font-size:24px;color:#647168;letter-spacing:.02em}
+</style></head><body>
+<div class="card" id="card"><svg class="motif" viewBox="0 0 64 64" aria-hidden="true" style="left:20px;top:120px;width:300px;height:300px"><path d="M44 16H22a6 6 0 0 0-6 6v20a6 6 0 0 0 6 6h22" fill="none" stroke="#A63D22" stroke-width="1.1" stroke-dasharray="3 2.2" opacity=".6"/></svg><div class="brand"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#A63D22"/><path d="M44 16H22a6 6 0 0 0-6 6v20a6 6 0 0 0 6 6h22" fill="none" stroke="#F6F4EF" stroke-width="9" stroke-linecap="square" stroke-linejoin="round"/></svg><span>Convoy</span></div><h1 class="h1">Deploy AI models to real robots.</h1><p class="desc">Deployment infrastructure for physical AI</p><div class="rule"></div><p class="dom">deployconvoy.com</p></div>
+</body></html>

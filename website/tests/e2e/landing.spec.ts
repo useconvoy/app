@@ -34,14 +34,8 @@ test.describe("landing page", () => {
     await expect(page.getByText("Stage:")).toHaveCount(0);
     await expect(page.getByText(/preview/i)).toHaveCount(0);
     await expect(page.locator("header")).not.toContainText("Precision Release");
-    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /^https:\/\/deployconvoy\.com\/?$/);
-    await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", "Deploy AI models to real robots.");
-    const ogImage = await page.locator('meta[property="og:image"]').getAttribute("content");
-    expect(ogImage).toContain("/opengraph-image");
-    // The tag carries the absolute production URL; fetch the same path from the server under test.
-    const image = await page.request.get(new URL(ogImage!).pathname);
-    expect(image.status()).toBe(200);
-    expect(image.headers()["content-type"]).toContain("image/png");
+    // Head tags, icons, JSON-LD and the share card are covered in metadata.spec.ts.
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://deployconvoy.com/");
   });
 
   test("section order and headings follow the brief", async ({ page }) => {

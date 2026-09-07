@@ -11,8 +11,8 @@ import { join, relative } from "node:path";
 const ROOT = new URL("..", import.meta.url).pathname;
 const SRC = join(ROOT, "src");
 const ALLOWED = "src/styles/tokens.css";
-// The favicon cannot read CSS variables; it copies two token values and says so.
-const EXEMPT = new Set(["src/app/icon.svg"]);
+// The brand mark cannot read CSS variables; it copies token values and says so.
+const EXEMPT = new Set(["src/assets/brand/convoy-mark.svg"]);
 const HEX = /#[0-9a-fA-F]{3,8}\b/g;
 
 function walk(dir, files = []) {
