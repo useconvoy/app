@@ -88,7 +88,7 @@ function Endpoint({ kind }: { kind: "model" | "robot" }) {
 
 export function ArrowGlyph() {
   return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4 flex-none" aria-hidden="true" focusable="false">
+    <svg viewBox="0 0 16 16" className="btn-arrow h-4 w-4 flex-none" aria-hidden="true" focusable="false">
       <path d="M2 8h11m0 0L9 4m4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );

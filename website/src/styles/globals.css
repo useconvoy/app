@@ -182,9 +182,17 @@ body {
   text-decoration: none;
   border: 1px solid transparent;
   transition:
-    background-color var(--duration-feedback) var(--ease-state),
-    border-color var(--duration-feedback) var(--ease-state),
-    color var(--duration-feedback) var(--ease-state);
+    background-color var(--duration-control) var(--ease-state),
+    border-color var(--duration-control) var(--ease-state),
+    color var(--duration-control) var(--ease-state);
+}
+/* The arrow on a primary action moves 2px on hover or focus, and no further. */
+.btn .btn-arrow {
+  transition: transform var(--duration-control) var(--ease-state);
+}
+.btn:hover .btn-arrow,
+.btn:focus-visible .btn-arrow {
+  transform: translateX(2px);
 }
 .btn-primary {
   background: var(--accent);
@@ -273,6 +281,69 @@ details.disclosure[open] > summary .disclosure-mark {
 }
 .field-input::placeholder {
   color: var(--text-muted);
+}
+
+/* --- The execution-path trace. The base diagram is complete at first paint;
+ * the overlay path on each connector is hidden until a run draws it in
+ * (staggered by --i), and each node's border is emphasised briefly as the
+ * trace reaches it. Hover and focus only give static feedback. --- */
+.trace .trace-overlay {
+  color: var(--accent);
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  opacity: 0;
+}
+.trace .trace-node {
+  transition:
+    border-color var(--duration-control) var(--ease-state),
+    box-shadow var(--duration-control) var(--ease-state);
+}
+.trace .trace-node:hover {
+  border-color: var(--text-primary);
+}
+.trace[data-trace="playing"] .trace-overlay {
+  animation: trace-draw 700ms var(--ease-state) both;
+  animation-delay: calc(var(--i) * 350ms);
+}
+.trace[data-trace="playing"] .trace-node {
+  animation: trace-node 650ms var(--ease-state) both;
+  animation-delay: calc(var(--i) * 350ms);
+}
+/* Reduced motion: no travel. The replay button applies a quiet static
+ * emphasis to the path instead, and lets it go. */
+.trace[data-trace="emphasis"] .trace-node {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+.trace[data-trace="emphasis"] .trace-overlay {
+  stroke-dashoffset: 0;
+  opacity: 1;
+}
+@keyframes trace-draw {
+  0% {
+    stroke-dashoffset: 1;
+    opacity: 1;
+  }
+  55% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+@keyframes trace-node {
+  0% {
+    box-shadow: 0 0 0 0 var(--accent-tint);
+  }
+  35% {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-tint);
+  }
+  100% {
+    box-shadow: 0 0 0 0 var(--accent-tint);
+  }
 }
 
 /* Only the code panel may scroll sideways; the page body never does. */

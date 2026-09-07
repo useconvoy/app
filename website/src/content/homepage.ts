@@ -156,6 +156,7 @@ export const EXECUTION = {
   edges: ["observations", "tensors", "model outputs", "commands"],
   feedback: "new observations / robot state",
   scope: "Convoy runtime boundary",
+  traceLabel: "Trace the path",
   description:
     "Sensors, then Input processing, then Model, then Action processing, then Robot controller. Convoy runtime boundary: Input processing, Model, Action processing. Outside Convoy: Sensors and Robot controller.",
   legend: [
