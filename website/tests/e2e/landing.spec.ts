@@ -512,6 +512,36 @@ test.describe("landing page", () => {
       expect(h1).toBeGreaterThanOrEqual(80);
       await expect(page.getByRole("group", { name: "Convoy runtime boundary" })).toBeVisible();
       await expect(page.locator("[data-contact-address]")).toBeVisible();
+      // The header may be taller now; anchors still land below it, and the menu still closes on Escape.
+      const headerHeight = await page.locator("header").evaluate((el) => el.getBoundingClientRect().height);
+      const padding = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop));
+      expect(padding, `scroll padding follows the measured header at ${width}`).toBeGreaterThanOrEqual(headerHeight);
+      if (width < 900) {
+        await page.getByRole("button", { name: "Menu" }).click();
+        const menu = page.locator("[data-mobile-menu]");
+        await expect(menu).toBeVisible();
+        const fits = await menu.evaluate((el) => el.getBoundingClientRect().bottom <= window.innerHeight + 1 || getComputedStyle(el).overflowY === "auto");
+        expect(fits).toBe(true);
+        await page.keyboard.press("Escape");
+        await expect(page.getByRole("button", { name: "Menu" })).toBeFocused();
+        await page.getByRole("button", { name: "Menu" }).click();
+        await menu.getByRole("link", { name: "Contact" }).click();
+      } else {
+        await page.locator("header nav").first().getByRole("link", { name: "Contact" }).click();
+      }
+      await expect(page).toHaveURL(/#contact$/);
+      const top = await page.locator("#contact").evaluate((el) => el.getBoundingClientRect().top);
+      expect(top, `contact anchor clears the enlarged header at ${width}`).toBeGreaterThanOrEqual(headerHeight - 1);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.locator(width < 900 ? "[data-mobile-menu]" : "header nav").first().evaluate(() => {});
+      if (width < 900) {
+        await page.getByRole("button", { name: "Menu" }).click();
+        await page.locator("[data-mobile-menu]").getByRole("link", { name: "How it works" }).click();
+      } else {
+        await page.locator("header nav").first().getByRole("link", { name: "How it works" }).click();
+      }
+      const workflowTop = await page.locator("#workflow").evaluate((el) => el.getBoundingClientRect().top);
+      expect(workflowTop, `workflow anchor clears the enlarged header at ${width}`).toBeGreaterThanOrEqual(headerHeight - 1);
     }
   });
 

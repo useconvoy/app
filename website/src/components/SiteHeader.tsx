@@ -5,8 +5,10 @@ import { useEffect, useId, useRef, useState } from "react";
 import { NAV, SITE } from "@/content/homepage";
 
 /**
- * Sticky header, 72px on desktop and 64px on mobile; scroll padding on the
- * root keeps anchor targets and focused controls out from under it.
+ * Sticky header, 72px on desktop and 64px on mobile, taller only if its row
+ * wraps under text enlargement; its measured height drives the root's
+ * --header-height, so scroll padding keeps anchor targets and focused
+ * controls out from under it and the open menu never exceeds the viewport.
  * Wordmark left, ordinary anchor links and one primary action right. Below
  * 900px the wordmark, Contact, and a real menu button remain: a disclosure
  * (aria-expanded / aria-controls) that Escape closes with focus returned to
@@ -16,9 +18,26 @@ import { NAV, SITE } from "@/content/homepage";
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState<string | null>(null);
+  const headerRef = useRef<HTMLElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLElement>(null);
   const menuId = useId();
+
+  // The header's real height (it may wrap under text enlargement) feeds the
+  // root's --header-height, which sets scroll padding for anchors and focused
+  // controls and the open menu's available height.
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header || typeof ResizeObserver === "undefined") return;
+    const apply = () => document.documentElement.style.setProperty("--header-height", `${Math.ceil(header.getBoundingClientRect().height)}px`);
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(header);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty("--header-height");
+    };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -76,8 +95,8 @@ export function SiteHeader() {
   const isCurrent = (href: string) => (current === href ? true : undefined);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-subtle bg-background">
-      <div className="mx-auto flex min-h-16 w-full max-w-(--content-max) flex-wrap items-center justify-between gap-x-6 gap-y-2 px-5 py-2 sm:px-8 md:min-h-[72px] md:px-10 lg:px-16">
+    <header ref={headerRef} className="sticky top-0 z-30 border-b border-subtle bg-background">
+      <div className="mx-auto flex min-h-16 w-full max-w-(--content-max) flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-2 sm:px-8 md:min-h-[72px] md:gap-x-6 md:px-10 lg:px-16">
         <a href="#top" className="text-xl font-semibold tracking-[-0.02em] text-primary no-underline" aria-label={`${SITE.name} home`}>
           {SITE.name}
         </a>
@@ -99,7 +118,7 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2 md:hidden">
-          <a href={contact.href} className="type-label inline-flex min-h-12 items-center px-3 text-primary">
+          <a href={contact.href} className="type-label inline-flex min-h-12 items-center px-2 text-primary">
             {contact.label}
           </a>
           <button
@@ -126,7 +145,7 @@ export function SiteHeader() {
         aria-label="Main"
         hidden={!open}
         data-mobile-menu
-        className="absolute inset-x-0 top-full z-20 border-b border-subtle bg-surface shadow-[0_12px_24px_-16px_rgba(24,34,31,0.25)] md:hidden"
+        className="absolute inset-x-0 top-full z-20 max-h-[calc(100dvh-var(--header-height))] overflow-y-auto border-b border-subtle bg-surface shadow-[0_12px_24px_-16px_rgba(24,34,31,0.25)] md:hidden"
       >
         <ul className="mx-auto flex w-full max-w-(--content-max) flex-col px-5 pt-2 pb-4 sm:px-8">
           {NAV.links.map((link) => (

@@ -93,6 +93,14 @@ body {
 
 /* --- Type scale (brief Part XII). Sizes ease between the mobile and desktop
  * values rather than jumping at a breakpoint. --- */
+.type-display,
+.type-h2,
+.type-h3,
+.type-lead,
+.btn {
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
 .type-display {
   font-size: clamp(2.75rem, 2.1rem + 2.9vw, 4rem); /* 44 -> 64 */
   line-height: 1.06;
