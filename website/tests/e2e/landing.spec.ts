@@ -322,9 +322,11 @@ test.describe("landing page", () => {
         for (const figure of [hero, execution]) {
           await expect(figure.locator("button, [role='status'], [aria-live], [data-trace], [data-trace-hero], [data-trace-button], [data-hero-replay], [data-trace-progress]"), `no motion remnants in ${label}`).toHaveCount(0);
           await expect(figure.getByText(/replay|playing|trace the path|tracing|trace again|highlight/i)).toHaveCount(0);
-          // Nothing in the figure runs an animation, and every visible element is fully opaque at first paint.
+          // Nothing in the diagram runs an animation, and every visible element is fully opaque at first paint.
+          // The decorative etched field behind the hero diagram is covered by etched-field.spec.ts.
           const moving = await figure.evaluate((root) =>
             Array.from(root.querySelectorAll("*"))
+              .filter((el) => !el.closest(".etched-waves") && !el.closest(".etched-grid"))
               .filter((el) => {
                 const cs = getComputedStyle(el);
                 return cs.animationName !== "none" || (cs.display !== "none" && parseFloat(cs.opacity) < 1);

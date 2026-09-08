@@ -48,6 +48,15 @@ pnpm run verify           # all of the above, in order
 node scripts/build-brand.mjs [review-dir]   # re-render favicon.ico, icons/ and the share card from src/assets/brand/
 ```
 
+`tests/e2e/etched-field.spec.ts` drives the decorative field behind the
+hero figure with real Playwright mouse input and CDP touch events: idle
+origins in the margins, a wave at the pointer on entry and on meaningful
+movement, the six-ring cap retiring the oldest wave, resize handling with
+the mouse still inside, pause/resume from the footer (also with storage
+blocked), OS reduced motion at load and on change, offscreen and hidden
+document, tap versus drag, out-and-back drag, slow press, cancel and
+two-finger gestures, and that a swipe over the field still scrolls.
+
 `tests/e2e/metadata.spec.ts` checks the crawler-facing surface on the raw
 HTML and the static endpoints: title, description, canonical, robots
 directives, Open Graph and Twitter tags with an absolute 1200 × 630 PNG,

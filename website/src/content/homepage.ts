@@ -321,4 +321,6 @@ export const FOOTER = {
   links: NAV.links,
   domain: SITE.domain,
   copyright: (year: number) => `© ${year} Convoy`,
+  /** The visitor's switch for the decorative motion behind the hero figure. */
+  motion: { pause: "Pause motion", resume: "Resume motion" },
 } as const;
