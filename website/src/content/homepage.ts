@@ -31,6 +31,8 @@ export const SITE = {
  * serving the one they stored. Bump the version when the artwork changes.
  */
 export const BRAND_VERSION = "2026-09";
+/** The link-preview card has its own version: replacing the artwork must not move the stable favicon and icon URLs. */
+export const SHARE_VERSION = "2026-09-2";
 export const BRAND = {
   /** Vector favicon for browsers that take one: the open release frame, a paper C on oxide. */
   iconSvg: `/icons/convoy-mark-${BRAND_VERSION}.svg`,
@@ -41,10 +43,10 @@ export const BRAND = {
   icon192: `/icons/convoy-mark-${BRAND_VERSION}-192.png`,
   icon512: `/icons/convoy-mark-${BRAND_VERSION}-512.png`,
   appleTouch: `/icons/convoy-mark-${BRAND_VERSION}-180.png`,
-  /** The link-preview card, 1200 × 630. */
-  shareCard: `/share/convoy-card-${BRAND_VERSION}.png`,
+  /** The link-preview card, 1200 × 630. Earlier versions stay under public/share/ for pages that cached them. */
+  shareCard: `/share/convoy-card-${SHARE_VERSION}.png`,
   shareCardAlt:
-    "Convoy mark and wordmark on warm paper with the line “Deploy AI models to real robots.” and the descriptor “Deployment infrastructure for physical AI”.",
+    "Convoy mark and wordmark in paper on an oxide field, with the line “Deploy AI models to real robots.” and the domain deployconvoy.com.",
 } as const;
 
 export const NAV = {

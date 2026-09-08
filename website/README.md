@@ -72,10 +72,14 @@ as sources in `src/assets/brand/`. `scripts/build-brand.mjs` renders them
 with the pinned Chromium into `public/`: `favicon.ico` (16, 32 and 48 px
 PNGs in one container, at the root where browsers and crawlers look first),
 an SVG, and 96, 180, 192 and 512 px PNGs under `icons/`, plus the 1200 × 630
-card under `share/`. Paths carry `BRAND_VERSION` from
-`src/content/homepage.ts`; bump it when the artwork changes so link-preview
-caches fetch the new card instead of the one they stored. `favicon.ico`
-keeps its stable URL. The icons are not padded for maskable use and are not
+card under `share/`. Icon paths carry `BRAND_VERSION` and the card carries
+`SHARE_VERSION`, both from `src/content/homepage.ts`; bump the card's
+version when its artwork changes so link-preview caches fetch the new card
+(new posts only: already-cached posts keep the image they stored), and keep
+the previous PNG in `public/share/`. Icon URLs and `favicon.ico` stay
+stable. The renderer checks that every face loaded, that the marked text
+stays inside the 80 px column with the art clear of it, that the headline
+sets on two lines, and that text contrast is at least 4.5:1. The icons are not padded for maskable use and are not
 declared as such.
 
 The canonical URL is `https://deployconvoy.com/` (apex, https, trailing
