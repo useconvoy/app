@@ -95,9 +95,11 @@ paper, and thin rings that expand and fade behind the still diagram.
 - Nothing runs while the field is mostly offscreen, the tab is hidden, the
   visitor has paused motion, or the OS asks for reduced motion (checked at
   mount and on change). Unmount tears everything down.
-- The footer carries one control, "Pause motion" / "Resume motion"
-  (`MotionToggle.tsx`), kept for the visit in sessionStorage with an
-  in-memory fallback when storage is blocked. OS reduced motion outranks it.
+- The footer carries one control (`MotionToggle.tsx`): an ordinary action
+  button whose label names the next action, "Pause motion" while running
+  and "Resume motion" while paused, with no pressed state. The choice is
+  kept for the visit in sessionStorage with an in-memory fallback when
+  storage is blocked. OS reduced motion outranks it.
 
 Ordinary control feedback remains: link and button color on hover and
 focus (160ms), the focus ring, the disclosure chevron and the mobile menu.

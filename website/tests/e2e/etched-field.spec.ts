@@ -35,9 +35,9 @@ test.describe("etched field", () => {
     const hero = html.slice(html.indexOf('id="top"'), html.indexOf('id="problem"') > 0 ? html.indexOf('id="problem"') : html.indexOf("</section>"));
     expect(hero).not.toMatch(/<button/);
     expect(hero).not.toMatch(/Replay|Trace the path|Playing/);
-    // The one control lives in the footer, unpressed by default.
+    // The one control lives in the footer: an action button offering "Pause motion", with no pressed state.
     expect(html).toMatch(/<footer[\s\S]*data-motion-toggle[\s\S]*<\/footer>/);
-    expect(html).toMatch(/aria-pressed="false"[^>]*data-motion-toggle|data-motion-toggle[^>]*aria-pressed="false"/);
+    expect(html).not.toMatch(/data-motion-toggle[^>]*aria-pressed|aria-pressed[^>]*data-motion-toggle/);
     expect(html).toContain("Pause motion");
   });
 
@@ -198,11 +198,11 @@ test.describe("etched field", () => {
     await expect(page.locator(RINGS)).not.toHaveCount(0, { timeout: 6500 });
     const toggle = page.locator("[data-motion-toggle]");
     await expect(toggle).toHaveText("Pause motion");
-    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await expect(toggle).not.toHaveAttribute("aria-pressed", /.*/);
     await toggle.scrollIntoViewIfNeeded();
     await toggle.click();
     await expect(toggle).toHaveText("Resume motion");
-    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect(toggle).not.toHaveAttribute("aria-pressed", /.*/);
     await expect(page.locator(RINGS)).toHaveCount(0);
     await expect(page.locator(FIELD)).toHaveAttribute("data-etched-field", "paused");
     // Nothing starts while paused, even with the pointer over the field.

@@ -4,16 +4,17 @@ import { FOOTER } from "@/content/homepage";
 import { setMotionPaused, useMotionPaused } from "@/lib/motion-preference";
 
 /**
- * One discreet control for the page's decorative motion. Pressed means
- * paused: the field stops and its rings are removed at once. The OS
- * reduced-motion setting takes precedence and is not overridden here.
+ * One discreet control for the page's decorative motion: an ordinary action
+ * button whose label names the next action ("Pause motion" while running,
+ * "Resume motion" while paused), so no pressed state is exposed. Pausing
+ * stops the field and removes its rings at once. The OS reduced-motion
+ * setting takes precedence and is not overridden here.
  */
 export function MotionToggle({ className = "" }: { className?: string }) {
   const paused = useMotionPaused();
   return (
     <button
       type="button"
-      aria-pressed={paused}
       onClick={() => setMotionPaused(!paused)}
       className={`inline-flex min-h-11 items-center gap-2 rounded px-1 text-muted hover:text-primary hover:underline ${className}`}
       data-motion-toggle
