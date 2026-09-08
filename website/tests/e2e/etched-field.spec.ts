@@ -363,7 +363,9 @@ test.describe("etched field on a phone", () => {
       expect(Math.abs(o.x - 40)).toBeLessThanOrEqual(1);
       expect(Math.abs(o.y - 50)).toBeLessThanOrEqual(1);
     }
-    const before = (await waves(page)).length;
+    // Every gesture below must start no new wave. Waves are compared by id, since the tap's rings fade on their own.
+    const seen = new Set(await waves(page));
+    const newWaves = async () => (await waves(page)).filter((id) => !seen.has(id));
     // A drag that moves past the threshold, even if it comes back to the start.
     const start = { x: box.x + 200, y: box.y + 120 };
     await touch("touchStart", [start]);
@@ -371,13 +373,13 @@ test.describe("etched field on a phone", () => {
     await touch("touchMove", [start]);
     await touch("touchEnd", []);
     await page.waitForTimeout(150);
-    expect((await waves(page)).length, "out-and-back drag starts nothing").toBe(before);
+    expect(await newWaves(), "out-and-back drag starts nothing").toEqual([]);
     // A slow press.
     await touch("touchStart", [{ x: box.x + 220, y: box.y + 140 }]);
     await page.waitForTimeout(400);
     await touch("touchEnd", []);
     await page.waitForTimeout(150);
-    expect((await waves(page)).length, "slow press starts nothing").toBe(before);
+    expect(await newWaves(), "slow press starts nothing").toEqual([]);
     // A cancelled gesture.
     await touch("touchStart", [{ x: box.x + 240, y: box.y + 160 }]);
     await touch("touchCancel", []);
@@ -385,14 +387,14 @@ test.describe("etched field on a phone", () => {
     await touch("touchMove", [{ x: box.x + 240, y: box.y + 100 }]);
     await touch("touchEnd", []);
     await page.waitForTimeout(150);
-    expect((await waves(page)).length, "cancelled and scrolling gestures start nothing").toBe(before);
+    expect(await newWaves(), "cancelled and scrolling gestures start nothing").toEqual([]);
     // Two fingers (a pinch) are never a tap, even when both lift quickly and without moving.
     await touch("touchStart", [{ x: box.x + 100, y: box.y + 100 }]);
     await touch("touchStart", [{ x: box.x + 100, y: box.y + 100 }, { x: box.x + 180, y: box.y + 140 }]);
     await touch("touchEnd", [{ x: box.x + 180, y: box.y + 140 }]);
     await touch("touchEnd", []);
     await page.waitForTimeout(150);
-    expect((await waves(page)).length, "two fingers start nothing").toBe(before);
+    expect(await newWaves(), "two fingers start nothing").toEqual([]);
     // The field never blocks scrolling: touch-action stays auto and a swipe over the field scrolls the page.
     expect(await field.evaluate((el) => getComputedStyle(el).touchAction)).toBe("auto");
     const y0 = await page.evaluate(() => window.scrollY);
