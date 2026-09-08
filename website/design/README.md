@@ -64,20 +64,44 @@ scroll padding.
 
 ## Motion
 
-The page is static. The two diagrams (the release figure in the hero and
-the execution path) render complete at first paint with every label,
+The diagrams are static. The two figures (the release figure in the hero
+and the execution path) render complete at first paint with every label,
 release part, placement note and the controller and safety boundary
-visible, and nothing on the page plays, sequences, traces or replays. The
-earlier one-shot trace, its replay control, progress line, live status and
-reduced-motion highlight toggle were removed at the founder's direction:
-they read as a gimmick, and a calm complete diagram says the same thing.
+visible; nothing plays, sequences, traces or replays, and there is no
+replay control. The earlier one-shot trace was removed at the founder's
+direction.
 
-What remains is ordinary control feedback only: link and button color on
-hover and focus (160ms), the focus ring, the disclosure chevron, and the
-mobile menu. No element translates, scales or fades on interaction, no
-autoplay, no requestAnimationFrame, no timers, no motion hook.
-`prefers-reduced-motion` still collapses the remaining color transitions
-and disables smooth scrolling.
+The one motion on the page is the **etched field** behind the hero figure,
+from Claude Design's approved exploration `hero-etched-ripple` (project
+29acffdc, `explorations/hero-etched-ripple.html`): a faint grid on the
+paper, and thin rings that expand and fade behind the still diagram.
+`src/components/EtchedField.tsx` implements it:
+
+- Idle waves start every 3–5 s at random exposed places, favoring the
+  left and right margins so they show without running under the copy.
+- A mouse entering the field starts a wave at the pointer; while hovering,
+  movement of at least 24 px, at most every 650 ms, starts another at the
+  current position. Rings keep their original centers. Leaving resumes
+  random origins. After a resize the stale coordinates are dropped and the
+  next move re-establishes the origin from the new bounds.
+- On a phone a short single-finger tap (under 300 ms, under 10 px of
+  movement at any point in the gesture) starts a wave at the tap. Scroll
+  and pinch are never prevented (`touch-action: auto`); a drag, an
+  out-and-back drag, a cancelled gesture or a second finger starts nothing.
+- A wave is three rings 230 ms apart, 2.5–3.2 s each, at most two waves
+  (six rings) at once; an intentional wave at the cap retires the oldest.
+  Opacity and transform only; the rings are DOM nodes created after mount
+  in an `aria-hidden` layer with no dependency, canvas or library.
+- Nothing runs while the field is mostly offscreen, the tab is hidden, the
+  visitor has paused motion, or the OS asks for reduced motion (checked at
+  mount and on change). Unmount tears everything down.
+- The footer carries one control, "Pause motion" / "Resume motion"
+  (`MotionToggle.tsx`), kept for the visit in sessionStorage with an
+  in-memory fallback when storage is blocked. OS reduced motion outranks it.
+
+Ordinary control feedback remains: link and button color on hover and
+focus (160ms), the focus ring, the disclosure chevron and the mobile menu.
+No element translates, scales or fades on interaction.
 
 ## Reading density and pacing
 

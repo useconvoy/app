@@ -280,6 +280,58 @@ details.disclosure[open] > summary .disclosure-mark {
   color: var(--text-muted);
 }
 
+/* --- The etched field behind the hero figure: a faint grid on the paper
+ * and thin rings that expand and fade (EtchedField.tsx creates the rings).
+ * Opacity and transform only; the foreground sits above on its own layer.
+ * The mask fades the grid out toward the field's edges. --- */
+.etched-field {
+  border-radius: 8px;
+  overflow: hidden;
+  touch-action: auto;
+}
+.etched-grid,
+.etched-waves {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.etched-grid {
+  --etched-line: color-mix(in srgb, var(--text-primary) 13%, transparent);
+  background:
+    repeating-linear-gradient(0deg, var(--etched-line) 0 1px, transparent 1px 26px),
+    repeating-linear-gradient(90deg, var(--etched-line) 0 1px, transparent 1px 26px);
+  -webkit-mask: radial-gradient(ellipse 85% 80% at 50% 50%, black 40%, transparent 100%);
+  mask: radial-gradient(ellipse 85% 80% at 50% 50%, black 40%, transparent 100%);
+}
+.etched-waves {
+  overflow: hidden;
+}
+.etched-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  transform: translate(-50%, -50%) scale(0.03);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: etched-ring var(--d, 2.8s) cubic-bezier(0.15, 0.6, 0.3, 1) forwards;
+}
+.etched-ring[data-ink] {
+  border-color: color-mix(in srgb, var(--text-primary) 40%, transparent);
+}
+@keyframes etched-ring {
+  0% {
+    transform: translate(-50%, -50%) scale(0.03);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0;
+  }
+}
+
 /* Only the code panel may scroll sideways; the page body never does. */
 .scroll-x {
   overflow-x: auto;
