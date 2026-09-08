@@ -1,0 +1,35 @@
+<!doctype html>
+<!-- Link-preview card, candidate B: oxide color block. The same flush-left
+     column (80 px margin) in paper on oxide; the right third carries the open
+     release frame (the C) as a bold cream stroke at low opacity, right-aligned
+     on the 80 px margin and kept clear of the words. Rendered by
+     scripts/build-brand.mjs / preview-share-cards.mjs with the self-hosted
+     IBM Plex Sans and Mono faces. Colors are the design tokens: oxide, paper. -->
+<html lang="en"><head><meta charset="utf-8"><style>
+  @font-face { font-family: "Plex Sans"; font-weight: 600; src: url("__FONTS__/ibm-plex-sans-latin-600-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Plex Sans"; font-weight: 500; src: url("__FONTS__/ibm-plex-sans-latin-500-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Plex Mono"; font-weight: 400; src: url("__FONTS__/ibm-plex-mono-latin-400-normal.woff2") format("woff2"); }
+  * { margin: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; background: #A63D22; -webkit-font-smoothing: antialiased; }
+  .card { position: relative; width: 1200px; height: 630px; color: #F6F4EF; font-family: "Plex Sans", sans-serif; overflow: hidden; }
+  .field { position: absolute; left: 760px; top: 0; width: 440px; height: 630px; }
+  /* 520 px frame; its open ends (path x = 44/64) land at 1120, the 80 px right margin. */
+  .frame { position: absolute; left: 2px; top: 55px; width: 520px; height: 520px; opacity: 0.24; }
+  .brand { position: absolute; left: 80px; top: 80px; display: flex; align-items: center; gap: 18px; }
+  .brand svg { width: 52px; height: 52px; display: block; }
+  .brand span { font-weight: 600; font-size: 38px; letter-spacing: -0.02em; line-height: 1; }
+  .h1 { position: absolute; left: 80px; top: 226px; width: 680px; font-size: 88px; line-height: 1.04; letter-spacing: -0.025em; font-weight: 500; }
+  .dom { position: absolute; left: 80px; top: 528px; font-family: "Plex Mono", monospace; font-size: 22px; letter-spacing: 0.02em; color: #F6F4EF; opacity: 0.86; }
+</style></head><body>
+<div class="card">
+  <div class="field" data-art="field">
+    <svg class="frame" viewBox="0 0 64 64" aria-hidden="true"><path d="M44 16H22a6 6 0 0 0-6 6v20a6 6 0 0 0 6 6h22" fill="none" stroke="#F6F4EF" stroke-width="9" stroke-linecap="square" stroke-linejoin="round"/></svg>
+  </div>
+  <div class="brand" data-text="brand">
+    <svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#F6F4EF"/><path d="M44 16H22a6 6 0 0 0-6 6v20a6 6 0 0 0 6 6h22" fill="none" stroke="#A63D22" stroke-width="9" stroke-linecap="square" stroke-linejoin="round"/></svg>
+    <span>Convoy</span>
+  </div>
+  <h1 class="h1" data-text="headline">Deploy AI models<br>to real robots.</h1>
+  <p class="dom" data-text="domain">deployconvoy.com</p>
+</div>
+</body></html>
