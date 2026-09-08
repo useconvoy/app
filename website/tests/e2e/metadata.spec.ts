@@ -84,9 +84,13 @@ test.describe("metadata and crawl surface", () => {
     expect(tw("site")).toEqual([]);
     expect(tw("creator")).toEqual([]);
     expect(html).not.toMatch(/fb:app_id|twitter:site|twitter:creator/);
-    // The share card is a real 1200 × 630 PNG at the URL in the tag.
+    // The share card is a real 1200 × 630 PNG at the URL in the tag, well under LinkedIn's 5 MB limit.
     const bytes = await fetchOk(request, new URL(og("image")[0]).pathname, /^image\/png/);
     expect(pngSize(bytes)).toEqual({ width: 1200, height: 630 });
+    expect(bytes.length).toBeLessThan(5 * 1024 * 1024);
+    // The card carries its own version, and the previous card stays served for pages that cached it.
+    expect(og("image")[0]).toContain("/share/convoy-card-2026-09-2.png");
+    expect(pngSize(await fetchOk(request, "/share/convoy-card-2026-09.png", /^image\/png/))).toEqual({ width: 1200, height: 630 });
     // The previous generated card is gone, so nothing links to two different images.
     expect((await request.get("/opengraph-image")).status()).toBe(404);
   });

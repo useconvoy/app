@@ -128,7 +128,12 @@ Finalized in Claude Design after the reference package: an open release
 frame read as a bold geometric C, paper on oxide, `rx` 14 on a 64-unit
 square, the same geometry at every size. The stroke's visible bounds run
 roughly x 11.5–48.5 / y 11.5–52.5; the mark is not inset for maskable
-icons and is not declared maskable. The 1200 × 630 card keeps the brand,
-headline, descriptor and domain inside the central x 285–915 square so a
-square crop loses only the dashed motif on the left. Sources:
-`src/assets/brand/`; renderer: `scripts/build-brand.mjs`.
+icons and is not declared maskable. The 1200 × 630 link-preview card
+(`SHARE_VERSION` 2026-09-2, chosen by Codex review from two candidates) is
+an oxide color block: one flush-left column on an 80 px margin with the
+lockup (mark 60 px, wordmark 48 px), the headline "Deploy AI models / to
+real robots." in Plex Sans 500 at 86 px with normal tracking, and a
+subordinate domain line, all in paper (5.77:1); the right third carries the
+open release frame as a bold cream stroke at 24 % opacity, right-aligned on
+the margin and clear of the words. No descriptor, rule, grid or diagram.
+Sources: `src/assets/brand/`; renderer: `scripts/build-brand.mjs`.
