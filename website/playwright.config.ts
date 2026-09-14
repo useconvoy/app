@@ -30,6 +30,22 @@ export default defineConfig({
           : {},
       },
     },
+    {
+      name: "webkit",
+      // The responsive layout, navigation and accessibility suite also runs
+      // in Safari's engine. The CDP touch gesture test stays Chromium-only.
+      testMatch: "**/landing.spec.ts",
+      use: { ...devices["Desktop Safari"] },
+    },
+    ...([
+      ["iphone", "iPhone 13"],
+      ["android", "Pixel 7"],
+    ] as const).map(([name, device]) => ({
+      name,
+      testMatch: "**/landing.spec.ts",
+      grep: /renders the approved hero|section order|mobile menu exposes|contact block opens/,
+      use: { ...devices[device] },
+    })),
   ],
   webServer: {
     command: `pnpm exec next start -p ${PORT}`,

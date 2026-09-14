@@ -55,8 +55,8 @@ test.describe("illustrated hero motion", () => {
       await page.waitForTimeout(600);
     }
     expect(Math.max(...samples) - Math.min(...samples)).toBeGreaterThan(.1);
-    for (const width of [1440, 768, 390]) {
-      await page.setViewportSize({width, height:1000});
+    for (const size of [{width:1440,height:1000}, {width:768,height:1000}, {width:390,height:844}, {width:844,height:390}, {width:932,height:430}]) {
+      await page.setViewportSize(size);
       await expect.poll(async () => {
         const glow = (await lamp.boundingBox())!;
         const art = (await page.locator(".hero-art").boundingBox())!;

@@ -42,6 +42,7 @@ pnpm run typecheck
 pnpm run lint
 pnpm run check:tokens     # hex literals only in tokens.css
 pnpm run build
+pnpm exec playwright install chromium webkit  # first-time browser setup
 pnpm run test:e2e         # against the production build; writes tests/screenshots/
 node scripts/measure-page.mjs http://127.0.0.1:3100   # section heights, visible words, hero CTA position
 pnpm run verify           # all of the above, in order
@@ -60,6 +61,15 @@ The page uses warm paper and clay actions, forest workflow/contact bands,
 a teal execution board, and warm partnership paper. Semantic colors live
 in `tokens.css`. Both architecture diagrams remain static and accessible;
 product copy and the controller/safety boundary are unchanged.
+
+The landing-page suite runs in Chromium and WebKit. Mobile coverage includes
+320–430px phones and landscape, single-row navigation, 44px tap targets,
+content-driven artwork placement, section-anchor clearance, and enlarged
+diagram labels that must not overlap their nodes. The desktop navigation
+appears at 1200px; smaller screens retain the compact menu. The hero motion
+suite additionally checks lamp placement through orientation changes. iPhone
+and Android profiles also exercise the hero, disclosures, contact block,
+and mobile navigation using touch input.
 
 `tests/e2e/metadata.spec.ts` checks the crawler-facing surface on the raw
 HTML and the static endpoints: title, description, canonical, robots

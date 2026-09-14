@@ -38,6 +38,11 @@ export function HeroMotion({ children }: { children: ReactNode }) {
       const [px, py] = style.objectPosition.split(" ").map((value) => parseFloat(value) / 100);
       const x = box.left - parent.left + (box.width - art.naturalWidth * scale) * px + 777 * scale;
       const y = box.top - parent.top + (box.height - art.naturalHeight * scale) * py + 225 * scale;
+      // A landscape crop can exclude the bulb. Keep its light inside the art.
+      if (x < box.left - parent.left || x > box.right - parent.left || y < box.top - parent.top || y > box.bottom - parent.top) {
+        root.removeAttribute("data-lamp-ready");
+        return;
+      }
       root.style.setProperty("--lamp-x", `${x}px`);
       root.style.setProperty("--lamp-y", `${y}px`);
       root.style.setProperty("--lamp-size", `${90 * scale}px`);

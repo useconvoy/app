@@ -3,7 +3,7 @@ import { EXECUTION } from "@/content/homepage";
 /**
  * The execution-path figure, static and complete at first paint: five
  * nodes from Sensors to Robot controller joined by solid execution arrows,
- * the three Convoy-scoped nodes inside the labelled dashed oxide boundary,
+ * the three Convoy-scoped nodes inside the labelled dashed runtime boundary,
  * a placement label under each node, the feedback line, the caption and the
  * legend. Vertical below a 56rem container, a row above it. Nothing moves
  * and nothing here is interactive; the caption says what placement depends
@@ -42,9 +42,9 @@ export function ExecutionDiagram() {
                   role="group"
                   aria-label={EXECUTION.scope}
                   data-runtime-boundary
-                  className="relative my-2 flex flex-col gap-1 rounded-lg border-2 border-dashed border-accent px-3 pt-7 pb-3 @4xl:my-0 @4xl:mx-1 @4xl:flex-[3_1_auto] @4xl:flex-row @4xl:items-stretch @4xl:gap-0"
+                  className="relative my-2 flex flex-col gap-1 rounded-lg border-2 border-dashed border-accent p-3 @4xl:my-0 @4xl:mx-1 @4xl:flex-[3_1_auto] @4xl:flex-row @4xl:items-stretch @4xl:gap-0 @4xl:pt-7"
                 >
-                  <span className="absolute -top-[11px] left-3 bg-background px-2 font-mono text-sm font-medium tracking-[0.02em] text-accent">
+                  <span className="mb-3 font-mono text-sm font-medium tracking-[0.02em] text-accent @4xl:absolute @4xl:-top-[11px] @4xl:left-3 @4xl:mb-0 @4xl:bg-background @4xl:px-2">
                     {EXECUTION.scope}
                   </span>
                   {body}
@@ -59,8 +59,8 @@ export function ExecutionDiagram() {
       </div>
 
       {/* Feedback: new observations and robot state travel back to the sensors. */}
-      <div className="mt-3 flex items-center gap-3 type-small text-secondary">
-        <svg viewBox="0 0 120 20" className="h-5 w-[120px] flex-none text-strong" aria-hidden="true" focusable="false">
+      <div className="execution-feedback mt-3 flex items-center gap-3 type-small text-secondary">
+        <svg viewBox="0 0 120 20" className="h-5 w-[72px] flex-none text-strong @4xl:w-[120px]" aria-hidden="true" focusable="false">
           <path d="M115 4v8H8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 4" />
           <path d="M13 8l-6 4 6 4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -125,7 +125,7 @@ function Edge({ label }: { label: string }) {
   return (
     <div
       aria-hidden="true"
-      className="flex items-center gap-2 py-0.5 pl-4 @4xl:h-16 @4xl:w-10 @4xl:flex-none @4xl:flex-col @4xl:justify-center @4xl:gap-0 @4xl:py-0 @4xl:pl-0"
+      className="flex min-h-11 items-center gap-2 py-0.5 pl-4 @4xl:h-16 @4xl:w-10 @4xl:flex-none @4xl:flex-col @4xl:justify-center @4xl:gap-0 @4xl:py-0 @4xl:pl-0"
       data-edge
     >
       <svg viewBox="0 0 40 16" className="h-4 w-10 rotate-90 overflow-visible text-primary @4xl:rotate-0" focusable="false">

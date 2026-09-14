@@ -1,5 +1,5 @@
 import { AxeBuilder } from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /**
  * Checks against the production build. Each test states what it proves;
@@ -13,7 +13,9 @@ const VIEWPORTS = [
   { name: "desktop-1024", width: 1024, height: 768 },
   { name: "tablet-768", width: 768, height: 1024 },
   { name: "landscape-844x390", width: 844, height: 390 },
+  { name: "mobile-360", width: 360, height: 800 },
   { name: "mobile-390", width: 390, height: 844 },
+  { name: "mobile-430", width: 430, height: 932 },
   { name: "mobile-320", width: 320, height: 568 },
 ] as const;
 
@@ -115,9 +117,11 @@ test.describe("landing page", () => {
     await expect(page.locator("header nav").first().getByRole("link", { name: "Contact" })).not.toHaveAttribute("aria-current", "true");
   });
 
-  test("skip link and keyboard reach the content and the form", async ({ page }) => {
+  test("skip link and keyboard reach the content and disclosures", async ({ page, browserName }) => {
     await page.goto("/");
-    await page.keyboard.press("Tab");
+    // Safari defaults to Option-Tab for links; plain Tab targets form controls.
+    // https://support.apple.com/guide/safari/cpsh003/mac
+    await page.keyboard.press(browserName === "webkit" ? "Alt+Tab" : "Tab");
     const skip = page.getByRole("link", { name: "Skip to content" });
     await expect(skip).toBeFocused();
     await page.keyboard.press("Enter");
@@ -131,13 +135,14 @@ test.describe("landing page", () => {
     await expect(second).not.toHaveAttribute("open", "");
   });
 
-  test("mobile menu exposes state, closes on Escape, and restores focus", async ({ page }) => {
+  test("mobile menu exposes state, closes on Escape, and restores focus", async ({ page, isMobile }) => {
+    const activate = (target: Locator) => isMobile ? target.tap() : target.click();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
     const button = page.getByRole("button", { name: "Menu" });
     await expect(button).toBeVisible();
     await expect(button).toHaveAttribute("aria-expanded", "false");
-    await button.click();
+    await activate(button);
     await expect(page.getByRole("button", { name: "Close" })).toHaveAttribute("aria-expanded", "true");
     const menu = page.locator("[data-mobile-menu]");
     const menuLink = menu.getByRole("link", { name: "How it works" });
@@ -148,16 +153,46 @@ test.describe("landing page", () => {
     await expect(page.getByRole("button", { name: "Menu" })).toBeFocused();
     await expect(menu).toBeHidden();
     // A pointer-down outside the menu closes it.
-    await page.getByRole("button", { name: "Menu" }).click();
+    await activate(page.getByRole("button", { name: "Menu" }));
     await expect(menu).toBeVisible();
-    await page.mouse.click(200, 700);
+    if (isMobile) await page.touchscreen.tap(200, 700);
+    else await page.mouse.click(200, 700);
     await expect(menu).toBeHidden();
     await expect(page.getByRole("button", { name: "Menu" })).toHaveAttribute("aria-expanded", "false");
     // A menu link navigates to its section and closes the menu.
-    await page.getByRole("button", { name: "Menu" }).click();
-    await menu.getByRole("link", { name: "Design partnership" }).click();
+    await activate(page.getByRole("button", { name: "Menu" }));
+    await activate(menu.getByRole("link", { name: "Design partnership" }));
     await expect(page).toHaveURL(/#partnership$/);
     await expect(page.getByRole("button", { name: "Menu" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("phone layouts keep navigation compact, artwork clear of copy, and anchors close to the header", async ({ page }) => {
+    for (const width of [320, 360, 390, 430, 844, 932]) {
+      await page.setViewportSize({width, height: width > 500 ? 430 : 844});
+      await page.goto("/");
+      const header = await page.locator("header").boundingBox();
+      expect(header!.height, `one header row at ${width}`).toBeLessThanOrEqual(73);
+      await expect(page.getByRole("button", {name:"Menu", exact:true})).toBeVisible();
+      if (width < 1200) {
+        const copy = (await page.locator(".hero-copy").boundingBox())!;
+        const art = (await page.locator(".hero-art").boundingBox())!;
+        const baseline = (await page.locator(".hero-baseline").boundingBox())!;
+        expect(art.y, `art follows the copy at ${width}`).toBeGreaterThanOrEqual(copy.y + copy.height);
+        expect(art.y - copy.y - copy.height, `no oversized gap before art at ${width}`).toBeLessThanOrEqual(26);
+        expect(art.y + art.height, `baseline never covers artwork at ${width}`).toBeLessThanOrEqual(baseline.y + 1);
+      }
+      await page.getByRole("button", {name:"Menu", exact:true}).click();
+      await page.locator("[data-mobile-menu]").getByRole("link", {name:"How it works", exact:true}).click();
+      await expect(page).toHaveURL(/#workflow$/);
+      await expect.poll(async () => Math.round((await page.locator("#workflow").boundingBox())!.y)).toBeLessThanOrEqual(header!.height + 24);
+      expect((await page.locator("#workflow").boundingBox())!.y).toBeGreaterThanOrEqual(header!.height);
+    }
+    await page.setViewportSize({width:390, height:844});
+    await page.getByRole("button", {name:"Menu", exact:true}).click();
+    await page.setViewportSize({width:1280, height:800});
+    await expect(page.locator("[data-mobile-menu]")).toBeHidden();
+    await page.setViewportSize({width:390, height:844});
+    await expect(page.getByRole("button", {name:"Menu", exact:true})).toHaveAttribute("aria-expanded", "false");
   });
 
   test("contact block opens the visitor's email app with the subject filled in", async ({ page }) => {
@@ -218,12 +253,12 @@ test.describe("landing page", () => {
   });
 
   test("interactive controls meet 44px targets on mobile and desktop", async ({ page }) => {
-    for (const width of [390, 1440]) {
+    for (const width of [320, 390, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/");
       if (width < 900) await page.getByRole("button", { name: "Menu" }).click();
       const small = await page
-        .locator("a.btn, button, header nav a, footer nav a, summary, [data-contact-link]")
+        .locator("a.btn, button, header a, footer a, summary, [data-contact-link]")
         .evaluateAll((els) =>
           els
             .filter((el) => (el as HTMLElement).offsetParent !== null)
@@ -404,6 +439,16 @@ test.describe("landing page", () => {
       const h1 = await page.locator("h1").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
       expect(h1).toBeGreaterThanOrEqual(80);
       await expect(page.getByRole("group", { name: "Convoy runtime boundary" })).toBeVisible();
+      const label = (await page.locator("[data-runtime-boundary] > span").boundingBox())!;
+      const firstNode = (await page.locator("[data-node='input']").boundingBox())!;
+      expect(label.y + label.height, "enlarged boundary label stays above the first node").toBeLessThanOrEqual(firstNode.y);
+      if (width < 1200) {
+        const copy = (await page.locator(".hero-copy").boundingBox())!;
+        const art = (await page.locator(".hero-art").boundingBox())!;
+        const baseline = (await page.locator(".hero-baseline").boundingBox())!;
+        expect(art.y).toBeGreaterThanOrEqual(copy.y + copy.height);
+        expect(art.y + art.height).toBeLessThanOrEqual(baseline.y + 1);
+      }
       await expect(page.locator("[data-contact-address]")).toBeVisible();
       // The header may be taller now; anchors still land below it, and the menu still closes on Escape.
       const headerHeight = await page.locator("header").evaluate((el) => el.getBoundingClientRect().height);

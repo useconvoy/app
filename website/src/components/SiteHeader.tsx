@@ -11,7 +11,7 @@ import { BRAND, NAV, SITE } from "@/content/homepage";
  * --header-height, so scroll padding keeps anchor targets and focused
  * controls out from under it and the open menu never exceeds the viewport.
  * Wordmark left, ordinary anchor links and one primary action right. Below
- * 900px the wordmark, Contact, and a real menu button remain: a disclosure
+ * 1200px the wordmark, Contact, and a real menu button remain: a disclosure
  * (aria-expanded / aria-controls) that Escape closes with focus returned to
  * the button, a pointer-down outside closes, and a link click closes. The
  * link for the section in view carries aria-current="true" in both navs.
@@ -23,6 +23,13 @@ export function SiteHeader() {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLElement>(null);
   const menuId = useId();
+
+  useEffect(() => {
+    const desktop = matchMedia("(min-width: 1200px)");
+    const closeOnDesktop = () => { if (desktop.matches) setOpen(false); };
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => desktop.removeEventListener("change", closeOnDesktop);
+  }, []);
 
   // The header's real height (it may wrap under text enlargement) feeds the
   // root's --header-height, which sets scroll padding for anchors and focused
@@ -97,13 +104,13 @@ export function SiteHeader() {
 
   return (
     <header ref={headerRef} className="sticky top-0 z-30 border-b border-subtle bg-background">
-      <div className="mx-auto flex min-h-16 w-full max-w-(--content-max) flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-2 sm:px-8 md:min-h-[72px] md:gap-x-6 md:px-10 lg:px-16">
+      <div className="site-header-row mx-auto flex min-h-16 w-full max-w-(--content-max) flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-2 sm:px-8 lg:min-h-[72px] md:gap-x-6 md:px-10 lg:px-16">
         <a href="#top" className="convoy-wordmark text-xl font-semibold tracking-[-0.02em] text-primary no-underline" aria-label={`${SITE.name} home`}>
           <Image src={BRAND.iconSvg} alt="" width={32} height={32} />
           {SITE.name}
         </a>
 
-        <nav aria-label="Main" className="hidden items-center gap-2 md:flex">
+        <nav aria-label="Main" className="hidden items-center gap-2 lg:flex">
           {NAV.links.map((link) => (
             <a
               key={link.href}
@@ -119,14 +126,14 @@ export function SiteHeader() {
           </a>
         </nav>
 
-        <div className="flex items-center gap-2 md:hidden">
+        <div className="flex items-center gap-2 lg:hidden">
           <a href={contact.href} className="type-label inline-flex min-h-12 items-center px-2 text-primary">
             {contact.label}
           </a>
           <button
             ref={buttonRef}
             type="button"
-            className="btn btn-secondary min-w-12 gap-2 px-3 text-sm"
+            className="mobile-menu-trigger btn btn-secondary min-w-12 gap-2"
             aria-expanded={open}
             aria-controls={menuId}
             onClick={() => setOpen((value) => !value)}
@@ -147,7 +154,7 @@ export function SiteHeader() {
         aria-label="Main"
         hidden={!open}
         data-mobile-menu
-        className="absolute inset-x-0 top-full z-20 max-h-[calc(100dvh-var(--header-height))] overflow-y-auto border-b border-subtle bg-surface shadow-[0_12px_24px_-16px_rgba(24,34,31,0.25)] md:hidden"
+        className="absolute inset-x-0 top-full z-20 max-h-[calc(100dvh-var(--header-height))] overflow-y-auto border-b border-subtle bg-surface shadow-[0_12px_24px_-16px_rgba(24,34,31,0.25)] lg:hidden"
       >
         <ul className="mx-auto flex w-full max-w-(--content-max) flex-col px-5 pt-2 pb-4 sm:px-8">
           {NAV.links.map((link) => (

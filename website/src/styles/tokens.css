@@ -86,7 +86,7 @@
   color-scheme: light;
 }
 
-@media (max-width: 899px) {
+@media (max-width: 1199px) {
   :root {
     --header-height: 64px;
   }
