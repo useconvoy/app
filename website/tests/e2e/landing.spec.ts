@@ -111,6 +111,7 @@ test.describe("landing page", () => {
     expect(padding).toBeGreaterThanOrEqual(headerHeight);
     await page.locator("header nav").first().getByRole("link", { name: "How it works" }).click();
     await expect(page).toHaveURL(/#workflow$/);
+    await expect.poll(async () => Math.abs((await page.locator("#workflow").boundingBox())!.y - padding)).toBeLessThanOrEqual(2);
     const top = await page.locator("#workflow").evaluate((el) => el.getBoundingClientRect().top);
     expect(top, "section starts below the sticky header").toBeGreaterThanOrEqual(headerHeight);
     await expect(page.locator("header nav").first().getByRole("link", { name: "How it works" })).toHaveAttribute("aria-current", "true");
@@ -468,16 +469,18 @@ test.describe("landing page", () => {
         await page.locator("header nav").first().getByRole("link", { name: "Contact" }).click();
       }
       await expect(page).toHaveURL(/#contact$/);
+      await expect.poll(async () => Math.abs((await page.locator("#contact").boundingBox())!.y - padding)).toBeLessThanOrEqual(2);
       const top = await page.locator("#contact").evaluate((el) => el.getBoundingClientRect().top);
       expect(top, `contact anchor clears the enlarged header at ${width}`).toBeGreaterThanOrEqual(headerHeight - 1);
-      await page.evaluate(() => window.scrollTo(0, 0));
-      await page.locator(width < 900 ? "[data-mobile-menu]" : "header nav").first().evaluate(() => {});
+      // The sticky navigation is available here; wait for the next anchor's
+      // smooth scroll to finish before measuring clearance, especially in Safari.
       if (width < 900) {
         await page.getByRole("button", { name: "Menu" }).click();
         await page.locator("[data-mobile-menu]").getByRole("link", { name: "How it works" }).click();
       } else {
         await page.locator("header nav").first().getByRole("link", { name: "How it works" }).click();
       }
+      await expect.poll(async () => Math.abs((await page.locator("#workflow").boundingBox())!.y - padding)).toBeLessThanOrEqual(2);
       const workflowTop = await page.locator("#workflow").evaluate((el) => el.getBoundingClientRect().top);
       expect(workflowTop, `workflow anchor clears the enlarged header at ${width}`).toBeGreaterThanOrEqual(headerHeight - 1);
     }
