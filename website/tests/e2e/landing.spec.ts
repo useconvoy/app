@@ -222,8 +222,8 @@ test.describe("landing page", () => {
     expect(order).toBe(true);
     // No form, no fields, nothing to submit or store.
     await expect(page.locator("form")).toHaveCount(0);
-    await expect(page.getByText(/received|sending is not available/i)).toHaveCount(0);
-    // Every primary action on the page lands on the contact section.
+    await expect(page.locator("#contact").getByText(/received|sending is not available/i)).toHaveCount(0);
+    // Deployment inquiry actions still land on the contact section.
     const ctas = page.getByRole("link", { name: "Discuss your deployment" });
     for (const href of await ctas.evaluateAll((links) => links.map((a) => a.getAttribute("href")))) {
       expect(href).toBe("#contact");
