@@ -1,13 +1,11 @@
 name: website-checks
 
-# Pull-request checks for the landing page: typecheck, lint, token check,
-# production build, and the Playwright release gates (accessibility,
-# keyboard, mobile menu, responsive reflow, contact link). One standard
-# Linux job, no caches persisted, no artifacts kept.
+# Pull-request gates for the website/BFF, API, Python 3.10 device agent and
+# existing-host deployment contract. The retired MVP web app is not bundled.
 
 on:
   pull_request:
-    paths: ["website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/website-checks.yml"]
+    paths: ["control-plane/**", "website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/**"]
 
 permissions:
   contents: read
@@ -31,6 +29,7 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run lint
       - run: pnpm run check:tokens
+      - run: bash scripts/test-portal.sh
       - run: pnpm run build
         env:
           NEXT_PUBLIC_SITE_URL: https://deployconvoy.com
@@ -38,3 +37,42 @@ jobs:
       - run: pnpm run test:e2e
         env:
           CI: "true"
+
+  control-plane:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: control-plane
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.22"
+          python-version: "3.12"
+      - run: uv sync --frozen --all-packages
+      - run: uv run --frozen ruff check server agent
+      - run: uv run --frozen pytest -q server/tests
+
+  agent-python310:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - run: python -m pip install pytest pytest-timeout -e control-plane/agent
+      - run: python -m pytest -q control-plane/agent/tests
+
+  deployment-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install PyYAML
+      - run: bash -n website/infra/deploy/remote-release.sh
+      - run: python -m unittest discover -s website/infra/deploy/tests -v

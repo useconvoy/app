@@ -185,6 +185,8 @@ test.describe("metadata and crawl surface", () => {
     const robots = await (await request.get("/robots.txt")).text();
     expect(robots).toMatch(/User-Agent: \*\s+Allow: \/\s/i);
     expect(robots).not.toMatch(/Disallow: \/\s*$/m);
+    expect(robots).toContain("Disallow: /portal");
+    expect(robots).toContain("Disallow: /api/portal");
     expect(robots).toContain("Sitemap: https://deployconvoy.com/sitemap.xml");
     const sitemapRes = await request.get("/sitemap.xml");
     expect(sitemapRes.status()).toBe(200);

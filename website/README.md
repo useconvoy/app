@@ -1,167 +1,166 @@
-# Convoy landing page
+# Convoy website and Jetson portal
 
-The public site for Convoy, deployment infrastructure for physical AI. One
-route, static-first: an illustrated humanoid hero, the problem and release diagram, the Package / Qualify / Release
-workflow, the execution path, the design-partnership invitation, six FAQ
-boundaries, and an email contact section. Copy is verbatim from the approved research
-and design brief (Parts XI–XVII) and describes a product in development.
+This Next.js app serves the [Convoy landing page](https://deployconvoy.com/) and
+[authenticated Jetson demo](https://deployconvoy.com/portal). The landing page
+introduces the robot deployment workflow in development. **Open demo** leads to
+Device, Chat, Usage, and Traces for one configured physical Jetson.
 
-## Stack
+The demo uses received device data and real model responses. Its verified
+text-inference configuration and limits are recorded in the
+[production portal architecture and walkthrough](../docs/production-portal.md).
+That document distinguishes preserved physical evidence, software contract
+validation, and public deployment acceptance. Demo credentials are provided
+privately by the operator and must never be embedded in this repository.
 
-Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind v4 over a
-single semantic token file. IBM Plex Sans and Mono are self-hosted under the
-SIL Open Font License. No component library, no animation framework, no
-analytics.
+## Stack and layout
 
+Next.js 16 App Router, React 19, TypeScript, and Tailwind v4 over a single semantic
+token file. IBM Plex Sans and Mono are self-hosted under the SIL Open Font
+License. There is no component library, animation framework, or analytics.
+
+```text
+src/app/                 landing, portal, metadata, 404, robots, sitemap, manifest
+src/app/api/portal/      session, physical-device snapshot, bounded text Chat
+src/components/portal/  portal shell, login, device/usage/trace views, Chat, charts
+src/components/         landing sections, header, footer, diagrams, contact
+src/content/homepage.ts landing copy
+src/content/claims.ts   claims ledger: stage, scope, evidence, approval
+src/content/support.ts  tested physical text-inference configuration
+src/lib/portal/         server-only authentication, upstream boundary, curated types
+src/styles/tokens.css   the only source file that may contain a hex color
+src/styles/globals.css  Tailwind bridge, shared typography and controls
+src/styles/portal.css   responsive portal layout using the same semantic tokens
+src/assets/brand/       brand source assets
+public/                 versioned icons, share cards, hero artwork
+infra/deploy/           existing Lightsail web-release script
+tests/e2e/              Playwright UI, accessibility, keyboard, responsive checks
+tests/portal/           isolated server API contract/security tests
 ```
-src/app/                 layout (metadata, JSON-LD), page, 404, robots, sitemap, manifest
-src/assets/brand/        the mark (SVG) and the share card (HTML); scripts/build-brand.mjs renders public/
-public/                  favicon.ico, icons/, share/: versioned static brand assets
-src/components/          one component per page section plus header, footer, envelope, contact
-src/content/homepage.ts  every public sentence on the page
-src/content/claims.ts    the claims ledger: text, stage, evidence, approval
-src/content/support.ts   the supported-configuration matrix (empty until tested)
-infra/deploy/            the release script that runs on the instance
-src/styles/tokens.css    the only file that may contain a hex color
-src/styles/globals.css   Tailwind theme bridge, type scale, controls
-tests/e2e/               Playwright: accessibility, keyboard, contact, screenshots
-```
+
+`design/reference/` is preserved visual reference material. The current source
+of implemented color roles is `src/styles/tokens.css`; the portal shares those
+roles, fonts, small radii, and focus styling. Conceptual landing diagrams remain
+labelled as design intent; the portal's measurements come from the backend.
 
 ## Develop
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 cp .env.example .env.local
 pnpm run dev
 ```
+
+The landing page runs without backend configuration. The portal additionally
+requires the server-only runtime variables documented in
+[src/lib/portal/README.md](src/lib/portal/README.md), a configured physical device,
+and an internal control-plane connection. Public deployments require HTTPS for
+the secure session cookie. Never use `NEXT_PUBLIC_` for a password, session secret,
+or upstream operator token.
 
 ## Verify
 
 ```bash
 pnpm run typecheck
 pnpm run lint
-pnpm run check:tokens     # hex literals only in tokens.css
+pnpm run check:tokens
+bash scripts/test-portal.sh
 pnpm run build
-pnpm exec playwright install chromium webkit  # first-time browser setup
-pnpm run test:e2e         # against the production build; writes tests/screenshots/
-node scripts/measure-page.mjs http://127.0.0.1:3100   # section heights, visible words, hero CTA position
-pnpm run verify           # all of the above, in order
-node scripts/build-brand.mjs [review-dir]   # re-render favicon.ico, icons/ and the share card from src/assets/brand/
+pnpm exec playwright install chromium webkit
+pnpm run test:e2e
 ```
 
-`tests/e2e/hero-motion.spec.ts` checks the illustrated hero asset and its
-36px optical focus marker, stable content, responsive lamp placement, soft
-brightness changes, pause/resume (including blocked storage), OS reduced
-motion, offscreen and hidden-page suspension, and native touch scrolling.
-The WebP illustration is preloaded with explicit dimensions. The lamp uses
-an image-registered CSS glow; pointer movement updates two custom properties
-without creating particles or running a render loop.
+For the portal alone after a production build:
 
-The page uses warm paper and clay actions, forest workflow/contact bands,
-a teal execution board, and warm partnership paper. Semantic colors live
-in `tokens.css`. Both architecture diagrams remain static and accessible;
-product copy and the controller/safety boundary are unchanged.
+```bash
+pnpm exec playwright test tests/e2e/portal.spec.ts --project=chromium
+```
 
-The landing-page suite runs in Chromium and WebKit. Mobile coverage includes
-320–430px phones and landscape, single-row navigation, 44px tap targets,
-content-driven artwork placement, section-anchor clearance, and enlarged
-diagram labels that must not overlap their nodes. The desktop navigation
-appears at 1200px; smaller screens retain the compact menu. The hero motion
-suite additionally checks lamp placement through orientation changes. iPhone
-and Android profiles also exercise the hero, disclosures, contact block,
-and mobile navigation using touch input.
+`pnpm run verify` runs the package's typecheck, lint, token, build, and browser
+checks. Run `bash scripts/test-portal.sh` as well for the dedicated server API
+checks. Contract fixtures exist only in test files; they do not prove physical
+hardware or public deployment acceptance.
 
-`tests/e2e/metadata.spec.ts` checks the crawler-facing surface on the raw
-HTML and the static endpoints: title, description, canonical, robots
-directives, Open Graph and Twitter tags with an absolute 1200 × 630 PNG,
-every declared icon served at its stated size and type (including the
-16/32/48 ICO), the browser-mode manifest, valid WebSite and Organization
-JSON-LD limited to facts the page states, robots.txt and sitemap agreeing
-with the canonical URL, and the www host answered with a 308 to the apex.
+The portal suite covers login/logout, queued/running/completed requests, recovery
+of an uncertain submission using the same UUID, conversation context, expiry,
+offline blocking, input limits, exact data tables, and distinct browser/device
+clocks. Axe and overflow checks cover 320, 390, 768, and 1440 pixels; enlarged-text
+checks exercise 200% text at a phone viewport. Screenshots are written to
+`tests/screenshots/portal-*.png`.
+
+The landing suite covers Chromium/WebKit, mobile and landscape reflow, keyboard
+navigation, anchor clearance, native disclosures, contact links, enlarged text,
+static diagrams, metadata, redirects, and the illustrated hero's optional motion.
+Its hero test additionally checks OS reduced motion, pause/resume, offscreen
+suspension, hidden-page behavior, and touch scrolling. Set
+`PLAYWRIGHT_CHROMIUM_PATH` only when using an externally supplied Chromium binary.
+
+## Data and request behavior
+
+The browser uses only the session, snapshot, and Chat endpoints under
+`/api/portal/`. The server holds a dedicated operator token, validates the single
+physical device, and discards fleet aggregates and simulator data before returning
+curated fields. It exposes no arbitrary proxy, deployment control, enrollment,
+configuration mutation, or raw log browser.
+
+Telemetry samples, received usage, and the bounded inference sample carry their
+own provenance. Missing values remain **Not reported**. Browser refresh time is
+not substituted for a device measurement timestamp. Chat returns the full reply
+when complete; no token stream or device measurement is simulated. The UI keeps
+conversation history in memory while the portal stays open in the browser tab.
+
+See [the walkthrough](../docs/production-portal.md#walkthrough) for the interaction
+sequence and [data definitions](../docs/production-portal.md#what-the-numbers-mean)
+for the 30-day accounting window, delayed records, overlapping clocks, and sample
+percentile limitations.
 
 ## Brand assets and metadata
 
-The mark and the link-preview card were finalized in Claude Design and live
-as sources in `src/assets/brand/`. `scripts/build-brand.mjs` renders them
-with the pinned Chromium into `public/`: `favicon.ico` (16, 32 and 48 px
-PNGs in one container, at the root where browsers and crawlers look first),
-an SVG, and 96, 180, 192 and 512 px PNGs under `icons/`, plus the 1200 × 630
-card under `share/`. Icon paths carry `BRAND_VERSION` and the card carries
-`SHARE_VERSION`, both from `src/content/homepage.ts`; bump the card's
-version when its artwork changes so link-preview caches fetch the new card
-(new posts only: already-cached posts keep the image they stored), and keep
-the previous PNG in `public/share/`. Icon URLs and `favicon.ico` stay
-stable. The renderer checks that every face loaded, that the marked text
-stays inside the 80 px column with the art clear of it, that the headline
-sets on two lines, and that text contrast is at least 4.5:1. The icons are not padded for maskable use and are not
-declared as such.
+Brand sources live in `src/assets/brand/`. `scripts/build-brand.mjs` renders the
+favicon, versioned PNG/SVG icons, and 1200 × 630 social card with Chromium. The
+paths are defined by `BRAND_VERSION` and `SHARE_VERSION` in
+`src/content/homepage.ts`. Bump the relevant version when artwork changes and
+retain earlier published assets for cached links.
 
-The canonical URL is `https://deployconvoy.com/` (apex, https, trailing
-slash) and the same string appears in the canonical link, `og:url`, the
-sitemap and the JSON-LD ids. `next.config.ts` sets `trailingSlash` so the
-framework emits that form, with `skipTrailingSlashRedirect` so no
-normalizing hop is added; the legacy paths still redirect straight to `/`.
-The `www` host is answered by the app with a 308 to the apex (Caddy passes
-the original Host header); DNS and TLS are unchanged.
+```bash
+node scripts/build-brand.mjs [review-dir]
+node scripts/measure-page.mjs http://127.0.0.1:3100
+```
 
-The e2e suite is the desktop-and-mobile release gate: axe at 1440, 1280,
-768, 390 and 320 with every disclosure open; no sideways scroll at any
-width; 44px control targets; the skip link; the mobile menu (aria-expanded,
-Escape, focus return); every on-page anchor; the diagrams reflowing to an
-ordered vertical structure on mobile with the controller and safety
-boundary intact; 200% zoom reflow and the contact address wrapping at 320;
-both diagrams static and complete at first paint in normal and
-reduced motion at 1440, 393 and 430 with no control, live region or
-animation remnants; the mailto link's address, subject and template;
-and the legacy redirects. It writes full-page screenshots to
-`tests/screenshots/`. In this session's image the
-pinned Chromium is supplied through `PLAYWRIGHT_CHROMIUM_PATH`.
+The landing page's canonical URL is `https://deployconvoy.com/`. Its metadata,
+structured data, robots, and sitemap agree on that URL. The portal has its own
+title and canonical route and is marked `noindex, nofollow`. Authentication is
+enforced by the portal API; robots metadata is not access control. The `www` host
+redirects to the apex.
 
 ## Contact
 
-Inquiries go by email. The contact section carries a mailto link that opens
-the visitor's own mail app with the subject "Convoy deployment inquiry" and a
-three-line template (model, robot configuration, deployment challenge), plus
-the address as selectable text. Nothing is collected or stored on the site.
+The landing contact link opens the visitor's email app with the address, subject,
+and deployment-inquiry template. That contact interaction does not submit form
+data to Convoy. Portal authentication and Chat are separate server requests.
+`CONTACT_EMAIL` in `src/content/homepage.ts` is the default address;
+`NEXT_PUBLIC_CONTACT_EMAIL` overrides it at build time.
 
-The address is one constant, `CONTACT_EMAIL` in `src/content/homepage.ts`,
-and `NEXT_PUBLIC_CONTACT_EMAIL` overrides it at build time. Changing it is a
-one-line edit and a redeploy.
+## Deployment on the existing Lightsail host
 
-## Deployment (Lightsail)
+The website uses the existing `convoy-console-demo` Lightsail instance, its static
+IP, Caddy TLS termination, and existing DNS. The portal does not require a new AWS
+resource. Its production architecture adds a bounded website API connected to
+the internal control plane and direct outbound HTTPS from the Jetson agent.
 
-The site runs on the existing Lightsail instance `convoy-console-demo`
-(us-west-2a, static IP, Caddy terminating TLS with Let's Encrypt, Route 53 A
-records for the apex and `www`). Nothing about that box, its DNS, or its
-certificate changes for a release.
+The existing `.github/workflows/deploy-website.yml` builds standalone Next.js
+output, ships it to the instance over SSH, and invokes
+`infra/deploy/remote-release.sh`. Runtime portal configuration and the physical
+agent's direct AWS transport are operator deployment steps; a web build alone
+does not create that connection. Review the current release workflow and server
+configuration when deploying rather than assuming the old landing-only health
+check proves device access.
 
-`.github/workflows/deploy-website.yml` runs on every push to `main` that
-touches `website/` (and by hand from the Actions tab). It builds the
-standalone Next.js output on a standard Linux runner, copies one tarball to
-the instance over SSH, and runs `infra/deploy/remote-release.sh`, which:
+A web rollback restores the selected web release. It does not prove that the
+physical agent, control-plane database, or backend configuration has been rolled
+back with it. Preserve the existing backup and identity records and verify the
+public session, physical snapshot, and an actual Chat request after a change.
 
-1. copies `compose.yaml`, `compose.override.yaml`, `.env` and `Caddyfile` to
-   `/opt/convoy/rollback/<timestamp>/` together with the image the `web`
-   service was running;
-2. unpacks the release into `/opt/convoy/releases/<sha>/`;
-3. rewrites only the `web` service in `compose.yaml` to run that directory
-   with the stock `node:22-alpine` image (`node server.js`, read-only bind
-   mount, unprivileged user);
-4. recreates `web`, checks it through the compose network the way Caddy
-   reaches it, and restores the backup if the check fails.
-
-The previous console's image stays in ECR and in the local Docker cache, and
-its other services (postgres, notifier, the environments override) are left
-exactly as they were. **Rollback:** run the workflow with `rollback` checked
-(and `rollback_to` naming a backup directory, or empty for the newest), or on
-the instance `sudo bash /tmp/remote-release.sh rollback [backup]`. The
-pre-launch state of the previous console is `rollback/20260907T015223Z`.
-
-No registry push, snapshot, or new AWS resource is involved. The GitHub
-Actions minutes come from the organization's included allowance.
-
-**Historical paths.** `/platform`, `/solutions`, `/security`, `/company`,
-`/writing`, `/changelog`, `/demo`, `/early-access`, `/terms` and `/privacy`
-redirect permanently to `/` (see `next.config.ts`). The old authenticated
-console routes (`/app`, `/sign-in`, `/api/...`) return an ordinary 404 and
-are not recreated.
+Historical marketing paths such as `/platform`, `/demo`, and `/early-access`
+continue to redirect to `/`. `/portal` and `/api/portal/...` are the new demo
+surface; older authenticated console routes such as `/app` and `/sign-in` are
+not recreated.

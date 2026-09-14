@@ -83,7 +83,8 @@ test.describe("landing page", () => {
     await expect(faq).toHaveCount(6);
     await expect(faq.first()).toHaveAttribute("open", "");
     await expect(faq.first()).toContainText("What can I use today?");
-    await expect(faq.first()).toContainText("Convoy is in development");
+    await expect(faq.first()).toContainText("The Jetson demo lets you chat with a model on a physical device");
+    await expect(faq.first()).toContainText("broader robot deployment workflow remains in development");
   });
 
   test("every on-page anchor resolves to an element", async ({ page }) => {

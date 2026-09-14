@@ -1,0 +1,71 @@
+# Convoy device agent (Jetson Orin Nano). Installed by scripts/jetson/install-agent.sh.
+# STATUS: pending device verification (authored without a Jetson; systemd-analyze verify was not run).
+#
+# The agent makes outbound HTTPS requests only and opens no inbound ports; the runtime child it
+# supervises (llama-server) listens on 127.0.0.1 only and reads a per-launch API key file (0600).
+# Enroll first (one-time, as the service user):
+#   sudo -u convoy-agent /opt/convoy-agent/venv/bin/convoy-agent enroll --server https://<host> --token <t> --name <name>
+[Unit]
+Description=Convoy device agent (outbound only)
+Documentation=file:///opt/convoy-agent/JETSON_GUIDE.md
+After=network-online.target
+Wants=network-online.target
+# Enrollment writes /var/lib/convoy-agent/credential; the service is pointless before that.
+ConditionPathExists=/var/lib/convoy-agent/credential
+
+[Service]
+Type=simple
+User=convoy-agent
+Group=convoy-agent
+# GPU access on Jetson is granted through the video group on /dev/nvhost-* and /dev/nvmap (install-agent.sh
+# also adds the user to "render" when that group exists; systemd would refuse to start with a missing group).
+SupplementaryGroups=video
+WorkingDirectory=/var/lib/convoy-agent
+Environment=CONVOY_AGENT_DIR=/var/lib/convoy-agent
+Environment=CONVOY_LOG_LEVEL=INFO
+Environment=PYTHONUNBUFFERED=1
+# JetPack normally registers the CUDA runtime in ld.so.conf; the explicit path is a belt-and-braces
+# default that the agent passes through (scrubbed environment keeps only PATH/HOME/LD_LIBRARY_PATH/...).
+Environment=LD_LIBRARY_PATH=/usr/local/cuda/lib64
+Environment=PATH=/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/opt/convoy-agent/venv/bin/convoy-agent run
+Restart=always
+RestartSec=5s
+TimeoutStopSec=45s
+KillMode=mixed
+
+# Hardening. Not used on purpose: PrivateDevices (CUDA needs /dev/nvhost-*, /dev/nvmap),
+# MemoryDenyWriteExecute (CUDA/JIT), ProtectClock (implies a closed DevicePolicy, see below);
+# ProtectKernelModules is fine (no module loading).
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/convoy-agent
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+# ProtectClock=yes is NOT used: it implies DeviceAllow=char-rtc r, which switches the unit to a closed
+# device policy and denies the Tegra GPU nodes (/dev/nvhost-*, /dev/nvmap). Reproduced on the board:
+# with the full hardening `nvidia-smi --query-gpu=name,compute_cap` fails 255 (NvRmMemInitNvmap:
+# Operation not permitted; NVML init failed) and the agent's measured compute capability is null;
+# with only ProtectClock=no it answers "Orin (nvgpu), 8.7". The clock protection ProtectClock provided
+# is kept explicitly without the implicit device filter: no clock-setting capabilities, no clock
+# system calls. No per-board device nodes are listed; the default (open) device policy applies as before.
+ProtectClock=no
+CapabilityBoundingSet=~CAP_SYS_TIME CAP_WAKE_ALARM
+SystemCallFilter=~@clock
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+UMask=0077
+# Keep the runtime child within the same unified-memory budget the guide describes (adjust per device).
+MemoryMax=6G
+TasksMax=512
+
+[Install]
+WantedBy=multi-user.target

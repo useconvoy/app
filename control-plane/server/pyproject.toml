@@ -1,0 +1,34 @@
+[project]
+name = "convoy-server"
+version = "0.1.0"
+description = "Convoy control plane: API, web app, scheduler"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "sqlalchemy>=2.0",
+  "pydantic>=2.8",
+  "argon2-cffi>=23.1",
+  "croniter>=3.0",
+  "httpx>=0.27",
+  "python-multipart>=0.0.9",
+  "convoy-agent",
+]
+
+[tool.uv.sources]
+convoy-agent = { workspace = true }
+
+[project.scripts]
+convoy-server = "convoy_server.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["convoy_server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+timeout = 120
+filterwarnings = ["ignore::DeprecationWarning"]
