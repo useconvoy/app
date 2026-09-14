@@ -49,7 +49,9 @@ backup() {
 ensure_web_image() {
   local image registry region
   image=$(python3 "$COMPOSE_TOOL" image compose.yaml web)
-  if docker image inspect "$image" >/dev/null 2>&1; then return; fi
+  # An argumentless return inside Bash 5's ERR trap can inherit the original
+  # deployment failure, despite this successful inspection. Recovery needs zero.
+  if docker image inspect "$image" >/dev/null 2>&1; then return 0; fi
   if [[ "$image" == *'.dkr.ecr.'* ]]; then
     registry=${image%%/*}
     region=$(printf '%s' "$registry" | sed -nE 's#.*\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com#\1#p')

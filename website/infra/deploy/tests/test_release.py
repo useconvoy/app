@@ -93,7 +93,7 @@ fail = os.environ.get("FAIL_AT")
 if a[:3] == ["compose", "ps", "-q"]:
     if "control-plane" in doc["services"]: print("known-api-container")
 elif a[:2] == ["compose", "up"]:
-    if fail == "web-start" and a[-1] == "web" and "abcdef123456" in str(doc["services"]["web"]): sys.exit(1)
+    if fail == "web-start" and a[-1] == "web" and "abcdef123456" in str(doc["services"]["web"]): sys.exit(42)
 elif a[:2] == ["compose", "exec"]:
     if "control-plane:8080" in a[-1]:
         if fail == "api-health" and doc["services"]["control-plane"]["image"].endswith("abcdef123456"): sys.exit(1)
@@ -144,7 +144,10 @@ elif a[:2] == ["compose", "exec"]:
 
     def test_first_portal_failure_restores_old_landing_with_api_and_no_portal_endpoint(self):
         result = self.run_release("web-start")
-        self.assertNotEqual(result.returncode, 0)
+        # Recovery must succeed with cached images while preserving the initial
+        # nonzero deployment status. Linux Bash 5 previously inherited 42 from
+        # the ERR trap in ensure_web_image's argumentless return and aborted it.
+        self.assertEqual(result.returncode, 42)
         self.assertIn("previous application services restored", result.stderr)
         self.assert_runtime_retained()
         self.assertEqual(yaml.safe_load((self.root / "compose.yaml").read_text()), OLD)
