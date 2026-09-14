@@ -1,11 +1,6 @@
 import type { ReactNode } from "react";
 
-/**
- * One page section on flat paper: a hairline rule above, the 1280px
- * measure, page padding 20 / 32 / 40 / 64 and section gaps 40 / 56 / 80.
- * Sections are separated by rules, never by colour bands; where a block
- * needs a container it gets a bordered white surface inside the section.
- */
+/** Shared section rhythm and page measure, with optional semantic color bands. */
 export function Section({
   id,
   labelledBy,

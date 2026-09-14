@@ -1,7 +1,7 @@
 # Convoy landing page
 
 The public site for Convoy, deployment infrastructure for physical AI. One
-route, static-first: a hero, the problem, the Package / Qualify / Release
+route, static-first: an illustrated humanoid hero, the problem and release diagram, the Package / Qualify / Release
 workflow, the execution path, the design-partnership invitation, six FAQ
 boundaries, and a contact form. Copy is verbatim from the approved research
 and design brief (Parts XI–XVII) and describes a product in development.
@@ -48,14 +48,12 @@ pnpm run verify           # all of the above, in order
 node scripts/build-brand.mjs [review-dir]   # re-render favicon.ico, icons/ and the share card from src/assets/brand/
 ```
 
-`tests/e2e/etched-field.spec.ts` drives the decorative field behind the
-hero figure with real Playwright mouse input and CDP touch events: idle
-origins in the margins, a wave at the pointer on entry and on meaningful
-movement, the six-ring cap retiring the oldest wave, resize handling with
-the mouse still inside, pause/resume from the footer (also with storage
-blocked), OS reduced motion at load and on change, offscreen and hidden
-document, tap versus drag, out-and-back drag, slow press, cancel and
-two-finger gestures, and that a swipe over the field still scrolls.
+`tests/e2e/pixel-field.spec.ts` checks the illustrated hero asset and its
+cursor-reactive grid: a bounded trail aligned to the drafting cells, natural
+expiry, resize cleanup, pause/resume (including blocked storage), OS reduced
+motion, offscreen and hidden-page suspension, and native touch scrolling.
+The hero artwork is a 294 KB WebP, preloaded with explicit dimensions. The
+release architecture remains a static accessible diagram in the gap section.
 
 `tests/e2e/metadata.spec.ts` checks the crawler-facing surface on the raw
 HTML and the static endpoints: title, description, canonical, robots

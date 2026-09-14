@@ -11,7 +11,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 /**
  * The landing page, in the order the brief specifies: hero, problem,
  * workflow, execution path, design partnership, FAQ, contact, footer.
- * Everything is server-rendered; the header menu and the form are the only
+ * Everything is server-rendered; the header menu, motion control, and decorative hero field are the
  * client boundaries.
  */
 export default function HomePage() {

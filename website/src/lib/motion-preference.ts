@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * The visitor's own switch for the page's decorative motion (the etched
- * field behind the hero figure). Kept for the visit in sessionStorage; the
+ * The visitor's own switch for the page's decorative motion (the pixel
+ * field across the illustrated hero). Kept for the visit in sessionStorage; the
  * OS reduced-motion preference is honored separately and always wins.
  * A store rather than context so the footer control and the field share
  * one value without lifting state into the page.

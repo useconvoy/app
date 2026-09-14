@@ -52,7 +52,7 @@ test.describe("landing page", () => {
     await expect(page.getByRole("heading", { level: 3, name: /^Package$/ })).toBeVisible();
     await expect(page.getByRole("heading", { level: 3, name: /^Qualify$/ })).toBeVisible();
     await expect(page.getByRole("heading", { level: 3, name: /^Release$/ })).toBeVisible();
-    // One release envelope, in the hero, with all six parts as rows and the examples behind one disclosure.
+    // One release envelope, below the hero, with all six parts as rows and the examples behind one disclosure.
     const envelope = page.locator("[data-envelope]");
     await expect(envelope).toHaveCount(1);
     await expect(envelope).toContainText("Robot-policy release");
@@ -60,7 +60,7 @@ test.describe("landing page", () => {
     for (const part of ["Release identity", "Model assets", "Input / action processing", "Runtime", "Target configuration", "Evaluation evidence"]) {
       await expect(envelope.getByText(part, { exact: true })).toBeVisible();
     }
-    const details = page.locator("#top details");
+    const details = page.locator("#problem details");
     await expect(details).toHaveCount(1);
     await expect(details).not.toHaveAttribute("open", "");
     await expect(page.locator("[data-release-details]")).toBeHidden();
@@ -213,7 +213,7 @@ test.describe("landing page", () => {
     expect(parseFloat(duration)).toBeLessThanOrEqual(0.0001);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(page.locator("#execution figure")).toBeVisible();
-    await expect(page.locator("#top figure button, #execution figure button")).toHaveCount(0);
+    await expect(page.locator("#problem figure button, #execution figure button")).toHaveCount(0);
     await page.screenshot({ path: "tests/screenshots/desktop-1440-reduced-motion.png", fullPage: true });
   });
 
@@ -266,7 +266,7 @@ test.describe("landing page", () => {
     // The figure carries a written description of the same relationships.
     await expect(page.locator("#execution-diagram-description")).toContainText("Outside Convoy: Sensors and Robot controller");
     // Hero: model, release, controller read top to bottom.
-    const hero = page.locator("#top figure");
+    const hero = page.locator("#problem figure");
     const order = await hero.locator("[data-endpoint], [data-envelope]").evaluateAll((els) =>
       els.map((el) => ({ kind: el.getAttribute("data-endpoint") ?? "release", top: el.getBoundingClientRect().top })),
     );
@@ -316,14 +316,14 @@ test.describe("landing page", () => {
         const label = `${size.name} (${reducedMotion})`;
         await page.setViewportSize({ width: size.width, height: size.height });
         await page.goto("/");
-        const hero = page.locator("#top figure");
+        const hero = page.locator("#problem figure");
         const execution = page.locator("#execution figure");
         // No control, live region, progress line or sequence state inside either figure.
         for (const figure of [hero, execution]) {
           await expect(figure.locator("button, [role='status'], [aria-live], [data-trace], [data-trace-hero], [data-trace-button], [data-hero-replay], [data-trace-progress]"), `no motion remnants in ${label}`).toHaveCount(0);
           await expect(figure.getByText(/replay|playing|trace the path|tracing|trace again|highlight/i)).toHaveCount(0);
           // Nothing in the diagram runs an animation, and every visible element is fully opaque at first paint.
-          // The decorative etched field behind the hero diagram is covered by etched-field.spec.ts.
+          // The decorative etched field behind the hero diagram is covered by pixel-field.spec.ts.
           const moving = await figure.evaluate((root) =>
             Array.from(root.querySelectorAll("*"))
               .filter((el) => !el.closest(".etched-waves") && !el.closest(".etched-grid"))
@@ -359,8 +359,8 @@ test.describe("landing page", () => {
         await page.waitForTimeout(700);
         expect(await execution.evaluate((el) => JSON.stringify(el.getBoundingClientRect())), `no layout movement in ${label}`).toBe(before);
         await noHorizontalOverflow(page);
-        // The page's real interactions still work: the details disclosure in the hero and the contact link.
-        const details = page.locator("#top details");
+        // The page's real interactions still work: the details disclosure below the hero and the contact link.
+        const details = page.locator("#problem details");
         await details.locator("summary").click();
         await expect(page.locator("[data-release-details]")).toBeVisible();
         await details.locator("summary").click();

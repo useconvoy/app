@@ -1,23 +1,15 @@
 import { HERO } from "@/content/homepage";
-import { EtchedField } from "./EtchedField";
 import { ReleaseDetails, ReleaseEnvelope } from "./ReleaseEnvelope";
 
-/**
- * The compact release figure, static and complete at first paint: the
- * trained model above, the release envelope with its six parts, the robot
- * controller below, each endpoint with its ownership and edge noun, then
- * the caption and the details disclosure. The diagram itself never moves;
- * it sits on the etched field (EtchedField), a decorative grid with quiet
- * rings behind it.
- */
+/** Static release architecture on a drafting grid, following the illustrated hero. */
 export function HeroFigure() {
   return (
     <div data-hero-figure>
-      <EtchedField className="px-4 py-5 sm:px-7 sm:py-7">
+      <div className="release-drawing px-4 py-5 sm:px-6 sm:py-6">
         <Endpoint kind="model" />
         <ReleaseEnvelope />
         <Endpoint kind="robot" />
-      </EtchedField>
+      </div>
       <figcaption id="hero-diagram-caption" className="type-caption mt-4 text-secondary">
         {HERO.caption}
       </figcaption>

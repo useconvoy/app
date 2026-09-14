@@ -54,9 +54,9 @@
   --space-36: 144px;
 
   /* Shape */
-  --radius: 4px;
+  --radius: 2px;
   --radius-badge: 3px;
-  --radius-lg: 6px;
+  --radius-lg: 2px;
 
   /* Header height, for scroll padding under the sticky header */
   --header-height: 72px;

@@ -1,43 +1,40 @@
-import { HERO } from "@/content/homepage";
-import { HeroFigure } from "./HeroFigure";
+import Image from "next/image";
+import { HERO, SITE } from "@/content/homepage";
+import { PixelField } from "./PixelField";
 
-/**
- * Category, headline, lead and two actions in one column; the compact
- * release figure (HeroFigure, static) in the other.
- * Balanced columns from 900px; below that the copy and the primary action
- * come first and the figure follows.
- */
+/** The artwork is editorial; all product claims and actions remain live HTML. */
 export function Hero() {
   return (
-    <section id="top" aria-labelledby="hero-heading" className="bg-background">
-      <div className="mx-auto grid w-full max-w-(--content-max) gap-8 px-5 pt-8 pb-10 sm:px-8 sm:pt-14 sm:pb-16 md:grid-cols-2 md:gap-10 md:px-10 lg:gap-14 lg:px-16 lg:pt-16 lg:pb-20">
-        <div>
-          <p className="type-eyebrow">{HERO.eyebrow}</p>
-          <h1 id="hero-heading" className="type-display mt-4 text-primary">
-            {HERO.headline}
-          </h1>
-          <p className="type-lead mt-5 text-secondary">{HERO.lede}</p>
-          <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-            <a href={HERO.primary.href} className="btn btn-primary">
-              {HERO.primary.label}
-              <ArrowGlyph />
-            </a>
-            <a href={HERO.secondary.href} className="btn btn-secondary">
-              {HERO.secondary.label}
-            </a>
+    <section id="top" aria-labelledby="hero-heading" className="hero-section">
+      <PixelField>
+        <Image
+          className="hero-art"
+          src="/images/convoy-humanoid.webp"
+          alt="An illustrated humanoid robot carefully handling a component at a warehouse workbench."
+          width={1536}
+          height={1024}
+          sizes="100vw"
+          preload
+        />
+        <div className="hero-art-shade" aria-hidden="true" />
+        <div className="hero-layout">
+          <div className="hero-copy">
+            <p className="type-eyebrow hero-eyebrow"><span aria-hidden="true" />{HERO.eyebrow}</p>
+            <h1 id="hero-heading">Deploy AI models<br />{" "}to <em>real robots.</em></h1>
+            <p className="type-lead hero-lead">{HERO.lede}</p>
+            <div className="hero-actions">
+              <a href={HERO.primary.href} className="btn btn-primary">{HERO.primary.label}<ArrowGlyph /></a>
+              <a href={HERO.secondary.href} className="hero-secondary">{HERO.secondary.label}<span aria-hidden="true">↗</span></a>
+            </div>
           </div>
+          <div className="hero-art-label" aria-hidden="true"><span>FIG. 01</span><span>LEARNED MANIPULATION</span></div>
         </div>
-
-        <figure className="md:pt-1" aria-labelledby="hero-diagram-title" aria-describedby="hero-diagram-description hero-diagram-caption">
-          <p id="hero-diagram-title" className="type-eyebrow mb-4">
-            {HERO.diagramHeading}
-          </p>
-          <p id="hero-diagram-description" className="sr-only">
-            {HERO.description}
-          </p>
-          <HeroFigure />
-        </figure>
-      </div>
+        <div className="hero-baseline">
+          <span className="hero-stage"><span aria-hidden="true" />{SITE.stage}</span>
+          <span>From trained policy to physical action</span>
+          <a href="#workflow">Package <span aria-hidden="true">→</span> Qualify <span aria-hidden="true">→</span> Release <span aria-hidden="true">↓</span></a>
+        </div>
+      </PixelField>
     </section>
   );
 }

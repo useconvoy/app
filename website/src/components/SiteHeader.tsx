@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 
-import { NAV, SITE } from "@/content/homepage";
+import Image from "next/image";
+import { BRAND, NAV, SITE } from "@/content/homepage";
 
 /**
  * Sticky header, 72px on desktop and 64px on mobile, taller only if its row
@@ -97,7 +98,8 @@ export function SiteHeader() {
   return (
     <header ref={headerRef} className="sticky top-0 z-30 border-b border-subtle bg-background">
       <div className="mx-auto flex min-h-16 w-full max-w-(--content-max) flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-2 sm:px-8 md:min-h-[72px] md:gap-x-6 md:px-10 lg:px-16">
-        <a href="#top" className="text-xl font-semibold tracking-[-0.02em] text-primary no-underline" aria-label={`${SITE.name} home`}>
+        <a href="#top" className="convoy-wordmark text-xl font-semibold tracking-[-0.02em] text-primary no-underline" aria-label={`${SITE.name} home`}>
+          <Image src={BRAND.iconSvg} alt="" width={32} height={32} />
           {SITE.name}
         </a>
 

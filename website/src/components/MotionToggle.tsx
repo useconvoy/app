@@ -7,7 +7,7 @@ import { setMotionPaused, useMotionPaused } from "@/lib/motion-preference";
  * One discreet control for the page's decorative motion: an ordinary action
  * button whose label names the next action ("Pause motion" while running,
  * "Resume motion" while paused), so no pressed state is exposed. Pausing
- * stops the field and removes its rings at once. The OS reduced-motion
+ * stops the field and removes its pixels at once. The OS reduced-motion
  * setting takes precedence and is not overridden here.
  */
 export function MotionToggle({ className = "" }: { className?: string }) {
