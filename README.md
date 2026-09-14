@@ -27,8 +27,10 @@ selects one explicitly physical device and excludes simulator totals. Demo users
 can inspect that device and submit text Chat requests; deployment, enrollment,
 configuration, and administrative controls remain outside the demo.
 
-Production uses the existing Lightsail host. The intended transport is direct
-outbound HTTPS from the Jetson agent to AWS, with the operator control plane on
-an internal service network. No additional AWS resources are required for this
-portal. See the production document for the deployment acceptance boundary and
-configuration references; credentials and production secrets never belong in Git.
+Production runs on the existing Lightsail host. The Jetson agent connects directly
+to AWS over outbound HTTPS, with the operator control plane on an internal service
+network. Public login, two-turn Chat, telemetry, usage, and matching traces passed
+live acceptance on September 14, 2026 UTC without a Mac relay. No new AWS resources
+were created; existing account charges still apply. See the
+[deployment acceptance record](docs/production-acceptance.md) for the deployed
+revision and measured results. Credentials and production secrets never belong in Git.

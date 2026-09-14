@@ -31,13 +31,16 @@ are historical observations; the portal reads current device state at runtime.
 No recorded smoke result is promoted to a general performance guarantee, fleet
 qualification, or robot-motion result.
 
-**Deployment acceptance:** the portal's production build, browser contract tests,
-responsive/accessibility checks, and server API tests can be verified locally.
-The public AWS connection and a fresh browser-to-device conversation require
-separate live acceptance by the operator. The topology below describes that
-production deployment; passing contract fixtures does not prove the public path.
-Record the deployed revision and live verification separately when rollout is
-complete.
+**Deployment acceptance:** revision `411e6076d32ef276ee65c2771109a3e937ab7597`
+was deployed successfully to the existing AWS host on September 14, 2026 UTC.
+The public browser accepted the privately issued demo credentials and completed
+two real Chat turns with context retention. Observed browser round trips were
+1.28 and 1.25 seconds; the corresponding gateway measurements were 308.29 and
+273.70 milliseconds. Live telemetry, physical-device usage, and matching trace
+records were inspected through the public portal. The Jetson connected directly
+to AWS after the Mac relay was removed. These are measured smoke results, not a
+latency guarantee. The [acceptance record](production-acceptance.md) links the
+deployment, CI run, exact requests, and validation scope.
 
 ## Architecture
 
@@ -225,4 +228,5 @@ It verifies sign-in/out, truthful request states, uncertain-submit reconciliatio
 context retention, failed/expired requests, offline blocking, bounded input,
 keyboard controls, measurement provenance, accessible tables/charts, and responsive
 reflow at 320, 390, 768, and 1440 pixels plus 200% text enlargement. It is a software
-contract check; real device and public HTTPS acceptance must be verified separately.
+contract check. The independent public HTTPS and real-device verification is
+recorded in the [deployment acceptance record](production-acceptance.md).
