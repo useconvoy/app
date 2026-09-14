@@ -52,7 +52,9 @@ node scripts/build-brand.mjs [review-dir]   # re-render favicon.ico, icons/ and 
 cursor-reactive grid: a bounded trail aligned to the drafting cells, natural
 expiry, resize cleanup, pause/resume (including blocked storage), OS reduced
 motion, offscreen and hidden-page suspension, and native touch scrolling.
-The hero artwork is a 294 KB WebP, preloaded with explicit dimensions. The
+The hero artwork is a flat, hand-drawn warehouse illustration, served as a
+WebP and preloaded with explicit dimensions. Hover squares are 5px on an
+8px drafting grid. The
 release architecture remains a static accessible diagram in the gap section.
 
 `tests/e2e/metadata.spec.ts` checks the crawler-facing surface on the raw

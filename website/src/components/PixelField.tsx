@@ -3,7 +3,8 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { isMotionPaused, subscribeMotionPaused } from "@/lib/motion-preference";
 
-const CELL = 18;
+const CELL = 8;
+const SPREAD = 96;
 const MAX_PIXELS = 180;
 const INTERVAL = 65;
 
@@ -37,8 +38,8 @@ export function PixelField({ children }: { children: ReactNode }) {
       const cx = Math.floor(x / CELL);
       const cy = Math.floor(y / CELL);
       for (let i = 0; i < (ambient ? 10 : 16); i++) {
-        const dx = Math.round((Math.random() - 0.5) * 12);
-        const dy = Math.round((Math.random() - 0.5) * 12);
+        const dx = Math.round((Math.random() - 0.5) * (SPREAD * 2 / CELL));
+        const dy = Math.round((Math.random() - 0.5) * (SPREAD * 2 / CELL));
         const px = (cx + dx) * CELL;
         const py = (cy + dy) * CELL;
         if (px < 0 || py < 0 || px > root.clientWidth - CELL || py > root.clientHeight - CELL) continue;

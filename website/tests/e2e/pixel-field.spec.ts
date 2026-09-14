@@ -9,7 +9,7 @@ test.describe("illustrated hero and pixel field", () => {
     const art = page.locator(".hero-art");
     await expect(art).toHaveAttribute("alt", /humanoid robot/);
     expect(await art.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBe(1536);
-    const response = await request.get("/images/convoy-humanoid.webp");
+    const response = await request.get("/images/convoy-humanoid-illustrated.webp");
     expect(response.ok()).toBe(true);
     expect(response.headers()["content-type"]).toContain("image/webp");
     expect((await response.body()).byteLength).toBeLessThan(350_000);
@@ -25,8 +25,11 @@ test.describe("illustrated hero and pixel field", () => {
     const heading = await page.locator("h1").boundingBox();
     await page.mouse.move(300, 200);
     await expect.poll(() => page.locator(PIXELS).count()).toBeGreaterThan(0);
+    const size = await page.locator(PIXELS).first().boundingBox();
+    expect(size?.width, "hover squares stay fine at five CSS pixels").toBe(5);
+    expect(size?.height).toBe(5);
     const cells = await page.locator(PIXELS).evaluateAll((pixels) => pixels.map((pixel) => ({x: parseFloat((pixel as HTMLElement).style.left), y: parseFloat((pixel as HTMLElement).style.top)})));
-    expect(cells.every((p) => p.x % 18 === 0 && p.y % 18 === 0)).toBe(true);
+    expect(cells.every((p) => p.x % 8 === 0 && p.y % 8 === 0)).toBe(true);
     for (let i = 0; i < 18; i++) {
       await page.mouse.move(200 + i * 30, 220 + (i % 3) * 50);
       await page.waitForTimeout(70);

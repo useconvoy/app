@@ -9,8 +9,8 @@ export function Hero() {
       <PixelField>
         <Image
           className="hero-art"
-          src="/images/convoy-humanoid.webp"
-          alt="An illustrated humanoid robot carefully handling a component at a warehouse workbench."
+          src="/images/convoy-humanoid-illustrated.webp"
+          alt="A hand-drawn industrial humanoid robot with a simple visor and mechanical joints packing a parcel in a warehouse."
           width={1536}
           height={1024}
           sizes="100vw"
