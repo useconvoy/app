@@ -1,8 +1,8 @@
 /**
  * The public copy of the landing page. Layout lives in the components; words
- * live here so a copy change never touches markup. Everything describes a
- * product in development: nothing on this page claims shipped functionality,
- * pass states, timing, compatibility, or customers.
+ * live here so a copy change never touches markup. The broader robot workflow
+ * remains in development; the FAQ distinguishes the scoped physical text-
+ * inference demo, with evidence recorded in claims.ts and support.ts.
  */
 
 /** The inbox inquiries go to. Override at build time with NEXT_PUBLIC_CONTACT_EMAIL. */
@@ -267,12 +267,12 @@ export const FAQ = {
     {
       question: "What can I use today?",
       answer:
-        "Convoy is in development. We’re speaking with robotics teams about focused design partnerships, with compatibility and scope defined around each deployment.",
+        "The Jetson demo lets you chat with a model on a physical device and inspect its telemetry, received usage, and inference traces. Demo credentials are supplied by the operator. The broader robot deployment workflow remains in development; design partnerships start with a defined model, robot configuration, and scope.",
     },
     {
       question: "Will it work with any model or robot?",
       answer:
-        "No universal compatibility is assumed. Support must be defined for the model, processing pipeline, runtime, hardware, and controller configuration.",
+        "One text-inference configuration has physical verification: Qwen2.5-1.5B-Instruct Q4_K_M on our Jetson Orin Nano. This does not establish support for arbitrary models or robot motion. Each deployment still needs a defined processing pipeline, runtime, hardware, and controller configuration.",
     },
     {
       question: "Does Convoy replace the robot’s controller or safety system?",

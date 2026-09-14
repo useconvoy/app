@@ -2,22 +2,20 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  // One traced folder that runs with `node server.js`; the Dockerfile copies
-  // it. Nothing on the page needs a full node_modules tree at run time.
+  // One traced output runs the landing page, portal UI and server API with
+  // `node server.js`; deployment supplies the server-only portal environment.
   output: "standalone",
-  // The canonical form of the one page is https://deployconvoy.com/ with the
-  // slash; this keeps every generated URL (canonical, og:url, redirects) in
-  // that form so they match the sitemap byte for byte.
+  // The landing page canonical is https://deployconvoy.com/. The portal
+  // declares its own canonical metadata and stays out of the public sitemap.
   trailingSlash: true,
   // ...without a normalizing hop: the redirects below already send every
   // legacy path straight to "/", and static files never carry a slash.
   skipTrailingSlashRedirect: true,
-  // The page is static text, a diagram and one form. Nothing here needs the
-  // image optimizer, so it is off rather than left as an unused route.
+  // Landing and portal use prepared static image assets. Neither surface
+  // needs the image optimizer.
   images: { unoptimized: true },
-  // Paths the previous marketing site served. They now point at the one
-  // page; the old authenticated console routes (/app, /sign-in, ...) are
-  // deliberately not recreated and fall through to the 404.
+  // Previous marketing paths keep their landing redirect. The new demo uses
+  // /portal and /api/portal; the old /app and /sign-in console stays retired.
   async redirects() {
     return [
       // One public host. Caddy serves both names to this app with the

@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "note": "Policy rows (allowed/unverified/blocked) are separate from device evidence (untested/health_tested/task_qualified). Matching uses the FULL L4T release string reported by the device. Two allowed CUDA 12.6 / SM 8.7 tracks exist (L4T 36.5.2 = track jp623, and the board-observed L4T 36.4.7 = track l4t3647, whose JetPack version is not established); a runtime artifact belongs to exactly one track through its recipe's target tuple.",
+  "rows": [
+    {
+      "jetpack": "6.2.3",
+      "l4t": "36.5.2",
+      "cuda": "12.6",
+      "ubuntu": "22.04",
+      "python": "3.10",
+      "compute_capability": "8.7",
+      "policy": "allowed",
+      "evidence": "untested",
+      "source": "https://developer.nvidia.com/embedded/jetpack-sdk-623",
+      "source_verified": "externally by supervisor 2026-09-12; physical untested"
+    },
+    {
+      "jetpack": null,
+      "l4t": "36.4.7",
+      "cuda": "12.6",
+      "ubuntu": "22.04",
+      "python": "3.10",
+      "compute_capability": "8.7",
+      "policy": "allowed",
+      "evidence": "untested",
+      "source": "https://developer.nvidia.com/embedded/jetpack-archive",
+      "source_verified": "board-observed 2026-09-13 on the project's Jetson Orin Nano Developer Kit (Super): /etc/nv_tegra_release R36 REVISION 4.7, CUDA 12.6.11 (nvcc 12.6.68), Python 3.10.12, aarch64; the nvidia-jetpack metapackage is absent and NVIDIA's JetPack 6.2.2 page lists Jetson Linux 36.5, so no JetPack version is asserted for this release. Candidate track l4t3647: physical qualification pending"
+    },
+    {
+      "jetpack": "7.2.1",
+      "l4t": "39.2.1",
+      "cuda": "13",
+      "ubuntu": "24.04",
+      "python": "3.12",
+      "compute_capability": "8.7",
+      "policy": "unverified",
+      "evidence": "untested",
+      "source": "https://developer.nvidia.com/embedded/jetpack-archive",
+      "source_verified": "externally by supervisor 2026-09-12; separate track, different CUDA major; runtime must be rebuilt"
+    }
+  ]
+}

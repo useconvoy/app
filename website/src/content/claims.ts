@@ -7,7 +7,7 @@
  *   building   — what Convoy is building; the page may say "is building".
  *   intended   — an intended design or boundary, not shipped behavior.
  *   planned    — roadmap; must be labeled as such wherever it appears.
- *   verified   — backed by evidence at `evidence`; none exist yet.
+ *   verified   — backed by scoped evidence at `evidence`.
  */
 export type ClaimStage = "building" | "intended" | "planned" | "verified";
 
@@ -17,7 +17,7 @@ export interface Claim {
   stage: ClaimStage;
   /** Where on the page the claim appears. */
   surface: string;
-  /** URL of the evidence that would move the claim to `verified`. */
+  /** Evidence URL for a verified claim, or null until evidence exists. */
   evidence: string | null;
   approved: boolean;
 }
@@ -65,7 +65,7 @@ export const CLAIMS: readonly Claim[] = [
   },
   {
     id: "availability",
-    text: "Convoy is in development and is speaking with robotics teams about focused design partnerships, with compatibility and scope defined around each deployment.",
+    text: "The Jetson demo exposes text Chat, device telemetry, received usage and inference traces. The broader robot deployment workflow remains in development.",
     stage: "building",
     surface: "faq",
     evidence: null,
@@ -73,10 +73,18 @@ export const CLAIMS: readonly Claim[] = [
   },
   {
     id: "fleet-planned",
-    text: "Fleet rollout, monitoring, and evaluation of updates are roadmap and do not appear as current capability.",
+    text: "Physical fleet rollout and general robot-policy qualification are outside the public demo and are not represented as verified capabilities.",
     stage: "planned",
     surface: "omitted from page",
     evidence: null,
+    approved: true,
+  },
+  {
+    id: "physical-text-inference",
+    text: "Qwen2.5-1.5B-Instruct Q4_K_M has been verified for two-turn text Chat on the project's Jetson Orin Nano Developer Kit Super 8 GB, using llama.cpp CUDA offload on 29/29 layers, a 2,048-token context, and a 128-token output cap, with matching trace and usage evidence.",
+    stage: "verified",
+    surface: "faq, portal, supported-configuration matrix",
+    evidence: "https://github.com/useconvoy/app/blob/main/control-plane/docs/VERIFICATION.md#browser-chat-on-the-physical-nano--source-4df467b",
     approved: true,
   },
 ];

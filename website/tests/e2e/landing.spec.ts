@@ -83,7 +83,8 @@ test.describe("landing page", () => {
     await expect(faq).toHaveCount(6);
     await expect(faq.first()).toHaveAttribute("open", "");
     await expect(faq.first()).toContainText("What can I use today?");
-    await expect(faq.first()).toContainText("Convoy is in development");
+    await expect(faq.first()).toContainText("The Jetson demo lets you chat with a model on a physical device");
+    await expect(faq.first()).toContainText("broader robot deployment workflow remains in development");
   });
 
   test("every on-page anchor resolves to an element", async ({ page }) => {
@@ -221,8 +222,8 @@ test.describe("landing page", () => {
     expect(order).toBe(true);
     // No form, no fields, nothing to submit or store.
     await expect(page.locator("form")).toHaveCount(0);
-    await expect(page.getByText(/received|sending is not available/i)).toHaveCount(0);
-    // Every primary action on the page lands on the contact section.
+    await expect(page.locator("#contact").getByText(/received|sending is not available/i)).toHaveCount(0);
+    // Deployment inquiry actions still land on the contact section.
     const ctas = page.getByRole("link", { name: "Discuss your deployment" });
     for (const href of await ctas.evaluateAll((links) => links.map((a) => a.getAttribute("href")))) {
       expect(href).toBe("#contact");

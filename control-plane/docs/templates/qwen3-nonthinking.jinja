@@ -1,0 +1,23 @@
+{#- Convoy reviewed chat template: Qwen3 instruct checkpoints, NON-THINKING, text-only.
+    EXPERIMENTAL CONDITION. Derived from the Qwen3 official chat template restricted to what the
+    Convoy gateway admits (system|user|assistant text messages, no tools, no vision, no
+    chat_template_kwargs): the generation prompt always ends with the empty think block the official
+    template emits for enable_thinking=false. Prior assistant turns are rendered without any
+    <think>...</think> block, as the official template does for turns before the last user query.
+    Pin it through the release "template" (hash-bound); verify on device with
+    scripts/jetson/gguf_template.py (embedded template) and bench_gateway.py --render-check before
+    any qualification claim. Do not treat a "/no_think" instruction alone as a guarantee. -#}
+{%- for message in messages -%}
+  {%- set content = message.content if message.content is string else '' -%}
+  {%- if message.role == 'system' or message.role == 'user' -%}
+{{ '<|im_start|>' + message.role + '\n' + content + '<|im_end|>\n' }}
+  {%- elif message.role == 'assistant' -%}
+    {%- if '</think>' in content -%}
+      {%- set content = content.split('</think>')[-1].lstrip('\n') -%}
+    {%- endif -%}
+{{ '<|im_start|>assistant\n' + content + '<|im_end|>\n' }}
+  {%- endif -%}
+{%- endfor -%}
+{%- if add_generation_prompt -%}
+{{ '<|im_start|>assistant\n<think>\n\n</think>\n\n' }}
+{%- endif -%}

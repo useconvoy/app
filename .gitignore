@@ -1,0 +1,17 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.env
+.env.*
+!.env.example
+*.db
+*.db-wal
+*.db-shm
+control-plane/data/
+node_modules/
+.next/
+test-results/
+playwright-report/

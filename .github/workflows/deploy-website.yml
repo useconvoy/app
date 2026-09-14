@@ -1,26 +1,17 @@
 name: deploy-website
 
-# Releases the landing page to the existing Lightsail instance. The build
-# happens on a standard Linux runner; the instance receives one tarball of
-# the standalone Next.js output and runs it with the stock node:22-alpine
-# image already reachable from Docker Hub. No image registry push, no
-# snapshot, no new AWS resource: the only things that change on the box are
-# compose.yaml's `web` service and a new directory under /opt/convoy/releases.
-# Every changed file is copied to /opt/convoy/rollback/<timestamp>/ first.
-#
-# Repository settings this uses (unchanged from the previous console deploy):
-#   vars.DEPLOY_HOST        the instance's static IP
-#   vars.DEPLOY_HOST_KEY    ssh-keyscan line for that host (recommended)
-#   secrets.DEPLOY_SSH_KEY  private key for ubuntu@ on the instance
+# Releases standalone Next.js plus the API image to the existing Lightsail host.
+# Host runtime files under /opt/convoy/portal are provisioned separately and retained.
+# vars.DEPLOY_HOST, trusted vars.DEPLOY_HOST_KEY and secrets.DEPLOY_SSH_KEY are required.
 
 on:
   push:
     branches: [main]
-    paths: ["website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/deploy-website.yml"]
+    paths: ["control-plane/**", "website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/deploy-website.yml"]
   workflow_dispatch:
     inputs:
       rollback:
-        description: "Restore a previous web release from a backup on the instance instead of deploying"
+        description: "Restore both application services from a host backup; retain runtime data"
         type: boolean
         default: false
       rollback_to:
@@ -38,7 +29,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       SITE: https://deployconvoy.com
     steps:
@@ -68,52 +59,63 @@ jobs:
           pnpm run typecheck
           pnpm run lint
           pnpm run check:tokens
+          bash scripts/test-portal.sh
           pnpm run build
           cp -r public .next/standalone/
           cp -r .next/static .next/standalone/.next/
           tar -czf "/tmp/release-${{ steps.meta.outputs.sha }}.tar.gz" -C .next/standalone .
           ls -la "/tmp/release-${{ steps.meta.outputs.sha }}.tar.gz"
 
-      - name: Prepare SSH
+      - name: Build the API-only image
+        if: ${{ !inputs.rollback }}
+        env:
+          SHA: ${{ steps.meta.outputs.sha }}
+        run: |
+          docker build --tag "convoy-control-plane:${SHA}" control-plane
+          docker save "convoy-control-plane:${SHA}" | gzip >"/tmp/control-plane-${SHA}.tar.gz"
+
+      - name: Prepare trusted SSH
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           DEPLOY_HOST_KEY: ${{ vars.DEPLOY_HOST_KEY }}
         run: |
-          test -n "${DEPLOY_HOST}" || { echo "::error::vars.DEPLOY_HOST is not set"; exit 1; }
+          [[ "${DEPLOY_HOST}" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "::error::vars.DEPLOY_HOST is invalid or missing"; exit 1; }
           test -n "${DEPLOY_SSH_KEY}" || { echo "::error::secrets.DEPLOY_SSH_KEY is not set"; exit 1; }
+          test -n "${DEPLOY_HOST_KEY}" || { echo "::error::trusted vars.DEPLOY_HOST_KEY is required"; exit 1; }
           install -m 700 -d ~/.ssh
           install -m 600 /dev/null ~/.ssh/deploy_key
           printf '%s\n' "${DEPLOY_SSH_KEY}" >~/.ssh/deploy_key
-          if [ -n "${DEPLOY_HOST_KEY}" ]; then
-            printf '%s\n' "${DEPLOY_HOST_KEY}" >~/.ssh/known_hosts
-            STRICT=yes
-          else
-            echo "::warning::vars.DEPLOY_HOST_KEY is unset; accepting the host key unverified. Set it to the output of: ssh-keyscan ${DEPLOY_HOST}"
-            STRICT=accept-new
-          fi
-          echo "STRICT=${STRICT}" >>"$GITHUB_ENV"
-          echo "SSH=ssh -i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=${STRICT} -o ConnectTimeout=20 ubuntu@${DEPLOY_HOST}" >>"$GITHUB_ENV"
+          printf '%s\n' "${DEPLOY_HOST_KEY}" >~/.ssh/known_hosts
+          ssh-keygen -F "${DEPLOY_HOST}" -f ~/.ssh/known_hosts >/dev/null || { echo "::error::trusted host key does not match DEPLOY_HOST"; exit 1; }
+          printf '%s\n' 'Host convoy-deploy' "  HostName ${DEPLOY_HOST}" '  User ubuntu' '  IdentityFile ~/.ssh/deploy_key' '  IdentitiesOnly yes' '  StrictHostKeyChecking yes' '  ConnectTimeout 20' '  BatchMode yes' >~/.ssh/config
+          chmod 600 ~/.ssh/config ~/.ssh/known_hosts
 
-      - name: Ship the release and switch the web service
+      - name: Ship and switch both application services
+        id: ship
         if: ${{ !inputs.rollback }}
         env:
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
           SHA: ${{ steps.meta.outputs.sha }}
         run: |
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking="${STRICT}" \
-            "/tmp/release-${SHA}.tar.gz" website/infra/deploy/remote-release.sh \
-            "ubuntu@${DEPLOY_HOST}:/tmp/"
-          $SSH sudo -n bash /tmp/remote-release.sh deploy "${SHA}" "/tmp/release-${SHA}.tar.gz"
+          scp "/tmp/release-${SHA}.tar.gz" "/tmp/control-plane-${SHA}.tar.gz" \
+            website/infra/deploy/remote-release.sh website/infra/deploy/compose-release.py convoy-deploy:/tmp/
+          ssh convoy-deploy sudo -n bash /tmp/remote-release.sh deploy "${SHA}" "/tmp/release-${SHA}.tar.gz" "/tmp/control-plane-${SHA}.tar.gz" | tee /tmp/deploy-result.log
+          BACKUP=$(sed -nE 's#^backup: /opt/convoy/rollback/([A-Za-z0-9_-]+)$#\1#p' /tmp/deploy-result.log | tail -1)
+          test -n "$BACKUP"
+          echo "backup=$BACKUP" >>"$GITHUB_OUTPUT"
 
-      - name: Roll back to the previous web release
+      - name: Roll back both application services
         if: ${{ inputs.rollback }}
+        env:
+          ROLLBACK_TO: ${{ inputs.rollback_to }}
         run: |
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking="${STRICT}" \
-            website/infra/deploy/remote-release.sh "ubuntu@${{ vars.DEPLOY_HOST }}:/tmp/"
-          $SSH sudo -n bash /tmp/remote-release.sh rollback "${{ inputs.rollback_to }}"
+          [[ "${ROLLBACK_TO}" =~ ^[A-Za-z0-9_-]*$ ]] || { echo "invalid backup name"; exit 1; }
+          scp website/infra/deploy/remote-release.sh website/infra/deploy/compose-release.py convoy-deploy:/tmp/
+          ssh convoy-deploy sudo -n bash /tmp/remote-release.sh rollback "${ROLLBACK_TO}"
 
       - name: Verify the public site
+        id: verify
+        if: ${{ !inputs.rollback }}
         run: |
           set -u
           fail=0
@@ -143,6 +145,9 @@ jobs:
           check "json-ld"     1 "$(grep -c 'application/ld+json' /tmp/apex.html)"
           check "robots.txt"  200 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/robots.txt")"
           check "legacy path" 308 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/platform")"
+          check "portal" 200 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/portal/")"
+          check "portal session" 200 "$(curl -sS -o /tmp/portal-session.json -w '%{http_code}' --max-time 20 "$SITE/api/portal/session")"
+          check "anonymous snapshot protected" 401 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/api/portal/snapshot")"
           check "old console" 404 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/app")"
           check "sitemap"     200 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/sitemap.xml")"
           echo "certificate: $(echo | openssl s_client -connect deployconvoy.com:443 -servername deployconvoy.com 2>/dev/null | openssl x509 -noout -issuer -enddate | tr '\n' ' ')"
@@ -153,3 +158,15 @@ jobs:
             echo "- verification: $([ $fail = 0 ] && echo passed || echo FAILED)"
           } >>"$GITHUB_STEP_SUMMARY"
           exit $fail
+
+      - name: Verify rollback public reachability
+        if: ${{ inputs.rollback }}
+        run: curl --fail --silent --show-error --max-time 20 --output /dev/null "$SITE/"
+
+      - name: Restore both services if public verification fails
+        if: ${{ failure() && steps.ship.outcome == 'success' && steps.verify.outcome == 'failure' }}
+        env:
+          BACKUP: ${{ steps.ship.outputs.backup }}
+        run: |
+          [[ "$BACKUP" =~ ^[A-Za-z0-9_-]+$ ]] || exit 1
+          ssh convoy-deploy sudo -n bash /tmp/remote-release.sh rollback "$BACKUP"
