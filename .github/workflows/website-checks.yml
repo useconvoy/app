@@ -33,7 +33,7 @@ jobs:
       - run: pnpm run build
         env:
           NEXT_PUBLIC_SITE_URL: https://deployconvoy.com
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm run test:e2e
         env:
           CI: "true"
