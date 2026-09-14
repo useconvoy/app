@@ -13,10 +13,10 @@ export function ReleaseWorkflow() {
     <Section id={WORKFLOW.id} labelledBy="workflow-heading">
       <SectionHeading id="workflow-heading" eyebrow={WORKFLOW.eyebrow} heading={WORKFLOW.heading} lead={WORKFLOW.lead} />
 
-      <ol className="mt-8 grid gap-7 md:grid-cols-3 md:gap-8" aria-label="Release workflow steps">
+      <ol className="workflow-steps" aria-label="Release workflow steps">
         {WORKFLOW.stages.map((stage) => (
-          <li key={stage.number} className="flex min-w-0 flex-col border-t border-strong pt-5">
-            <p className="font-mono text-sm font-medium tracking-[0.04em] text-accent">{stage.number}</p>
+          <li key={stage.number} className="workflow-card">
+            <div className="workflow-card-art" aria-hidden="true"><span>{stage.number}</span><WorkflowGlyph stage={stage.number} /></div>
             <h3 className="type-h3 mt-2 text-primary">{stage.title}</h3>
             <p className="type-body mt-2 mb-3 text-secondary">{stage.body}</p>
             <Disclosure summary={WORKFLOW.detailLabel(stage.title)} summaryClassName="type-label text-primary" className="mt-auto border-t border-subtle">
@@ -42,5 +42,14 @@ export function ReleaseWorkflow() {
         ))}
       </ol>
     </Section>
+  );
+}
+
+/** Static drafting symbols: a bundle, evaluation sheet, and target compute. */
+function WorkflowGlyph({ stage }: { stage: string }) {
+  return (
+    <svg viewBox="0 0 112 80" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true" focusable="false">
+      {stage === "01" ? <><path d="m28 25 27-14 29 14v31L56 71 28 56Zm0 0 28 15 28-15M56 40v31M42 18l28 15v13" /><path d="m14 36 8 4m69 0 8-4M56 2v4" opacity=".4" /></> : stage === "02" ? <><path d="M31 9h39l12 12v50H31ZM70 9v14h12M44 34h8m8 0h10M44 46h8m8 0h10M44 58h8m8 0h10" /><path d="M23 17h-6v45h6M90 29h6v33h-6" opacity=".4" /></> : <><rect x="33" y="17" width="46" height="46" rx="2" /><rect x="44" y="28" width="24" height="24" rx="1" /><path d="M43 8v9m13-9v9m13-9v9M43 63v9m13-9v9m13-9v9M24 27h9m-9 13h9m-9 13h9m46-26h9m-9 13h9m-9 13h9" /><path d="m51 40 4 4 7-9" /></>}
+    </svg>
   );
 }

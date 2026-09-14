@@ -16,9 +16,9 @@ export function Section({
     <section
       id={id}
       aria-labelledby={labelledBy}
-      className={`border-t border-subtle bg-background py-10 sm:py-14 lg:py-20 ${className}`}
+      className={`page-section ${className}`}
     >
-      <div className="mx-auto w-full max-w-(--content-max) px-5 sm:px-8 md:px-10 lg:px-16">{children}</div>
+      <div className="section-inner">{children}</div>
     </section>
   );
 }
@@ -37,7 +37,7 @@ export function SectionHeading({
   children?: ReactNode;
 }) {
   return (
-    <div className="max-w-[820px]">
+    <div className="section-heading">
       <p className="type-eyebrow">{eyebrow}</p>
       <h2 id={id} className="type-h2 mt-3 text-primary">
         {heading}

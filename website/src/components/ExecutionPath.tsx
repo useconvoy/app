@@ -8,7 +8,7 @@ import { Section, SectionHeading } from "./Section";
  * with a meaningful border, the model node white with an ink border, and
  * anything outside Convoy (sensors, controller) dashed grey. Solid arrows
  * carry execution. The three Convoy-scoped nodes sit inside a labelled
- * dashed oxide boundary that is a real group in the accessibility tree and
+ * dashed teal boundary that is a real group in the accessibility tree and
  * keeps its label in the vertical layout below 900px; a visually hidden
  * sentence states the same relationships in words. Placement labels under
  * each node say where it may run, dotted where that is configuration
@@ -21,14 +21,15 @@ export function ExecutionPath() {
     <Section id={EXECUTION.id} labelledBy="execution-heading">
       <SectionHeading id="execution-heading" eyebrow={EXECUTION.eyebrow} heading={EXECUTION.heading} lead={EXECUTION.lead} />
 
-      <figure className="mt-10" aria-labelledby="execution-diagram-title" aria-describedby="execution-diagram-description execution-diagram-caption">
+      <figure className="execution-board" aria-labelledby="execution-diagram-title" aria-describedby="execution-diagram-description execution-diagram-caption">
+        <div className="drawing-title type-eyebrow" aria-hidden="true"><span>Observation → action</span><span>Conceptual architecture</span></div>
         <figcaption id="execution-diagram-title" className="sr-only">
           {EXECUTION.path}
         </figcaption>
         <p id="execution-diagram-description" className="sr-only">
           {EXECUTION.description}
         </p>
-        <div className="mt-2">
+        <div className="execution-board-body">
           <ExecutionDiagram />
         </div>
       </figure>
@@ -63,7 +64,7 @@ export function ExecutionPath() {
   );
 }
 
-/** The one dark surface: the conceptual categories a release carries, no values. */
+/** A dark diagnostic panel for the conceptual categories a release carries, no values. */
 function ReleaseRecordPanel() {
   const { panelLabel, panelStatus, panelFooter, groups } = EXECUTION.boundaryDisclosure;
   return (

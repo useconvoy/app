@@ -15,12 +15,12 @@ const [CONTACT_LOCAL, CONTACT_DOMAIN] = CONTACT.email.split("@");
 export function ContactSection() {
   return (
     <Section id={CONTACT.id} labelledBy="contact-heading">
-      <div className="grid gap-8 md:grid-cols-12 md:gap-10">
-        <div className="md:col-span-5">
+      <div className="contact-layout">
+        <div>
           <SectionHeading id="contact-heading" eyebrow={CONTACT.eyebrow} heading={CONTACT.heading} lead={CONTACT.lead} />
         </div>
-        <div className="md:col-span-7">
-          <div className="rounded-lg border border-subtle bg-surface p-5 sm:p-8 lg:p-10">
+        <div className="contact-panel">
+          <div>
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <a href={CONTACT_MAILTO} className="btn btn-primary sm:whitespace-nowrap" data-contact-link>
                 {CONTACT.button}

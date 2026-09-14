@@ -3,7 +3,7 @@
 The public site for Convoy, deployment infrastructure for physical AI. One
 route, static-first: an illustrated humanoid hero, the problem and release diagram, the Package / Qualify / Release
 workflow, the execution path, the design-partnership invitation, six FAQ
-boundaries, and a contact form. Copy is verbatim from the approved research
+boundaries, and an email contact section. Copy is verbatim from the approved research
 and design brief (Parts XI–XVII) and describes a product in development.
 
 ## Stack
@@ -24,7 +24,7 @@ src/content/support.ts   the supported-configuration matrix (empty until tested)
 infra/deploy/            the release script that runs on the instance
 src/styles/tokens.css    the only file that may contain a hex color
 src/styles/globals.css   Tailwind theme bridge, type scale, controls
-tests/e2e/               Playwright: accessibility, keyboard, form, screenshots
+tests/e2e/               Playwright: accessibility, keyboard, contact, screenshots
 ```
 
 ## Develop
@@ -48,14 +48,18 @@ pnpm run verify           # all of the above, in order
 node scripts/build-brand.mjs [review-dir]   # re-render favicon.ico, icons/ and the share card from src/assets/brand/
 ```
 
-`tests/e2e/pixel-field.spec.ts` checks the illustrated hero asset and its
-cursor-reactive grid: a bounded trail aligned to the drafting cells, natural
-expiry, resize cleanup, pause/resume (including blocked storage), OS reduced
+`tests/e2e/hero-motion.spec.ts` checks the illustrated hero asset and its
+36px optical focus marker, stable content, responsive lamp placement, soft
+brightness changes, pause/resume (including blocked storage), OS reduced
 motion, offscreen and hidden-page suspension, and native touch scrolling.
-The hero artwork is a flat, hand-drawn warehouse illustration, served as a
-WebP and preloaded with explicit dimensions. Hover squares are 5px on an
-8px drafting grid. The
-release architecture remains a static accessible diagram in the gap section.
+The WebP illustration is preloaded with explicit dimensions. The lamp uses
+an image-registered CSS glow; pointer movement updates two custom properties
+without creating particles or running a render loop.
+
+The page uses warm paper and clay actions, forest workflow/contact bands,
+a teal execution board, and warm partnership paper. Semantic colors live
+in `tokens.css`. Both architecture diagrams remain static and accessible;
+product copy and the controller/safety boundary are unchanged.
 
 `tests/e2e/metadata.spec.ts` checks the crawler-facing surface on the raw
 HTML and the static endpoints: title, description, canonical, robots

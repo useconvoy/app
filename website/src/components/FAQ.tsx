@@ -6,11 +6,11 @@ import { Section, SectionHeading } from "./Section";
 export function FAQ() {
   return (
     <Section id={COPY.id} labelledBy="faq-heading">
-      <div className="grid gap-6 md:grid-cols-12 md:gap-10">
-        <div className="md:col-span-5">
+      <div className="faq-layout">
+        <div>
           <SectionHeading id="faq-heading" eyebrow={COPY.eyebrow} heading={COPY.heading} />
         </div>
-        <div className="border-t border-subtle md:col-span-7">
+        <div className="faq-list">
           {COPY.items.map((item, index) => (
             <Disclosure
               key={item.question}

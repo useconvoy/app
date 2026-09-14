@@ -1,12 +1,12 @@
 import Image from "next/image";
 import { HERO, SITE } from "@/content/homepage";
-import { PixelField } from "./PixelField";
+import { HeroMotion } from "./HeroMotion";
 
 /** The artwork is editorial; all product claims and actions remain live HTML. */
 export function Hero() {
   return (
     <section id="top" aria-labelledby="hero-heading" className="hero-section">
-      <PixelField>
+      <HeroMotion>
         <Image
           className="hero-art"
           src="/images/convoy-humanoid-illustrated.webp"
@@ -27,14 +27,13 @@ export function Hero() {
               <a href={HERO.secondary.href} className="hero-secondary">{HERO.secondary.label}<span aria-hidden="true">↗</span></a>
             </div>
           </div>
-          <div className="hero-art-label" aria-hidden="true"><span>FIG. 01</span><span>LEARNED MANIPULATION</span></div>
         </div>
         <div className="hero-baseline">
           <span className="hero-stage"><span aria-hidden="true" />{SITE.stage}</span>
           <span>From trained policy to physical action</span>
           <a href="#workflow">Package <span aria-hidden="true">→</span> Qualify <span aria-hidden="true">→</span> Release <span aria-hidden="true">↓</span></a>
         </div>
-      </PixelField>
+      </HeroMotion>
     </section>
   );
 }

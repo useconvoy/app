@@ -7,6 +7,10 @@
   --background: #f6f4ef; /* page */
   --surface: #ffffff; /* raised panels, form fields */
   --surface-subtle: #ece9e1; /* quiet bands, envelope fill */
+  --surface-teal: #dce8e2; /* execution board */
+  --surface-warm: #eee3cf; /* partnership paper */
+  --signal: #356a60; /* optical focus and runtime diagrams */
+  --lamp-light: #ffdc9e; /* decorative illustrated bulb */
 
   /* Text on the page background */
   --text-primary: #18221f; /* 14.84:1 on background */
@@ -32,10 +36,10 @@
   --information: #265b94;
   --information-tint: #e7eff9;
 
-  /* The one dark diagnostic region */
-  --inverse-background: #16201c;
-  --inverse-text: #f3f5f0; /* 15.21:1 on inverse-background */
-  --inverse-muted: #bac6bc; /* 9.46:1 */
+  /* Forest bands and diagnostic regions */
+  --inverse-background: #182e29;
+  --inverse-text: #f3f5f0; /* paper on forest */
+  --inverse-muted: #bac6bc; /* supporting text on forest */
   --code-keyword: #f4b897;
   --code-string: #b7d8b8;
   --code-value: #abcded;
