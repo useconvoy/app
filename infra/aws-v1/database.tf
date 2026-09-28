@@ -42,7 +42,7 @@ resource "aws_db_instance" "this" {
 }
 # Only containers, never secret versions: no password is read into Terraform state.
 resource "aws_secretsmanager_secret" "this" {
-  for_each                = toset(["runtime-db", "migration-db", "admin", "execution", "probe"])
+  for_each                = toset(["runtime-db", "migration-db", "admin", "execution-signing", "action-verification", "probe"])
   name                    = "${var.name}/${each.key}"
   recovery_window_in_days = 7
 }

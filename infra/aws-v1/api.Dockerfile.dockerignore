@@ -1,5 +1,7 @@
 **
 !infra/
+!infra/runtime/
+!infra/runtime/execution_keys.py
 !infra/aws-v1/
 !infra/aws-v1/runtime/
 !infra/aws-v1/runtime/entrypoint.py

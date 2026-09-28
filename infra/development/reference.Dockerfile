@@ -8,7 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libegl1 
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 convoy && useradd --uid 10001 --gid convoy --create-home convoy \
     && mkdir -p /robot /certificates/api /certificates/inference /certificates/ca \
-    && chown -R convoy:convoy /robot /certificates
+    && mkdir -p /run/execution-signing /run/action-verification \
+    && chmod 700 /run/execution-signing /run/action-verification \
+    && chown -R convoy:convoy /robot /certificates /run/execution-signing /run/action-verification
 ENV PYTHONUNBUFFERED=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never \
     PATH="/app/integrations/simulation/.venv/bin:${PATH}" \
     SSL_CERT_FILE=/run/ca/ca.crt OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
@@ -26,6 +28,7 @@ RUN uv sync --project integrations/simulation --frozen --no-dev --extra managed 
     && python -c 'import json; from convoy_sim.runtimes import reference_manifest; open("/app/release.json", "w").write(json.dumps(reference_manifest()))' \
     && rm -rf /root/.cache
 COPY infra/development/containers /app/packaging
+COPY infra/runtime/execution_keys.py /app/runtime/execution_keys.py
 USER convoy
 # Compose grants /robot only to the device/acceptance processes. Declaring an
 # image-wide VOLUME would create unused anonymous volumes for every worker.

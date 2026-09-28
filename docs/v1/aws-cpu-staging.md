@@ -2,8 +2,8 @@
 
 Status: configuration and local qualification; **not applied to AWS**. This is
 one synthetic-data installation of the supported robot lifecycle. It cannot
-host multiple customers securely yet. Legacy installation-wide APIs and shared
-execution-signing authority still need the tenancy/signing changes described in
+host multiple customers securely yet. Legacy installation-wide APIs still need
+the tenancy changes described in
 [decision 003](decisions/003-service-hosting.md).
 
 ## What runs where
@@ -14,7 +14,7 @@ execution-signing authority still need the tenancy/signing changes described in
 | API | 0.5 vCPU / 1 GiB | PostgreSQL runtime role, bootstrap login and execution signer |
 | Scheduler | 0.25 vCPU / 0.5 GiB | PostgreSQL runtime role; existing maintenance and lease loop |
 | Evaluation service | 0.25 vCPU / 0.5 GiB | PostgreSQL runtime role; ordinary mission orchestration; no model code |
-| Scripted CPU inference | 1 vCPU / 2 GiB | Pinned MetaWorld policy/runtime; execution/probe secrets; no DB access |
+| Scripted CPU inference | 1 vCPU / 2 GiB | Pinned MetaWorld runtime; public action keys/probe credential; no DB access |
 | One-off bootstrap / migrate | 0.25 vCPU / 0.5 GiB each | Administrative / migration role; no permanent service |
 | PostgreSQL | db.t4g.small, 20 GiB gp3, single AZ | Fleet/auth/deployment/mission/evaluation metadata; seven-day automated backups |
 
@@ -132,13 +132,22 @@ publish roles are registry/account prerequisites, not resources created here.
    variables and save/review that exact plan. **Only after the account, region,
    cost and access are agreed should the reviewed plan be applied.**
 3. The first apply creates network/database/task definitions and services with
-   desired count zero. Populate the five secret containers shown by `terraform
-   output -json secret_arns` with independently generated strong random **plain
-   string** values: `runtime-db`, `migration-db`, `admin`, `execution`, `probe`.
-   `admin` is the bootstrap password; its email is `operator_email`. Execution
-   and probe must be distinct and at least 32 characters. Use the secret console
-   or CLI file input from a private temporary file, never command-line literals
-   or Terraform variables. RDS generates and retains its own master secret.
+   desired count zero. Populate the six secret containers shown by `terraform
+   output -json secret_arns`. `runtime-db`, `migration-db`, `admin` and `probe`
+   receive independent strong random plain strings; the probe requires at least
+   32 characters. The API bootstrap email is `operator@<console domain>`.
+   `execution-signing` receives the complete private JSON document described in
+   [execution signing](execution-signing.md); `action-verification` receives only
+   its matching public action document. Generate them with the shared
+   `infra/runtime/execution_keys.py initialize` helper in an environment containing
+   `convoy-contracts[signing]`, using two private directories and an installation-
+   specific issuer. The helper creates keys once and refuses overwrites.
+   Use the secret console or CLI file input, never key material in command-line
+   literals or Terraform variables. RDS retains its own separate master secret.
+   Only the API execution role can fetch `execution-signing`; only inference can
+   fetch `action-verification`. Neither application task role has AWS API access.
+   At task startup each wrapper consumes its one injected JSON document into a
+   validated mode-0600 file in a private temporary directory, before serving.
 4. From the repository root with Terraform/AWS CLI on PATH, explicitly run:
 
    ```sh
@@ -160,9 +169,13 @@ publish roles are registry/account prerequisites, not resources created here.
 
 Secret injection occurs at task start; changing a secret version does not update
 running processes. Rotate DB secrets with services stopped, rerun bootstrap,
-then restart the affected tasks. Rotating the shared execution key requires
-stopping/cancelling sessions and coordinating API/worker replacement; it is not
-a transparent live rotation. [ECS secret injection](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/secrets-envvar-secrets-manager.html)
+then restart the affected tasks. Execution-key rotation also drains/cancels
+missions before task replacement: publish overlapping public keys and restart
+inference first, then update/restart the API signer, retiring old keys after the
+original grant lifetimes. This single-replica template has downtime and loses
+in-memory sessions on replacement; it does not implement live secret refresh or
+transparent session migration. Never treat a secret-store update alone as
+revocation in running tasks. [ECS secret injection](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/secrets-envvar-secrets-manager.html)
 
 ## Hosted acceptance and subsequent releases
 

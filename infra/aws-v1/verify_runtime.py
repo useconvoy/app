@@ -16,6 +16,7 @@ def run(args, **kwargs):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--api-image", required=True, help="locally built AWS API wrapper image")
+    parser.add_argument("--inference-image", help="optional scripted AWS wrapper image for public-only inference check")
     args = parser.parse_args()
     name = "convoy-aws-check-" + uuid.uuid4().hex[:12]
     password = secrets.token_urlsafe(32)
@@ -38,6 +39,9 @@ def main():
         script = Path(__file__).with_name("tests").joinpath("runtime_check.py").read_text()
         run(["docker", "run", "--rm", "-i", "--network", name,
              "-e", "TEST_ADMIN_PASSWORD=" + password, "--entrypoint", "python", args.api_image, "-"], input=script)
+        if args.inference_image:
+            run(["docker", "run", "--rm", "-i", "--network", "none",
+                 "-e", "TEST_INFERENCE_ONLY=1", "--entrypoint", "python", args.inference_image, "-"], input=script)
     finally:
         if container:
             subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)

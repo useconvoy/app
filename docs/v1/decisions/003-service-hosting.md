@@ -1,7 +1,8 @@
 # Decision 003: service and hosting boundaries
 
-Status: implemented locally for the scripted simulation profile. Cloud provider
-selection and hosted production qualification remain open.
+Status: locally qualified service boundaries for the scripted simulation profile.
+Compose/AWS public-key packaging is implemented with container acceptance pending.
+Actual cloud deployment and hosted qualification remain open.
 
 ## Decision
 
@@ -13,20 +14,20 @@ ownership, not every Python module.
 | --- | --- | --- |
 | Web / console BFF | Browser UI, origin checks, forwarding the user's session | Operator credential, database, device actuation |
 | Management API | Human/device authentication, project resources, immutable releases, desired deployment and mission state | Model inference or robot control loop |
-| Scheduler (`convoy-server worker`) | Existing fenced schedules, rollout maintenance and retention | Policy inference, simulated physics, new evaluation orchestration |
+| Scheduler (`convoy-server worker`) | Existing fenced schedules, rollout maintenance and retention | Execution keys, policy inference, simulated physics, evaluation orchestration |
+| Evaluation service | Durable evaluation jobs that create and observe ordinary missions | Execution keys, policy inference or simulator ownership |
 | Inference worker | One pinned release/runtime, grant validation, bounded decision admission | Database access, physical command submission |
 | Device coordinator / simulator | Device credential, execution journal, deadline checks, observation/action exchange, simulator ownership | User account credential or database access |
 | PostgreSQL | Fleet metadata, auth records, desired/observed state, mission/episode records | Model weights, videos, device's local command journal |
 
 The scheduler is a long-running service because its existing lease loop already
-supports process ownership. A durable evaluation executor can be a second jobs
-entry point once its schema and lifecycle are implemented. It should create and
-observe ordinary missions; it must not import MuJoCo or run untrusted model code
-inside a database-privileged job process. A broker is not required just to split
-these processes.
+supports process ownership. The separate durable evaluation executor creates and
+observes ordinary missions; it does not import MuJoCo or run model code inside its
+database-privileged job process. A broker is not required just to split these
+processes.
 
-One API, one scheduler, one inference worker and one coordinator are the qualified
-local topology. PostgreSQL currently serializes application writes with an
+One API, one scheduler, one evaluation service, one inference worker and one
+coordinator are the local topology. PostgreSQL currently serializes application writes with an
 advisory transaction lock. Legacy chat state and artifacts remain on the API's
 filesystem; API/scheduler share that volume. Adding replicas does not make those
 features shared or prove horizontal scalability. The device's journal remains
@@ -54,10 +55,13 @@ robot-side controller to the Internet.
 
 The API supports [private Ed25519 signing and public verification](../execution-signing.md)
 with purpose, issuer, audience and key rotation, retaining identity, expiry and
-release binding. The local activation harness selects this mode. Scripted Compose
-and unapplied AWS templates still use shared HMAC keys; migrate those templates
-and qualify isolated identities/mounts before crossing provider or customer trust
-boundaries. Encryption alone does not solve this authority boundary.
+release binding. The local activation harness has qualified this mode with real
+Qwen and SmolVLA. Compose and unapplied AWS templates now also separate API-private
+signing material from the action worker's public verification document; database
+jobs receive neither. Compose uses separate key volumes, while AWS wrappers
+consume role-specific injected JSON into private task files. Acceptance of the
+updated container boundary is pending. Hosted identities, mounts and networking
+still require qualification; encryption alone does not establish that boundary.
 
 Inference requests go directly from the coordinator to the worker, keeping the
 management database outside each decision. Management outages do not erase an

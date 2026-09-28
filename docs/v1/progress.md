@@ -23,7 +23,7 @@ That coordinator checkpoint used a scripted policy and privileged simulator stat
 | Component pairing | Through PR #89: real Qwen admission and SmolVLA/MuJoCo, deployment-driven activation and restore qualified locally | Live Jetson and genuine remote planner qualification; no universal plug-and-play claim |
 | Release evaluation | Through PR #89: suites, leased jobs, comparison, promotion and actual paired A/B evidence qualified locally and through the browser | Broader seeds, task and model qualification |
 | Durable hosting foundation | PostgreSQL migrations and concurrency checks, restartable evaluation jobs, local execution journal | Full tenant conversion, artifact storage/retention and database restore rehearsal |
-| Provider and hosting | PRs #79 and #81 merged; local service images/TLS/PostgreSQL and reviewed AWS CPU staging configuration | Account/region/budget, provisioned endpoint and hosted acceptance |
+| Provider and hosting | PRs #79 and #81: local service images/TLS/PostgreSQL and reviewed AWS CPU staging configuration; current Compose/AWS changes separate API-private signing from public worker verification | Updated container acceptance, account/region/budget, provisioned endpoint and hosted acceptance |
 | Networking | Direct HTTP, bounded requests/deadlines, verified TLS; six pipeline fault cases qualified | Wider delay/loss/load matrix and target-site latency measurements |
 | Hardware/second embodiment | Simulation only | Partner adapter, real controller authority/recovery, qualified model/hardware pair |
 
@@ -91,11 +91,10 @@ also preserves earlier readiness and sleep-interrupted failures. All inference
 ran on the developer Mac CPU; this does not qualify Jetson/cloud placement.
 
 An audit before PR #89 confirmed that selecting a deployment then checked
-already configured worker/planner identities. It does not itself replace their
-model processes. The next activation slice must stage a registered local recipe,
-switch at an idle boundary, verify observed component identities, and support an
-explicit restore to a prior bundle. Persistent packaging alone does not close
-that gap.
+already configured worker/planner identities. It did not replace their model
+processes. The required follow-up was to stage a registered local recipe, switch
+at an idle boundary, verify observed component identities, and support an explicit
+restore. PR #89 subsequently closed that local activation gap.
 
 PR #86 adds component/stage diagnostics to durable terminal episodes and the
 console. The full agent suite passed (227 passed, four skipped), with 37 focused
@@ -119,10 +118,16 @@ Seven bindings and all 21 model process incarnations stopped cleanly. See the
 [acceptance record](local-activation.md). This is still local CPU, offline lockstep;
 it does not establish multi-seed reliability, Jetson execution or WAN timing.
 
-The next isolated slice adds API-private Ed25519 mission signing and purpose-scoped
+Merged PR #90 adds API-private Ed25519 mission signing and purpose-scoped
 public verification in model services, with rotation, revocation and original
 expiry preservation. Clean `20947f9` passed another real Qwen/SmolVLA A → B → A
 run: three accepted plans, 162 learned actions equal to the direct reference, and
-verified cleanup. See [execution signing](execution-signing.md). Scripted Compose
-and unapplied AWS templates retain explicit HMAC mode and still need migration
-and isolated-identity qualification before hosted deployment.
+verified cleanup. See [execution signing](execution-signing.md).
+
+The current hosting slice applies that authority separation to scripted Compose
+and unapplied AWS templates: private signing material only for the API, public
+action verification only for inference, and no execution keys for jobs. Its
+shared key helper passes 28 focused tests, including interrupted initialization
+and refusal to overwrite or regenerate an existing installation's keys. Updated
+container acceptance remains pending. This packaging work adds no paid cloud
+resources and does not establish Linux Qwen inference or a remote learned planner.

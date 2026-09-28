@@ -39,6 +39,7 @@
     "regional_source": "https://aws.amazon.com/blogs/networking-and-content-delivery/exploring-data-transfer-costs-for-classic-and-application-load-balancers/"
   },
   "secrets": {
+    "rechecked_date": "2026-09-28",
     "secret_month": 0.4,
     "requests_10000": 0.05,
     "source": "https://aws.amazon.com/secrets-manager/pricing/"

@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
   push:
     branches: [v1]
-    paths: ["infra/development/services.py", "infra/development/services.compose.yml", "infra/development/containers/**", "infra/development/reference.Dockerfile*", "infra/aws-v1/**", "control-plane/Dockerfile", "control-plane/uv.lock", "website/Dockerfile", "website/pnpm-lock.yaml", "integrations/simulation/pyproject.toml", "integrations/simulation/uv.lock", ".github/workflows/service-images.yml"]
+    paths: ["infra/development/services.py", "infra/development/services.compose.yml", "infra/development/containers/**", "infra/development/tests/**", "infra/development/reference.Dockerfile*", "infra/runtime/**", "infra/aws-v1/**", "control-plane/Dockerfile", "control-plane/uv.lock", "website/Dockerfile", "website/pnpm-lock.yaml", "integrations/simulation/pyproject.toml", "integrations/simulation/uv.lock", ".github/workflows/service-images.yml"]
   pull_request:
-    paths: ["infra/development/services.py", "infra/development/services.compose.yml", "infra/development/containers/**", "infra/development/reference.Dockerfile*", "infra/aws-v1/**", "control-plane/Dockerfile", "control-plane/uv.lock", "website/Dockerfile", "website/pnpm-lock.yaml", "integrations/simulation/pyproject.toml", "integrations/simulation/uv.lock", ".github/workflows/service-images.yml"]
+    paths: ["infra/development/services.py", "infra/development/services.compose.yml", "infra/development/containers/**", "infra/development/tests/**", "infra/development/reference.Dockerfile*", "infra/runtime/**", "infra/aws-v1/**", "control-plane/Dockerfile", "control-plane/uv.lock", "website/Dockerfile", "website/pnpm-lock.yaml", "integrations/simulation/pyproject.toml", "integrations/simulation/uv.lock", ".github/workflows/service-images.yml"]
 
 permissions:
   contents: read
@@ -21,6 +21,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Verify isolated installation configuration
+        run: python3 -m unittest discover -s infra/development/tests -v
       - name: Build and provision independent services
         run: |
           mkdir -p integrations/simulation/runs/image-boundary integrations/simulation/dist
@@ -32,7 +34,9 @@ jobs:
         run: |
           docker build -f infra/aws-v1/api.Dockerfile \
             --build-arg BASE_IMAGE=convoy-v1-api:local -t convoy-v1-aws-api:local .
-          python3 infra/aws-v1/verify_runtime.py --api-image convoy-v1-aws-api:local
+          docker build -f infra/aws-v1/inference.Dockerfile \
+            --build-arg BASE_IMAGE=convoy-v1-reference:local -t convoy-v1-aws-inference:local .
+          python3 infra/aws-v1/verify_runtime.py --api-image convoy-v1-aws-api:local --inference-image convoy-v1-aws-inference:local
       - name: Verify private native runs were excluded from the image
         run: >-
           docker run --rm --entrypoint python convoy-v1-reference:local -c

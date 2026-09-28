@@ -9,7 +9,7 @@ x-api-environment: &api-environment
   CONVOY_LOG_LEVEL: WARNING
 
 x-reference: &reference
-  image: convoy-v1-reference:local
+  image: ${REFERENCE_IMAGE:-convoy-v1-reference:local}
   build:
     context: ../..
     dockerfile: infra/development/reference.Dockerfile
@@ -36,7 +36,7 @@ services:
     cpus: 1
 
   migrate:
-    image: convoy-v1-api:local
+    image: ${API_IMAGE:-convoy-v1-api:local}
     build: {context: ../../control-plane}
     profiles: [tools]
     environment: *api-environment
@@ -46,18 +46,19 @@ services:
       postgres: {condition: service_healthy}
 
   api:
-    image: convoy-v1-api:local
+    image: ${API_IMAGE:-convoy-v1-api:local}
     build: {context: ../../control-plane}
     init: true
     environment:
       <<: *api-environment
       CONVOY_ADMIN_EMAIL: ${CONVOY_ADMIN_EMAIL}
       CONVOY_ADMIN_PASSWORD: ${CONVOY_ADMIN_PASSWORD}
-      CONVOY_EXECUTION_SECRET: ${CONVOY_EXECUTION_SECRET}
+      CONVOY_EXECUTION_SIGNING_KEYS_FILE: /run/execution-signing/keys.json
       SSL_CERT_FILE: /run/ca/ca.crt
     command: [uvicorn, 'convoy_server.app:create_app', --factory, --host, 0.0.0.0, --port, '8443', --ssl-keyfile, /run/tls/service.key, --ssl-certfile, /run/tls/service.crt]
     volumes:
       - api-data:/data
+      - execution-signing:/run/execution-signing:ro
       - tls-api:/run/tls:ro
       - tls-ca:/run/ca:ro
     ports: ["127.0.0.1:${API_PORT:-8443}:8443"]
@@ -74,7 +75,7 @@ services:
     cpus: 2
 
   jobs:
-    image: convoy-v1-api:local
+    image: ${API_IMAGE:-convoy-v1-api:local}
     init: true
     environment: *api-environment
     volumes: [api-data:/data]
@@ -92,7 +93,7 @@ services:
     cpus: 1
 
   evaluations:
-    image: convoy-v1-api:local
+    image: ${API_IMAGE:-convoy-v1-api:local}
     init: true
     environment: *api-environment
     command: [convoy-evaluations]
@@ -110,7 +111,7 @@ services:
     cpus: 1
 
   web:
-    image: convoy-v1-web:local
+    image: ${WEB_IMAGE:-convoy-v1-web:local}
     build: {context: ../../website}
     init: true
     environment:
@@ -134,10 +135,11 @@ services:
   inference:
     <<: *reference
     environment:
-      CONVOY_EXECUTION_SECRET: ${CONVOY_EXECUTION_SECRET}
+      CONVOY_ACTION_VERIFICATION_KEYS_FILE: /run/action-verification/keys.json
       CONVOY_WORKER_PROBE_TOKEN: ${CONVOY_WORKER_PROBE_TOKEN}
     command: [python, /app/packaging/worker.py]
     volumes:
+      - action-verification:/run/action-verification:ro
       - tls-inference:/run/tls:ro
       - tls-ca:/run/ca:ro
     healthcheck:
@@ -170,6 +172,14 @@ services:
       - tls-ca:/run/ca:ro
     command: [python, /app/packaging/acceptance.py, bootstrap]
 
+  execution-keys:
+    <<: *reference
+    profiles: [tools]
+    volumes:
+      - execution-signing:/run/execution-signing
+      - action-verification:/run/action-verification
+    command: [python, /app/runtime/execution_keys.py, initialize, --signing-file, /run/execution-signing/keys.json, --action-verification-file, /run/action-verification/keys.json, --issuer, convoy-local-services]
+
   certificates:
     <<: *reference
     profiles: [tools]
@@ -180,6 +190,8 @@ services:
     command: [python, /app/packaging/certificates.py]
 
 volumes:
+  execution-signing:
+  action-verification:
   postgres-data:
   api-data:
   robot-data:

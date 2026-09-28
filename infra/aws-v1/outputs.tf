@@ -1,7 +1,7 @@
 output "cluster" { value = aws_ecs_cluster.this.name }
 output "urls" { value = { for key, value in var.domains : key => "https://${value}" } }
 output "secret_arns" {
-  description = "Metadata only. Populate generated strong values out of band; Terraform never reads them."
+  description = "Metadata only. Populate passwords and distinct private-signing/public-action documents out of band; Terraform never reads values."
   value       = { for key, value in aws_secretsmanager_secret.this : key => value.arn }
 }
 output "operator_email" { value = "operator@${var.domains.web}" }

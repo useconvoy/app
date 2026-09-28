@@ -21,8 +21,8 @@ AWS bill or a hard spending limit.
 | Two Application Load Balancers | 2 × $0.0225/hour × 730h, before traffic | $32.85 |
 | One NAT gateway | $0.045/hour × 730h, before traffic | $32.85 |
 | Public IPv4 | Minimum four ALB addresses + one NAT address, $0.005/address-hour | $18.25 |
-| Secrets Manager | Five app secret containers + one RDS-managed master, $0.40/secret-month | $2.40 |
-| **Fixed subtotal** | Service count one, including evaluation process | **$176.89** |
+| Secrets Manager | Six app secret containers + one RDS-managed master, $0.40/secret-month | $2.80 |
+| **Fixed subtotal** | Service count one, including evaluation process | **$177.29** |
 
 The Fargate quantity is web .25/.5, API .5/1, scheduler .25/.5, evaluations
 .25/.5 and inference 1/2 (vCPU/GiB). Each task uses the included 20 GiB ephemeral
@@ -58,7 +58,7 @@ avoid NAT processing for same-region ECR/S3 layer access.
 | Existing public DNS zone allocation | One standard zone | $0.50 |
 | Internet egress allowance | 10 GB at $0.09/GB before any shared free allowance | $0.90 |
 | Secret API calls | 10,000 requests × .05 | $0.05 |
-| **Example total** | Fixed subtotal plus the above | **about $194/month** |
+| **Example total** | Fixed subtotal plus the above | **about $195/month** |
 
 Use **$190–210/month** for this specifically declared low-traffic always-on
 configuration, then add a deliberate margin; a $250–300 warning threshold is an

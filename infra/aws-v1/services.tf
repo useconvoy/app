@@ -1,9 +1,9 @@
 locals {
   tasks = merge({
     web       = { image = "web", cpu = 256, memory = 512, command = ["node", "server.js"], database = false, secrets = {} }
-    api       = { image = "api", cpu = 512, memory = 1024, command = ["python", "/app/aws-runtime/entrypoint.py", "api"], database = true, secrets = { CONVOY_DB_PASSWORD = "runtime-db", CONVOY_ADMIN_PASSWORD = "admin", CONVOY_EXECUTION_SECRET = "execution" } }
+    api       = { image = "api", cpu = 512, memory = 1024, command = ["python", "/app/aws-runtime/entrypoint.py", "api"], database = true, secrets = { CONVOY_DB_PASSWORD = "runtime-db", CONVOY_ADMIN_PASSWORD = "admin", CONVOY_EXECUTION_SIGNING_JSON = "execution-signing" } }
     scheduler = { image = "api", cpu = 256, memory = 512, command = ["python", "/app/aws-runtime/entrypoint.py", "scheduler"], database = true, secrets = { CONVOY_DB_PASSWORD = "runtime-db" } }
-    inference = { image = "inference", cpu = 1024, memory = 2048, command = ["python", "/app/aws-runtime/inference.py"], database = false, secrets = { CONVOY_EXECUTION_SECRET = "execution", CONVOY_WORKER_PROBE_TOKEN = "probe" } }
+    inference = { image = "inference", cpu = 1024, memory = 2048, command = ["python", "/app/aws-runtime/inference.py"], database = false, secrets = { CONVOY_ACTION_VERIFICATION_JSON = "action-verification", CONVOY_WORKER_PROBE_TOKEN = "probe" } }
     migrate   = { image = "api", cpu = 256, memory = 512, command = ["python", "/app/aws-runtime/entrypoint.py", "migrate"], database = true, secrets = { CONVOY_DB_PASSWORD = "migration-db" } }
     bootstrap = { image = "api", cpu = 256, memory = 512, command = ["python", "/app/aws-runtime/bootstrap.py"], database = true, secrets = { CONVOY_RUNTIME_DB_PASSWORD = "runtime-db", CONVOY_MIGRATION_DB_PASSWORD = "migration-db" } }
     }, var.enable_evaluations ? {
