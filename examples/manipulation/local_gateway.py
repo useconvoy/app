@@ -9,11 +9,9 @@ together on exit; ambiguous runtime failure is never automatically restarted.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import platform
 import signal
-import tarfile
 import threading
 import time
 from pathlib import Path
@@ -22,40 +20,8 @@ from convoy_agent.gateway import Gateway
 from convoy_agent.owned_process import OwnedProcess
 from convoy_agent.runtime import RuntimeSupervisor
 from convoy_planner.artifact import validate_gateway_identity
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def prepare(receipt: dict, output: Path) -> tuple[Path, Path]:
-    if receipt["schema_version"] != 1:
-        raise ValueError("unsupported local asset receipt")
-    model = Path(receipt["model"]["path"]).resolve()
-    if model.stat().st_size != receipt["model"]["bytes"] or sha256(model) != receipt["model"]["sha256"]:
-        raise ValueError("model bytes do not match the supplied pin")
-    archive = Path(receipt["archive"]["path"]).resolve()
-    if sha256(archive) != receipt["archive"]["sha256"]:
-        raise ValueError("runtime archive differs from the supplied pin")
-    extracted = output / "runtime"
-    extracted.mkdir(mode=0o700)
-    with tarfile.open(archive) as source:
-        source.extractall(extracted, filter="data")
-    original_root = Path(receipt["runtime_root"]).resolve()
-    binary = None
-    for record in [receipt["binary"], *receipt["libraries"]]:
-        relative = Path(record["path"]).resolve().relative_to(original_root)
-        member = (extracted / relative).resolve()
-        member.relative_to(extracted.resolve())
-        if sha256(member) != record["sha256"]:
-            raise ValueError("extracted runtime member differs from the supplied pin")
-        if record is receipt["binary"]:
-            binary = member
-    return model, binary
+from convoy_planner.local_assets import prepare_text_assets as prepare
+from convoy_planner.local_assets import sha256
 
 
 def main():

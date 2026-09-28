@@ -148,3 +148,28 @@ def test_missing_record_and_incomplete_output_never_claim_cleanup(native, monkey
                 owner.record_path.write_bytes(before)
                 owner.record_path.chmod(0o600)
             assert supervisor.stop(deadline=time.monotonic() + 3)["stopped"]
+
+
+def test_failed_reader_start_closes_pipe_after_verified_exit_and_allows_restart(native, monkeypatch):
+    directory, launch = native
+    with OwnedProcess(directory / "owner") as owner:
+        supervisor = RuntimeSupervisor(directory, process_owner=owner)
+
+        def fail_start(_):
+            raise RuntimeError("test reader thread could not start")
+
+        try:
+            with monkeypatch.context() as patch:
+                patch.setattr("convoy_agent.runtime._LogReader.start", fail_start)
+                with pytest.raises(RuntimeError, match="reader thread could not start"):
+                    supervisor.start(**launch)
+            child, reader, marker = supervisor.proc, supervisor._reader, supervisor.api_key_file
+            assert child.poll() is None and reader.ident is None and not child.stdout.closed
+            result = supervisor.stop(deadline=time.monotonic() + 3)
+            assert result["stopped"] and child.poll() is not None
+            assert child.stdout.closed and not marker.exists()
+            assert json.loads(owner.record_path.read_text())["state"] == "stopped"
+            supervisor.start(**launch)
+            assert supervisor.proc is not child and supervisor._reader.ident is not None
+        finally:
+            assert supervisor.stop(deadline=time.monotonic() + 3)["stopped"]
