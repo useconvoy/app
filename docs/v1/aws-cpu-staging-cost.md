@@ -52,6 +52,7 @@ avoid NAT processing for same-region ECR/S3 layer access.
 | --- | --- | ---: |
 | ALB capacity | 1 average LCU per ALB, 2 × .008 × 730 | $11.68 |
 | NAT processing | 10 GB × .045 | $0.45 |
+| Regional network allowance | 20 GB charged network legs × .01 (web to public API ALB) | $0.20 |
 | CloudWatch logs | 5 GB ingestion × .50 + 1 GB average retained × .03 | $2.53 |
 | ECR retained images | 10 GB across qualified/rollback images × .10 | $1.00 |
 | Existing public DNS zone allocation | One standard zone | $0.50 |
@@ -72,6 +73,17 @@ EFS, WAF, load tests or paid support plan is included.
 [Secrets Manager](https://aws.amazon.com/secrets-manager/pricing/),
 [Route53](https://aws.amazon.com/route53/pricing/),
 [EC2 data transfer](https://aws.amazon.com/ec2/pricing/on-demand/)
+
+Network usage can be recalculated as `$0.045 × NAT_GB + $0.09 × Internet_GB
++ $0.01 × regional_charged_leg_GB`, before tier/allowance changes. Web reaches
+the API's public HTTPS ALB through the NAT/Internet gateway, so its regional
+transfer is additional to NAT processing. ALB-to-target cross-zone traffic
+within this VPC is free. Tasks, NAT and RDS currently share the first AZ; moving
+tasks/DB/NAT across AZs introduces additional regional charged legs. Review
+actual routing and billed byte dimensions when changing placement, rather than
+applying the ALB cross-zone exemption to every connection.
+[AWS ALB transfer scenarios](https://aws.amazon.com/blogs/networking-and-content-delivery/exploring-data-transfer-costs-for-classic-and-application-load-balancers/),
+[ALB cross-zone pricing](https://aws.amazon.com/elasticloadbalancing/faqs/)
 
 ## Idle and teardown costs
 

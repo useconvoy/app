@@ -34,7 +34,9 @@
     "nat_hour": 0.045,
     "nat_gb": 0.045,
     "public_ipv4_hour": 0.005,
-    "source": "https://aws.amazon.com/vpc/pricing/"
+    "source": "https://aws.amazon.com/vpc/pricing/",
+    "regional_charged_leg_gb": 0.01,
+    "regional_source": "https://aws.amazon.com/blogs/networking-and-content-delivery/exploring-data-transfer-costs-for-classic-and-application-load-balancers/"
   },
   "secrets": {
     "secret_month": 0.4,
