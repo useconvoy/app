@@ -13,6 +13,13 @@ function request(path: string, options: RequestInit = {}) {
 test("allowlist excludes controller/device writes, path traversal, unknown query keys and duplicate scope", () => {
   assert.equal(allowedPlatformPath(["robots"], "GET", new URLSearchParams("project_id=prj_one")), "/api/v1/robots?project_id=prj_one");
   assert.equal(allowedPlatformPath(["deployments"], "GET", new URLSearchParams("project_id=prj_one&robot_id=rob_one")), "/api/v1/deployments?project_id=prj_one&robot_id=rob_one");
+  assert.equal(allowedPlatformPath(["applications", "app_one", "qualification"], "GET", new URLSearchParams("release_id=rel_one")), "/api/v1/applications/app_one/qualification?release_id=rel_one");
+  assert.equal(allowedPlatformPath(["applications", "app_one", "qualification"], "GET", new URLSearchParams()), null);
+  assert.equal(allowedPlatformPath(["evaluations", "eva_one"], "GET", new URLSearchParams()), "/api/v1/evaluations/eva_one");
+  assert.equal(allowedPlatformPath(["evaluations", "eva_one"], "GET", new URLSearchParams("baseline_id=eva_two")), "/api/v1/evaluations/eva_one?baseline_id=eva_two");
+  assert.equal(allowedPlatformPath(["evaluations", "eva_one"], "GET", new URLSearchParams("baseline_id=a&baseline_id=b")), null);
+  assert.equal(allowedPlatformPath(["evaluations", "eva_one", "promote"], "POST", new URLSearchParams()), "/api/v1/evaluations/eva_one/promote");
+  assert.equal(allowedPlatformPath(["evaluations", "eva_one", "promote"], "GET", new URLSearchParams()), null);
   for (const path of [["admin"], ["devices", "dev_one", "deploy"], ["..", "admin"], ["auth", "tokens"], ["https:", "evil.test"]]) {
     assert.equal(allowedPlatformPath(path, "POST", new URLSearchParams()), null);
   }
