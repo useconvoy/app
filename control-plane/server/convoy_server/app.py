@@ -54,9 +54,10 @@ def create_app(settings: Settings | None = None, *, start_scheduler: bool | None
 
     for r in (auth.router, users.router, enrollment.router):
         app.include_router(r)
-    from .routers import platform
+    from .routers import evaluations, platform
 
     app.include_router(platform.router)
+    app.include_router(evaluations.router)
     _include_optional(app)
 
     @app.exception_handler(HTTPException)

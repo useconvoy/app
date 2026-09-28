@@ -287,8 +287,9 @@ def test_additive_platform_upgrade_preserves_legacy_records(app, admin, settings
     engine = make_engine(settings)
     try:
         result = migrations.ensure_schema(engine)
-        assert result["user_version"] == 4
-        assert len(result["add_tables"]) == 8 and not result["rebuild"]
+        assert result["user_version"] == migrations.SCHEMA_VERSION
+        assert set(result["add_tables"]) == {table.name for table in Base.metadata.sorted_tables if table.name.startswith("platform_")}
+        assert not result["rebuild"]
     finally:
         engine.dispose()
     connection = sqlite3.connect(path)

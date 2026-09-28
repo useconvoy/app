@@ -28,3 +28,32 @@ The policy remains scripted and reads privileged simulator state. The simulator 
 | Hardware/second embodiment | Simulation only | Partner adapter, real controller authority/recovery, qualified model/hardware pair |
 
 No paid infrastructure has been provisioned. Local development does not require AWS access. Hosted deployment will need a concrete cost plan and configured account/region/budget. The legacy installation-wide APIs remain unsuitable as a multi-customer tenancy boundary.
+
+## Subsequent verified checkpoints
+
+- PRs #72–#76 are merged into `v1`, including the independent worker, lifecycle
+  APIs, coordinator, authenticated console and PostgreSQL foundation. Their
+  applicable remote checks passed before merge.
+- PR #77 qualifies all six real-process fault cases against a disposable
+  PostgreSQL database. The local PostgreSQL and SQLite runs passed; new CI
+  execution is currently blocked by the GitHub account's billing/spending state.
+- PR #78 runs actual pretrained SmolVLA on camera observations through the
+  managed pipeline. Two seed-0 missions on the same warm worker each succeeded
+  in 54 actions, matching a separate direct run. This is offline lockstep CPU
+  inference, not paired edge/cloud execution or physical robot timing.
+- A separate service-packaging slice runs API, web, scheduler, inference,
+  simulator and PostgreSQL as containers with verified internal TLS. Real
+  mission acceptance and persistence across stop/start passed locally.
+- The evaluation slice adds immutable fixed-seed suites, durable leased jobs,
+  complete case accounting, comparisons and optional promotion gates. Its
+  separate-process acceptance ran four 500-step physics missions across two
+  suite executions, recovered after killing the job process without admitting
+  another copy of a case, and enforced the promotion gate.
+
+The Jetson is intended to be the robot-side edge computer in the future paired
+architecture. Its previously recorded SSH hostname/address were unreachable;
+a bounded discovery on the current local subnet found no reachable SSH endpoint.
+Current hardware/model state remains unverified. A text LLM is not treated as a
+compatible arm action policy. Compatible edge inference, a separate cloud planner,
+paired activation, cloud hosting, complete tenancy and artifact/retention work
+remain outstanding. No paid cloud resources have been provisioned.

@@ -252,9 +252,12 @@ def unresolved_mission(db: Session, robot: Robot) -> Mission | None:
     return db.scalar(select(Mission).where(Mission.robot_id == robot.id, Mission.state.not_in(TERMINAL)))
 
 
-def create_deployment(db: Session, p: Principal, data: dict) -> dict:
+def create_deployment(db: Session, p: Principal, data: dict, *, evaluation_id: str | None = None) -> dict:
+    from .evaluations import require_available, require_promotion
+
     dispatch_allowed(db)
     robot = resource_for(db, Robot, data["robot_id"], p)
+    require_available(db, robot.id, evaluation_id)
     if robot.generation != data["expected_generation"]:
         raise HTTPException(409, "robot generation changed")
     if unresolved_mission(db, robot):
@@ -265,6 +268,8 @@ def create_deployment(db: Session, p: Principal, data: dict) -> dict:
         raise HTTPException(404, "release not found in robot project")
     if release.manifest["profile"] != robot.profile:
         raise HTTPException(409, "release profile does not match robot")
+    if evaluation_id is None:
+        require_promotion(db, release)
     robot.generation += 1
     row = Deployment(
         id=new_id("dep"),
@@ -278,9 +283,12 @@ def create_deployment(db: Session, p: Principal, data: dict) -> dict:
     return deployment_out(row)
 
 
-def create_mission(db: Session, p: Principal, robot_id: str, data: dict) -> dict:
+def create_mission(db: Session, p: Principal, robot_id: str, data: dict, *, evaluation_id: str | None = None) -> dict:
+    from .evaluations import require_available, require_promotion
+
     dispatch_allowed(db)
     robot = resource_for(db, Robot, robot_id, p)
+    require_available(db, robot.id, evaluation_id)
     if robot.generation != data["expected_generation"]:
         raise HTTPException(409, "robot generation changed")
     if unresolved_mission(db, robot):
@@ -291,6 +299,8 @@ def create_mission(db: Session, p: Principal, robot_id: str, data: dict) -> dict
     if deployment.generation != robot.generation or deployment.state != "ready":
         raise HTTPException(409, "current deployment is not ready")
     release = db.get(ApplicationRelease, deployment.release_id)
+    if evaluation_id is None:
+        require_promotion(db, release)
     ttl = min(data["ttl_s"], release.manifest["execution"]["mission_timeout_s"])
     row = Mission(
         id=new_id("mis"),
