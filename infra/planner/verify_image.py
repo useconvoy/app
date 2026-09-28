@@ -293,7 +293,10 @@ def verify_identity(value: dict, assets: dict):
     assert value["runtime_source"] == assets["source"]
     assert value["model"] == {key: assets["model"][key] for key in ("sha256", "bytes")}
     assert value["runtime_archive_sha256"] == assets["archive"]["sha256"]
-    assert value["native"]["backend"] == "CPU" and value["native"]["gpu_offloaded_layers"] == 0
+    assert value["native"]["backend"] == "CPU" and value["effective_configuration"]["gpu_layers"] == 0
+    # This CPU-only build emits no GPU offload line. Keep an absent measurement
+    # absent instead of pretending the parser observed a numeric zero.
+    assert value["native"]["gpu_offloaded_layers"] in (None, 0)
     assert value["native"]["binary_sha256"] == assets["binary"]["sha256"]
     identity = validate_gateway_identity(value["gateway_identity"])
     assert identity["simulated"] is False and identity["model_sha256"] == assets["model"]["sha256"]
