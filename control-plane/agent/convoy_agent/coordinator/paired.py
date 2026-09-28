@@ -69,10 +69,14 @@ def main(argv: list[str] | None = None) -> int:
             # acquires role locks here; mission recovery gates any later launch.
             from convoy_lerobot.local_bundle import LocalBundleOwner
 
+            if "CONVOY_EXECUTION_SIGNING_KEYS_FILE" in os.environ:
+                parser.error("API private signing configuration must not be passed to the coordinator")
             bundle_owner = resources.enter_context(LocalBundleOwner(
                 args.data_dir / "local-bundle", args.local_registry,
-                worker_execution_secret=os.environ.get("CONVOY_EXECUTION_SECRET", ""),
-                planner_execution_secret=os.environ.get("CONVOY_PLANNER_EXECUTION_SECRET", ""),
+                worker_execution_secret=os.environ.get("CONVOY_EXECUTION_SECRET"),
+                planner_execution_secret=os.environ.get("CONVOY_PLANNER_EXECUTION_SECRET"),
+                worker_verification_keys_file=os.environ.get("CONVOY_ACTION_VERIFICATION_KEYS_FILE"),
+                planner_verification_keys_file=os.environ.get("CONVOY_PLANNER_VERIFICATION_KEYS_FILE"),
                 worker_probe_token=worker_token, planner_probe_token=planner_token,
             ))
             worker, planner = None, None

@@ -1,6 +1,6 @@
 # Decision 004: qualify a planner and an action policy as one application
 
-Status: implementation and qualification on the component-pairing feature branch.
+Status: merged on `v1`, including local deployment-driven activation and restore.
 Live Jetson model admission and hosted edge/cloud execution remain unqualified.
 
 ## The next behavior
@@ -76,8 +76,8 @@ regain readiness without changing its generation or original expiry. Server
 reconciliation expires only requests for which no execution authority was ever
 issued. An admitted or uncertain execution cannot be cleared by a readiness probe.
 
-The API is the sole mission-grant signer. The action worker and planner have
-different signing keys and grant purposes. The evaluation service has database
+The API is the sole mission-grant signer. In asymmetric mode, the action worker
+and planner have distinct public verification keys and purposes. The evaluation service has database
 access but no model signing keys; it reconciles authorized runs through normal
 deployments and missions. The coordinator holds a device credential and receives
 short-lived mission grants. Model calls bypass the API and database. Remote

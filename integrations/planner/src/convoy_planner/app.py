@@ -9,6 +9,7 @@ import threading
 import time
 
 from convoy_contracts.execution import IDENTITY_FIELDS, canonical_digest, validate_identity
+from convoy_contracts.grants import GrantVerifier
 from convoy_contracts.pairing import (
     CONTROLLED_PLANNER_RUNTIME,
     PAIRED_PROFILE,
@@ -24,14 +25,21 @@ from .artifact import artifact_descriptor, implementation_sources
 from .sessions import Sessions
 
 
-def create_app(manifest: dict, backend, *, execution_secret: str, probe_token: str) -> FastAPI:
+def create_app(manifest: dict, backend, *, execution_secret: str | None = None,
+               grant_verifier: GrantVerifier | None = None, probe_token: str) -> FastAPI:
     manifest = copy.deepcopy(manifest)
     validate_release_manifest(manifest)
     if manifest["profile"] != PAIRED_PROFILE:
         raise ValueError("planner requires paired manifest")
-    if (len(execution_secret.encode()) < 32 or len(probe_token) < 32 or
-            secrets.compare_digest(execution_secret, probe_token)):
-        raise ValueError("distinct planner execution and probe secrets of at least 32 characters required")
+    if (execution_secret is None) == (grant_verifier is None):
+        raise ValueError("configure exactly one planner authorization mode")
+    if len(probe_token) < 32:
+        raise ValueError("configure a planner probe secret of at least 32 characters")
+    if execution_secret is not None:
+        if len(execution_secret.encode()) < 32 or secrets.compare_digest(execution_secret, probe_token):
+            raise ValueError("distinct planner execution and probe secrets of at least 32 characters required")
+    elif not isinstance(grant_verifier, GrantVerifier) or grant_verifier.purpose != "planner":
+        raise ValueError("planner requires a planner-purpose verifier")
     # Capture this installed implementation at process creation. Inference never reads
     # possibly replaced source files or mutable manifests to label an admitted result.
     sources = {key: hashlib.sha256(path.read_bytes()).hexdigest() for key, path in implementation_sources().items()}
@@ -92,13 +100,18 @@ def create_app(manifest: dict, backend, *, execution_secret: str, probe_token: s
         except Exception as error:
             raise HTTPException(503, "planner gateway identity unavailable") from error
 
-    def authorize(body: dict, authorization: str, *, plan=False):
+    def recheck_grant(authorization: str):
         try:
             if not authorization.startswith("Bearer "):
                 raise ValueError("planner grant required")
-            grant = verify_planner_grant(authorization[7:], execution_secret)
+            token = authorization[7:]
+            return (grant_verifier.verify(token) if grant_verifier is not None
+                    else verify_planner_grant(token, execution_secret))
         except ValueError as error:
             raise HTTPException(401, str(error)) from error
+
+    def authorize(body: dict, authorization: str, *, plan=False):
+        grant = recheck_grant(authorization)
         try:
             if plan:
                 validate_plan_request(body)
@@ -125,6 +138,7 @@ def create_app(manifest: dict, backend, *, execution_secret: str, probe_token: s
             session, fresh = sessions.start(grant)
             if fresh:
                 session.gateway_identity, session.planner_identity = snapshot()
+            recheck_grant(authorization)
             sessions.check(session)
             return {"identity": body["identity"], "next_sequence": session.next_sequence, **session.planner_identity}
         except HTTPException:
@@ -164,8 +178,10 @@ def create_app(manifest: dict, backend, *, execution_secret: str, probe_token: s
             sessions.check(session)
             if duration > body["budget_ms"] or time.time() >= grant["expires_at"]:
                 raise HTTPException(504, "planner exceeded original budget or mission grant")
-            return validate_plan_result({**{key: body[key] for key in PLAN_ECHO_FIELDS},
+            result = validate_plan_result({**{key: body[key] for key in PLAN_ECHO_FIELDS},
                 **session.planner_identity, "decision": decision, "planner_duration_ms": duration})
+            recheck_grant(authorization)
+            return result
         except HTTPException:
             if session:
                 sessions.poison(session)

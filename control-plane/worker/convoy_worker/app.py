@@ -15,6 +15,7 @@ from convoy_contracts.execution import (
     validate_result,
     verify_grant,
 )
+from convoy_contracts.grants import GrantVerifier
 from convoy_contracts.pairing import action_manifest, validate_release_manifest
 from fastapi import FastAPI, Header, HTTPException, Request
 
@@ -28,13 +29,19 @@ class Runtime(Protocol):
     def get_action(self, observation: list[float] | dict) -> list[float]: ...
 
 
-def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str, probe_token: str) -> FastAPI:
+def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str | None = None,
+               grant_verifier: GrantVerifier | None = None, probe_token: str) -> FastAPI:
     validate_release_manifest(manifest)
     policy_manifest = action_manifest(manifest)
-    if len(execution_secret.encode()) < 32 or len(probe_token) < 32:
-        raise ValueError("configure distinct execution and probe secrets of at least 32 characters")
-    if secrets.compare_digest(execution_secret, probe_token):
-        raise ValueError("execution and probe secrets must be distinct")
+    if (execution_secret is None) == (grant_verifier is None):
+        raise ValueError("configure exactly one execution authorization mode")
+    if len(probe_token) < 32:
+        raise ValueError("configure a probe secret of at least 32 characters")
+    if execution_secret is not None:
+        if len(execution_secret.encode()) < 32 or secrets.compare_digest(execution_secret, probe_token):
+            raise ValueError("configure distinct execution and probe secrets of at least 32 characters")
+    elif not isinstance(grant_verifier, GrantVerifier) or grant_verifier.purpose != "action":
+        raise ValueError("worker requires an action-purpose verifier")
     if policy_manifest["policy"] != {"runtime": runtime.runtime, "artifact_sha256": runtime.artifact_sha256}:
         raise ValueError("loaded runtime/artifact does not match the release manifest")
     visual = policy_manifest["profile"] == VISUAL_PROFILE
@@ -72,11 +79,15 @@ def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str, probe
             raise HTTPException(409, "release or profile mismatch")
         return health()
 
+    def verify_token(token: str):
+        # A configured asymmetric verifier never falls back to a shared secret.
+        return grant_verifier.verify(token) if grant_verifier is not None else verify_grant(token, execution_secret)
+
     def authorize(body: dict, authorization: str, *, decision: bool = False):
         if not authorization.startswith("Bearer "):
             raise HTTPException(401, "execution grant required")
         try:
-            grant = verify_grant(authorization[7:], execution_secret)
+            grant = verify_token(authorization[7:])
         except ValueError as error:
             raise HTTPException(401, str(error)) from error
         try:
@@ -96,7 +107,7 @@ def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str, probe
 
     def recheck_grant(authorization: str):
         try:
-            return verify_grant(authorization[7:], execution_secret)
+            return verify_token(authorization[7:])
         except ValueError as error:
             raise HTTPException(401, str(error)) from error
 
@@ -113,6 +124,7 @@ def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str, probe
             session, fresh = sessions.start(grant)
             if fresh:
                 runtime.reset_session(body["identity"])
+            recheck_grant(authorization)
             sessions.check(session)
             return {"identity": body["identity"], "next_sequence": session.next_sequence}
         except Exception:
@@ -156,6 +168,7 @@ def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str, probe
             )}
             result.update(action=action, policy_duration_ms=duration_ms)
             validate_result(result)
+            recheck_grant(authorization)
             return result
         except HTTPException:
             if session is not None:

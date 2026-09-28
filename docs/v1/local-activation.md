@@ -20,9 +20,12 @@ also manages these components:
 - A separate action worker process that loads SmolVLA and returns bounded actions
   from camera observations.
 
-Model traffic stays on loopback. The two model services receive separate execution
-and probe credentials; they do not receive the management login or database
-credentials. The model worker is the process that imports the heavy inference
+Model traffic stays on loopback. The current harness gives the API private grant
+signing keys and each model service its purpose-scoped public verification file
+and separate probe credential. See [execution signing](execution-signing.md) for
+rotation, retained legacy mode and the same-user development boundary.
+Model services do not receive management login or database credentials.
+The model worker is the process that imports the heavy inference
 libraries. The coordinator remains the only process allowed to apply simulator
 actions. No deployment action starts a mission automatically.
 
@@ -74,13 +77,14 @@ weights. A uses context 2048; B uses context 4096. Their native configuration,
 planner artifact and outer release digests differ. These are two configurations,
 not two different weight checkpoints.
 
-The [completed acceptance](../../examples/manipulation/evidence/local-paired-activation.json)
+The [PR #89 acceptance](../../examples/manipulation/evidence/local-paired-activation.json)
 used one API, coordinator, journal and SQLite database. The harness deployed A,
 then B, then restored A, explicitly starting a successful seed-0 mission each time.
 The browser deployed B and started a fourth mission, evaluated A and B against
 one immutable seed-0 suite, compared the reports, explicitly promoted B, and
 restored A at generation 7 without starting another mission. No evaluation gate
 was enabled, so the explicit restore did not need a promotion of A.
+That historical run used HMAC grants; it is not evidence for public-key mode.
 
 All six missions accepted an actual Qwen proposal and applied 54 SmolVLA actions.
 Every action, reward and success flag matched the direct seed-0 reference.

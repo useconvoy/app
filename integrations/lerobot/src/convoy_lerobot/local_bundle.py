@@ -80,19 +80,38 @@ def _port() -> int:
 
 
 class LocalBundleOwner:
-    def __init__(self, directory: Path, registry_path: Path, *, worker_execution_secret: str,
-                 planner_execution_secret: str, worker_probe_token: str, planner_probe_token: str,
+    def __init__(self, directory: Path, registry_path: Path, *, worker_execution_secret: str | None = None,
+                 planner_execution_secret: str | None = None, worker_probe_token: str, planner_probe_token: str,
+                 worker_verification_keys_file: Path | None = None,
+                 planner_verification_keys_file: Path | None = None,
                  startup_timeout_s: float = 120.0, shutdown_timeout_s: float = 15.0):
-        credentials = (worker_execution_secret, planner_execution_secret, worker_probe_token, planner_probe_token)
-        if any(not isinstance(value, str) or len(value) < 32 for value in credentials) or len(set(credentials)) != 4:
-            raise ValueError("four distinct execution and probe credentials of at least 32 characters required")
+        probes = (worker_probe_token, planner_probe_token)
+        credentials = (worker_execution_secret, planner_execution_secret, *probes)
+        self._verification_files = {}
+        if worker_verification_keys_file is not None or planner_verification_keys_file is not None:
+            if (worker_verification_keys_file is None or planner_verification_keys_file is None
+                    or worker_execution_secret is not None or planner_execution_secret is not None):
+                raise ValueError("configure both public verification files or both legacy secrets")
+            from convoy_contracts.grants import GrantVerifier
+
+            for role, purpose, path in (("worker", "action", worker_verification_keys_file),
+                                        ("planner", "planner", planner_verification_keys_file)):
+                path = Path(path).absolute()
+                GrantVerifier(path, purpose=purpose)
+                self._verification_files[role] = str(path)
+            credentials = probes
+        if (any(not isinstance(value, str) or len(value) < 32 for value in credentials)
+                or len(set(credentials)) != len(credentials)):
+            raise ValueError("distinct execution and probe credentials of at least 32 characters required")
         for value in (startup_timeout_s, shutdown_timeout_s):
             if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or not 0 < value <= 600:
                 raise ValueError("local startup and shutdown bounds must be in (0, 600] seconds")
         self.directory, self.registry_path = Path(directory).absolute(), Path(registry_path)
         self._invocation_cwd = Path.cwd()
         self.startup_timeout_s, self.shutdown_timeout_s = startup_timeout_s, shutdown_timeout_s
-        self._credentials = dict(zip(("worker_secret", "planner_secret", "worker_probe", "planner_probe"), credentials, strict=True))
+        self._credentials = {"worker_probe": worker_probe_token, "planner_probe": planner_probe_token}
+        if not self._verification_files:
+            self._credentials.update(worker_secret=worker_execution_secret, planner_secret=planner_execution_secret)
         self._stack = None
         self._owners = {}
         self._children = {}
@@ -180,6 +199,13 @@ class LocalBundleOwner:
         attempt = self.directory / "attempts" / uuid.uuid4().hex
         self._persist("preparing", target)
         try:
+            # Operator rotation/removal can happen after owner construction. A
+            # known-invalid public configuration must not interrupt loaded A.
+            if self._verification_files:
+                from convoy_contracts.grants import GrantVerifier
+
+                for role, purpose in (("worker", "action"), ("planner", "planner")):
+                    GrantVerifier(self._verification_files[role], purpose=purpose)
             recipe = recipe_for(self._registry, target["release_digest"])
             if recipe.manifest != manifest:
                 raise BundleError("registered_manifest_mismatch")
@@ -257,12 +283,16 @@ class LocalBundleOwner:
         env.update(PYTHONUNBUFFERED="1", HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1",
                    HF_HUB_DISABLE_TELEMETRY="1", TOKENIZERS_PARALLELISM="false")
         if role == "worker":
-            env.update(CONVOY_EXECUTION_SECRET=self._credentials["worker_secret"],
-                       CONVOY_WORKER_PROBE_TOKEN=self._credentials["worker_probe"],
+            env.update(CONVOY_WORKER_PROBE_TOKEN=self._credentials["worker_probe"],
                        CONVOY_SMOLVLA_ASSETS=str(prepared.action_assets))
         else:
-            env.update(CONVOY_PLANNER_EXECUTION_SECRET=self._credentials["planner_secret"],
-                       CONVOY_PLANNER_PROBE_TOKEN=self._credentials["planner_probe"])
+            env.update(CONVOY_PLANNER_PROBE_TOKEN=self._credentials["planner_probe"])
+        if self._verification_files:
+            name = "CONVOY_ACTION_VERIFICATION_KEYS_FILE" if role == "worker" else "CONVOY_PLANNER_VERIFICATION_KEYS_FILE"
+            env[name] = self._verification_files[role]
+        else:
+            name = "CONVOY_EXECUTION_SECRET" if role == "worker" else "CONVOY_PLANNER_EXECUTION_SECRET"
+            env[name] = self._credentials[f"{role}_secret"]
         return env
 
     def _spawn_component(self, role: str, prepared, attempt: Path, port: int) -> None:

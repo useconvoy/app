@@ -3,7 +3,7 @@ name = "convoy-planner"
 version = "0.1.0"
 description = "Optional fixed-task planner adapter for the owned Convoy llama.cpp gateway"
 requires-python = ">=3.10"
-dependencies = ["convoy-contracts", "fastapi>=0.115", "uvicorn>=0.30"]
+dependencies = ["convoy-contracts[signing]", "fastapi>=0.115", "uvicorn>=0.30"]
 
 [project.scripts]
 convoy-planner = "convoy_planner.cli:main"

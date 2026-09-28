@@ -161,7 +161,7 @@ def create_run(db: Session, p: Principal, data: dict) -> dict:
     if release.manifest["profile"] == PAIRED_PROFILE:
         # Only the API admits this run and issues later mission grants. The
         # separate evaluation job needs database access, never either signer.
-        platform.planner_signing_secret()
+        platform.validate_execution_signing(paired=True)
     require_available(db, robot.id)
     if platform.unresolved_mission(db, robot):
         raise HTTPException(409, "robot has an active or unresolved mission")

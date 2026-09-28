@@ -18,10 +18,10 @@ That coordinator checkpoint used a scripted policy and privileged simulator stat
 
 | Area | Current state | Next evidence needed |
 |---|---|---|
-| Console workflow | PRs #75, #82 and #84 merged; deployment, evaluation, comparison, promotion and paired display verified against actual services | Repeat the workflow with independently activated candidate components |
+| Console workflow | Through PR #89: independent A/B activation, Start, evaluation, comparison, promotion and restore verified against actual local models | Desired versus observed component display and freshness |
 | Learned inference | PR #78 merged; actual pretrained SmolVLA camera-policy evidence through managed missions | Extend the qualified task/seed envelope and qualify target compute |
-| Component pairing | PRs #83–#85 merged; controlled and actual Qwen admission plus SmolVLA/MuJoCo qualified locally; paired console evaluation verified | Live Jetson qualification and deployment-driven component activation; no universal plug-and-play claim |
-| Release evaluation | PRs #80 and #82 merged; suites, leased jobs, comparison and promotion gates qualified locally and through the browser | Paired evidence and broader model/task qualification |
+| Component pairing | Through PR #89: real Qwen admission and SmolVLA/MuJoCo, deployment-driven activation and restore qualified locally | Live Jetson and genuine remote planner qualification; no universal plug-and-play claim |
+| Release evaluation | Through PR #89: suites, leased jobs, comparison, promotion and actual paired A/B evidence qualified locally and through the browser | Broader seeds, task and model qualification |
 | Durable hosting foundation | PostgreSQL migrations and concurrency checks, restartable evaluation jobs, local execution journal | Full tenant conversion, artifact storage/retention and database restore rehearsal |
 | Provider and hosting | PRs #79 and #81 merged; local service images/TLS/PostgreSQL and reviewed AWS CPU staging configuration | Account/region/budget, provisioned endpoint and hosted acceptance |
 | Networking | Direct HTTP, bounded requests/deadlines, verified TLS; six pipeline fault cases qualified | Wider delay/loss/load matrix and target-site latency measurements |
@@ -80,7 +80,7 @@ its saved SSH host identity matched. Its DHCP address had changed. The available
 local SSH key was rejected; device login is pending. Current hardware/model state
 remains unverified. A text LLM is not treated as a
 compatible arm action policy. Compatible edge inference, a separate cloud planner,
-paired activation, cloud hosting, complete tenancy and artifact/retention work
+cloud hosting, complete tenancy and artifact/retention work
 remain outstanding. No paid cloud resources have been provisioned.
 
 PR #85's clean source `c7d9166` completed actual Qwen text-model admission in
@@ -90,7 +90,7 @@ actions matched the direct seed-0 trace; active wall time was 46.34 seconds for
 also preserves earlier readiness and sleep-interrupted failures. All inference
 ran on the developer Mac CPU; this does not qualify Jetson/cloud placement.
 
-An implementation audit confirmed that selecting a deployment currently checks
+An audit before PR #89 confirmed that selecting a deployment then checked
 already configured worker/planner identities. It does not itself replace their
 model processes. The next activation slice must stage a registered local recipe,
 switch at an idle boundary, verify observed component identities, and support an
@@ -108,5 +108,13 @@ PID persistence, exact child recovery, and an untouched unrelated sentinel.
 PR #88 connects it to the real model supervisor. Clean source `a0d3bc5` loaded
 actual Qwen, served one fixed-skill request, survived an owner kill with the native
 child left alive, verified that orphan's exit, and loaded a second configuration.
-Both requests succeeded and all owned resources stopped. Deployment-driven paired
-activation and explicit restore remain outstanding.
+Both requests succeeded and all owned resources stopped. At that checkpoint,
+deployment-driven paired activation and explicit restore remained outstanding.
+
+PR #89 completed local deployment-driven activation and restore. One installation
+passed A → B → A through the harness and additional browser deployment, execution,
+paired evaluation, comparison, promotion and restore. Six seed-0 missions each
+accepted a real Qwen plan and applied 54 SmolVLA actions matching the direct trace.
+Seven bindings and all 21 model process incarnations stopped cleanly. See the
+[acceptance record](local-activation.md). This is still local CPU, offline lockstep;
+it does not establish multi-seed reliability, Jetson execution or WAN timing.
