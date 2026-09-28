@@ -19,6 +19,7 @@ import sys
 import threading
 import time
 import uuid
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 import httpx
@@ -47,7 +48,46 @@ def wait_for(read, accept, *, timeout: float = 30):
     raise RuntimeError(f"timed out waiting for pipeline state; last={last}")
 
 
-def run(output: Path, *, faults: bool = False, serve: bool = False) -> dict:
+@contextmanager
+def disposable_postgres(env: dict, evidence: dict, output: Path):
+    """Own one fresh database; never migrate or drop the caller's endpoint database."""
+    import psycopg
+    from psycopg import sql
+    from sqlalchemy.engine import make_url
+
+    endpoint = os.environ.get("CONVOY_TEST_POSTGRES_URL")
+    if not endpoint:
+        raise ValueError("--postgres requires CONVOY_TEST_POSTGRES_URL with CREATE DATABASE permission")
+    url = make_url(endpoint)
+    if url.drivername not in {"postgresql", "postgresql+psycopg"}:
+        raise ValueError("CONVOY_TEST_POSTGRES_URL must use postgresql or postgresql+psycopg")
+    name = "convoy_pipeline_" + uuid.uuid4().hex
+    created = False
+    evidence["database"] = {"backend": "postgresql", "name": name, "cleanup": "not_created"}
+    # DDL uses autocommit because CREATE/DROP DATABASE cannot run in a transaction.
+    with psycopg.connect(url.set(drivername="postgresql").render_as_string(hide_password=False),
+                         autocommit=True, connect_timeout=5,
+                         options="-c statement_timeout=30000") as admin:
+        try:
+            admin.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+            created = True
+            evidence["database"]["cleanup"] = "pending"
+            # Non-secret ownership breadcrumb survives an uncatchable harness kill.
+            (output / "postgres-database.json").write_text(json.dumps(evidence["database"], indent=2) + "\n")
+            env["DATABASE_URL"] = url.set(drivername="postgresql+psycopg", database=name).render_as_string(
+                hide_password=False,
+            )
+            yield
+        finally:
+            env.pop("DATABASE_URL", None)
+            if created:
+                # Only the unguessable database whose creation we acknowledged is owned here.
+                admin.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(name)))
+                evidence["database"]["cleanup"] = "dropped"
+                (output / "postgres-database.json").write_text(json.dumps(evidence["database"], indent=2) + "\n")
+
+
+def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bool = False) -> dict:
     output.mkdir(parents=True, exist_ok=False, mode=0o700)
     os.chmod(output, 0o700)
     api_port, worker_port = free_port(), free_port()
@@ -61,12 +101,13 @@ def run(output: Path, *, faults: bool = False, serve: bool = False) -> dict:
            "CONVOY_EXECUTION_SECRET": secrets.token_urlsafe(48),
            "CONVOY_WORKER_PROBE_TOKEN": secrets.token_urlsafe(48), "CONVOY_LOG_LEVEL": "WARNING"}
     # Explicit local configuration overrides inherited connection settings.
-    for key in ("DATABASE_URL", "CONVOY_SQLITE_WAL", "CONVOY_SEED_SIMULATOR"):
+    for key in ("DATABASE_URL", "CONVOY_TEST_POSTGRES_URL", "CONVOY_SQLITE_WAL", "CONVOY_SEED_SIMULATOR"):
         env.pop(key, None)
     manifest = reference_manifest()
     manifest_file = output / "release.json"
     manifest_file.write_text(json.dumps(manifest, indent=2) + "\n")
     processes, logs = [], []
+    database_resources = ExitStack()
 
     def start(label, module, *args):
         log = (output / f"{label}.log").open("w")
@@ -86,6 +127,7 @@ def run(output: Path, *, faults: bool = False, serve: bool = False) -> dict:
                 process.wait(timeout=5)
 
     evidence = {"policy_kind": "scripted", "physics": "MuJoCo", "execution": "offline lockstep",
+                "database": {"backend": "sqlite", "cleanup": "retained_in_output"},
                 "services": ["management API", "inference worker", "robot coordinator"], "cases": []}
     try:
         source_root = Path(__file__).resolve().parents[2]
@@ -98,11 +140,22 @@ def run(output: Path, *, faults: bool = False, serve: bool = False) -> dict:
     except (OSError, subprocess.SubprocessError):
         evidence["source_commit"] = None
     try:
+        if postgres:
+            database_resources.enter_context(disposable_postgres(env, evidence, output))
+            migration = start("migration", "convoy_server.cli", "migrate")
+            if migration.wait(timeout=60) != 0:
+                raise RuntimeError("PostgreSQL migration failed; inspect migration.log")
+            processes.remove(migration)  # a completed bootstrap task is not a live service
         api_process = start("api", "convoy_server.cli", "serve", "--host", "127.0.0.1", "--port", api_port)
         worker = start("worker", "convoy_worker.cli", "--release", manifest_file,
                        "--factory", "convoy_sim.runtimes:scripted", "--port", worker_port)
         with httpx.Client(base_url=base, timeout=5) as api:
-            wait_for(lambda: api.get("/api/health"), lambda response: response.status_code == 200)
+            health = wait_for(lambda: api.get("/api/health"), lambda response: response.status_code == 200).json()
+            if postgres:
+                assert health["db"]["backend"] == "postgresql", health
+                assert health["db"]["schema"]["compatible"] is True, health
+                evidence["database"].update(server_version=health["db"]["server_version"],
+                                            schema_revision=health["db"]["schema"]["revision"])
             wait_for(lambda: httpx.get(worker_url + "/health"), lambda response: response.status_code == 200)
             response = api.post("/api/v1/auth/login", json={"email": email, "password": password})
             response.raise_for_status()
@@ -265,11 +318,26 @@ def run(output: Path, *, faults: bool = False, serve: bool = False) -> dict:
         evidence.update(status="failed", error=f"{type(error).__name__}: {error}")
         raise
     finally:
+        cleanup_errors = []
         for process in reversed(processes):
-            stop(process)
+            try:
+                stop(process)
+            except BaseException as error:
+                cleanup_errors.append(f"process cleanup: {type(error).__name__}: {error}")
         for log in logs:
-            log.close()
+            try:
+                log.close()
+            except OSError as error:
+                cleanup_errors.append(f"log cleanup: {error}")
+        try:
+            database_resources.close()  # after attempting to stop every service
+        except BaseException as error:
+            cleanup_errors.append(f"database cleanup: {type(error).__name__}: {error}")
+        if cleanup_errors:
+            evidence.update(status="failed", cleanup_errors=cleanup_errors)
         (output / "pipeline-result.json").write_text(json.dumps(evidence, indent=2) + "\n")
+        if cleanup_errors:
+            raise RuntimeError("pipeline cleanup failed; inspect pipeline-result.json")
     return evidence
 
 
@@ -278,10 +346,19 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--faults", action="store_true")
     parser.add_argument("--serve", action="store_true", help="leave a seeded, ready, idle stack for console use")
+    parser.add_argument("--postgres", action="store_true",
+                        help="create a disposable database using CONVOY_TEST_POSTGRES_URL; drop it on exit")
     args = parser.parse_args()
     if args.serve and args.faults:
         parser.error("choose the acceptance run (--faults) or an interactive stack (--serve)")
-    result = run(args.output.resolve(), faults=args.faults, serve=args.serve)
+    def interrupted(*_):
+        raise KeyboardInterrupt("pipeline interrupted")
+
+    previous = signal.signal(signal.SIGTERM, interrupted)
+    try:
+        result = run(args.output.resolve(), faults=args.faults, serve=args.serve, postgres=args.postgres)
+    finally:
+        signal.signal(signal.SIGTERM, previous)
     print(json.dumps({"status": result["status"], "cases": [case["case"] for case in result["cases"]]}))
 
 
