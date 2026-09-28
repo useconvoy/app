@@ -94,6 +94,18 @@ The development gateway supports only the two explicit context-size choices
 a new output directory. This is native ownership integration, not automatic bundle
 activation or a persistent deployment service.
 
+Clean source `a0d3bc5` passed a real local Qwen ownership check: one fixed-skill
+request with context 2048, owner SIGKILL with the native child confirmed alive,
+then a successor using the same ownership directory. The successor recorded the
+old child's verified exit before starting context 4096 and serving the second
+request. Both calls returned the expected skill (116 prompt/18 completion tokens
+each); configuration and planner artifact digests differed. Final process,
+listener and credential-marker cleanup passed, and the unrelated sentinel was
+untouched. The [sanitized evidence](../../examples/manipulation/evidence/native-qwen-owner-recovery.json)
+records observed request times of 0.723 and 0.709 seconds; other tests could run
+concurrently, so these are not isolated latency benchmarks. This exercised the
+actual supervisor through a qualification driver, not deployment automation.
+
 Local verification passed all 13 cases on Darwin arm64/Python 3.12.13 and in a
 disposable Linux 6.12.76 aarch64 container/Python 3.12.14, both with psutil 7.2.2.
 The Linux tests ran as unprivileged UID 501. Python 3.10 execution is configured in
