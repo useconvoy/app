@@ -16,7 +16,10 @@ from fastapi.testclient import TestClient
 from hosted import app
 
 password = os.environ["TEST_ADMIN_PASSWORD"]
-with psycopg.connect(host="postgres", dbname="convoy", user="convoy_admin", password=password) as admin:
+with psycopg.connect(host="postgres", dbname="convoy", user="convoy_admin", password=password) as owner:
+    owner.execute("CREATE ROLE limited_admin LOGIN CREATEROLE PASSWORD 'disposable-limited-admin'")
+    owner.execute("ALTER DATABASE convoy OWNER TO limited_admin")
+with psycopg.connect(host="postgres", dbname="convoy", user="limited_admin", password="disposable-limited-admin") as admin:
     configure_roles(admin, "disposable-migration-password", "disposable-runtime-password")
 
 migrator = "postgresql+psycopg://convoy_migrator:disposable-migration-password@postgres/convoy"
@@ -44,6 +47,6 @@ with psycopg.connect(host="postgres", dbname="convoy", user="convoy_app", passwo
         client.rollback()
     else:
         raise AssertionError("runtime role unexpectedly owns DDL")
-with psycopg.connect(host="postgres", dbname="convoy", user="convoy_admin", password=password) as admin:
+with psycopg.connect(host="postgres", dbname="convoy", user="limited_admin", password="disposable-limited-admin") as admin:
     configure_roles(admin, "disposable-migration-password", "disposable-runtime-password")
 print("passed: real migration + API DML under runtime role, denied runtime DDL, legacy routes blocked, repeatable grants")

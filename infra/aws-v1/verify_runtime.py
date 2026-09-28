@@ -46,4 +46,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except subprocess.CalledProcessError as error:
+        raise SystemExit(f"Local container check failed (exit {error.returncode}); see the preceding diagnostic.") from None

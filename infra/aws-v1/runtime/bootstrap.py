@@ -13,7 +13,16 @@ def configure_roles(connection, migration_password, runtime_password):
         for role, password in (("convoy_migrator", migration_password), ("convoy_app", runtime_password)):
             if not connection.execute("SELECT 1 FROM pg_roles WHERE rolname=%s", (role,)).fetchone():
                 connection.execute(sql.SQL("CREATE ROLE {} LOGIN").format(sql.Identifier(role)))
-            connection.execute(sql.SQL("ALTER ROLE {} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD {}")
+            flags = connection.execute(
+                "SELECT rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls FROM pg_roles WHERE rolname=%s",
+                (role,),
+            ).fetchone()
+            if any(flags):
+                raise RuntimeError("refusing to repurpose an elevated database role")
+            # Even NOSUPERUSER requires an actual superuser. RDS's master is
+            # deliberately not one; CREATE ROLE defaults plus inspection above
+            # enforce the boundary without requesting superuser-only changes.
+            connection.execute(sql.SQL("ALTER ROLE {} LOGIN PASSWORD {}")
                                .format(sql.Identifier(role), sql.Literal(password)))
         # RDS's administrative role may administer objects, but PostgreSQL 17's
         # SET ROLE checks still require membership for ownership/default grants.

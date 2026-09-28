@@ -147,7 +147,7 @@ publish roles are registry/account prerequisites, not resources created here.
    ```
 
    Each helper checks that services and other tasks are stopped, starts exactly
-   one ECS task and requires its container exit code 0. Bootstrap creates
+   one ECS task and requires its container exit code 0. Bootstrap verifies existing roles are unprivileged, creates
    non-superuser `convoy_migrator` and `convoy_app` roles; only the migration role
    can create schema. Default grants make new migrated tables usable by the
    runtime role. No secret is fetched through Terraform or printed by the helper.

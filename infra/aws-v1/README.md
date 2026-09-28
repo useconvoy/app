@@ -57,7 +57,8 @@ python3 infra/aws-v1/verify_runtime.py --api-image convoy-v1-aws-api:local
 ```
 
 This creates its own internal Docker network and disposable PostgreSQL 17,
-with no published port or persistent volume. It applies real migrations as
+with no published port or persistent volume. It bootstraps roles through a non-superuser administrator with CREATEROLE/DB
+ownership, then applies real migrations as
 `convoy_migrator`, starts the actual API as `convoy_app`, logs in and creates a
 project, verifies runtime DDL is denied, blocks legacy routes, repeats grants,
 and removes its own containers/network. It does not test AWS's RDS admin role
