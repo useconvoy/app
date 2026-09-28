@@ -3,9 +3,9 @@ name: simulation-checks
 on:
   push:
     branches: [v1]
-    paths: ["integrations/simulation/**", ".github/workflows/simulation-checks.yml"]
+    paths: ["integrations/simulation/**", "control-plane/**", "examples/manipulation/**", ".github/workflows/simulation-checks.yml"]
   pull_request:
-    paths: ["integrations/simulation/**", ".github/workflows/simulation-checks.yml"]
+    paths: ["integrations/simulation/**", "control-plane/**", "examples/manipulation/**", ".github/workflows/simulation-checks.yml"]
 
 permissions:
   contents: read
@@ -36,5 +36,29 @@ jobs:
         with:
           name: simulation-evidence
           path: integrations/simulation/runs/ci-reference
+          if-no-files-found: ignore
+          retention-days: 7
+
+  managed-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: integrations/simulation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.22"
+          python-version: "3.11"
+      - run: uv sync --frozen --extra managed
+      - run: uv run --frozen --extra managed ruff check src tests ../../examples/manipulation
+      - run: uv run --frozen --extra managed python ../../examples/manipulation/pipeline.py --faults --output runs/ci-pipeline
+      # Do not upload the surrounding directory: it contains generated credentials.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: managed-pipeline-result
+          path: integrations/simulation/runs/ci-pipeline/pipeline-result.json
           if-no-files-found: ignore
           retention-days: 7

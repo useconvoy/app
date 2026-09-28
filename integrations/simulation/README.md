@@ -106,3 +106,11 @@ and its [MIT license](https://github.com/Farama-Foundation/Metaworld/blob/main/L
 [expert policies](https://metaworld.farama.org/benchmark/expert_trajectories/),
 [MuJoCo](https://github.com/google-deepmind/mujoco), and
 [LeRobot's LIBERO integration](https://huggingface.co/docs/lerobot/libero).
+
+## Run through the Convoy deployment and mission pipeline
+
+The optional `managed` extra connects this simulator to the real control-plane
+API and a separate action-policy worker. See the [managed manipulation
+reference](../../examples/manipulation/README.md) for the reproducible three-process
+acceptance run, including cancellation and restart recovery. Its baseline is
+still scripted and runs in offline lockstep.
