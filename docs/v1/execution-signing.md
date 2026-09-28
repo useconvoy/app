@@ -36,15 +36,32 @@ regular file before process startup and on rotation.
 
 Asymmetric configuration cannot coexist with either legacy HMAC execution setting.
 Invalid, missing or empty configured paths fail closed, without automatic fallback.
-Legacy HMAC remains for existing development fixtures. Scripted Compose and
-unapplied AWS staging templates still select that legacy mode; migrate and qualify
-them before crossing provider or customer trust boundaries.
+Legacy HMAC remains for explicit development fixtures. The scripted Compose
+installation and unapplied AWS staging templates now select public-key grants:
+the API receives private signing material, the action worker receives only its
+public document, and scheduler/evaluation jobs receive no execution keys.
+Local container acceptance passed on clean `0674a231`: two 500-action scripted
+MuJoCo missions, restart persistence of keys and history, and refusal to start
+after key loss. The rebuilt AWS wrappers also passed local role/signature checks.
+See [public-key hosting qualification](public-key-hosting.md); this establishes
+neither a deployed AWS service nor remote Qwen inference.
 
 The local activation harness generates disposable keys and passes the private
 path only to its API process. Processes still share an OS user, so this proves
 distribution, not filesystem isolation. Hosted services need separate identities,
 API-only private mounts, read-only public mounts, verified TLS and restricted
 networking. This change does not provision a hosted deployment.
+
+Compose initializes separate persistent private/public key volumes once and
+validates the existing pair on restart. It refuses partial or mismatched pairs;
+an initialized installation must not silently regenerate missing keys. AWS
+wrappers consume their role-specific `CONVOY_EXECUTION_SIGNING_JSON` or
+`CONVOY_ACTION_VERIFICATION_JSON` injection into a private file before serving.
+The shared helper rejects other execution settings and removes the consumed JSON
+from the process environment. Secret values do not belong in Terraform state.
+AWS injection is a startup snapshot: changing a Secrets Manager version does not
+update a running task's file. Follow the [staging rotation procedure](aws-cpu-staging.md)
+to drain missions and replace affected tasks.
 
 ## Verification and rotation
 

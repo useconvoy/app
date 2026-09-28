@@ -21,14 +21,20 @@ Read [the deployment runbook](../../docs/v1/aws-cpu-staging.md) and
 - `services.tf`: single-replica Fargate web, API, scheduler, evaluation service
   and CPU scripted inference; explicit bootstrap and migration task definitions.
 - `runtime/`: thin image wrappers for verified RDS TLS, database role setup,
-  API route availability, and HTTP behind the inference ALB. No model download,
+  API route availability, role-scoped execution keys, and HTTP behind the inference ALB. No model download,
   robot control loop, or customer code runs in the database-privileged job tasks.
 
 The task execution roles pull only their image repository, write only their log
 stream and fetch only their specified secrets. Application task roles have no
 AWS permissions. There is no shared admin credential in the web/inference task,
 no DB credential or database security-group admission in either of those tasks,
-and no model package in the API image. AWS `ecr:GetAuthorizationToken` requires
+and no model package in the API image. The API receives private signing JSON;
+inference receives only the action public verification document; jobs receive no
+execution keys. The shared `infra/runtime/execution_keys.py` helper consumes each
+role's injected JSON into a private task file and rejects conflicting settings.
+Both rebuilt ARM64 wrappers passed local container acceptance; see the
+[qualification](../../docs/v1/public-key-hosting.md).
+AWS `ecr:GetAuthorizationToken` requires
 `Resource: "*"`; layer/image access is separately repository-scoped.
 
 ## Local checks (no AWS account)
@@ -42,7 +48,8 @@ terraform -chdir=infra/aws-v1 fmt -check -recursive
 terraform -chdir=infra/aws-v1 init -backend=false -input=false -lockfile=readonly
 terraform -chdir=infra/aws-v1 validate
 terraform -chdir=infra/aws-v1 test -var-file=example.tfvars
-uvx --from ruff==0.16.7 ruff check infra/aws-v1
+uvx --from ruff==0.16.7 ruff check infra/aws-v1 infra/runtime
+uv run --project control-plane --frozen --all-packages pytest -q infra/runtime/tests
 ```
 
 The test provider mocks AWS calls. It evaluates real HCL/provider schemas and
@@ -53,24 +60,31 @@ requests and `v1` pushes, using a checksum-verified Terraform archive and the
 read-only provider lock. It has no AWS credentials or account calls. Python
 lint installs only its pinned tool, without the simulation/model dependencies.
 
-After building the qualified base API locally, the wrapper/permission check is:
+After building the current base API and scripted reference images locally, the
+wrapper/permission check is:
 
 ```sh
 docker build -f infra/aws-v1/api.Dockerfile \
   --build-arg BASE_IMAGE=convoy-v1-api:local -t convoy-v1-aws-api:local .
-python3 infra/aws-v1/verify_runtime.py --api-image convoy-v1-aws-api:local
+docker build -f infra/aws-v1/inference.Dockerfile \
+  --build-arg BASE_IMAGE=convoy-v1-reference:local -t convoy-v1-aws-inference:local .
+python3 infra/aws-v1/verify_runtime.py --api-image convoy-v1-aws-api:local \
+  --inference-image convoy-v1-aws-inference:local
 ```
 
 This creates its own internal Docker network and disposable PostgreSQL 17,
 with no published port or persistent volume. It bootstraps roles through a non-superuser administrator with CREATEROLE/DB
 ownership, then applies real migrations as
 `convoy_migrator`, starts the actual API as `convoy_app`, logs in and creates a
-project, verifies runtime DDL is denied, blocks legacy routes, repeats grants,
-and removes its own containers/network. It does not test AWS's RDS admin role
-implementation or TLS endpoint; those remain staged acceptance checks.
+project, verifies runtime DDL is denied, blocks legacy routes, checks exact signed
+mission-grant replay, and removes its own containers/network. The inference check
+starts the real scripted wrapper without private signing material, exercises a
+signed action, and rejects planner/HMAC grants and conflicting configuration.
+It does not test AWS's RDS admin role implementation or TLS endpoint; those remain
+staged acceptance checks.
 The existing `service-images` workflow also watches this directory and runs
-this check after its base API build. It builds only the small derivative layer;
-there is no second API build or learned-model download for AWS qualification.
+these checks after its base image builds. It builds only the small derivative
+layers; there is no second API build or learned-model download for AWS qualification.
 
 ## Trust material
 
@@ -86,6 +100,21 @@ The application/inference ALB-to-task hop is private HTTP, clearly distinct from
 the verified client-to-ALB and app-to-RDS TLS connections.
 
 ## Recorded validation
+
+The shared key helper passes 28 focused local tests. Both rebuilt ARM64 wrappers
+passed local acceptance: the API applied migrations, performed runtime DML while
+DDL was denied, materialized its private signer and preserved original grant
+expiry across claim/reclaim. The inference wrapper admitted a signed action,
+rejected planner/HMAC grants and conflicting configuration, and stopped gracefully.
+
+Clean `0674a231` also passed isolated Compose acceptance with two successful
+500-action scripted MuJoCo missions across down/up, unchanged key hashes and
+retained history, no automatic Start, and refusal to regenerate deleted keys.
+The existing installation remained untouched and disposable resources were removed.
+See the [qualification](../../docs/v1/public-key-hosting.md) and
+[sanitized receipt](../../examples/manipulation/evidence/public-key-hosting.json).
+All checks ran locally; they do not establish deployed AWS, remote Qwen, Jetson
+execution or hosted CI success. The checks below are earlier historical results.
 
 Locally passed on September 27, 2026: Terraform formatting, real provider schema
 validation, three mocked plans, the real PostgreSQL role/API check, Python lint,

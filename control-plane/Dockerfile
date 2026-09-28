@@ -85,8 +85,9 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN groupadd --system --gid 10001 convoy \
  && useradd --system --uid 10001 --gid convoy --home-dir /app --shell /usr/sbin/nologin convoy \
- && mkdir -p /app /data /data/backups \
- && chown -R convoy:convoy /app /data
+ && mkdir -p /app /data /data/backups /run/execution-signing \
+ && chmod 700 /run/execution-signing \
+ && chown -R convoy:convoy /app /data /run/execution-signing
 
 WORKDIR /app
 # The workspace is installed editable (uv's default for members), so the sources stay in the image;

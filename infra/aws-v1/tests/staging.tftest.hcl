@@ -27,6 +27,17 @@ mock_provider "aws" {
     defaults = { arn = "arn:aws:logs:us-east-1:000000000000:log-group:mock" }
   }
 }
+# Distinct values are essential: a single mock ARN would hide accidental cross-role access.
+override_resource {
+  override_during = plan
+  target          = aws_secretsmanager_secret.this["execution-signing"]
+  values          = { arn = "arn:aws:secretsmanager:us-east-1:000000000000:secret:private-signing-example" }
+}
+override_resource {
+  override_during = plan
+  target          = aws_secretsmanager_secret.this["action-verification"]
+  values          = { arn = "arn:aws:secretsmanager:us-east-1:000000000000:secret:public-action-example" }
+}
 run "fresh_installation_stays_stopped" {
   command = plan
   assert {
@@ -39,8 +50,31 @@ run "fresh_installation_stays_stopped" {
   }
   assert {
     condition     = length(jsondecode(aws_ecs_task_definition.this["inference"].container_definitions)[0].secrets) == 2 && length(jsondecode(aws_ecs_task_definition.this["web"].container_definitions)[0].secrets) == 0
-    error_message = "Inference receives execution/probe credentials only; web receives no privileged secret."
+    error_message = "Inference receives public verification/probe credentials only; web receives no privileged secret."
   }
+  assert {
+    condition     = toset(keys(aws_secretsmanager_secret.this)) == toset(["runtime-db", "migration-db", "admin", "execution-signing", "action-verification", "probe"])
+    error_message = "Staging uses six secret containers, with no shared execution HMAC."
+  }
+  assert {
+    condition     = toset([for secret in jsondecode(aws_ecs_task_definition.this["api"].container_definitions)[0].secrets : secret.name]) == toset(["CONVOY_DB_PASSWORD", "CONVOY_ADMIN_PASSWORD", "CONVOY_EXECUTION_SIGNING_JSON"]) && toset([for secret in jsondecode(aws_ecs_task_definition.this["inference"].container_definitions)[0].secrets : secret.name]) == toset(["CONVOY_ACTION_VERIFICATION_JSON", "CONVOY_WORKER_PROBE_TOKEN"])
+    error_message = "The API signs, inference verifies public action grants, and neither receives the other's key document."
+  }
+  assert {
+    condition = alltrue([for role, policy in aws_iam_role_policy.execution :
+      contains(flatten([for statement in jsondecode(policy.policy).Statement : statement.Resource if contains(statement.Action, "secretsmanager:GetSecretValue")]), aws_secretsmanager_secret.this["execution-signing"].arn) == (role == "api")
+      && contains(flatten([for statement in jsondecode(policy.policy).Statement : statement.Resource if contains(statement.Action, "secretsmanager:GetSecretValue")]), aws_secretsmanager_secret.this["action-verification"].arn) == (role == "inference")
+    ])
+    error_message = "Only the API execution role may fetch private signing keys; only inference may fetch public action keys."
+  }
+  assert {
+    condition = alltrue([for role, task in aws_ecs_task_definition.this : alltrue([
+      for secret in jsondecode(task.container_definitions)[0].secrets :
+      !startswith(secret.name, "CONVOY_EXECUTION_") && !startswith(secret.name, "CONVOY_ACTION_") && !startswith(secret.name, "CONVOY_PLANNER_")
+    ]) if !contains(["api", "inference"], role)])
+    error_message = "Database jobs, maintenance, and web receive no execution keys."
+  }
+
 }
 run "enabled_installation_is_single_replica" {
   command = plan

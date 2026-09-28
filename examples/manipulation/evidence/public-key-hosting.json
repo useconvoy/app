@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-09-28T07:16:28.225234+00:00",
+  "source_commit": "0674a2312644a9e15d8f6f0126b5aa5a05479812",
+  "source_clean_at_compose_acceptance": true,
+  "qualification": "public-key service packaging on local Linux ARM64 containers",
+  "policy_kind": "scripted",
+  "physics": "MuJoCo",
+  "execution": "offline lockstep",
+  "profile": "metaworld-sawyer-pick-place-v1",
+  "release_digest": "4d568e510278944d53ee7e0cfa81fd58ca7ae11df8502aee195d1b7c9dd98b1b",
+  "compose": {
+    "missions": [
+      {
+        "id": "mis_he9nfzjuhpkx",
+        "state": "completed",
+        "seed": 0,
+        "success": true,
+        "applied_actions": 500
+      },
+      {
+        "id": "mis_c73ffwxu3slz",
+        "state": "completed",
+        "seed": 0,
+        "success": true,
+        "applied_actions": 500
+      }
+    ],
+    "applied_actions_total": 1000,
+    "same_keys_across_restart": true,
+    "mission_history_and_journal_retained": true,
+    "no_mission_automatically_started_after_restart": true,
+    "stored_grant_signatures_verified_at_original_issuance_time": 2,
+    "expected_key_mount_paths_checked_read_only": true,
+    "private_setting_api_only": true,
+    "public_file_contains_no_private_key": true,
+    "static_rendered_compose_role_volumes_checked": true,
+    "images": {
+      "convoy-v1-key-hosting-api:local": {
+        "id": "sha256:cca22fe8a1a4c57345d446cd62ffce3a936f0a60e32a825ebed99a821ea93a69",
+        "architecture": "arm64"
+      },
+      "convoy-v1-key-hosting-web:local": {
+        "id": "sha256:8267102fa412dde3459cad0b202f6f71c2bb77d4aa253c3810d61562676149ca",
+        "architecture": "arm64"
+      },
+      "convoy-v1-key-hosting-reference:local": {
+        "id": "sha256:78de040523beae983fd5228c8e0c8eacb673f404da0bddedc0906f95b1ae6a51",
+        "architecture": "arm64"
+      },
+      "source_commit": "0674a2312644a9e15d8f6f0126b5aa5a05479812",
+      "source_dirty": false
+    },
+    "database": {
+      "backend": "postgresql",
+      "server_version": "17.11 (Debian 17.11-1.pgdg12+2)",
+      "schema": {
+        "revision": "0002_evaluations",
+        "expected_revision": "0002_evaluations",
+        "compatible": true
+      },
+      "write_concurrency": "serialized_advisory_lock",
+      "backup": {
+        "mode": "external",
+        "managed_by_convoy": false
+      }
+    },
+    "missing_key_volume_check": {
+      "passed": true,
+      "up_exit_code": 2,
+      "missing_both_key_volumes_refused": true,
+      "no_keys_regenerated": true,
+      "receipt_preserved": true,
+      "no_service_started": true,
+      "probe_network": "none"
+    },
+    "cleanup": {
+      "container_absent": true,
+      "volume_absent": true,
+      "network_absent": true,
+      "existing_eight_unchanged": true,
+      "private_state_removed": true
+    }
+  },
+  "aws_local": {
+    "runtime_passed": true,
+    "protected_existing_container_count": 8,
+    "existing_eight_containers_unchanged": true,
+    "disposable_containers_absent": true,
+    "disposable_networks_absent": true,
+    "no_aws_calls": true,
+    "images": {
+      "convoy-v1-key-hosting-aws-api:local": {
+        "id": "sha256:1ec383a8e1dc3bf0115d63dc36a5c8c8776dcebf969a9c352b6b756c0976ae27",
+        "architecture": "arm64",
+        "runtime_source_matches": true,
+        "source_hashes": {
+          "/app/aws-runtime/entrypoint.py": "55449094a90b85a17769aa43f8835e97a9f38fdf1db60faae8dffbe32619534b",
+          "/app/runtime/execution_keys.py": "6c43c3cc2224d463c55142d2b1c91743c5900dddc9dc2cb406f36d42eeaa633f"
+        }
+      },
+      "convoy-v1-key-hosting-aws-inference:local": {
+        "id": "sha256:6204b0b163c2924d285d20b063af88557d2201f3eac38e1fad058ba57aa9129e",
+        "architecture": "arm64",
+        "runtime_source_matches": true,
+        "source_hashes": {
+          "/app/aws-runtime/inference.py": "d23bd64a06a22e233fde1e20c7ee3e1ba2b265fafa02fb51fc823ab725565cb4",
+          "/app/runtime/execution_keys.py": "6c43c3cc2224d463c55142d2b1c91743c5900dddc9dc2cb406f36d42eeaa633f"
+        }
+      }
+    },
+    "runtime_test_sha256": "fc246840dd4203e5e49421f9b3512ceb90b8a9f454815b3f707f756f364a4955",
+    "runtime_log_sha256": "b27987a2e3f8f6d90edca8c1de3fe6ca34c711f6d8daa5ffa89f4e8d07191705"
+  },
+  "tests": {
+    "key_helper_tests_passed": 28,
+    "compose_configuration_tests_passed": 4,
+    "terraform_fmt": true,
+    "terraform_schema": true,
+    "terraform_mocked_plans_passed": 3,
+    "ruff": true,
+    "diff_check": true
+  },
+  "evidence_sha256": {
+    "evidence-first.json": "52d7c59abdb58d5a0c243aba77b13bc52b651fc72261df0afbf0188ef6002db1",
+    "evidence-second.json": "d373bddab274d88b228335bec62c70bff81c80ea5ea07fc207629e511693fe23",
+    "check-before.json": "fe7ac60f63d07b6a206809976ae6218f8bcf3c89c7c11108b43041dfa7737830",
+    "check-first.json": "66338191d54b4279bed5a3ee8bd2665bdaa8f0dd2b94791d3185d3595875e4a7",
+    "check-restarted.json": "7157c098bed5cd4d5fbabe2c71104f1c43fac02e294f70399ee0989fdaa9cffa",
+    "check-second.json": "d94b47065fa7ef8a088b795f02eb32c6bcfbd71cd2fafe132db45a188ea2cd0e",
+    "lost-keys.json": "94828c52f6d014bab0d17e86e781d44746eceeab82533736e2618b9e7578131c",
+    "cleanup.json": "a2e5bb10d859e8ae52a17294eaea247d94037644fc5340d15e37ed7e520e0cbc",
+    "check.py": "bb650ef62da2b3a91786834fe05f135553036ce6c8a719935840b270ee77b6e3"
+  },
+  "limitations": [
+    "No AWS deployment or paid resources created.",
+    "No real learned-model inference in this packaging check; PR90 contains separate local Qwen/SmolVLA evidence.",
+    "No Jetson qualification or remote planner endpoint.",
+    "No WAN, real-time, multi-seed reliability, multi-tenant or hostile-host isolation claim.",
+    "Historical signature checks do not reauthorize completed or expired missions.",
+    "Hosted GitHub Actions status recorded separately after PR creation."
+  ]
+}

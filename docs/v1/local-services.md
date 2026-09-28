@@ -25,6 +25,7 @@ or share it. The console authenticates with the account's own session; its serve
 does not receive an operator API token or the admin password.
 
 `up` builds the existing API and website images plus one CPU reference image,
+initializes API-private signing and worker-public verification volumes once,
 starts PostgreSQL, explicitly migrates it with API/jobs/device stopped, then
 starts the remaining services. Its one-time bootstrap logs in through the real
 console proxy, creates a project/application/release, enrolls the simulated
@@ -64,6 +65,23 @@ is exact. Internal DNS names never appear in browser fetch URLs. The enrollment
 configuration uses the internal API address; the server's public URL remains
 the host address for human-facing commands.
 
+For another installation, use a distinct project, private state directory and
+unused ports. Its image tags also default to the selected project prefix:
+
+```sh
+python3 infra/development/services.py up --project convoy-proof \
+  --state-dir /absolute/private/convoy-proof --web-port 3301 --api-port 8444
+python3 infra/development/services.py verify --project convoy-proof \
+  --state-dir /absolute/private/convoy-proof
+```
+
+Repeat project/state arguments for status, logs and down. Recorded ports and image
+tags are reused; optional `--image-prefix` chooses the initial tags. A new state
+directory cannot take over an existing Compose project. Legacy HMAC installations
+are preserved: their up/verify refuses implicit migration, while status/logs/down
+remain available. Use a separate installation for this public-key qualification;
+there is no automatic database or active-mission migration between installations.
+
 The helper creates a private local CA and two distinct service certificates,
 valid for 30 days. Only API/inference receive their own TLS private key. Web and
 device receive the CA certificate; verification is never disabled. No root
@@ -83,12 +101,19 @@ The console is HTTP only on loopback. The API's upstream cookie is secure, and
 the console proxy reissues its own HttpOnly, SameSite=Strict session cookie for
 the local browser origin. In a hosted setup the browser origin must be HTTPS.
 
-The API and inference worker share a generated execution-signing secret. Only
-the inference worker and device receive the separate readiness-probe token.
+Only the API mounts the private signing volume. The inference worker mounts a
+different read-only volume containing public action-verification keys. Jobs,
+evaluation, web and simulator containers mount neither signing volume. The
+one-off initializer temporarily mounts both to create a matching pair; it never
+overwrites keys. A host receipt requires the pair to remain present on later up:
+lost volumes, partial initialization or mismatched public keys fail closed.
+This is persistent identity, not automatic key rotation. See
+[execution signing](execution-signing.md) for the grant and rotation contracts.
+Only the inference worker and device receive the separate readiness-probe token.
 The device generates and retains its own enrollment credential; the web server
 has neither credential. Bootstrap/verification receive the local login only for
-their short-lived process. Docker operators can inspect container environment
-variables: this is a local development configuration, not a secrets service.
+their short-lived process. Docker administrators can still inspect volumes and
+processes; container separation does not restrict the trusted host administrator.
 
 ## Stop, restart and inspect
 

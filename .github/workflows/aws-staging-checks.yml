@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
   push:
     branches: [v1]
-    paths: ["infra/aws-v1/**", ".github/workflows/aws-staging-checks.yml"]
+    paths: ["infra/aws-v1/**", "infra/runtime/**", ".github/workflows/aws-staging-checks.yml"]
   pull_request:
-    paths: ["infra/aws-v1/**", ".github/workflows/aws-staging-checks.yml"]
+    paths: ["infra/aws-v1/**", "infra/runtime/**", ".github/workflows/aws-staging-checks.yml"]
 
 permissions:
   contents: read
@@ -50,4 +50,7 @@ jobs:
           version: "0.8.22"
           python-version: "3.12"
       - name: Lint hosting helpers without installing model dependencies
-        run: uvx --from ruff==0.16.7 ruff check infra/aws-v1
+        run: uvx --from ruff==0.16.7 ruff check infra/aws-v1 infra/runtime
+      - name: Verify role-scoped key bootstrap without model dependencies
+        working-directory: control-plane
+        run: uv run --frozen --all-packages pytest -q ../infra/runtime/tests
