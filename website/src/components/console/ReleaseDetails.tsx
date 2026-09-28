@@ -1,9 +1,10 @@
 import type { Release } from "@/lib/platform/client";
-import { releaseComponents } from "@/lib/platform/manifest";
+import { CONTROLLED_PLANNER_RUNTIME, releaseComponents } from "@/lib/platform/manifest";
 
 const PLACEMENTS: Record<string, string> = {
   "development-local-cpu": "local development CPU",
   "development-jetson-lan": "development Jetson on the local network",
+  "development-local-controlled": "local controlled planner fixture",
 };
 
 export function ReleaseDetails({ release }: { release: Release }) {
@@ -15,6 +16,7 @@ export function ReleaseDetails({ release }: { release: Release }) {
       Pinned release digest <code>{release.digest}</code>
     </p>
     {pairing && <>
+      {pairing.planner.runtime === CONTROLLED_PLANNER_RUNTIME && <p className="console-note">Controlled planner fixture: deterministic fixed-skill admission, with no text-model inference.</p>}
       <p className="console-note">Configured action placement: {PLACEMENTS[pairing.placement.policy] ?? pairing.placement.policy}.<br />
         Configured planner placement: {PLACEMENTS[pairing.placement.planner] ?? pairing.placement.planner}.</p>
       <p className="console-note">The planner selects the fixed <code>{pairing.task.skill_id}</code> skill before the visual action policy runs. Task: {pairing.task.instruction}</p>

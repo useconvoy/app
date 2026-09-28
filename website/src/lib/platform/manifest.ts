@@ -1,5 +1,6 @@
 /** Display types for the manifests validated and stored by the management API. */
 export const PAIRED_PROFILE = "metaworld-smolvla-text-skill-v1";
+export const CONTROLLED_PLANNER_RUNTIME = "convoy-controlled-text-skill-v1";
 
 interface Artifact { runtime: string; artifact_sha256: string }
 
@@ -15,11 +16,11 @@ export interface PairedManifest {
   schema_version: 2;
   profile: typeof PAIRED_PROFILE;
   action_manifest: ActionManifest;
-  planner: Artifact & { protocol_sha256: string };
+  planner: Artifact & { runtime: "convoy-llamacpp-text-skill-v1" | typeof CONTROLLED_PLANNER_RUNTIME; protocol_sha256: string };
   task: { instruction: string; skill_id: string };
   catalog_sha256: string;
   planning: { timeout_ms: number };
-  placement: { policy: "development-local-cpu"; planner: "development-jetson-lan" };
+  placement: { policy: "development-local-cpu"; planner: "development-jetson-lan" | "development-local-controlled" };
 }
 
 export type ReleaseManifest = ActionManifest | PairedManifest;

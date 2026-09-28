@@ -17,6 +17,9 @@ if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(connection.api_url).ho
 if (connection.planner_backend_kind !== 'controlled-text-planner') throw new Error('This qualification expects an explicitly labeled controlled text planner');
 const manifest = JSON.parse(await fs.readFile(connection.manifest_path, 'utf8'));
 if (manifest.schema_version !== 2 || manifest.profile !== 'metaworld-smolvla-text-skill-v1') throw new Error('A paired release is required');
+if (manifest.planner.runtime !== 'convoy-controlled-text-skill-v1' || manifest.placement.planner !== 'development-local-controlled') {
+  throw new Error('Controlled qualification must declare its own runtime and local placement');
+}
 const output = path.resolve(outputPath);
 await fs.mkdir(output, { recursive: false });
 const reserved = net.createServer();
@@ -54,7 +57,8 @@ try {
   await expect(components).toContainText(manifest.action_manifest.policy.runtime);
   await expect(components).toContainText(manifest.planner.runtime);
   await expect(components).toContainText('Configured action placement: local development CPU');
-  await expect(components).toContainText('Configured planner placement: development Jetson on the local network');
+  await expect(components).toContainText('Configured planner placement: local controlled planner fixture');
+  await expect(components).toContainText('no text-model inference');
   await components.getByText('Pinned component identities', { exact: true }).click();
   for (const digest of [manifest.action_manifest.policy.artifact_sha256, manifest.planner.artifact_sha256, manifest.planner.protocol_sha256]) {
     await expect(components).toContainText(digest);
