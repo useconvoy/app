@@ -61,6 +61,14 @@
 .console-history th, .console-history td { padding: var(--space-3) var(--space-2); border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
 .console-history td small { display: block; max-width: 32ch; color: var(--text-secondary); margin-top: var(--space-2); }
 .console-episode { margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--border-subtle); }
+.console-evaluations { grid-column: 1 / -1; margin-top: 0; }
+.console-evaluation-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-8); }
+.console-evaluation-columns h3, .console-evaluation-report h3 { margin-bottom: var(--space-4); }
+.console-evaluation-columns details { margin-top: var(--space-6); }
+.console-evaluation-report { margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--border-subtle); }
+.console-evaluation-report > label { margin-bottom: var(--space-4); }
+.console-reservation { padding: var(--space-4); margin-bottom: var(--space-6); background: var(--information-tint); border-left: 2px solid var(--information); }
+.console-comparison { margin-top: var(--space-6); display: grid; gap: var(--space-3); }
 .console-skip { position: fixed; top: var(--space-2); left: var(--space-2); clip-path: inset(50%); width: 1px; height: 1px; overflow: hidden; white-space: nowrap; padding: var(--space-3); background: var(--surface); color: var(--accent); z-index: 10; }
 .console-skip:focus { clip-path: none; width: auto; height: auto; }
 @media (max-width: 760px) {
@@ -71,4 +79,5 @@
   .console-grid { grid-template-columns: 1fr; gap: var(--space-4); }
   .console-projects, .console-projects > form { flex-direction: column; align-items: stretch; width: 100%; }
   .console-card { padding: var(--space-4); }
+  .console-evaluation-columns { grid-template-columns: 1fr; gap: var(--space-6); }
 }

@@ -39,8 +39,10 @@ observable through the evaluation API.
 
 These are authenticated, project-scoped APIs. All writes require the normal
 `Idempotency-Key`; browser requests also require the existing client header.
-Console evaluation controls are a follow-up; the current console's deployment
-and Start actions already enforce any configured gate at the API boundary.
+The console exposes suite creation, evaluation progress/cancellation, report
+comparison, promotion and explicit gate changes. Its ordinary deployment/Start
+controls combine qualification with authoritative robot reservation, role,
+pause, readiness and mission checks. The API remains the admission authority.
 
 Robot snapshots include `evaluation_id` when an active or unresolved evaluation
 reserves the robot. `GET /api/v1/applications/{id}/qualification?release_id={id}`

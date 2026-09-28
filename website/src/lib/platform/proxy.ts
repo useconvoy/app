@@ -35,25 +35,30 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
   if (!parts.length || parts.some(part => !/^[A-Za-z0-9_-]{1,64}$/.test(part))) return null;
   const path = parts.join("/");
   let keys: string[] = [];
+  let required: string[] = [];
   let allowed = false;
   if (method === "GET") {
     allowed = /^(auth\/me|projects|devices)$/.test(path)
       || new RegExp(`^(devices|deployments|missions|episodes)/${ID}$`).test(path)
-      || new RegExp(`^applications/${ID}/releases$`).test(path);
-    if (["robots", "applications", "missions"].includes(path)) { allowed = true; keys = ["project_id"]; }
-    if (path === "deployments") { allowed = true; keys = ["project_id", "robot_id"]; }
-    if (path === "episodes") { allowed = true; keys = ["mission_id"]; }
+      || new RegExp(`^applications/${ID}/(releases|evaluation-suites|evaluation-gate)$`).test(path)
+      || new RegExp(`^evaluation-suites/${ID}$`).test(path);
+    if (["robots", "applications", "missions", "evaluations"].includes(path)) { allowed = true; keys = ["project_id"]; required = keys; }
+    if (path === "deployments") { allowed = true; keys = ["project_id", "robot_id"]; required = ["project_id"]; }
+    if (path === "episodes") { allowed = true; keys = ["mission_id"]; required = keys; }
+    if (new RegExp(`^evaluations/${ID}$`).test(path)) { allowed = true; keys = ["baseline_id"]; }
+    if (new RegExp(`^applications/${ID}/qualification$`).test(path)) { allowed = true; keys = ["release_id"]; required = keys; }
   } else if (method === "POST") {
-    allowed = /^(auth\/(login|logout)|projects|robots|applications|deployments|enrollments)$/.test(path)
-      || new RegExp(`^applications/${ID}/releases$`).test(path)
+    allowed = /^(auth\/(login|logout)|projects|robots|applications|deployments|enrollments|evaluations)$/.test(path)
+      || new RegExp(`^applications/${ID}/(releases|evaluation-suites|evaluation-gate)$`).test(path)
       || new RegExp(`^robots/${ID}/missions$`).test(path)
-      || new RegExp(`^missions/${ID}/cancel$`).test(path);
+      || new RegExp(`^missions/${ID}/cancel$`).test(path)
+      || new RegExp(`^evaluations/${ID}/(cancel|promote)$`).test(path);
   }
   if (!allowed) return null;
   for (const [key, value] of search) {
     if (!keys.includes(key) || search.getAll(key).length !== 1 || !new RegExp(`^${ID}$`).test(value)) return null;
   }
-  if (keys.length && !search.has(keys[0])) return null;
+  if (required.some(key => !search.has(key))) return null;
   return `/api/v1/${path}${search.size ? `?${search.toString()}` : ""}`;
 }
 

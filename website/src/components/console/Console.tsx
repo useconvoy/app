@@ -3,9 +3,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, errorText, MutationAttempts, terminal, timestamp } from "@/lib/platform/client";
-import type { Account, Application, Deployment, Device, Episode, Mission, Project, Release, Robot } from "@/lib/platform/client";
+import type { Account, Application, Deployment, Device, Episode, EvaluationRun, Mission, Project, Qualification, Release, Robot } from "@/lib/platform/client";
+import { Evaluations } from "./Evaluations";
 
-const PROFILE = "metaworld-sawyer-pick-place-v1";
+const PROFILES = [
+  { id: "metaworld-sawyer-pick-place-v1", label: "Sawyer · state observations" },
+  { id: "metaworld-smolvla-pick-place-rgb-v1", label: "Sawyer · camera observations (SmolVLA)" },
+];
 const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 
 function Brand() { return <Link className="console-brand" href="/">Convoy <span>/ console</span></Link>; }
@@ -105,6 +109,8 @@ function ProjectWorkspace({ project, writable, canDispatch, onSessionEnd }: { pr
   const [releases, setReleases] = useState<Release[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [missions, setMissions] = useState<Mission[]>([]);
+  const [evaluations, setEvaluations] = useState<EvaluationRun[]>([]);
+  const [qualification, setQualification] = useState<Qualification | null>(null);
   const [robotId, setRobotId] = useState("");
   const [applicationId, setApplicationId] = useState("");
   const [releaseId, setReleaseId] = useState("");
@@ -118,7 +124,7 @@ function ProjectWorkspace({ project, writable, canDispatch, onSessionEnd }: { pr
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const actionLock = useRef(false);
-  const refreshLock = useRef(false);
+  const refreshLock = useRef<Promise<void> | null>(null);
   const attempts = useRef(new MutationAttempts());
   const alive = useRef(true);
   const projectQuery = `project_id=${encodeURIComponent(project.id)}`;
@@ -129,19 +135,32 @@ function ProjectWorkspace({ project, writable, canDispatch, onSessionEnd }: { pr
   const deployment = robot ? deployments.find(item => item.robot_id === robot.id && item.generation === robot.generation) : undefined;
   const robotMissions = robot ? missions.filter(item => item.robot_id === robot.id) : [];
   const active = robotMissions.find(item => !terminal(item.state));
+  const reserved = !!robot?.evaluation_id;
+  const profileMatches = !!robot && robot.profile === release?.manifest.profile;
+  const qualified = !!release && qualification?.release_id === release.id && qualification.deployment_allowed;
 
-  const refresh = useCallback(async () => {
-    if (refreshLock.current) return;
-    refreshLock.current = true; setRefreshing(true);
-    try {
-      const [r, d, a, m, targets] = await Promise.all([
-        api<Robot[]>(`robots?${projectQuery}`), api<Device[]>("devices"), api<Application[]>(`applications?${projectQuery}`),
-        api<Mission[]>(`missions?${projectQuery}`), api<Deployment[]>(`deployments?${projectQuery}`),
-      ]);
-      if (alive.current) { setRobots(r); setDevices(d); setApplications(a); setMissions(m); setDeployments(targets); setUpdated(new Date().toISOString()); setRefreshError(null); }
-    } catch (cause) {
-      if (alive.current) { if (cause instanceof ApiError && cause.status === 401) onSessionEnd(); else setRefreshError(errorText(cause)); }
-    } finally { refreshLock.current = false; if (alive.current) setRefreshing(false); }
+  const refresh = useCallback(async (afterMutation = false) => {
+    if (refreshLock.current) {
+      await refreshLock.current;
+      if (!afterMutation) return;
+    }
+    // A read begun before a mutation cannot acknowledge its new reservation.
+    // Keep the action locked until a fresh post-mutation snapshot completes.
+    const pending = (async () => {
+      setRefreshing(true);
+      try {
+        const [r, d, a, m, targets, runs] = await Promise.all([
+          api<Robot[]>(`robots?${projectQuery}`), api<Device[]>("devices"), api<Application[]>(`applications?${projectQuery}`),
+          api<Mission[]>(`missions?${projectQuery}`), api<Deployment[]>(`deployments?${projectQuery}`),
+          api<EvaluationRun[]>(`evaluations?${projectQuery}`),
+        ]);
+        if (alive.current) { setRobots(r); setDevices(d); setApplications(a); setMissions(m); setDeployments(targets); setEvaluations(runs); setUpdated(new Date().toISOString()); setRefreshError(null); }
+      } catch (cause) {
+        if (alive.current) { if (cause instanceof ApiError && cause.status === 401) onSessionEnd(); else setRefreshError(errorText(cause)); }
+      } finally { if (alive.current) setRefreshing(false); }
+    })();
+    refreshLock.current = pending;
+    try { await pending; } finally { if (refreshLock.current === pending) refreshLock.current = null; }
   }, [projectQuery, onSessionEnd]);
   useEffect(() => {
     alive.current = true;
@@ -163,7 +182,7 @@ function ProjectWorkspace({ project, writable, canDispatch, onSessionEnd }: { pr
   async function run(action: () => Promise<void>) {
     if (actionLock.current) return;
     actionLock.current = true; setBusy(true); setError(null); setNotice(null);
-    try { await action(); await refresh(); }
+    try { await action(); await refresh(true); }
     catch (cause) { if (cause instanceof ApiError && cause.status === 401) onSessionEnd(); else setError(errorText(cause)); }
     finally { actionLock.current = false; if (alive.current) setBusy(false); }
   }
@@ -193,9 +212,9 @@ function ProjectWorkspace({ project, writable, canDispatch, onSessionEnd }: { pr
           })}><label>Simulator name<input name="name" defaultValue="Sawyer simulator" required maxLength={120} /></label><button className="btn btn-secondary" disabled={disabled || !canDispatch}>Create enrollment command</button></form>
           {enrollment && <><p className="console-note">This command contains a one-use credential. It is shown only in this session.</p><pre className="console-code">{enrollment}</pre><button onClick={() => void navigator.clipboard.writeText(enrollment).then(() => setNotice("Enrollment command copied.")).catch(() => setError("Copy the enrollment command manually."))}>Copy command</button></>}
           <form onSubmit={event => submit(event, async data => {
-            const created = await attempts.current.submit<Robot>("robots", { project_id: project.id, device_id: data.get("device"), name: data.get("name"), profile: PROFILE });
+            const created = await attempts.current.submit<Robot>("robots", { project_id: project.id, device_id: data.get("device"), name: data.get("name"), profile: data.get("profile") });
             setRobotId(created.id); setNotice("Simulator registered. Configure a release before deployment.");
-          })}><label>Enrolled device<select name="device" required defaultValue=""><option value="" disabled>Choose an enrolled simulator</option>{devices.filter(item => item.simulated && !robots.some(bound => bound.device_id === item.id)).map(item => <option key={item.id} value={item.id}>{item.name} · {item.id}</option>)}</select></label><label>Robot name<input name="name" required maxLength={120} /></label><button className="btn btn-secondary" disabled={disabled || !canDispatch}>Register robot</button></form>
+          })}><label>Enrolled device<select name="device" required defaultValue=""><option value="" disabled>Choose an enrolled simulator</option>{devices.filter(item => item.simulated && !robots.some(bound => bound.device_id === item.id)).map(item => <option key={item.id} value={item.id}>{item.name} · {item.id}</option>)}</select></label><label>Robot name<input name="name" required maxLength={120} /></label><label>Simulator profile<select name="profile" defaultValue={PROFILES[0].id}>{PROFILES.map(profile => <option key={profile.id} value={profile.id}>{profile.label}</option>)}</select></label><p className="console-note">Choose the observation format supported by your simulator and release. Registration does not install its policy or dependencies.</p><button className="btn btn-secondary" disabled={disabled || !canDispatch}>Register robot</button></form>
           <p className="console-note">The coordinator must also be configured on that host with this robot ID and a verified inference worker.</p>
         </details>
       </section>
@@ -206,7 +225,7 @@ function ProjectWorkspace({ project, writable, canDispatch, onSessionEnd }: { pr
           setApplicationId(created.id); setReleases([]); setReleaseId(""); setNotice("Application created. Register a pinned release manifest.");
         })}><label>Application name<input name="name" maxLength={120} required /></label><button className="btn btn-secondary" disabled={disabled}>Create application</button></form></details>
         <label>Release<select value={release?.id ?? ""} onChange={event => setReleaseId(event.target.value)}><option value="" disabled>No release selected</option>{releases.map(item => <option key={item.id} value={item.id}>{item.id} · {item.digest.slice(0, 12)}</option>)}</select></label>
-        {release && <p className="console-note">Pinned digest <code>{release.digest}</code></p>}
+        {release && <p className="console-note">Profile <code>{release.manifest.profile}</code><br />Policy runtime <code>{release.manifest.policy.runtime}</code><br />Pinned digest <code>{release.digest}</code></p>}
         <details><summary>Register a release manifest</summary><p>Use the manifest produced by your policy build. Registration records its identity; deployment readiness is acknowledged separately by the coordinator.</p>
           <label>Upload manifest JSON<input type="file" accept="application/json,.json" onChange={event => void readManifest(event.target.files?.[0])} /></label>
           <form onSubmit={event => submit(event, async () => {
@@ -217,31 +236,40 @@ function ProjectWorkspace({ project, writable, canDispatch, onSessionEnd }: { pr
           })}><label>Manifest JSON<textarea rows={9} required value={manifest} onChange={event => setManifest(event.target.value)} spellCheck={false} /></label><button className="btn btn-secondary" disabled={disabled || !application}>Register release</button></form>
         </details>
       </section>
-      <section className="console-card" aria-labelledby="deployment-heading"><p className="console-eyebrow">03 / Deploy</p><h2 id="deployment-heading">Deployment</h2>
+      {application && release && <Evaluations key={`${application.id}:${release.id}`} application={application} release={release} robot={robot} runs={evaluations}
+        qualification={qualification?.release_id === release.id ? qualification : null} onQualification={setQualification} snapshot={updated}
+        dispatchAvailable={canDispatch && !refreshError && !!updated} hasActiveMission={!!active} writable={writable} busy={busy} run={run}
+        onEpisode={async id => { setEpisode(await api<Episode>(`episodes/${id}`)); document.getElementById("episodes-heading")?.scrollIntoView({ behavior: "smooth" }); }} />}
+      <section className="console-card" aria-labelledby="deployment-heading"><p className="console-eyebrow">04 / Deploy</p><h2 id="deployment-heading">Deployment</h2>
         {deployment ? <><div className="console-state"><Status state={deployment.state} /><span>Generation {deployment.generation}</span></div><p>Desired release <code>{deployment.release_id}</code></p><p className="console-note">Last acknowledgement: {timestamp(deployment.observed_at)}</p>{deployment.detail && <p>{deployment.detail}</p>}</> : <p>No deployment requested for the selected robot.</p>}
-        <button className="btn btn-primary" disabled={disabled || !canDispatch || !robot || !release || !!active || !!refreshError || !updated} onClick={() => void run(async () => {
+        <button className="btn btn-primary" disabled={disabled || !canDispatch || !robot || !release || !!active || reserved || !qualified || !profileMatches || !!refreshError || !updated} onClick={() => void run(async () => {
           if (!robot || !release) return;
           await attempts.current.submit("deployments", { robot_id: robot.id, release_id: release.id, expected_generation: robot.generation });
           setNotice("Deployment requested. Wait for the coordinator to acknowledge readiness; this does not start a mission.");
         })}>Request deployment</button>
+        {reserved && <p className="console-note">Reserved by evaluation <code>{robot?.evaluation_id}</code>. Inspect or request cancellation in Release qualification.</p>}
+        {!profileMatches && <p className="console-note">Choose a robot and release with the same observation profile.</p>}
+        {!qualified && release && <p className="console-note">The selected release’s qualification must be available and satisfy the current application gate.</p>}
         <p className="console-note">Uses the selected robot and release. Active or unresolved missions block deployment. An acknowledgement is not a live-health guarantee.</p>
       </section>
-      <section className="console-card" aria-labelledby="mission-heading"><p className="console-eyebrow">04 / Run</p><h2 id="mission-heading">Missions</h2>
+      <section className="console-card" aria-labelledby="mission-heading"><p className="console-eyebrow">05 / Run</p><h2 id="mission-heading">Missions</h2>
         {active && <div className="console-state"><Status state={active.state} /><code>{active.id}</code></div>}
         {active?.state === "unknown" && <Alert>Execution state is unresolved. Reconcile it on the coordinator before new work can start.</Alert>}
         <form onSubmit={event => submit(event, async data => {
           if (!robot || !deployment) throw new Error("Choose a ready deployment first.");
           await attempts.current.submit<Mission>(`robots/${robot.id}/missions`, { deployment_id: deployment.id, expected_generation: robot.generation, seed: Number(data.get("seed")), ttl_s: Number(data.get("ttl")) });
           setNotice("Mission requested. Running is shown only after the coordinator acknowledges execution.");
-        })}><div className="console-pair"><label>Scenario seed<input name="seed" type="number" min={0} max={4294967295} step={1} defaultValue={0} required /></label><label>Authorization, seconds<input name="ttl" type="number" min={1} max={300} step={1} defaultValue={60} required /></label></div><button className="btn btn-primary" disabled={disabled || !canDispatch || deployment?.state !== "ready" || !!active || !!refreshError || !updated}>Start mission</button></form>
+        })}><div className="console-pair"><label>Scenario seed<input name="seed" type="number" min={0} max={4294967295} step={1} defaultValue={0} required /></label><label>Authorization, seconds<input name="ttl" type="number" min={1} max={300} step={1} defaultValue={60} required /></label></div><button className="btn btn-primary" disabled={disabled || !canDispatch || deployment?.state !== "ready" || deployment?.release_id !== release?.id || !qualified || !profileMatches || !!active || reserved || !!refreshError || !updated}>Start mission</button></form>
+        {reserved && <p className="console-note">This robot is reserved by an evaluation. Use its evaluation cancellation control to stop the suite.</p>}
+        {deployment && deployment.release_id !== release?.id && <p className="console-note">Start uses the currently deployed release. Select <code>{deployment.release_id}</code> above before starting it.</p>}
         <p className="console-note">Authorization covers both queueing and execution, bounded by the release policy. Simulation steps are not a physical-robot timing qualification.</p>
-        {active && <button className="btn btn-secondary" disabled={disabled || active.state === "cancel_requested"} onClick={() => void run(async () => {
+        {active && !reserved && <button className="btn btn-secondary" disabled={disabled || active.state === "cancel_requested"} onClick={() => void run(async () => {
           await attempts.current.submit(`missions/${active.id}/cancel`, { reason: "Requested from application console" });
           setNotice("Cancellation requested. Wait for acknowledgement; this button is not an emergency stop.");
         })}>{active.state === "cancel_requested" ? "Cancellation awaiting acknowledgement" : "Request cancellation"}</button>}
       </section>
     </div>
-    <section className="console-card console-history" aria-labelledby="episodes-heading"><div className="console-section-heading"><div><p className="console-eyebrow">05 / Inspect</p><h2 id="episodes-heading">Mission history & episodes</h2></div><span>{robot?.name ?? "Select a robot"}</span></div>
+    <section className="console-card console-history" aria-labelledby="episodes-heading"><div className="console-section-heading"><div><p className="console-eyebrow">06 / Inspect</p><h2 id="episodes-heading">Mission history & episodes</h2></div><span>{robot?.name ?? "Select a robot"}</span></div>
       {robotMissions.length ? <div className="console-table-wrap"><table><thead><tr><th>Mission</th><th>State</th><th>Seed</th><th>Last report</th><th>Evidence</th></tr></thead><tbody>{robotMissions.map(item => <tr key={item.id}><td><code>{item.id}</code>{item.detail && <small>{item.detail}</small>}</td><td><Status state={item.state} /></td><td>{item.seed}</td><td>{timestamp(item.updated_at)}</td><td>{item.episode_id ? <button disabled={busy} onClick={() => void run(async () => { setEpisode(await api<Episode>(`episodes/${item.episode_id}`)); })}>View episode</button> : "No terminal episode"}</td></tr>)}</tbody></table></div> : <p>No missions recorded for this robot.</p>}
       {episode && <div className="console-episode"><h3>Episode <code>{episode.id}</code></h3><p><Status state={episode.state} /> {episode.detail}</p><p>Benchmark task at the final step: <strong>{episode.summary.final_success === true ? "Succeeded" : episode.summary.final_success === false ? "Did not succeed" : "Not reported"}</strong></p><p className="console-note">Release digest <code>{episode.release_digest}</code></p><pre className="console-code">{JSON.stringify(episode.summary, null, 2)}</pre><p className="console-note">This is the coordinator-reported summary. Mission completion and benchmark task success are separate outcomes.</p></div>}
     </section>
