@@ -29,7 +29,7 @@ export function ReleaseDetails({ release }: { release: Release }) {
           Skill catalog <code>{pairing.catalog_sha256}</code><br />
           Planning timeout {pairing.planning.timeout_ms} ms.</p>
       </details>
-      <p className="console-note">Placement is declared by this release. Both components must be configured separately; registration does not acknowledge readiness.</p>
+      <p className="console-note">Placement is declared by this release. Deployment verifies both models before reporting readiness.</p>
     </>}
   </div>;
 }

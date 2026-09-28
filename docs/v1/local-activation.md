@@ -74,13 +74,21 @@ weights. A uses context 2048; B uses context 4096. Their native configuration,
 planner artifact and outer release digests differ. These are two configurations,
 not two different weight checkpoints.
 
-The intended acceptance is one API, one coordinator, one journal and one database:
-deploy A, explicitly run a seed-0 mission, deploy B and run again, then explicitly
-restore A and run again. Exact process incarnations, accepted planner proposals,
-applied simulator actions and final cleanup must agree. Unit-level faults cover
-unknown recipes, corrupted assets before replacement, partial startup, stale
-desired state and unresolved execution. A passed native model test alone does not
-qualify this full activation flow; record the actual completed acceptance separately.
+The [completed acceptance](../../examples/manipulation/evidence/local-paired-activation.json)
+used one API, coordinator, journal and SQLite database. The harness deployed A,
+then B, then restored A, explicitly starting a successful seed-0 mission each time.
+The browser deployed B and started a fourth mission, evaluated A and B against
+one immutable seed-0 suite, compared the reports, explicitly promoted B, and
+restored A at generation 7 without starting another mission. No evaluation gate
+was enabled, so the explicit restore did not need a promotion of A.
+
+All six missions accepted an actual Qwen proposal and applied 54 SmolVLA actions.
+Every action, reward and success flag matched the direct seed-0 reference.
+Independent final checks covered seven bindings, 21 process incarnations, 28
+model listeners and native credential-file removal. This proves the release
+workflow on the fixed local task; it does not establish general reliability.
+Focused faults also cover unknown recipes, corrupted assets before replacement,
+partial startup, stale desired state and unresolved execution.
 
 This path does not configure wireless access points, offer real-time physical
 control guarantees, activate the Jetson, or provision a hosted environment. The

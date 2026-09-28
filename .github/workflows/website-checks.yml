@@ -62,9 +62,9 @@ jobs:
       - run: uv run --frozen ruff check server agent contracts worker
       - run: uv run --frozen pytest -q server/tests
       - run: uv run --frozen pytest -q contracts/tests worker/tests
-      # These tests import only integration metadata/reset hooks, never model dependencies.
+      # Metadata, reset and owned foreground-process tests; no model dependencies or downloads.
       - run: uv run --frozen ruff check ../integrations/lerobot
-      - run: PYTHONPATH=../integrations/lerobot/src uv run --frozen pytest -q ../integrations/lerobot/tests
+      - run: PYTHONPATH=../integrations/lerobot/src:../integrations/planner/src uv run --frozen --all-packages --extra local-host pytest -q ../integrations/lerobot/tests
       - run: PYTHONPATH=../integrations/lerobot/src:../integrations/planner/src uv run --frozen pytest -q ../examples/manipulation/test_real_planner.py ../examples/manipulation/test_local_gateway.py
 
   planner:
