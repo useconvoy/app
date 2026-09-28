@@ -17,7 +17,7 @@ class ChatBodyLimit:
         path = scope.get("path", "")
         application = path.startswith((
             "/api/agent/v1/robots/", "/api/v1/projects", "/api/v1/robots", "/api/v1/applications",
-            "/api/v1/deployments", "/api/v1/missions/",
+            "/api/v1/deployments", "/api/v1/missions/", "/api/v1/evaluations", "/api/v1/evaluation-suites",
         ))
         limited = (
             path.startswith("/api/agent/v1/chat/") or path.startswith("/api/v1/devices/") and "/chat" in path

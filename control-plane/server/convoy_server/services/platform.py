@@ -114,7 +114,7 @@ def project_out(row: Project) -> dict:
     return {"id": row.id, "name": row.name, "created_at": iso(row.created_at)}
 
 
-def robot_out(row: Robot) -> dict:
+def robot_out(row: Robot, *, evaluation_id: str | None = None) -> dict:
     return {
         "id": row.id,
         "project_id": row.project_id,
@@ -122,6 +122,7 @@ def robot_out(row: Robot) -> dict:
         "name": row.name,
         "profile": row.profile,
         "generation": row.generation,
+        "evaluation_id": evaluation_id,
         "simulated": True,
         "created_at": iso(row.created_at),
     }
@@ -252,9 +253,12 @@ def unresolved_mission(db: Session, robot: Robot) -> Mission | None:
     return db.scalar(select(Mission).where(Mission.robot_id == robot.id, Mission.state.not_in(TERMINAL)))
 
 
-def create_deployment(db: Session, p: Principal, data: dict) -> dict:
+def create_deployment(db: Session, p: Principal, data: dict, *, evaluation_id: str | None = None) -> dict:
+    from .evaluations import require_available, require_promotion
+
     dispatch_allowed(db)
     robot = resource_for(db, Robot, data["robot_id"], p)
+    require_available(db, robot.id, evaluation_id)
     if robot.generation != data["expected_generation"]:
         raise HTTPException(409, "robot generation changed")
     if unresolved_mission(db, robot):
@@ -265,6 +269,8 @@ def create_deployment(db: Session, p: Principal, data: dict) -> dict:
         raise HTTPException(404, "release not found in robot project")
     if release.manifest["profile"] != robot.profile:
         raise HTTPException(409, "release profile does not match robot")
+    if evaluation_id is None:
+        require_promotion(db, release)
     robot.generation += 1
     row = Deployment(
         id=new_id("dep"),
@@ -278,9 +284,12 @@ def create_deployment(db: Session, p: Principal, data: dict) -> dict:
     return deployment_out(row)
 
 
-def create_mission(db: Session, p: Principal, robot_id: str, data: dict) -> dict:
+def create_mission(db: Session, p: Principal, robot_id: str, data: dict, *, evaluation_id: str | None = None) -> dict:
+    from .evaluations import require_available, require_promotion
+
     dispatch_allowed(db)
     robot = resource_for(db, Robot, robot_id, p)
+    require_available(db, robot.id, evaluation_id)
     if robot.generation != data["expected_generation"]:
         raise HTTPException(409, "robot generation changed")
     if unresolved_mission(db, robot):
@@ -291,6 +300,8 @@ def create_mission(db: Session, p: Principal, robot_id: str, data: dict) -> dict
     if deployment.generation != robot.generation or deployment.state != "ready":
         raise HTTPException(409, "current deployment is not ready")
     release = db.get(ApplicationRelease, deployment.release_id)
+    if evaluation_id is None:
+        require_promotion(db, release)
     ttl = min(data["ttl_s"], release.manifest["execution"]["mission_timeout_s"])
     row = Mission(
         id=new_id("mis"),
@@ -318,6 +329,8 @@ def cancel_mission(db: Session, p: Principal, mission_id: str, data: dict) -> di
 
 
 def desired(db: Session, robot: Robot) -> dict:
+    from .evaluations import active_for_robot
+
     deployment = db.scalar(
         select(Deployment).where(Deployment.robot_id == robot.id, Deployment.generation == robot.generation)
     )
@@ -328,8 +341,9 @@ def desired(db: Session, robot: Robot) -> dict:
     if deployment:
         deployed = deployment_out(deployment)
         deployed["release"] = release_out(db.get(ApplicationRelease, deployment.release_id))
+    evaluation = active_for_robot(db, robot.id)
     return {
-        "robot": robot_out(robot),
+        "robot": robot_out(robot, evaluation_id=evaluation.id if evaluation else None),
         "deployment": deployed,
         "mission": mission_out(mission) if mission else None,
     }

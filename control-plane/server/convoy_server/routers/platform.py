@@ -113,11 +113,17 @@ def create_robot(
 
 @router.get("/api/v1/robots")
 def list_robots(project_id: Id, p: PrincipalRead, db: Database):
+    from ..evaluation_models import EvaluationRun
+    from ..services.evaluations import TERMINAL
+
     service.project_for(db, project_id, p)
+    reservations = dict(db.execute(select(EvaluationRun.robot_id, EvaluationRun.id).where(
+        EvaluationRun.project_id == project_id, EvaluationRun.state.not_in(TERMINAL),
+    )).all())
     rows = db.scalars(
         select(Robot).where(Robot.project_id == project_id).order_by(Robot.created_at.desc()).limit(200)
     )
-    return [service.robot_out(row) for row in rows]
+    return [service.robot_out(row, evaluation_id=reservations.get(row.id)) for row in rows]
 
 
 @router.post("/api/v1/applications", status_code=201)

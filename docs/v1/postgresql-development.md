@@ -135,3 +135,10 @@ fleet metadata uses PostgreSQL; redundant API text-chat behavior and independent
 artifact storage are not qualified here. Organization membership, finer role
 scoping, durable evaluation jobs/outbox, full legacy endpoint qualification and
 cloud deployment remain follow-up slices of the hosted-data milestone.
+
+The [managed manipulation harness](../../examples/manipulation/README.md#use-a-disposable-postgresql-database)
+also runs the complete six-case API → worker → coordinator → physics acceptance
+against a fresh, isolated PostgreSQL database. It verifies the same cancellation,
+outage/report replay and restart rules as the SQLite reference and drops its own
+database after process cleanup. This adds an end-to-end execution check; it does
+not qualify database failover, backup restoration or physical-robot timing.

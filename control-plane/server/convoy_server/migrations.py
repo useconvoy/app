@@ -28,7 +28,8 @@ log = logging.getLogger("convoy.migrations")
 # schema-2 usage records). A v3 database that predates it gains the table at startup through the ordinary
 # `plan_migration` -> `add_tables` path; no version bump or rebuild is involved.
 # Schema 4 adds the platform application lifecycle; old text release records are unchanged.
-SCHEMA_VERSION = 4
+# Schema 5 adds immutable evaluation suites, durable case jobs and release gates.
+SCHEMA_VERSION = 5
 
 
 class SchemaError(RuntimeError):

@@ -1,0 +1,188 @@
+# Development only. Use services.py: it provisions private credentials and TLS.
+x-api-environment: &api-environment
+  DATABASE_URL: postgresql+psycopg://convoy:${POSTGRES_PASSWORD:?run services.py up}@postgres:5432/convoy
+  CONVOY_DATA_DIR: /data
+  CONVOY_SIMULATOR: "1"
+  CONVOY_SCHEDULER_INPROCESS: "0"
+  CONVOY_PUBLIC_URL: https://localhost:${API_PORT:-8443}
+  CONVOY_SECURE_COOKIES: "1"
+  CONVOY_LOG_LEVEL: WARNING
+
+x-reference: &reference
+  image: convoy-v1-reference:local
+  build:
+    context: ../..
+    dockerfile: infra/development/reference.Dockerfile
+  init: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  mem_limit: 1g
+  cpus: 2
+
+services:
+  postgres:
+    image: postgres:17-bookworm@sha256:639ab7ceb90e13123085b741fb31ef493fba25463002f6da665352e7b534b652
+    environment:
+      POSTGRES_USER: convoy
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: convoy
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U convoy -d convoy]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    mem_limit: 512m
+    cpus: 1
+
+  migrate:
+    image: convoy-v1-api:local
+    build: {context: ../../control-plane}
+    profiles: [tools]
+    environment: *api-environment
+    volumes: [api-data:/data]
+    command: [convoy-server, migrate]
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  api:
+    image: convoy-v1-api:local
+    build: {context: ../../control-plane}
+    init: true
+    environment:
+      <<: *api-environment
+      CONVOY_ADMIN_EMAIL: ${CONVOY_ADMIN_EMAIL}
+      CONVOY_ADMIN_PASSWORD: ${CONVOY_ADMIN_PASSWORD}
+      CONVOY_EXECUTION_SECRET: ${CONVOY_EXECUTION_SECRET}
+      SSL_CERT_FILE: /run/ca/ca.crt
+    command: [uvicorn, 'convoy_server.app:create_app', --factory, --host, 0.0.0.0, --port, '8443', --ssl-keyfile, /run/tls/service.key, --ssl-certfile, /run/tls/service.crt]
+    volumes:
+      - api-data:/data
+      - tls-api:/run/tls:ro
+      - tls-ca:/run/ca:ro
+    ports: ["127.0.0.1:${API_PORT:-8443}:8443"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('https://localhost:8443/api/health', timeout=3)"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    cpus: 2
+
+  jobs:
+    image: convoy-v1-api:local
+    init: true
+    environment: *api-environment
+    volumes: [api-data:/data]
+    command: [convoy-server, worker]
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, convoy-server, worker-health]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 1
+
+  evaluations:
+    image: convoy-v1-api:local
+    init: true
+    environment: *api-environment
+    command: [convoy-evaluations]
+    depends_on:
+      api: {condition: service_healthy}
+    # Checks DB/schema access; episode/job progress is observed through the API.
+    healthcheck:
+      test: [CMD, python, -c, "from convoy_server.db import init_engine; init_engine()"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 1
+
+  web:
+    image: convoy-v1-web:local
+    build: {context: ../../website}
+    init: true
+    environment:
+      CONVOY_API_URL: https://api:8443
+      CONVOY_CONSOLE_ORIGIN: http://localhost:${WEB_PORT:-3300}
+      NODE_EXTRA_CA_CERTS: /run/ca/ca.crt
+    volumes: [tls-ca:/run/ca:ro]
+    ports: ["127.0.0.1:${WEB_PORT:-3300}:3000"]
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/console').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1
+
+  inference:
+    <<: *reference
+    environment:
+      CONVOY_EXECUTION_SECRET: ${CONVOY_EXECUTION_SECRET}
+      CONVOY_WORKER_PROBE_TOKEN: ${CONVOY_WORKER_PROBE_TOKEN}
+    command: [python, /app/packaging/worker.py]
+    volumes:
+      - tls-inference:/run/tls:ro
+      - tls-ca:/run/ca:ro
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('https://localhost:8443/health', timeout=3)"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  simulator:
+    <<: *reference
+    environment:
+      CONVOY_WORKER_PROBE_TOKEN: ${CONVOY_WORKER_PROBE_TOKEN}
+    volumes:
+      - robot-data:/robot
+      - tls-ca:/run/ca:ro
+    depends_on:
+      api: {condition: service_healthy}
+      inference: {condition: service_healthy}
+    stop_grace_period: 15s
+
+  acceptance:
+    <<: *reference
+    profiles: [tools]
+    environment:
+      CONVOY_ADMIN_EMAIL: ${CONVOY_ADMIN_EMAIL}
+      CONVOY_ADMIN_PASSWORD: ${CONVOY_ADMIN_PASSWORD}
+      CONVOY_CONSOLE_ORIGIN: http://localhost:${WEB_PORT:-3300}
+    volumes:
+      - robot-data:/robot
+      - tls-ca:/run/ca:ro
+    command: [python, /app/packaging/acceptance.py, bootstrap]
+
+  certificates:
+    <<: *reference
+    profiles: [tools]
+    volumes:
+      - tls-api:/certificates/api
+      - tls-inference:/certificates/inference
+      - tls-ca:/certificates/ca
+    command: [python, /app/packaging/certificates.py]
+
+volumes:
+  postgres-data:
+  api-data:
+  robot-data:
+  tls-api:
+  tls-inference:
+  tls-ca:

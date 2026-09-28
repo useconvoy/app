@@ -564,4 +564,5 @@ class FixtureModel(Base):
 
 
 # Register additive lifecycle tables with the same migration metadata.
+from . import evaluation_models as _evaluation_models  # noqa: E402, F401
 from . import platform_models as _platform_models  # noqa: E402, F401
