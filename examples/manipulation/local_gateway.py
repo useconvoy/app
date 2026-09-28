@@ -90,17 +90,18 @@ def main():
             model_path=model, template_path=None, binary=binary,
             lib_dir=output / "runtime/lib", health_timeout_s=120,
         )
+        evidence.update(effective_configuration=supervisor.config,
+                        native={key: native[key] for key in (
+                            "build_info", "binary_sha256", "chat_template_sha256", "backend",
+                            "gpu_offloaded_layers", "gpu_total_layers", "n_ctx", "total_slots",
+                        )})
         if native["simulated"] or native["backend"] != "CPU":
             raise ValueError("native runtime did not establish the requested CPU backend")
         gateway.start()
         gateway.set_mode("production")
         identity = validate_gateway_identity(gateway.runtime_identity(check_health=True))
         evidence.update(status="ready", gateway_url=f"http://127.0.0.1:{gateway.port}",
-                        gateway_identity=identity, effective_configuration=supervisor.config,
-                        native={key: native[key] for key in (
-                            "build_info", "binary_sha256", "chat_template_sha256", "backend",
-                            "gpu_offloaded_layers", "gpu_total_layers", "n_ctx", "total_slots",
-                        )})
+                        gateway_identity=identity)
         (output / "gateway.json").write_text(json.dumps(evidence, indent=2) + "\n")
         print(f"Real local CPU gateway ready: {output / 'gateway.json'}", flush=True)
         while not stopped.wait(0.2):

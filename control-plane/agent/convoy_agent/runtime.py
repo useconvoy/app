@@ -38,7 +38,7 @@ from .runtime_args import argv_for, canonical_config, scrub_env
 
 log = logging.getLogger("convoy.agent.runtime")
 _OFFLOAD_RE = re.compile(r"offloaded (\d+)/(\d+) layers to GPU")
-_BACKEND_RE = re.compile(r"(CUDA\d+|Metal|CPU|Vulkan\d*)\b")
+_BACKEND_RE = re.compile(r"\b(CUDA\d+|Metal|CPU(?:_Mapped|_REPACK)?|Vulkan\d*)\b")
 _DEVICE_RE = re.compile(r"ggml_cuda_init: found (\d+) CUDA devices")
 CHILD_RECORD = "child.json"
 # Child identity proof (pid + kernel start time + cmdline marker) is a Linux /proc contract; the Jetson
@@ -692,10 +692,11 @@ class RuntimeSupervisor:
             m = _DEVICE_RE.search(line)
             if m:
                 ev["cuda_devices"] = int(m.group(1))
-            if "load_tensors:" in line and ("CUDA" in line or "CPU" in line or "Metal" in line):
+            if "load_tensors:" in line:
                 b = _BACKEND_RE.search(line)
                 if b:
-                    ev["backend"] = b.group(1)
+                    backend = b.group(1)
+                    ev["backend"] = "CPU" if backend in {"CPU_Mapped", "CPU_REPACK"} else backend
         if ev["gpu_offloaded_layers"] is not None and ev["gpu_total_layers"]:
             ev["intended_backend_ok"] = ev["gpu_offloaded_layers"] == ev["gpu_total_layers"] and (
                 ev["backend"] or ""
