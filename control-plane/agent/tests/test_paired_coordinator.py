@@ -10,6 +10,7 @@ import zlib
 
 import pytest
 from convoy_agent.coordinator import Coordinator, ExecutionJournal, StepResult
+from convoy_agent.coordinator.transport import RemoteError
 from convoy_contracts.execution import VISUAL_PROFILE, canonical_digest
 from convoy_contracts.pairing import (
     CATALOG_SHA256,
@@ -160,6 +161,16 @@ def test_only_current_accepted_plan_can_start_the_local_policy(paired, mode, exp
     assert report["state"] == expected
     assert worker.sessions == adapter.created == adapter.steps == (1 if mode == "skill" else 0)
     assert report["summary"]["planner_accepted"] is (mode == "skill")
+    if mode == "skill":
+        assert "failure" not in report["summary"]
+    else:
+        diagnosis = report["summary"]["failure"]
+        assert diagnosis["component"] == "planner" and diagnosis["phase"] == "planner_proposal"
+        assert diagnosis["category"] == {
+            "decline": "declined", "wrong_identity": "protocol", "wrong_request": "protocol",
+            "late": "deadline", "cancel": "cancelled", "unavailable": "transport",
+        }[mode]
+        assert not diagnosis["authorization_elapsed"]
     assert planner.calls == 1 and planner.closed
     engine.tick()
     assert planner.calls == 1  # terminal polling never regenerates a decision
@@ -191,6 +202,23 @@ def test_accepted_plan_survives_planner_loss_but_crash_never_replays_it(paired):
     recovered = json.loads(journal.get("interrupted")["report_json"])
     assert recovered["state"] == "unknown" and planner.calls == 1
     assert journal.db.execute("SELECT state FROM plans WHERE mission_id='interrupted'").fetchone()[0] == "accepted"
+
+
+def test_policy_session_failure_is_not_misreported_as_a_planner_or_format_error(paired):
+    engine, journal, control, worker, planner, adapter = paired
+
+    def unavailable(*_):
+        raise RemoteError(500)
+
+    worker.start_session = unavailable
+    engine.tick()
+    failure = control.reports[-1]["summary"]["failure"]
+    assert failure["component"] == "action_policy" and failure["phase"] == "policy_session"
+    assert failure["category"] == "runtime" and failure["http_status"] == 500
+    assert control.reports[-1]["summary"]["planner_accepted"]
+    assert adapter.created == adapter.steps == journal.command_count("mission") == 0
+    engine.tick()
+    assert planner.calls == 1
 
 
 def test_cancellation_does_not_wait_for_a_stalled_planner(paired):

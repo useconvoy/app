@@ -6,6 +6,7 @@ import { api, ApiError, errorText, MutationAttempts, terminal, timestamp } from 
 import type { Account, Application, Deployment, Device, Episode, EvaluationRun, Mission, Project, Qualification, Release, Robot } from "@/lib/platform/client";
 import { Evaluations } from "./Evaluations";
 import { ReleaseDetails } from "./ReleaseDetails";
+import { EpisodeSummary } from "./EpisodeSummary";
 import { PAIRED_PROFILE, releaseComponents } from "@/lib/platform/manifest";
 
 const PROFILES = [
@@ -276,7 +277,7 @@ function ProjectWorkspace({ project, writable, canDispatch, executionProfiles, o
     </div>
     <section className="console-card console-history" aria-labelledby="episodes-heading"><div className="console-section-heading"><div><p className="console-eyebrow">06 / Inspect</p><h2 id="episodes-heading">Mission history & episodes</h2></div><span>{robot?.name ?? "Select a robot"}</span></div>
       {robotMissions.length ? <div className="console-table-wrap"><table><thead><tr><th>Mission</th><th>State</th><th>Seed</th><th>Last report</th><th>Evidence</th></tr></thead><tbody>{robotMissions.map(item => <tr key={item.id}><td><code>{item.id}</code>{item.detail && <small>{item.detail}</small>}</td><td><Status state={item.state} /></td><td>{item.seed}</td><td>{timestamp(item.updated_at)}</td><td>{item.episode_id ? <button disabled={busy} onClick={() => void run(async () => { setEpisode(await api<Episode>(`episodes/${item.episode_id}`)); })}>View episode</button> : "No terminal episode"}</td></tr>)}</tbody></table></div> : <p>No missions recorded for this robot.</p>}
-      {episode && <div className="console-episode"><h3>Episode <code>{episode.id}</code></h3><p><Status state={episode.state} /> {episode.detail}</p><p>Benchmark task at the final step: <strong>{episode.summary.final_success === true ? "Succeeded" : episode.summary.final_success === false ? "Did not succeed" : "Not reported"}</strong></p><p className="console-note">Release digest <code>{episode.release_digest}</code></p><pre className="console-code">{JSON.stringify(episode.summary, null, 2)}</pre><p className="console-note">This is the coordinator-reported summary. Mission completion and benchmark task success are separate outcomes.</p></div>}
+      {episode && <div className="console-episode"><h3>Episode <code>{episode.id}</code></h3><p><Status state={episode.state} /> {episode.detail}</p><EpisodeSummary episode={episode} /></div>}
     </section>
   </>;
 }
