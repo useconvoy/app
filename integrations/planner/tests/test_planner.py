@@ -2,10 +2,15 @@
 
 import copy
 import json
+import os
+import socket
+import subprocess
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+import httpx
 import pytest
 from convoy_contracts.execution import VISUAL_PROFILE, canonical_digest, sign_grant
 from convoy_contracts.pairing import (
@@ -231,3 +236,43 @@ def test_controlled_runtime_is_explicit_and_cannot_claim_real_model_provenance()
     with pytest.raises(ValueError):
         create_app({**bundle, "placement": {"policy": "development-local-cpu", "planner": "development-jetson-lan"}},
                    backend, execution_secret=SECRET, probe_token=PROBE)
+
+
+def test_controlled_module_cli_serves_the_same_source_bound_runtime(tmp_path):
+    bundle = manifest(Backend())
+    bundle["planner"].update(runtime=CONTROLLED_PLANNER_RUNTIME,
+                             artifact_sha256=canonical_digest(controlled_descriptor()))
+    bundle["placement"]["planner"] = "development-local-controlled"
+    manifest_file = tmp_path / "release.json"
+    manifest_file.write_text(json.dumps(bundle))
+    with socket.socket() as port_source:
+        port_source.bind(("127.0.0.1", 0))
+        port = port_source.getsockname()[1]
+    process = subprocess.Popen([sys.executable, "-m", "convoy_planner.controlled", "--manifest", str(manifest_file),
+                                "--port", str(port)],
+                               env={**os.environ, "CONVOY_PLANNER_EXECUTION_SECRET": SECRET,
+                                    "CONVOY_PLANNER_PROBE_TOKEN": PROBE},
+                               stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    try:
+        deadline = time.monotonic() + 5
+        response = None
+        with httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=1) as client:
+            while time.monotonic() < deadline:
+                try:
+                    response = client.post("/v1/probe", json={"release_digest": canonical_digest(bundle),
+                                          "profile": PAIRED_PROFILE}, headers={"Authorization": "Bearer " + PROBE})
+                    break
+                except httpx.TransportError:
+                    if process.poll() is not None:
+                        raise AssertionError(process.stderr.read().decode()) from None
+                    time.sleep(0.02)
+        assert response is not None and response.status_code == 200
+        assert response.json()["runtime"] == CONTROLLED_PLANNER_RUNTIME
+        assert response.json()["planner_artifact_sha256"] == bundle["planner"]["artifact_sha256"]
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)

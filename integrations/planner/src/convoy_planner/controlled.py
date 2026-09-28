@@ -55,11 +55,15 @@ class ControlledBackend:
 def main():
     from .app import create_app
 
+    # `python -m` executes this file as __main__. Construct the canonical class
+    # so the app's explicit controlled-backend gate sees the registered runtime.
+    from .controlled import ControlledBackend as RegisteredBackend
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--port", type=int, default=9101)
     args = parser.parse_args()
-    app = create_app(json.loads(args.manifest.read_text()), ControlledBackend(),
+    app = create_app(json.loads(args.manifest.read_text()), RegisteredBackend(),
                      execution_secret=os.environ["CONVOY_PLANNER_EXECUTION_SECRET"],
                      probe_token=os.environ["CONVOY_PLANNER_PROBE_TOKEN"])
     import uvicorn
