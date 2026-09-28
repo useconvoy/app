@@ -40,8 +40,11 @@ Legacy HMAC remains for explicit development fixtures. The scripted Compose
 installation and unapplied AWS staging templates now select public-key grants:
 the API receives private signing material, the action worker receives only its
 public document, and scheduler/evaluation jobs receive no execution keys.
-Container acceptance of this packaging change is pending; it is not evidence of
-a deployed cloud service or a remote learned planner.
+Local container acceptance passed on clean `0674a231`: two 500-action scripted
+MuJoCo missions, restart persistence of keys and history, and refusal to start
+after key loss. The rebuilt AWS wrappers also passed local role/signature checks.
+See [public-key hosting qualification](public-key-hosting.md); this establishes
+neither a deployed AWS service nor remote Qwen inference.
 
 The local activation harness generates disposable keys and passes the private
 path only to its API process. Processes still share an OS user, so this proves

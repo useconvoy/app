@@ -23,7 +23,7 @@ That coordinator checkpoint used a scripted policy and privileged simulator stat
 | Component pairing | Through PR #89: real Qwen admission and SmolVLA/MuJoCo, deployment-driven activation and restore qualified locally | Live Jetson and genuine remote planner qualification; no universal plug-and-play claim |
 | Release evaluation | Through PR #89: suites, leased jobs, comparison, promotion and actual paired A/B evidence qualified locally and through the browser | Broader seeds, task and model qualification |
 | Durable hosting foundation | PostgreSQL migrations and concurrency checks, restartable evaluation jobs, local execution journal | Full tenant conversion, artifact storage/retention and database restore rehearsal |
-| Provider and hosting | PRs #79 and #81: local service images/TLS/PostgreSQL and reviewed AWS CPU staging configuration; current Compose/AWS changes separate API-private signing from public worker verification | Updated container acceptance, account/region/budget, provisioned endpoint and hosted acceptance |
+| Provider and hosting | PRs #79 and #81: local services and reviewed AWS CPU staging; clean `0674a231` qualifies public-key separation, restart persistence and lost-key refusal in local containers, plus rebuilt AWS wrappers locally | Account/region/budget, provisioned endpoint and hosted acceptance |
 | Networking | Direct HTTP, bounded requests/deadlines, verified TLS; six pipeline fault cases qualified | Wider delay/loss/load matrix and target-site latency measurements |
 | Hardware/second embodiment | Simulation only | Partner adapter, real controller authority/recovery, qualified model/hardware pair |
 
@@ -128,6 +128,22 @@ The current hosting slice applies that authority separation to scripted Compose
 and unapplied AWS templates: private signing material only for the API, public
 action verification only for inference, and no execution keys for jobs. Its
 shared key helper passes 28 focused tests, including interrupted initialization
-and refusal to overwrite or regenerate an existing installation's keys. Updated
-container acceptance remains pending. This packaging work adds no paid cloud
-resources and does not establish Linux Qwen inference or a remote learned planner.
+and refusal to overwrite or regenerate an existing installation's keys.
+
+Clean `0674a2312644a9e15d8f6f0126b5aa5a05479812` passed isolated Compose
+acceptance: one successful 500-action scripted MuJoCo mission, full down/up with
+unchanged private/public key hashes and retained mission history, no automatic
+mission start, and a second successful 500-action mission. Independent checks
+verified stored JWT signatures at their original issuance time, all 1,000 command-journal
+rows, expected read-only key mounts/private file setting, and unchanged identities/start times/PIDs/restart
+counts for all eight pre-existing containers. Deleting both disposable key volumes
+made the next startup fail without regenerating keys or starting services. Final
+cleanup removed only the disposable installation's resources.
+
+Both rebuilt ARM64 AWS wrappers also passed locally: API migrations and runtime
+DML, denied DDL, private signer materialization and stable claim/reclaim expiry;
+public-only inference admitted a signed action and rejected planner/HMAC grants
+and conflicting configuration, then shut down gracefully. See the
+[qualification](public-key-hosting.md) and [sanitized receipt](../../examples/manipulation/evidence/public-key-hosting.json).
+These are local results. No paid cloud resources were provisioned; Linux Qwen,
+remote planner and Jetson qualification remain outstanding.

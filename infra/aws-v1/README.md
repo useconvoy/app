@@ -32,7 +32,8 @@ and no model package in the API image. The API receives private signing JSON;
 inference receives only the action public verification document; jobs receive no
 execution keys. The shared `infra/runtime/execution_keys.py` helper consumes each
 role's injected JSON into a private task file and rejects conflicting settings.
-These packaging changes still need their updated container acceptance.
+Both rebuilt ARM64 wrappers passed local container acceptance; see the
+[qualification](../../docs/v1/public-key-hosting.md).
 AWS `ecr:GetAuthorizationToken` requires
 `Resource: "*"`; layer/image access is separately repository-scoped.
 
@@ -100,10 +101,20 @@ the verified client-to-ALB and app-to-RDS TLS connections.
 
 ## Recorded validation
 
-The shared key helper currently passes 28 focused local tests. Rebuilt-container
-acceptance of the public-key packaging changes is pending. The prior checks below
-are historical results, not proof of the updated image contents or a hosted Qwen
-planner.
+The shared key helper passes 28 focused local tests. Both rebuilt ARM64 wrappers
+passed local acceptance: the API applied migrations, performed runtime DML while
+DDL was denied, materialized its private signer and preserved original grant
+expiry across claim/reclaim. The inference wrapper admitted a signed action,
+rejected planner/HMAC grants and conflicting configuration, and stopped gracefully.
+
+Clean `0674a231` also passed isolated Compose acceptance with two successful
+500-action scripted MuJoCo missions across down/up, unchanged key hashes and
+retained history, no automatic Start, and refusal to regenerate deleted keys.
+The existing installation remained untouched and disposable resources were removed.
+See the [qualification](../../docs/v1/public-key-hosting.md) and
+[sanitized receipt](../../examples/manipulation/evidence/public-key-hosting.json).
+All checks ran locally; they do not establish deployed AWS, remote Qwen, Jetson
+execution or hosted CI success. The checks below are earlier historical results.
 
 Locally passed on September 27, 2026: Terraform formatting, real provider schema
 validation, three mocked plans, the real PostgreSQL role/API check, Python lint,

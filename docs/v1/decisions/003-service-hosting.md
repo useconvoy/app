@@ -1,7 +1,7 @@
 # Decision 003: service and hosting boundaries
 
 Status: locally qualified service boundaries for the scripted simulation profile.
-Compose/AWS public-key packaging is implemented with container acceptance pending.
+Compose public-key separation and rebuilt AWS wrappers passed local container acceptance.
 Actual cloud deployment and hosted qualification remain open.
 
 ## Decision
@@ -59,9 +59,12 @@ release binding. The local activation harness has qualified this mode with real
 Qwen and SmolVLA. Compose and unapplied AWS templates now also separate API-private
 signing material from the action worker's public verification document; database
 jobs receive neither. Compose uses separate key volumes, while AWS wrappers
-consume role-specific injected JSON into private task files. Acceptance of the
-updated container boundary is pending. Hosted identities, mounts and networking
-still require qualification; encryption alone does not establish that boundary.
+consume role-specific injected JSON into private task files. The
+[local container qualification](../public-key-hosting.md) verified signed scripted
+missions, restart persistence, lost-key refusal and isolated process authority.
+AWS wrappers also passed local API/inference checks. Actual hosted identities,
+mounts and networking still require qualification; encryption alone does not
+establish that boundary.
 
 Inference requests go directly from the coordinator to the worker, keeping the
 management database outside each decision. Management outages do not erase an
