@@ -104,7 +104,15 @@ def bootstrap(api: Console):
 
 def verify(api: Console):
     installation = json.loads(INSTALLATION.read_text())
-    deployment = wait_for(lambda: api.get(f"deployments/{installation['deployment_id']}"),
+    # Evaluations and console redeployments legitimately advance the generation.
+    # Follow the current reference deployment, not the bootstrap snapshot.
+    robots = api.get(f"robots?project_id={installation['project_id']}")
+    robot = next(row for row in robots if row["id"] == installation["robot_id"])
+    targets = api.get(f"deployments?project_id={installation['project_id']}&robot_id={robot['id']}")
+    target = next(row for row in targets if row["generation"] == robot["generation"])
+    if target["release_id"] != installation["release_id"]:
+        raise RuntimeError("current deployment is not this installation's scripted reference release")
+    deployment = wait_for(lambda: api.get(f"deployments/{target['id']}"),
                           lambda row: row["state"] in {"ready", "blocked"})
     assert deployment["state"] == "ready", "device did not acknowledge the pinned worker release"
     # Browser-origin enforcement is exercised on the real Next.js server.
