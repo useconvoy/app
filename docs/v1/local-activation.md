@@ -101,7 +101,7 @@ python examples/manipulation/local_activation.py \
   --output /absolute/path/to/a-new-private-run
 ```
 
-The checked-in `examples/manipulation/evidence/native-qwen-owner-recovery.json`
+The checked-in `examples/manipulation/evidence/native-qwen-local-activation.json`
 supplies the qualified context-2048 and context-4096 native identities. The optional
 `--gateway-qualification` argument selects another explicit qualification receipt;
 the harness never rewrites its native pins to match the current code. The owner

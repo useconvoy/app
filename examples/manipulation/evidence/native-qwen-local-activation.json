@@ -1,0 +1,106 @@
+{
+  "status": "passed",
+  "source_commit": "d74912aca808b3bb8a64876322fc43f2d26c7781",
+  "qualification_script_sha256": "36a78093cdba6b1ead9df025753ad0f2bd8d5cabb7c86b174c05685f103b8138",
+  "scope": "actual local CPU Qwen inference and native owner crash recovery; no deployment automation, action policy, simulator, robot, Jetson or cloud qualification",
+  "observed_host": {
+    "system": "Darwin",
+    "machine": "arm64"
+  },
+  "timing_scope": "request observations while other tests may run; not an isolated latency benchmark",
+  "inferences": [
+    {
+      "context": 2048,
+      "decision": {
+        "kind": "skill",
+        "skill_id": "pick_place_puck",
+        "parameters": {}
+      },
+      "wall_seconds": 0.7246473339619115,
+      "gateway_identity": {
+        "release_id": "owner-qualification-2048",
+        "runtime_generation": 1,
+        "model_sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+        "runtime_artifact_sha256": "9d26160ba4f44c66095b29ec81e1fc4bc6e9d38dd2ea1110c12514422540cf86",
+        "binary_sha256": "c706ee031b41d2f1e440093b7753ab84db11d7d3a0ae259e93c4886a03c226b7",
+        "template_sha256": "4e9918361c284a93880606d182d64da6a9fe97cdc1f5c5a78c1c8840444246fc",
+        "config_sha256": "2a460a80f836f7d9995ce303fa91a4d7508b8989d5626c9c63c3593edb2f64fb",
+        "simulated": false,
+        "gateway_incarnation": "b41bb2edb617dd2647555f0d75ee9b44",
+        "gateway_epoch": 1,
+        "implementation_sha256": {
+          "gateway.py": "bdf57663048184d05b37e3bd2f15fb8eaa64477deeed3f86f47370cd313e6678",
+          "runtime.py": "eceb220a0a4239494e68e1be34c8cfb3c94c447884afaf4cf92874475a04e925",
+          "owned_process.py": "2eda0ca1c5413e7eb4aac194d620926cef0e03c554dfb84ebf8ee4265180a3fd",
+          "runtime_args.py": "5ef5780b1c55cbb78fff09e030d08dd3cfea93b93a7c6eb5124cbb96998972f4",
+          "psutil-7.2.2": "6a8cde46444a0771629543f87f42c6f95520f1f5c51c10214df8d088f37d64b4"
+        }
+      },
+      "planner_artifact_sha256": "3383f4652d5f1739ce89443472732e286fcd4b8b78bd16997556a85621c76b4d",
+      "usage": {
+        "prompt_tokens": 116,
+        "completion_tokens": 18,
+        "total_tokens": 134
+      },
+      "timing": {
+        "queue_ms": 0.04,
+        "latency_ms": 723.21,
+        "ttft_ms": 444.21
+      }
+    },
+    {
+      "context": 4096,
+      "decision": {
+        "kind": "skill",
+        "skill_id": "pick_place_puck",
+        "parameters": {}
+      },
+      "wall_seconds": 0.8069773329771124,
+      "gateway_identity": {
+        "release_id": "owner-qualification-4096",
+        "runtime_generation": 1,
+        "model_sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+        "runtime_artifact_sha256": "9d26160ba4f44c66095b29ec81e1fc4bc6e9d38dd2ea1110c12514422540cf86",
+        "binary_sha256": "c706ee031b41d2f1e440093b7753ab84db11d7d3a0ae259e93c4886a03c226b7",
+        "template_sha256": "4e9918361c284a93880606d182d64da6a9fe97cdc1f5c5a78c1c8840444246fc",
+        "config_sha256": "2cdae3d4f9831bc59a32ba13c4b1796b3e7f1a027733995faac36185e70a2968",
+        "simulated": false,
+        "gateway_incarnation": "680b32d66b98d6d199308825c42c87fd",
+        "gateway_epoch": 1,
+        "implementation_sha256": {
+          "gateway.py": "bdf57663048184d05b37e3bd2f15fb8eaa64477deeed3f86f47370cd313e6678",
+          "runtime.py": "eceb220a0a4239494e68e1be34c8cfb3c94c447884afaf4cf92874475a04e925",
+          "owned_process.py": "2eda0ca1c5413e7eb4aac194d620926cef0e03c554dfb84ebf8ee4265180a3fd",
+          "runtime_args.py": "5ef5780b1c55cbb78fff09e030d08dd3cfea93b93a7c6eb5124cbb96998972f4",
+          "psutil-7.2.2": "6a8cde46444a0771629543f87f42c6f95520f1f5c51c10214df8d088f37d64b4"
+        }
+      },
+      "planner_artifact_sha256": "7479f8c12ab94c60a29463a27d3925d642f91a1ef0d576446293cbfe4933f0c6",
+      "usage": {
+        "prompt_tokens": 116,
+        "completion_tokens": 18,
+        "total_tokens": 134
+      },
+      "timing": {
+        "queue_ms": 0.04,
+        "latency_ms": 805.6,
+        "ttft_ms": 532.12
+      }
+    }
+  ],
+  "orphan_survived_owner_kill": true,
+  "recovery_verified_before_replacement": true,
+  "distinct_configuration_and_planner_artifact": true,
+  "orderly_successor_cleanup": {
+    "stopped": true,
+    "gateway_drained": true,
+    "method": "owned_process"
+  },
+  "sentinel_untouched": true,
+  "final_cleanup": {
+    "known_native_processes_stopped": true,
+    "native_and_gateway_listeners_closed": true,
+    "no_native_marker_files": true,
+    "test_owner_and_sentinel_processes_stopped": true
+  }
+}

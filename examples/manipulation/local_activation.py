@@ -458,7 +458,7 @@ def main():
     parser.add_argument("--text-assets", type=Path, required=True, help="existing pinned native text asset receipt")
     parser.add_argument("--action-assets", type=Path, required=True, help="existing verified SmolVLA asset directory")
     parser.add_argument("--gateway-qualification", type=Path,
-                        default=Path(__file__).with_name("evidence") / "native-qwen-owner-recovery.json")
+                        default=Path(__file__).with_name("evidence") / "native-qwen-local-activation.json")
     parser.add_argument("--output", type=Path, required=True, help="new private run directory; never reused")
     parser.add_argument("--serve", action="store_true", help="complete A/B/A then retain the ready, idle installation")
     args = parser.parse_args()
