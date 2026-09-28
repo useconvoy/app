@@ -22,7 +22,11 @@ def validate_gateway_identity(value: dict) -> dict:
         raise ValueError("the planner requires an actual loaded text model")
     for key in STATIC_GATEWAY_FIELDS - {"implementation_sha256", "simulated"}:
         _digest(value[key], key)
-    _keys(value["implementation_sha256"], {"gateway.py", "runtime.py"}, "gateway implementation")
+    legacy_sources = {"gateway.py", "runtime.py"}
+    owned_sources = legacy_sources | {"owned_process.py", "runtime_args.py", "psutil-7.2.2"}
+    sources = value["implementation_sha256"]
+    if not isinstance(sources, dict) or set(sources) not in (legacy_sources, owned_sources):
+        raise ValueError("unsupported gateway implementation identity")
     for digest in value["implementation_sha256"].values():
         _digest(digest, "gateway source")
     for field in ("release_id", "gateway_incarnation"):

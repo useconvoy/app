@@ -71,6 +71,7 @@ class Gateway:
             name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
             for name in ("gateway.py", "runtime.py")
         }
+        self.implementation_sha256.update(supervisor.ownership_fingerprints())
         self.host = host
         self.port = port
         self.queue_depth = queue_depth

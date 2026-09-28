@@ -1,8 +1,9 @@
 # Owned local process prerequisite
 
 `convoy_agent.owned_process.OwnedProcess` is an opt-in helper for a known,
-foreground, single-process launcher. It is not yet connected to RuntimeSupervisor,
-the coordinator, or bundle activation. The base agent remains dependency-free and
+foreground, single-process launcher. The native `RuntimeSupervisor` can opt in by
+receiving a caller-held `process_owner`; `examples/manipulation/local_gateway.py`
+uses it. The coordinator and bundle activation do not yet use it. The base agent remains dependency-free and
 supports Python 3.10. Install `convoy-agent[local-host]` to use this helper.
 
 ```python
@@ -67,6 +68,31 @@ sentinel, immediate successful/failed child exits, TERM-to-KILL escalation, lock
 exclusion, ambiguous markers, malformed and
 mismatched identities, and native lookup denial. The existing Python 3.10 CI job
 runs the base agent first, then installs the optional extra and runs this file.
+
+## Native launcher integration
+
+The caller holds the owner context for the full supervisor lifetime. A pinned-model
+preflight precedes recovery, and recovery precedes key rotation or replacement.
+The unique marker file is passed to llama-server as its existing `--api-key-file`
+argument. Owned mode does not write or trust the legacy `child.json`; if that old
+record exists, startup and cleanup report unresolved ownership rather than
+discarding it. Existing agent callers retain the legacy mode.
+
+Shutdown requires both verified native exit and completed output drainage. A
+missing ownership record cannot override a still-live local Popen handle. An
+incomplete stop retains the child handle and key so a subsequent cleanup can
+finish; a pending output reader prevents another owned launch.
+
+Owned gateway identities include `owned_process.py`, `runtime_args.py`, and the
+actual installed psutil Python/native file hashes in addition to `gateway.py`
+and `runtime.py`. The planner accepts exactly the legacy or owned identity shape
+and binds the complete shape into its artifact digest. This creates new artifacts;
+historical manifests and evidence are preserved.
+
+The development gateway supports only the two explicit context-size choices
+2048 and 4096, with unchanged token and deadline bounds. Its command still requires
+a new output directory. This is native ownership integration, not automatic bundle
+activation or a persistent deployment service.
 
 Local verification passed all 13 cases on Darwin arm64/Python 3.12.13 and in a
 disposable Linux 6.12.76 aarch64 container/Python 3.12.14, both with psutil 7.2.2.

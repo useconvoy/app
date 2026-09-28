@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 
 from convoy_agent.gateway import Gateway
+from convoy_agent.owned_process import OwnedProcess
 from convoy_agent.runtime import RuntimeSupervisor
 from convoy_planner.artifact import validate_gateway_identity
 
@@ -61,6 +62,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--assets", type=Path, required=True, help="verified local model/runtime receipt")
     parser.add_argument("--output", type=Path, required=True, help="new private gateway state directory")
+    parser.add_argument("--ctx-size", type=int, choices=(2048, 4096), default=2048)
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, mode=0o700, exist_ok=False)
@@ -69,60 +71,61 @@ def main():
     stopped = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stopped.set())
     signal.signal(signal.SIGINT, lambda *_: stopped.set())
-    supervisor = RuntimeSupervisor(output / "native", simulate=False)
-    # Bound-completion calls acquire the inference slot without waiting. The
-    # legacy gateway's admission counter must still allow the first caller.
-    gateway = Gateway(supervisor, host="127.0.0.1", queue_depth=1, deadline_s=30)
-    config = {"ctx_size": 2048, "n_predict": 128, "gpu_layers": 0}
-    evidence = {
-        "scope": "local CPU text inference; no Jetson, cloud or physical-robot qualification",
-        "host": {"system": platform.system(), "machine": platform.machine()},
-        "launcher_sha256": sha256(Path(__file__)),
-        "model": {"sha256": receipt["model"]["sha256"], "bytes": receipt["model"]["bytes"]},
-        "runtime_source": receipt["source"], "runtime_archive_sha256": receipt["archive"]["sha256"],
-        "status": "starting",
-    }
-    try:
-        native = supervisor.start(
-            release_id="local-cpu-" + receipt["archive"]["sha256"][:16],
-            spec={"model": {"file": {"sha256": receipt["model"]["sha256"]}},
-                  "runtime": {"artifact_sha256": receipt["archive"]["sha256"]}, "config": config},
-            model_path=model, template_path=None, binary=binary,
-            lib_dir=output / "runtime/lib", health_timeout_s=120,
-        )
-        evidence.update(effective_configuration=supervisor.config,
-                        native={key: native[key] for key in (
-                            "build_info", "binary_sha256", "chat_template_sha256", "backend",
-                            "gpu_offloaded_layers", "gpu_total_layers", "n_ctx", "total_slots",
-                        )})
-        if native["simulated"] or native["backend"] != "CPU":
-            raise ValueError("native runtime did not establish the requested CPU backend")
-        gateway.start()
-        gateway.set_mode("production")
-        identity = validate_gateway_identity(gateway.runtime_identity(check_health=True))
-        evidence.update(status="ready", gateway_url=f"http://127.0.0.1:{gateway.port}",
-                        gateway_identity=identity)
-        (output / "gateway.json").write_text(json.dumps(evidence, indent=2) + "\n")
-        print(f"Real local CPU gateway ready: {output / 'gateway.json'}", flush=True)
-        while not stopped.wait(0.2):
-            if gateway.needs_restart or supervisor.state() != "running":
-                raise RuntimeError("native execution requires explicit recovery; no automatic restart")
-    except BaseException as error:
-        evidence.update(status="failed", error_type=type(error).__name__)
-        raise
-    finally:
-        gateway.set_mode("closed")
-        gateway.stop()
-        cleanup = supervisor.stop(deadline=time.monotonic() + 10)
-        evidence.update(cleanup=cleanup, gateway_drained=gateway.drain(2), gateway_stats=gateway.stats)
-        cleanup_ok = cleanup["stopped"] and evidence["gateway_drained"]
-        if not cleanup_ok:
-            evidence.update(status="failed", cleanup_error="owned gateway cleanup incomplete")
-        elif evidence["status"] == "ready":
-            evidence["status"] = "stopped"
-        (output / "gateway-result.json").write_text(json.dumps(evidence, indent=2) + "\n")
-        if not cleanup_ok:
-            raise RuntimeError("owned gateway cleanup incomplete; inspect retained local state")
+    with OwnedProcess(output / "native" / "owner") as owner:
+        supervisor = RuntimeSupervisor(output / "native", simulate=False, process_owner=owner)
+        # Bound-completion calls acquire the inference slot without waiting. The
+        # legacy gateway's admission counter must still allow the first caller.
+        gateway = Gateway(supervisor, host="127.0.0.1", queue_depth=1, deadline_s=30)
+        config = {"ctx_size": args.ctx_size, "n_predict": 128, "gpu_layers": 0}
+        evidence = {
+            "scope": "local CPU text inference; no Jetson, cloud or physical-robot qualification",
+            "host": {"system": platform.system(), "machine": platform.machine()},
+            "launcher_sha256": sha256(Path(__file__)),
+            "model": {"sha256": receipt["model"]["sha256"], "bytes": receipt["model"]["bytes"]},
+            "runtime_source": receipt["source"], "runtime_archive_sha256": receipt["archive"]["sha256"],
+            "status": "starting",
+        }
+        try:
+            native = supervisor.start(
+                release_id="local-cpu-" + receipt["archive"]["sha256"][:16],
+                spec={"model": {"file": {"sha256": receipt["model"]["sha256"]}},
+                      "runtime": {"artifact_sha256": receipt["archive"]["sha256"]}, "config": config},
+                model_path=model, template_path=None, binary=binary,
+                lib_dir=output / "runtime/lib", health_timeout_s=120,
+            )
+            evidence.update(effective_configuration=supervisor.config,
+                            native={key: native[key] for key in (
+                                "build_info", "binary_sha256", "chat_template_sha256", "backend",
+                                "gpu_offloaded_layers", "gpu_total_layers", "n_ctx", "total_slots",
+                            )})
+            if native["simulated"] or native["backend"] != "CPU":
+                raise ValueError("native runtime did not establish the requested CPU backend")
+            gateway.start()
+            gateway.set_mode("production")
+            identity = validate_gateway_identity(gateway.runtime_identity(check_health=True))
+            evidence.update(status="ready", gateway_url=f"http://127.0.0.1:{gateway.port}",
+                            gateway_identity=identity)
+            (output / "gateway.json").write_text(json.dumps(evidence, indent=2) + "\n")
+            print(f"Real local CPU gateway ready: {output / 'gateway.json'}", flush=True)
+            while not stopped.wait(0.2):
+                if gateway.needs_restart or supervisor.state() != "running":
+                    raise RuntimeError("native execution requires explicit recovery; no automatic restart")
+        except BaseException as error:
+            evidence.update(status="failed", error_type=type(error).__name__)
+            raise
+        finally:
+            gateway.set_mode("closed")
+            gateway.stop()
+            cleanup = supervisor.stop(deadline=time.monotonic() + 10)
+            evidence.update(cleanup=cleanup, gateway_drained=gateway.drain(2), gateway_stats=gateway.stats)
+            cleanup_ok = cleanup["stopped"] and evidence["gateway_drained"]
+            if not cleanup_ok:
+                evidence.update(status="failed", cleanup_error="owned gateway cleanup incomplete")
+            elif evidence["status"] == "ready":
+                evidence["status"] = "stopped"
+            (output / "gateway-result.json").write_text(json.dumps(evidence, indent=2) + "\n")
+            if not cleanup_ok:
+                raise RuntimeError("owned gateway cleanup incomplete; inspect retained local state")
 
 
 if __name__ == "__main__":
