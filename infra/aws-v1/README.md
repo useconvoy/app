@@ -38,15 +38,20 @@ against its official SHA256SUMS, and place it on your task-local PATH. The check
 lockfile pins provider **hashicorp/aws 6.62.0**. Then:
 
 ```sh
-terraform -chdir=infra/aws-v1 init -backend=false -input=false
 terraform -chdir=infra/aws-v1 fmt -check -recursive
+terraform -chdir=infra/aws-v1 init -backend=false -input=false -lockfile=readonly
 terraform -chdir=infra/aws-v1 validate
 terraform -chdir=infra/aws-v1 test -var-file=example.tfvars
+uvx --from ruff==0.16.7 ruff check infra/aws-v1
 ```
 
 The test provider mocks AWS calls. It evaluates real HCL/provider schemas and
 three useful plan contracts: stopped/private initial deployment, single-replica
 activation, and rejection of mutable image tags. It never runs a real apply.
+The `aws-staging-checks` workflow runs these same commands for relevant pull
+requests and `v1` pushes, using a checksum-verified Terraform archive and the
+read-only provider lock. It has no AWS credentials or account calls. Python
+lint installs only its pinned tool, without the simulation/model dependencies.
 
 After building the qualified base API locally, the wrapper/permission check is:
 
@@ -63,6 +68,9 @@ ownership, then applies real migrations as
 project, verifies runtime DDL is denied, blocks legacy routes, repeats grants,
 and removes its own containers/network. It does not test AWS's RDS admin role
 implementation or TLS endpoint; those remain staged acceptance checks.
+The existing `service-images` workflow also watches this directory and runs
+this check after its base API build. It builds only the small derivative layer;
+there is no second API build or learned-model download for AWS qualification.
 
 ## Trust material
 
