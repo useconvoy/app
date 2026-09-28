@@ -9,6 +9,9 @@ The initial placement is the planner adapter beside the existing Jetson gateway
 and the action policy/simulator on the development Mac. These are development
 placements, not cloud or physical-robot qualification. Actual model quality and
 device timing must be measured after this adapter is installed on the device.
+An actual model on the developer's own computer uses the separate
+`development-local` planner placement. It cannot satisfy a suite qualified for
+the Jetson placement, and it is distinct from the deterministic controlled fixture.
 
 ## Install and bind
 
@@ -126,3 +129,63 @@ accepted one controlled plan and reached benchmark success in 54 actual SmolVLA
 actions, all equal to the original direct trace. It took 44.36 wall seconds for
 0.675 simulated seconds. This qualifies the fixed-task integration, not a learned
 planner, Jetson deployment, real-time control or sustained physical placement.
+
+## Actual text-model qualification
+
+Use an existing owned gateway that provides complete, non-simulated provenance.
+The same environment must inspect the model and run the adapter so its Python,
+package and source identities match. The explicit placement describes where the
+model actually runs, including when the loopback URL is an SSH tunnel:
+
+```sh
+uv run --project integrations/lerobot --extra paired --frozen \
+  python examples/manipulation/real_planner.py \
+  --gateway-url http://127.0.0.1:9070 --planner-placement development-local \
+  --output /path/to/new-private-real-planner-run
+```
+
+The harness leaves the existing gateway/model owner alone and starts its own
+management API, planner adapter, action worker and simulator. It retains the
+original prompt/parser, 128-token bound and 30-second planning deadline. Prose,
+malformed JSON, unsupported skills, missing model provenance or a late response
+fail admission. There is no deterministic fallback or automatic model retry.
+`real-planner-result.json` joins the actual model descriptor, original accepted
+proposal, action trace and task outcome. Failed attempts retain their pipeline
+report; they are not changed into passing samples. `--serve` supports manual
+console evaluation against these processes.
+
+The [recorded actual-model run](../../examples/manipulation/evidence/paired-qwen-local-seed0.json)
+used pinned Qwen2.5-1.5B-Instruct Q4_K_M and llama.cpp on a Mac CPU. Qwen selected
+the catalog skill in 897 ms; the accepted plan led to 54 actual SmolVLA/MuJoCo
+actions and the first benchmark success signal. All actions exactly matched the
+original direct seed0 trace. The episode took 46.34 active wall seconds for
+0.675 simulated seconds. This is fixed-task integration evidence, not general
+planning, real-time performance or Jetson/cloud qualification.
+
+The record also retains two earlier failed attempts: an unrecognized native CPU
+log label prevented readiness, and a later mission stopped after three actions
+when host sleep outlasted its signed authorization. Neither is counted as a
+passing sample. The successful run used a new mission with the original prompt,
+parser and deadlines; its owned native process and gateway stopped cleanly.
+
+For a local CPU development fixture, `examples/manipulation/local_gateway.py`
+can own the existing `RuntimeSupervisor` and native gateway in a fresh private
+directory. It requires a version-1 asset receipt with a pinned model path, byte
+count and SHA256; a runtime archive path/SHA256; the original runtime root; and
+binary/library paths and SHA256 values. Archive members are relative to that
+root. The helper checks the model and archive, extracts the runtime into its own
+directory, verifies its binary/libraries, and requires native CPU and full gateway
+provenance before publishing `gateway.json`. A packaged build must resolve its
+non-system libraries within that package; build-tree paths are not valid evidence.
+
+```sh
+uv run --project integrations/lerobot --extra paired --frozen \
+  python examples/manipulation/local_gateway.py \
+  --assets /path/to/asset-receipt.json --output /path/to/new-private-gateway
+```
+
+This helper downloads nothing, installs no agent and listens only on loopback.
+Stop it with SIGINT/SIGTERM after qualification. It records native child exit and
+gateway drain in `gateway-result.json`. Unexpected runtime loss closes the fixture;
+it never starts a replacement model silently. It does not qualify unattended
+hardware supervision or host-crash recovery.

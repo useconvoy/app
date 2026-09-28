@@ -79,9 +79,12 @@ def validate_release_manifest(value: dict) -> dict:
     _keys(value["planning"], {"timeout_ms"}, "planning")
     _integer(value["planning"]["timeout_ms"], "planning timeout_ms", 1, 30000)
     # Explicit reference placement, without claiming hosted cloud or Jetson motor-policy qualification.
-    planner_placement = ("development-local-controlled" if value["planner"]["runtime"] == CONTROLLED_PLANNER_RUNTIME
-                         else "development-jetson-lan")
-    if value["placement"] != {"policy": "development-local-cpu", "planner": planner_placement}:
+    planner_placements = (("development-local-controlled",)
+                          if value["planner"]["runtime"] == CONTROLLED_PLANNER_RUNTIME
+                          else ("development-jetson-lan", "development-local"))
+    _keys(value["placement"], {"policy", "planner"}, "placement")
+    if (value["placement"]["policy"] != "development-local-cpu"
+            or value["placement"]["planner"] not in planner_placements):
         raise ValueError("unsupported qualification placement")
     return value
 

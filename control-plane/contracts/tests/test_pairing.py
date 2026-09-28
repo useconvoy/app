@@ -7,6 +7,7 @@ import pytest
 from convoy_contracts.execution import VISUAL_PROFILE, canonical_digest, sign_grant, verify_grant
 from convoy_contracts.pairing import (
     CATALOG_SHA256,
+    CONTROLLED_PLANNER_RUNTIME,
     FIXED_TASK,
     PAIRED_PROFILE,
     PLANNER_PROTOCOL_SHA256,
@@ -73,6 +74,32 @@ def test_planner_grants_do_not_cross_purpose_or_key_and_keep_original_expiry():
             verify_planner_grant(invalid, key, now)
     with pytest.raises(ValueError):
         verify_grant(token, SECRET)
+
+
+@pytest.mark.parametrize("runtime,allowed,rejected", [
+    (PLANNER_RUNTIME, ("development-local", "development-jetson-lan"),
+     ("development-local-controlled", "cloud")),
+    (CONTROLLED_PLANNER_RUNTIME, ("development-local-controlled",),
+     ("development-local", "development-jetson-lan", "cloud")),
+])
+def test_planner_placement_preserves_real_and_controlled_boundaries(runtime, allowed, rejected):
+    value = manifest()
+    value["planner"]["runtime"] = runtime
+    for placement in allowed:
+        value["placement"]["planner"] = placement
+        assert validate_release_manifest(value) is value
+    for placement in rejected:
+        value["placement"]["planner"] = placement
+        with pytest.raises(ValueError, match="unsupported qualification placement"):
+            validate_release_manifest(value)
+
+
+def test_local_and_jetson_placement_require_distinct_release_and_evaluation_identity():
+    jetson = manifest()
+    local = copy.deepcopy(jetson)
+    local["placement"]["planner"] = "development-local"
+    assert canonical_digest(local) != canonical_digest(jetson)
+    assert evaluation_contract(local) != evaluation_contract(jetson)
 
 
 def test_plan_envelope_cannot_expand_task_or_hide_unqualified_parameters():

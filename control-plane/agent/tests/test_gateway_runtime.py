@@ -238,3 +238,31 @@ def test_runtime_config_strictness_and_argv():
         }
     )
     assert env == {"PATH": "/bin", "HOME": "/h"}
+
+
+@pytest.mark.parametrize("buffer,backend,intended_cuda", [
+    ("CPU", "CPU", False),
+    ("CPU_Mapped", "CPU", False),
+    ("CPU_REPACK", "CPU", False),
+    ("CUDA0", "CUDA0", True),
+    ("Metal", "Metal", False),
+    ("Vulkan0", "Vulkan0", False),
+    ("CPU_UNKNOWN", None, None),
+    ("CPU_REPACKED", None, None),
+    ("XPU", None, None),
+])
+def test_native_buffer_evidence_recognizes_only_known_backends(tmp_path, monkeypatch, buffer, backend, intended_cuda):
+    sup = RuntimeSupervisor(tmp_path / "rt", simulate=False)
+    binary = tmp_path / "llama-server"
+    binary.write_bytes(b"metadata-only test binary")
+    sup.argv = [str(binary)]
+    lines = [f"0.00.122.355 I load_tensors:   {buffer} model buffer size =   877.31 MiB"]
+    if backend in {"CUDA0", "Metal", "Vulkan0"}:
+        lines.insert(0, "load_tensors: offloaded 29/29 layers to GPU")
+    monkeypatch.setattr(sup, "props", lambda: {})
+    monkeypatch.setattr(sup, "log_lines", lambda: lines)
+
+    evidence = sup.collect_evidence()
+
+    assert evidence["backend"] == backend
+    assert evidence["intended_backend_ok"] is intended_cuda
