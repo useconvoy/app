@@ -209,7 +209,9 @@ class Coordinator:
             self.journal.prepare(mission["id"], None)
             self.journal.finish(mission["id"], {
                 "identity": None, "state": "cancelled", "detail": "cancelled before local admission",
-                "summary": {"steps": 0, "execution_mode": "lockstep_offline"},
+                "summary": {"steps": 0, "execution_mode": "lockstep_offline",
+                            "failure": failure_record("mission_claim", Cancelled(), category="cancelled",
+                                                      authorization_elapsed=time.time() >= mission["expires_at"])},
             })
             self._flush_reports(desired)
             return

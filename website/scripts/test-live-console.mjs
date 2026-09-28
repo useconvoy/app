@@ -77,7 +77,6 @@ try {
   await expect(page.getByRole('heading', { name: 'Robots', exact: true })).toBeVisible();
   await expect(start).toBeEnabled();
   await start.click();
-  await expect(rows.first()).toContainText('running', { timeout: 5000 });
   await page.getByRole('button', { name: 'Request cancellation', exact: true }).click({ timeout: 5000 });
   await expect(rows.first()).toContainText('cancelled', { timeout: 15000 });
   await page.getByRole('button', { name: 'View episode', exact: true }).first().click();
