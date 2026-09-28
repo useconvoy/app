@@ -326,6 +326,21 @@ class RuntimeSupervisor:
                     "RUNTIME_ALREADY_RUNNING", "a runtime child is already running; stop it first"
                 )
             cfg = canonical_config(spec.get("config", {}))
+            model_sha = None
+            expected_sha = (spec.get("model", {}).get("file") or {}).get("sha256")
+            # Historical low-level callers may not provide a concrete pin. Preserve
+            # their lifecycle behavior but leave provenance incomplete: the paired
+            # planner refuses it rather than inferring an identity from a filename.
+            if not self.simulate and expected_sha is not None:
+                digest = hashlib.sha256()
+                with model_path.open("rb") as model_source:
+                    for block in iter(lambda: model_source.read(1024 * 1024), b""):
+                        digest.update(block)
+                model_sha = digest.hexdigest()
+                if model_sha != expected_sha:
+                    raise RuntimeError_("MODEL_DIGEST_MISMATCH", "model bytes differ from pinned launch identity")
+            # A rejected pin is not a launch: do not rotate credentials or begin
+            # generation/uptime accounting until the model preflight succeeds.
             self.config = cfg
             self.release_id = release_id
             self.port = free_port()
@@ -340,19 +355,6 @@ class RuntimeSupervisor:
             self._open_interval(self.started_at)
             self.evidence = {}
             self._provenance = {}
-            model_sha = None
-            expected_sha = (spec.get("model", {}).get("file") or {}).get("sha256")
-            # Historical low-level callers may not provide a concrete pin. Preserve
-            # their lifecycle behavior but leave provenance incomplete: the paired
-            # planner refuses it rather than inferring an identity from a filename.
-            if not self.simulate and expected_sha is not None:
-                digest = hashlib.sha256()
-                with model_path.open("rb") as model_source:
-                    for block in iter(lambda: model_source.read(1024 * 1024), b""):
-                        digest.update(block)
-                model_sha = digest.hexdigest()
-                if model_sha != expected_sha:
-                    raise RuntimeError_("MODEL_DIGEST_MISMATCH", "model bytes differ from pinned launch identity")
             self._reader = None  # evidence and tails come only from THIS launch
             if self.simulate:
                 from .simruntime import SimRuntime

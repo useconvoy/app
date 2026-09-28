@@ -62,5 +62,9 @@ def test_runtime_hash_mismatch_refuses_native_launch(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError_, match="model bytes differ"):
         supervisor.start(release_id="r", spec={"config": {}, "model": {"file": {"sha256": "a" * 64}}},
                          model_path=model, template_path=None, binary=None, lib_dir=None)
+    assert supervisor.generation == 0 and supervisor.started_at is None
+    assert supervisor.run_intervals == [] and supervisor.up_time(0, supervisor.clock()) == 0
+    assert supervisor.api_key is None and supervisor.api_key_file is None
+    assert not (supervisor.workdir / "runtime.key").exists()
     with pytest.raises(RuntimeError_, match="provenance unavailable"):
         supervisor.provenance()
