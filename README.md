@@ -1,5 +1,9 @@
 # Convoy
 
+V1 platform work is planned on the `v1` branch. See the [platform design](docs/v1/platform-design.md)
+and [implementation and hosting plan](docs/v1/implementation-plan.md) for milestones,
+service boundaries, testing, infrastructure, and the distinction between planned and implemented behavior.
+
 Convoy's public website and physical Jetson demo live in this repository.
 The landing page introduces the deployment workflow being built for physical AI;
 the portal exposes a focused, working text-inference path on one configured Jetson.
