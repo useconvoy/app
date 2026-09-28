@@ -177,7 +177,7 @@ def test_existing_v3_database_gains_the_unknown_interval_table_at_startup(app, a
     con = sqlite3.connect(str(live))
     con.execute("DROP TABLE usage_unknown_intervals")
     con.commit()
-    assert con.execute("PRAGMA user_version").fetchone()[0] == migrations.SCHEMA_VERSION == 3
+    assert con.execute("PRAGMA user_version").fetchone()[0] == migrations.SCHEMA_VERSION
     con.close()
 
     engine = make_engine(settings)
@@ -185,7 +185,7 @@ def test_existing_v3_database_gains_the_unknown_interval_table_at_startup(app, a
     assert plan["add_tables"] == ["usage_unknown_intervals"] and not plan["needs_rebuild"]
     assert not plan["needs_data_migration"] and not plan["empty"]
     out = migrations.ensure_schema(engine)  # startup completes the schema without a rebuild
-    assert out["add_tables"] == ["usage_unknown_intervals"] and out["user_version"] == 3, out
+    assert out["add_tables"] == ["usage_unknown_intervals"] and out["user_version"] == migrations.SCHEMA_VERSION, out
     with engine.connect() as c:
         idx = [r[1] for r in c.execute(migrations.text("PRAGMA index_list(usage_unknown_intervals)"))]
         assert "ix_usage_unknown_intervals_device_id" in idx  # created with the table
@@ -193,7 +193,7 @@ def test_existing_v3_database_gains_the_unknown_interval_table_at_startup(app, a
         assert {"id", "device_id", "from_ts", "to_ts", "seconds", "reason", "previous_incarnation", "record_seq", "simulated", "received_at"} <= set(cols)  # fmt: skip
     engine.dispose()
     again = migrations.migrate_database(settings)
-    assert again["ok"] and again["applied"] == {"unchanged": True, "user_version": 3}, again
+    assert again["ok"] and again["applied"] == {"unchanged": True, "user_version": migrations.SCHEMA_VERSION}, again
     assert not list(settings.data_dir.glob("convoy.pre-migrate-*.db"))
 
     # the services come back on the completed database and ingest an interval into the new table
