@@ -4,7 +4,10 @@ Convoy can now allocate and execute a fixed simulation suite through the normal
 robot deployment and mission path. Each case is persisted before execution. A
 separate `convoy-evaluations` process reconciles the jobs; the existing coordinator
 and inference worker perform the actual simulation and inference. The job process
-never imports model weights or runs customer code.
+never imports model weights or runs customer code. The local service deployment
+starts it as the separate `evaluations` container, alongside the legacy scheduler.
+Its container health check verifies database/schema access; job progress remains
+observable through the evaluation API.
 
 ## Workflow
 
