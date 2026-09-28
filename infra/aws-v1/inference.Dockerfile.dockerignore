@@ -1,0 +1,5 @@
+**
+!infra/
+!infra/aws-v1/
+!infra/aws-v1/runtime/
+!infra/aws-v1/runtime/inference.py
