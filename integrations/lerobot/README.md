@@ -2,7 +2,7 @@
 
 This optional integration runs the public **SmolVLA MetaWorld checkpoint** through Convoy's real enrollment, deployment, mission, inference, and episode APIs. The model worker and MuJoCo robot simulator are separate processes. A rendered image, four proprioceptive values, and the task instruction cross the inference boundary for every action. No training is needed.
 
-Two consecutive managed missions on the same warm worker succeeded on seed 0 in **54 actions each**, with every action exactly equal across mission resets and to the previously recorded direct inference run. They took **47.0 and 42.2 seconds wall time** for **0.675 seconds of simulated control time** each under local load. Worker inference p50 was **735 ms**, p95 nearest rank about **975 ms** across 108 decisions. This establishes a working integration for one task/seed; it does not establish real-time control, general model quality, physical safety, or hardware portability. See [the qualification evidence](../../examples/manipulation/evidence/smolvla-managed-seed0.json).
+Two consecutive managed missions on the same warm worker succeeded on seed 0 in **54 actions each**, with every action exactly equal across mission resets and to the previously recorded direct inference run. They took **47.6 and 47.2 seconds wall time** for **0.675 seconds of simulated control time** each under local load. Worker inference p50 was **749 ms**, p95 nearest rank about **1169 ms** across 108 decisions. This establishes a working integration for one task/seed; it does not establish real-time control, general model quality, physical safety, or hardware portability. See [the qualification evidence](../../examples/manipulation/evidence/smolvla-managed-seed0.json).
 
 ## Install and run
 
@@ -38,7 +38,7 @@ For individually hosted services, run the standard worker with `--factory convoy
 
 The checkpoint's feature metadata lists state length 6 and three cameras. Its saved normalizer contains four state/action values, and the upstream runtime supports only the present camera with `empty_cameras=0`. This integration uses the actual upstream four-state/one-camera path that was executed in qualification; it does not synthesize additional state or cameras.
 
-`artifact.py` hashes weights, saved processors, tokenizer/config assets, pinned package versions, camera/profile semantics, reset seed, one-action replanning, and action clipping into a runtime artifact digest. Changing any of these requires a new artifact; changing profile semantics requires a new profile version.
+`artifact.py` hashes the installed runtime, adapter, managed entrypoint, artifact builder, and execution-contract source bytes, as well as weights, saved processors, tokenizer/config assets, pinned package versions, camera/profile semantics, reset seed, one-action replanning, and action clipping into a runtime artifact digest. A source edit changes the digest even if its descriptive transform label is unchanged. Changing any of these requires a new artifact; changing profile semantics requires a new profile version.
 
 ## Stateful inference boundary
 

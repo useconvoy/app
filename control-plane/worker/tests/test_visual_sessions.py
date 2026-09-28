@@ -7,6 +7,7 @@ import time
 import zlib
 from concurrent.futures import ThreadPoolExecutor
 
+import pytest
 from convoy_contracts.execution import (
     MAX_VISUAL_REQUEST_BYTES,
     VISUAL_INSTRUCTION,
@@ -16,6 +17,7 @@ from convoy_contracts.execution import (
 )
 from convoy_worker.app import create_app
 from convoy_worker.sessions import Sessions
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 SECRET = "execution-secret-for-tests-only-1234567890"
@@ -146,6 +148,9 @@ def test_retention_capacity_always_reserves_space_to_close_active_owner():
         sessions.close({**identity(str(number)), "expires_at": expiry})
     grant = {**identity("owner"), "expires_at": expiry}
     owner, _ = sessions.start(grant)
+    with pytest.raises(HTTPException) as full:
+        sessions.close({**identity("unseen"), "expires_at": expiry})
+    assert full.value.status_code == 429 and sessions.owner is owner
     sessions.close(grant)
     assert sessions.owner is None and len(sessions.closed) == 1024
     assert owner.grant == grant

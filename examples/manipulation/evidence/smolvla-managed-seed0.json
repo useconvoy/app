@@ -4,7 +4,7 @@
   "scope": "Two identical seed0 missions verify reset and transport integration, not multi-seed model quality. Offline lockstep on Mac CPU; no physical or real-time qualification.",
   "hardware": "macOS-15.3-arm64-arm-64bit",
   "python": "3.12.13",
-  "source_base_commit": "b4781415fe221971306c91fb2f142064fc2b7ffe",
+  "source_base_commit": "696cea140e761f76a4fc7fb0afb949fdda5b9fa0",
   "source_worktree_was_dirty": true,
   "source_files_sha256": {
     "control-plane/contracts/convoy_contracts/execution.py": "ffd9808e1c724f13e6bfb1e4069f6a228e18f130a989f8827d70b2b42c1d1034",
@@ -13,19 +13,19 @@
     "control-plane/agent/convoy_agent/coordinator/engine.py": "5282c549abe312016c2370e1c7731659acdb287c0c92093e9e7bc021079468c7",
     "control-plane/agent/convoy_agent/coordinator/transport.py": "37425ac090514ccc64003819b1fa89d3d00e64236d6e461edaefdad4ba65a3e2",
     "control-plane/server/convoy_server/services/platform.py": "707c8b7c25df8ebb2a096a8a66839f0da5eb575774926646cb70fb52c3b4b715",
-    "integrations/lerobot/src/convoy_lerobot/artifact.py": "81fff7c4cd359da562394f33eea57482be562c8c90062439c5c97f1e471f177d",
+    "integrations/lerobot/src/convoy_lerobot/artifact.py": "d566ecc5e5d11d9ba2a7353110ff7c4a88a689a039ee14fbc9b406dc5f8d70fc",
     "integrations/lerobot/src/convoy_lerobot/adapter.py": "c440a36ac6eda667d62c24b355798d98f17368048b58c8a507a0b3c21cacd492",
     "integrations/lerobot/src/convoy_lerobot/runtime.py": "e0203b083bb222258ef74308352b924e67c7f4bb565cd4fe94177432c8b14a3c",
     "integrations/lerobot/src/convoy_lerobot/managed.py": "f6529d4432e9d3adf8fd1ecbcf102a4e820901eabbafe78dd4abc2cebadc79bf"
   },
-  "artifact_sha256": "5474aae7bfeb572710089cc524fc080c23e33c07633ba029896ce1ee43eea340",
-  "release_digest": "7bcb69c596334e6ee40690ce644340dd9899cf2a6f38819df8190b9c74ac1865",
+  "artifact_sha256": "873f36dac22eb58303364e8e7cbd4780e2e9664447a218b708a63450f9395f67",
+  "release_digest": "12d045a3f7bb4f688d4ab2a8515df5beabc39158ef57bc2a7cbbca7676d9c537",
   "manifest": {
     "schema_version": 1,
     "profile": "metaworld-smolvla-pick-place-rgb-v1",
     "policy": {
       "runtime": "lerobot-smolvla-metaworld-cpu-v1",
-      "artifact_sha256": "5474aae7bfeb572710089cc524fc080c23e33c07633ba029896ce1ee43eea340"
+      "artifact_sha256": "873f36dac22eb58303364e8e7cbd4780e2e9664447a218b708a63450f9395f67"
     },
     "environment": {
       "name": "pick-place-v3",
@@ -71,7 +71,7 @@
       "seed": 0,
       "simulated_duration_s": 0.675,
       "steps": 54,
-      "wall_duration_s": 46.991077124956064
+      "wall_duration_s": 47.595306875009555
     },
     {
       "ever_success": true,
@@ -84,14 +84,14 @@
       "seed": 0,
       "simulated_duration_s": 0.675,
       "steps": 54,
-      "wall_duration_s": 42.17963495803997
+      "wall_duration_s": 47.16611495800316
     }
   ],
   "worker_timing_ms": {
     "count": 108,
-    "p50": 735.2483754802961,
-    "p95_nearest_rank": 974.6738339890726,
-    "maximum": 1139.9901250260882
+    "p50": 749.2071039741859,
+    "p95_nearest_rank": 1169.3195839761756,
+    "maximum": 1909.5744580263272
   },
   "per_mission_reset_check": {
     "missions": 2,
@@ -107,7 +107,22 @@
     "exact_actions_equal": true,
     "note": "Same checkpoint, seed0, upstream camera and one-action replanning. Different processes/timing."
   },
-  "actions_jsonl_sha256": "6ecdc57dc7b39e579b96533a1409323e87af484a8f9ae84c7ad0e233ee27458f",
+  "actions_jsonl_sha256": "dcc4e6b7a67050daf8f0c0bb9a9be7c9942ccdac2d9a817b2a9fb89a85aaec0e",
   "baseline_regression": "passed",
-  "focused_tests": 40
+  "focused_tests": 41,
+  "implementation_sha256": {
+    "convoy_lerobot/runtime.py": "e0203b083bb222258ef74308352b924e67c7f4bb565cd4fe94177432c8b14a3c",
+    "convoy_lerobot/adapter.py": "c440a36ac6eda667d62c24b355798d98f17368048b58c8a507a0b3c21cacd492",
+    "convoy_lerobot/managed.py": "f6529d4432e9d3adf8fd1ecbcf102a4e820901eabbafe78dd4abc2cebadc79bf",
+    "convoy_lerobot/artifact.py": "d566ecc5e5d11d9ba2a7353110ff7c4a88a689a039ee14fbc9b406dc5f8d70fc",
+    "convoy_contracts/execution.py": "ffd9808e1c724f13e6bfb1e4069f6a228e18f130a989f8827d70b2b42c1d1034"
+  },
+  "baseline_regression_cases": [
+    "full_lifecycle",
+    "redeploy_and_idle_restart",
+    "cancel_running",
+    "management_outage_and_report_replay",
+    "inference_outage_stops_actions",
+    "restart_requires_recovery"
+  ]
 }
