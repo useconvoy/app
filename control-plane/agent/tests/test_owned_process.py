@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 import os
 import signal
+import socket
 import subprocess
 import sys
+import threading
 import time
+from contextlib import ExitStack
 from pathlib import Path
 
 import pytest
@@ -307,3 +310,66 @@ def test_definite_early_child_exit_allows_replacement(tmp_path, monkeypatch, chi
         child = owner.start(argv)
         owner.stop()
         assert child.poll() is not None
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux leader/task-group exit semantics")
+@pytest.mark.parametrize("recovered", [False, True])
+def test_zombie_leader_does_not_publish_stopped_while_thread_owns_listener(tmp_path, recovered):
+    code = r"""
+import ctypes, json, socket, sys, threading, time
+from pathlib import Path
+root = Path(sys.argv[2])
+listener = socket.socket()
+listener.bind(("127.0.0.1", 0))
+listener.listen(8)
+def finish():
+    deadline = time.monotonic() + 10
+    while not (root / "finish").exists() and time.monotonic() < deadline:
+        time.sleep(.01)
+    listener.close()
+threading.Thread(target=finish).start()
+(root / "ready").write_text(json.dumps({"port": listener.getsockname()[1]}))
+deadline = time.monotonic() + 5
+while not (root / "go").exists() and time.monotonic() < deadline:
+    time.sleep(.01)
+if not (root / "go").exists():
+    raise SystemExit(2)
+pthread_exit = ctypes.CDLL(None).pthread_exit
+pthread_exit.argtypes, pthread_exit.restype = [ctypes.c_void_p], None
+pthread_exit(None)
+"""
+    directory = tmp_path / "owner"
+    with ExitStack() as stack:
+        owner = stack.enter_context(OwnedProcess(directory))
+        child = owner.start(lambda marker: [sys.executable, "-c", code, marker, str(tmp_path)])
+        wait_file(tmp_path / "ready", child)
+        port = json.loads((tmp_path / "ready").read_text())["port"]
+        process = psutil.Process(child.pid)
+        assert read(directory)["created"] == process._ident[1]
+        (tmp_path / "go").touch()
+        deadline = time.monotonic() + 5
+        while process.status() != psutil.STATUS_ZOMBIE:
+            assert child.poll() is None and time.monotonic() < deadline
+            time.sleep(.01)
+        if recovered:
+            stack.close()
+            owner = stack.enter_context(OwnedProcess(directory))
+            assert owner._child is None
+        before = (directory / "process.json").read_bytes()
+        with pytest.raises(OwnershipError, match="exit_not_verified"):
+            owner.stop(terminate_timeout=.02, kill_timeout=.02)
+        assert (directory / "process.json").read_bytes() == before
+        assert child.poll() is None
+        with socket.socket() as probe:
+            assert probe.connect_ex(("127.0.0.1", port)) == 0
+        with pytest.raises(OwnershipError, match="unresolved_previous_launch"):
+            owner.start(argv)
+        finish = threading.Timer(.1, (tmp_path / "finish").touch)
+        finish.start()
+        try:
+            assert owner.stop(terminate_timeout=2, kill_timeout=.5)["action"] == "stopped"
+        finally:
+            finish.join(timeout=1)
+        assert child.wait(timeout=1) == 0 and read(directory)["state"] == "stopped"
+        with socket.socket() as probe:
+            assert probe.connect_ex(("127.0.0.1", port)) != 0
