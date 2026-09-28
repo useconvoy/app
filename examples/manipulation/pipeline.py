@@ -112,7 +112,13 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
     def start(label, module, *args):
         log = (output / f"{label}.log").open("w")
         logs.append(log)
-        process = subprocess.Popen([sys.executable, "-m", module, *map(str, args)], env=env,
+        child_env = dict(env)
+        if module in {"convoy_worker.cli", "convoy_sim.managed"}:
+            for key in ("DATABASE_URL", "CONVOY_ADMIN_EMAIL", "CONVOY_ADMIN_PASSWORD", "CONVOY_DATA_DIR"):
+                child_env.pop(key, None)
+        if module == "convoy_sim.managed":
+            child_env.pop("CONVOY_EXECUTION_SECRET", None)
+        process = subprocess.Popen([sys.executable, "-m", module, *map(str, args)], env=child_env,
                                    stdout=log, stderr=subprocess.STDOUT)
         processes.append(process)
         return process
