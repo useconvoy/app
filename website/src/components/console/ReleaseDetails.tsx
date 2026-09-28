@@ -3,6 +3,7 @@ import { CONTROLLED_PLANNER_RUNTIME, releaseComponents } from "@/lib/platform/ma
 
 const PLACEMENTS: Record<string, string> = {
   "development-local-cpu": "local development CPU",
+  "development-local": "local development runtime",
   "development-jetson-lan": "development Jetson on the local network",
   "development-local-controlled": "local controlled planner fixture",
 };
