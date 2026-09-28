@@ -114,7 +114,7 @@ def project_out(row: Project) -> dict:
     return {"id": row.id, "name": row.name, "created_at": iso(row.created_at)}
 
 
-def robot_out(row: Robot) -> dict:
+def robot_out(row: Robot, *, evaluation_id: str | None = None) -> dict:
     return {
         "id": row.id,
         "project_id": row.project_id,
@@ -122,6 +122,7 @@ def robot_out(row: Robot) -> dict:
         "name": row.name,
         "profile": row.profile,
         "generation": row.generation,
+        "evaluation_id": evaluation_id,
         "simulated": True,
         "created_at": iso(row.created_at),
     }
@@ -328,6 +329,8 @@ def cancel_mission(db: Session, p: Principal, mission_id: str, data: dict) -> di
 
 
 def desired(db: Session, robot: Robot) -> dict:
+    from .evaluations import active_for_robot
+
     deployment = db.scalar(
         select(Deployment).where(Deployment.robot_id == robot.id, Deployment.generation == robot.generation)
     )
@@ -338,8 +341,9 @@ def desired(db: Session, robot: Robot) -> dict:
     if deployment:
         deployed = deployment_out(deployment)
         deployed["release"] = release_out(db.get(ApplicationRelease, deployment.release_id))
+    evaluation = active_for_robot(db, robot.id)
     return {
-        "robot": robot_out(robot),
+        "robot": robot_out(robot, evaluation_id=evaluation.id if evaluation else None),
         "deployment": deployed,
         "mission": mission_out(mission) if mission else None,
     }

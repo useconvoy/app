@@ -6,8 +6,9 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import Field
 from sqlalchemy import select
 
-from ..evaluation_models import EvaluationGate, EvaluationRun, EvaluationSuite
-from ..platform_models import Application
+from ..evaluation_models import EvaluationGate, EvaluationRun, EvaluationSuite, ReleasePromotion
+from ..ids import iso
+from ..platform_models import Application, ApplicationRelease
 from ..services import evaluations as service
 from ..services import platform
 from .platform import CancelIn, Database, Id, IdempotencyKey, Input, Name, PrincipalRead, PrincipalWrite
@@ -32,6 +33,35 @@ class RunIn(Input):
 class GateIn(Input):
     suite_id: Id
     expected_generation: int = Field(strict=True, ge=0)
+
+
+@router.get("/api/v1/applications/{application_id}/qualification")
+def qualification(application_id: str, release_id: Id, p: PrincipalRead, db: Database):
+    platform.resource_for(db, Application, application_id, p)
+    release = db.get(ApplicationRelease, release_id)
+    if release is None or release.application_id != application_id:
+        raise HTTPException(404, "release not found in application")
+    gate = db.get(EvaluationGate, application_id)
+    query = select(ReleasePromotion).where(ReleasePromotion.release_id == release_id)
+    if gate:
+        query = query.where(ReleasePromotion.suite_id == gate.suite_id)
+    promotion = db.scalar(query.order_by(ReleasePromotion.created_at.desc()).limit(1))
+    return {
+        "release_id": release_id,
+        "gate": {"application_id": application_id, "suite_id": gate.suite_id, "generation": gate.generation}
+        if gate
+        else None,
+        "promotion": {
+            "id": promotion.id,
+            "release_id": promotion.release_id,
+            "evaluation_id": promotion.evaluation_id,
+            "suite_id": promotion.suite_id,
+            "created_at": iso(promotion.created_at),
+        }
+        if promotion
+        else None,
+        "deployment_allowed": gate is None or promotion is not None,
+    }
 
 
 @router.post("/api/v1/applications/{application_id}/evaluation-suites", status_code=201)

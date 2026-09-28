@@ -107,12 +107,19 @@ def finish_case(p, run, success, overrides=None):
 def test_suite_jobs_account_for_all_cases_and_gate_promotions(pipeline):
     p = pipeline
     spec = suite(p)
+    qualification = (
+        f"/api/v1/applications/{p['application']['id']}/qualification?release_id={p['release']['id']}"
+    )
+    assert p["admin"].get(qualification).json()["deployment_allowed"] is True
     assert spec == suite(p)
     gate_path = f"/api/v1/applications/{p['application']['id']}/evaluation-gate"
     post(p["admin"], gate_path, {"suite_id": spec["id"], "expected_generation": 0}, expected=200)
     request = {"robot_id": p["robot"]["id"], "release_id": p["release"]["id"], "expected_generation": 1}
     post(p["admin"], "/api/v1/deployments", request, key="unqualified", expected=409)
+    assert p["admin"].get(qualification).json()["deployment_allowed"] is False
     failed = evaluate(p, spec)
+    robots = p["admin"].get(f"/api/v1/robots?project_id={p['project']['id']}").json()
+    assert robots[0]["evaluation_id"] == failed["id"]
     assert failed == evaluate(p, spec)
     assert len(failed["cases"]) == 2 and all(case["mission_id"] is None for case in failed["cases"])
     post(p["admin"], "/api/v1/deployments", request, key="reserved", expected=409)
@@ -135,6 +142,12 @@ def test_suite_jobs_account_for_all_cases_and_gate_promotions(pipeline):
     tick()
     promoted = post(p["admin"], f"/api/v1/evaluations/{passed['id']}/promote", {})
     assert promoted["release_id"] == p["release"]["id"]
+    qualification_result = p["admin"].get(qualification).json()
+    assert qualification_result["deployment_allowed"] is True
+    assert qualification_result["promotion"]["id"] == promoted["id"]
+    assert (
+        p["admin"].get(f"/api/v1/robots?project_id={p['project']['id']}").json()[0]["evaluation_id"] is None
+    )
     assert (
         p["admin"]
         .get(f"/api/v1/evaluations/{passed['id']}?baseline_id={failed['id']}")

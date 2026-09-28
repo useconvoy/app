@@ -39,6 +39,13 @@ These are authenticated, project-scoped APIs. All writes require the normal
 Console evaluation controls are a follow-up; the current console's deployment
 and Start actions already enforce any configured gate at the API boundary.
 
+Robot snapshots include `evaluation_id` when an active or unresolved evaluation
+reserves the robot. `GET /api/v1/applications/{id}/qualification?release_id={id}`
+returns the current gate, its matching promotion (if any), and whether the
+qualification condition permits deployment. It does not replace robot readiness,
+mission/reservation, role or installation checks. These authoritative reads avoid
+inferring admission from a truncated list of recent evaluation runs.
+
 The job retains the initiating credential's identity, not its secret. Revocation,
 expiry, disabling the user, or losing the operator role stops admission of new
 cases and requests cancellation of the active case. Signing out revokes a
