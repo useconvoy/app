@@ -22,7 +22,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build and provision independent services
-        run: python3 infra/development/services.py up
+        run: |
+          mkdir -p integrations/simulation/runs/image-boundary integrations/simulation/dist
+          printf 'harmless private-run sentinel\n' > integrations/simulation/runs/image-boundary/connection.json
+          printf 'harmless device credential sentinel\n' > integrations/simulation/runs/image-boundary/credential
+          printf 'harmless build-output sentinel\n' > integrations/simulation/dist/sentinel.txt
+          python3 infra/development/services.py up
+      - name: Verify private native runs were excluded from the image
+        run: >-
+          docker run --rm --entrypoint python convoy-v1-reference:local -c
+          "from pathlib import Path; root=Path('/app/integrations/simulation');
+          assert {p.name for p in root.iterdir()} <= {'.venv', 'pyproject.toml', 'uv.lock', 'src'},
+          'unexpected local state was copied into the reference image'"
       - name: Verify real mission through the console API
         run: |
           python3 infra/development/services.py verify

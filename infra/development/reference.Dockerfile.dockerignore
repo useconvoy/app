@@ -8,4 +8,6 @@
 **/tests
 .git
 infra/development/.services
+integrations/simulation/runs
+integrations/simulation/dist
 **/.env*

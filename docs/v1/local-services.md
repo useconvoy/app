@@ -144,7 +144,9 @@ No image is published by these commands. See the
 the local machine.
 
 The `service-images` CI job runs this same setup, real mission, teardown/restart
-and second mission when packaging inputs change. It uploads only named evidence
+and second mission when packaging inputs change. It also plants harmless native
+run/credential sentinels and inspects the built image to verify that only package
+inputs were copied; local run state must never become an image layer. It uploads only named evidence
 JSON and build logs, then removes its disposable volumes and secrets. Existing
 contract, API and console tests remain responsible for their respective logic;
 there is no duplicate unit-test suite mirroring the Compose file.

@@ -18,7 +18,10 @@ COPY control-plane/server ./control-plane/server
 COPY control-plane/agent ./control-plane/agent
 COPY control-plane/contracts ./control-plane/contracts
 COPY control-plane/worker ./control-plane/worker
-COPY integrations/simulation ./integrations/simulation
+# Native demo runs contain device credentials and connection.json. Copy only
+# package inputs; Git's ignore rules do not protect a Docker build context.
+COPY integrations/simulation/pyproject.toml integrations/simulation/uv.lock ./integrations/simulation/
+COPY integrations/simulation/src ./integrations/simulation/src
 RUN uv sync --project integrations/simulation --frozen --no-dev --extra managed --python /usr/local/bin/python3 \
     && python -c 'import json; from convoy_sim.runtimes import reference_manifest; open("/app/release.json", "w").write(json.dumps(reference_manifest()))' \
     && rm -rf /root/.cache
