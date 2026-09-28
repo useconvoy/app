@@ -83,3 +83,13 @@ agent remain dependency-free. Server/model packages pin PyJWT 2.15.0 and
 cryptography 50.0.1. Fixed algorithms and audience checks follow the
 [PyJWT guidance](https://pyjwt.readthedocs.io/en/stable/api.html) and
 [JWT best current practices](https://www.rfc-editor.org/info/rfc8725/).
+
+## Qualified local run
+
+Clean implementation `20947f9` completed A → B → A with real Qwen and SmolVLA
+under public-key grants. All three missions succeeded in 54 learned actions each,
+with full action/reward/success equality to the direct seed-0 reference. Live
+process inspection found private signing configuration only in the API; all nine
+model process incarnations and twelve listeners stopped cleanly. The
+[sanitized receipt](../../examples/manipulation/evidence/public-key-local-activation.json)
+records the exact scope, hashes, timing observations and validation limits.

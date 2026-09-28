@@ -85,6 +85,10 @@ one immutable seed-0 suite, compared the reports, explicitly promoted B, and
 restored A at generation 7 without starting another mission. No evaluation gate
 was enabled, so the explicit restore did not need a promotion of A.
 That historical run used HMAC grants; it is not evidence for public-key mode.
+The subsequent [public-key run](../../examples/manipulation/evidence/public-key-local-activation.json)
+repeated all three harness missions on clean `20947f9`, again with 54 successful
+actions per mission and verified cleanup. No browser workflow was rerun for the
+authorization-only change.
 
 All six missions accepted an actual Qwen proposal and applied 54 SmolVLA actions.
 Every action, reward and success flag matched the direct seed-0 reference.

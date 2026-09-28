@@ -118,3 +118,11 @@ accepted a real Qwen plan and applied 54 SmolVLA actions matching the direct tra
 Seven bindings and all 21 model process incarnations stopped cleanly. See the
 [acceptance record](local-activation.md). This is still local CPU, offline lockstep;
 it does not establish multi-seed reliability, Jetson execution or WAN timing.
+
+The next isolated slice adds API-private Ed25519 mission signing and purpose-scoped
+public verification in model services, with rotation, revocation and original
+expiry preservation. Clean `20947f9` passed another real Qwen/SmolVLA A → B → A
+run: three accepted plans, 162 learned actions equal to the direct reference, and
+verified cleanup. See [execution signing](execution-signing.md). Scripted Compose
+and unapplied AWS templates retain explicit HMAC mode and still need migration
+and isolated-identity qualification before hosted deployment.
