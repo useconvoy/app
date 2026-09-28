@@ -95,7 +95,7 @@ def run_episode(config: RunConfig, seed: int, folder: Path, policy: Policy) -> d
         try:
             env = gym.make(
                 "Meta-World/MT1", env_name=ENVIRONMENT, seed=seed,
-                render_mode="rgb_array" if config.video else None, camera_name="corner2",
+                render_mode="rgb_array" if config.video else None, camera_name="corner3",
             )
             observation, _ = env.reset(seed=seed)
             initial = _observation(observation)
@@ -170,6 +170,7 @@ def run(config: RunConfig, output: Path, *, policy_factory: Callable[[], Policy]
         "policy_transform": "clip_to_action_bounds" if config.policy == "scripted" and policy_factory is None else "none",
         "observation_contract": "metaworld-v3-state39-goal-observable",
         "action_contract": "metaworld-v3-normalized-xyz-gripper4",
+        "video_camera": "corner3" if config.video else None,
         "config": asdict(config),
         "packages": {name: version(name) for name in PACKAGES},
         "python": platform.python_version(),
