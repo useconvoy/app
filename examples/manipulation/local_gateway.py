@@ -115,10 +115,13 @@ def main():
         gateway.stop()
         cleanup = supervisor.stop(deadline=time.monotonic() + 10)
         evidence.update(cleanup=cleanup, gateway_drained=gateway.drain(2), gateway_stats=gateway.stats)
-        if evidence["status"] == "ready":
+        cleanup_ok = cleanup["stopped"] and evidence["gateway_drained"]
+        if not cleanup_ok:
+            evidence.update(status="failed", cleanup_error="owned gateway cleanup incomplete")
+        elif evidence["status"] == "ready":
             evidence["status"] = "stopped"
         (output / "gateway-result.json").write_text(json.dumps(evidence, indent=2) + "\n")
-        if not cleanup["stopped"] or not evidence["gateway_drained"]:
+        if not cleanup_ok:
             raise RuntimeError("owned gateway cleanup incomplete; inspect retained local state")
 
 

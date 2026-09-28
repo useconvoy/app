@@ -65,7 +65,7 @@ jobs:
       # These tests import only integration metadata/reset hooks, never model dependencies.
       - run: uv run --frozen ruff check ../integrations/lerobot
       - run: PYTHONPATH=../integrations/lerobot/src uv run --frozen pytest -q ../integrations/lerobot/tests
-      - run: PYTHONPATH=../integrations/lerobot/src:../integrations/planner/src uv run --frozen pytest -q ../examples/manipulation/test_real_planner.py
+      - run: PYTHONPATH=../integrations/lerobot/src:../integrations/planner/src uv run --frozen pytest -q ../examples/manipulation/test_real_planner.py ../examples/manipulation/test_local_gateway.py
 
   planner:
     runs-on: ubuntu-latest
