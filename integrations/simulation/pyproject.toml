@@ -1,0 +1,39 @@
+[project]
+name = "convoy-sim"
+version = "0.1.0"
+description = "Reproducible Convoy action-policy simulation experiments"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "metaworld==3.1.1",
+  "gymnasium==1.2.1",
+  "mujoco==3.3.0",
+  "numpy==2.2.6",
+  "scipy==1.15.3",
+]
+
+[project.optional-dependencies]
+video = ["imageio==2.37.0", "imageio-ffmpeg==0.6.0"]
+
+[dependency-groups]
+dev = ["pytest>=8,<9", "ruff>=0.12,<0.13"]
+
+[project.scripts]
+convoy-sim = "convoy_sim.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.26,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/convoy_sim"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "W"]
+ignore = ["E501"]
