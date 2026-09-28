@@ -1,0 +1,55 @@
+{
+  "retrieved_date": "2026-09-27",
+  "region": "us-east-1",
+  "currency": "USD",
+  "hours_per_month": 730,
+  "fargate_arm": {
+    "vcpu_hour": 0.03238,
+    "gib_hour": 0.00356,
+    "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/current/us-east-1/index.json",
+    "publication": "2026-09-11T12:44:25Z",
+    "skus": [
+      "XSZATS4VYMDC9CYN",
+      "UNH9KPQP7W7C66C9"
+    ]
+  },
+  "rds": {
+    "t4g_small_single_az_hour": 0.032,
+    "gp3_gb_month": 0.115,
+    "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/current/us-east-1/index.json",
+    "publication": "2026-09-24T21:10:11Z",
+    "skus": [
+      "S9H3AXMBHSKRFJTA",
+      "KYVYY29G957PKY3B",
+      "6W8ECRFVDATCER7J"
+    ],
+    "excess_backup_gb_month": 0.095
+  },
+  "alb": {
+    "hour": 0.0225,
+    "lcu_hour": 0.008,
+    "source": "https://aws.amazon.com/elasticloadbalancing/pricing/"
+  },
+  "network": {
+    "nat_hour": 0.045,
+    "nat_gb": 0.045,
+    "public_ipv4_hour": 0.005,
+    "source": "https://aws.amazon.com/vpc/pricing/",
+    "regional_charged_leg_gb": 0.01,
+    "regional_source": "https://aws.amazon.com/blogs/networking-and-content-delivery/exploring-data-transfer-costs-for-classic-and-application-load-balancers/"
+  },
+  "secrets": {
+    "secret_month": 0.4,
+    "requests_10000": 0.05,
+    "source": "https://aws.amazon.com/secrets-manager/pricing/"
+  },
+  "logs": {
+    "ingest_gb": 0.5,
+    "stored_gb_month": 0.03,
+    "source": "https://aws.amazon.com/cloudwatch/pricing/"
+  },
+  "ecr": {
+    "stored_gb_month": 0.1,
+    "source": "https://aws.amazon.com/ecr/pricing/"
+  }
+}
