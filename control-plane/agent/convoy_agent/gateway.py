@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import secrets
@@ -24,6 +25,7 @@ import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any, Callable
 
 from .runtime import RuntimeSupervisor, http_json
@@ -64,6 +66,11 @@ class Gateway:
         on_request_done: Callable[[], None] | None = None,
     ):
         self.sup = supervisor
+        self.incarnation = secrets.token_hex(16)
+        self.implementation_sha256 = {
+            name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
+            for name in ("gateway.py", "runtime.py")
+        }
         self.host = host
         self.port = port
         self.queue_depth = queue_depth
@@ -151,7 +158,12 @@ class Gateway:
                 self.end_headers()
 
             def do_GET(self):
-                if self.path == "/health":
+                if self.path == "/v1/runtime-identity":
+                    try:
+                        self._json(200, gw.runtime_identity(check_health=True))
+                    except Exception:
+                        self._json(503, _err("runtime identity unavailable", "unavailable"))
+                elif self.path == "/health":
                     self._json(
                         200,
                         {
@@ -185,7 +197,7 @@ class Gateway:
                     self._json(404, {"error": {"message": "not found", "type": "invalid_request_error"}})
 
             def do_POST(self):
-                if self.path != "/v1/chat/completions":
+                if self.path not in ("/v1/chat/completions", "/v1/bound-completions"):
                     self._json(404, {"error": {"message": "not found", "type": "invalid_request_error"}})
                     return
                 trace_id = "tr_" + secrets.token_hex(8)
@@ -237,7 +249,19 @@ class Gateway:
                     )
                     return
                 try:
-                    code, obj = gw.handle(body, self.headers.get("X-Convoy-Eval-Token"), trace_id, t_arrive)
+                    if self.path == "/v1/bound-completions":
+                        if not isinstance(body, dict) or set(body) != {"request", "runtime_identity", "deadline_s"}:
+                            self._json(400, _err("invalid bound completion envelope", "invalid_request_error"))
+                            return
+                        if (type(body["deadline_s"]) not in (int, float) or
+                                not 0 < body["deadline_s"] <= 30 or not isinstance(body["runtime_identity"], dict)):
+                            self._json(400, _err("invalid bound completion deadline or identity", "invalid_request_error"))
+                            return
+                        code, obj = gw.handle(body["request"], None, trace_id, t_arrive,
+                                              deadline_s=body["deadline_s"],
+                                              expected_runtime_identity=body["runtime_identity"])
+                    else:
+                        code, obj = gw.handle(body, self.headers.get("X-Convoy-Eval-Token"), trace_id, t_arrive)
                 except Exception as e:  # R32: structured error boundary; never drop the connection
                     gw.stats["failed"] += 1
                     gw._span(trace_id, "failed", t_arrive, {"reason": f"internal_{type(e).__name__}"})
@@ -340,6 +364,19 @@ class Gateway:
                 self._inflight_cv.notify_all()
 
     # ---- request handling ----
+    def runtime_identity(self, *, check_health: bool = False) -> dict[str, Any]:
+        if self.mode != "production" or self.needs_restart:
+            raise RuntimeError("runtime is not serving production requests")
+        epoch = self.epoch
+        value = self.sup.provenance()
+        if check_health and not self.sup.health():
+            raise RuntimeError("native runtime is not healthy")
+        if (epoch != self.epoch or self.mode != "production" or
+                value["runtime_generation"] != self.sup.generation):
+            raise RuntimeError("runtime admission changed during identity read")
+        return {**value, "gateway_incarnation": self.incarnation, "gateway_epoch": epoch,
+                "implementation_sha256": self.implementation_sha256.copy()}
+
     def handle(
         self,
         body: dict[str, Any],
@@ -349,11 +386,13 @@ class Gateway:
         *,
         expected_release_id: str | None = None,
         deadline_s: float | None = None,
+        expected_runtime_identity: dict | None = None,
     ) -> tuple[int, dict[str, Any]]:
         t_arrive = t_arrive if t_arrive is not None else time.monotonic()
         self.stats["requests"] += 1
         try:
-            return self._handle(body, eval_token, trace_id, t_arrive, expected_release_id, deadline_s)
+            return self._handle(body, eval_token, trace_id, t_arrive, expected_release_id, deadline_s,
+                                expected_runtime_identity)
         finally:
             self._request_done()  # after the slot (if taken) was released and its interval accounted
 
@@ -365,6 +404,7 @@ class Gateway:
         t_arrive: float,
         expected_release_id: str | None = None,
         deadline_s: float | None = None,
+        expected_runtime_identity: dict | None = None,
     ) -> tuple[int, dict[str, Any]]:
         def reject(
             code: int, msg: str, typ: str = "invalid_request_error", reason: str | None = None
@@ -426,7 +466,9 @@ class Gateway:
             deadline = t_arrive + min(
                 self.deadline_s, deadline_s if deadline_s is not None else self.deadline_s
             )
-            if not self._slot.acquire(timeout=max(0.0, deadline - time.monotonic())):
+            acquired = (self._slot.acquire(blocking=False) if expected_runtime_identity is not None else
+                        self._slot.acquire(timeout=max(0.0, deadline - time.monotonic())))
+            if not acquired:
                 self.stats["timeouts"] += 1
                 self._span(trace_id, "timeout", t_arrive, {"reason": "slot_wait_deadline"})
                 return 503, _err("timed out waiting for the inference slot", "overloaded")
@@ -456,6 +498,11 @@ class Gateway:
                 return 503, _err("runtime unavailable", "unavailable")
             if expected_release_id is not None and self.sup.release_id != expected_release_id:
                 return reject(409, "active release changed before inference", "unavailable")
+            admitted_identity = None
+            if expected_runtime_identity is not None:
+                admitted_identity = self.runtime_identity()
+                if admitted_identity != expected_runtime_identity:
+                    return reject(409, "loaded runtime identity changed before inference", "unavailable")
             # limits and identity captured from the runtime that owns the slot NOW
             gen = self.sup.generation
             base, key = self.sup.base_url, self.sup.api_key
@@ -586,6 +633,9 @@ class Gateway:
                     {"reason": "runtime_changed_during_generation", "queue_ms": queue_ms},
                 )
                 return 503, _err("runtime changed during generation", "unavailable")
+            if admitted_identity is not None and (self.runtime_identity() != admitted_identity or
+                                                 time.monotonic() > deadline):
+                return reject(503, "runtime identity or original deadline changed during generation", "unavailable")
             if code != 200 or not isinstance(out, dict):
                 self.stats["failed"] += 1
                 if (
@@ -620,7 +670,7 @@ class Gateway:
                 "id": "chatcmpl-" + trace_id, "object": "chat.completion", "created": int(time.time()), "model": MODEL_NAME,
                 "choices": [{"index": 0, "message": {"role": "assistant", "content": content}, "finish_reason": "length" if out.get("truncated") or out.get("stop_type") == "limit" else "stop"}],
                 "usage": {"prompt_tokens": n_in, "completion_tokens": n_out, "total_tokens": n_in + n_out},
-                "convoy": {"trace_id": trace_id, "release_id": self.sup.release_id, "queue_ms": queue_ms, "latency_ms": latency_ms, "ttft_ms": ttft_ms, "timings": timings, "simulated": bool(out.get("simulated"))},
+                "convoy": {"trace_id": trace_id, "release_id": self.sup.release_id, "queue_ms": queue_ms, "latency_ms": latency_ms, "ttft_ms": ttft_ms, "timings": timings, "simulated": bool(out.get("simulated")), **({"runtime_identity": admitted_identity} if admitted_identity is not None else {})},
             }  # fmt: skip
         finally:
             # single-slot ownership interval: the only honest source of "active" (inference) time

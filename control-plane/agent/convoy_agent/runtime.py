@@ -239,6 +239,7 @@ class RuntimeSupervisor:
         self.argv: list[str] = []
         self.log_path: Path | None = None
         self.evidence: dict[str, Any] = {}
+        self._provenance: dict[str, Any] = {}
         self.started_at: float | None = None  # monotonic instant of the current launch (self.clock)
         self.stopped_at: float | None = None  # monotonic instant the last child was verified stopped
         # every start/stop TRANSITION (never just the latest instants): [[start, stop|None], ...]
@@ -301,6 +302,13 @@ class RuntimeSupervisor:
                 return "stopped"
             return "running" if self.proc.poll() is None else "crashed"
 
+    def provenance(self) -> dict[str, Any]:
+        """Snapshot recorded at launch, never read a new manifest during a request."""
+        with self._lock:
+            if self.state() != "running" or not self._provenance:
+                raise RuntimeError_("RUNTIME_UNAVAILABLE", "loaded runtime provenance unavailable")
+            return json.loads(json.dumps(self._provenance))
+
     def start(
         self,
         *,
@@ -331,6 +339,20 @@ class RuntimeSupervisor:
             self.started_at = self.clock()
             self._open_interval(self.started_at)
             self.evidence = {}
+            self._provenance = {}
+            model_sha = None
+            expected_sha = (spec.get("model", {}).get("file") or {}).get("sha256")
+            # Historical low-level callers may not provide a concrete pin. Preserve
+            # their lifecycle behavior but leave provenance incomplete: the paired
+            # planner refuses it rather than inferring an identity from a filename.
+            if not self.simulate and expected_sha is not None:
+                digest = hashlib.sha256()
+                with model_path.open("rb") as model_source:
+                    for block in iter(lambda: model_source.read(1024 * 1024), b""):
+                        digest.update(block)
+                model_sha = digest.hexdigest()
+                if model_sha != expected_sha:
+                    raise RuntimeError_("MODEL_DIGEST_MISMATCH", "model bytes differ from pinned launch identity")
             self._reader = None  # evidence and tails come only from THIS launch
             if self.simulate:
                 from .simruntime import SimRuntime
@@ -415,6 +437,16 @@ class RuntimeSupervisor:
                     detail,
                 )
             self.evidence = self.collect_evidence()
+            self._provenance = {
+                "release_id": release_id, "runtime_generation": self.generation,
+                "model_sha256": model_sha,
+                "runtime_artifact_sha256": spec.get("runtime", {}).get("artifact_sha256"),
+                "binary_sha256": self.evidence.get("binary_sha256"),
+                "template_sha256": self.evidence.get("chat_template_sha256"),
+                "config_sha256": hashlib.sha256(json.dumps(cfg, sort_keys=True, separators=(",", ":"),
+                                                            allow_nan=False).encode()).hexdigest(),
+                "simulated": self.simulate,
+            }
             return self.evidence
 
     def wait_healthy(self, timeout_s: float) -> tuple[bool, dict[str, Any]]:
