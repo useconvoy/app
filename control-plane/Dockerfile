@@ -1,5 +1,8 @@
 # syntax=docker/dockerfile:1.7
 # Pinned Convoy API service. The public UI is the sibling Next.js website.
+ARG PYTHON_IMAGE=python:3.12-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.8.24@sha256:1d31be550ff927957472b2a491dc3de1ea9b5c2d319a9cea5b6a48021e2990a6
+FROM ${UV_IMAGE} AS uv
 # ---------------------------------------------------------------- stage 1b: pinned SQLite -----------
 # The interpreter's stdlib `sqlite3` links the system libsqlite3.so.0 dynamically (Debian trixie ships
 # 3.46.1, which predates the WAL-reset fix). This stage compiles the PINNED official amalgamation
@@ -9,7 +12,7 @@
 # hence SQLAlchemy, api, worker, migrate, restore, backup CLI) is the pinned one. The server stage
 # attests version AND sqlite_source_id() at build time. Pinned by default; an EMPTY SQLITE_VERSION
 # (legacy compatibility build only, never the qualifying image) keeps the distribution library.
-FROM python:3.12-slim AS sqlite
+FROM ${PYTHON_IMAGE} AS sqlite
 ARG SQLITE_VERSION="3.51.3"
 ARG SQLITE_ARCHIVE_URL="https://www.sqlite.org/2026/sqlite-amalgamation-3510300.zip"
 ARG SQLITE_ARCHIVE_SHA3_256="ced02ff9738970f338c9c8e269897b554bcda73f6cf1029d49459e1324dbeaea"
@@ -42,10 +45,10 @@ RUN set -eu; mkdir -p /opt/sqlite; \
     fi
 
 # ---------------------------------------------------------------- stage 2: server -------------------
-FROM python:3.12-slim AS server
+FROM ${PYTHON_IMAGE} AS server
 ARG SQLITE_VERSION="3.51.3"
 ARG SQLITE_SOURCE_ID="2026-03-13 10:38:09 737ae4a34738ffa0c3ff7f9bb18df914dd1cad163f28fd6b6e114a344fe6d618"
-COPY --from=ghcr.io/astral-sh/uv:0.8 /uv /uvx /bin/
+COPY --from=uv /uv /uvx /bin/
 # pinned SQLite (empty when no pin was supplied) under /usr/local. Loader precedence is EXPLICIT, not
 # assumed: the dynamic loader resolves `libsqlite3.so.0` (NEEDED by the interpreter's `_sqlite3`) through
 # ld.so.cache, whose order follows /etc/ld.so.conf.d/*.conf read in byte order. On amd64 "libc.conf"
