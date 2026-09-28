@@ -6,7 +6,7 @@ This is the platform proposal for the v1 branch. The [implementation plan](imple
 
 Convoy helps robotics teams **package, evaluate, deploy, and operate robot intelligence across onboard, site, and cloud compute**. Customers retain their robot controllers and task expertise. The product supports autonomous systems and optional human intervention. Neither teleoperation nor a cloud dependency is required.
 
-The initial implementation targets a mobile robot with existing local navigation and a slower remote planner. ROS 2/Nav2 with Gazebo is the proposed reference integration. DimOS, Dora, proprietary industrial stacks, and humanoid stacks are adapter candidates, not mandatory dependencies. We should prove a second integration before advertising broad portability.
+The first executable simulation reference is now robot-arm manipulation in MetaWorld/MuJoCo, selected by the user after this design was drafted. Start with a labeled scripted baseline, then a qualified learned action policy; see [decision 001](decisions/001-simulation-reference.md). Mobile navigation with a slower remote planner remains a second application, and its goal/skill examples below remain useful design examples. DimOS, Dora, proprietary industrial stacks, and humanoid stacks are adapter candidates, not mandatory dependencies. Prove a second integration before advertising broad portability.
 
 ## 1. Functional requirements
 
@@ -210,7 +210,7 @@ Movement intents use an authenticated UTC `not_after` and require a bounded robo
 
 `submit_skill(command_id, owner_token, parameters, preconditions, local_expiry)` takes the caller-generated command ID already persisted in the local journal. It returns `accepted`, `already_known`, or `rejected`; the adapter maintains any mapping to a controller-native ID. Events and `get_command_status(command_id)` report `executing`, `completed`, `failed`, `cancelled`, or `unknown`. The adapter translates expiry into the executor's clock domain conservatively; an unknown mapping cannot authorize a freshness-dependent command. Cancellation acceptance is not proof that movement has ceased. If a robot stack cannot reconcile a previously submitted command after a crash, require recovery or operator resolution; do not blindly retry it.
 
-Goal/skill exchange is the V1 contract. Action-policy adapters additionally specify embodiment, joint order, position/velocity/torque meaning, action horizon, committed prefix, and buffer-exhaustion behavior. Learned-feature splits require paired tensor/latent versions and qualified delay envelopes. These are separate supported profiles, not one universal model API.
+Goal/skill exchange is the proposed mobile-application contract. The first simulation uses a separate, bounded MetaWorld observation/action profile. General action-policy adapters additionally specify embodiment, joint order, position/velocity/torque meaning, action horizon, committed prefix, and buffer-exhaustion behavior. Learned-feature splits require paired tensor/latent versions and qualified delay envelopes. These are separate supported profiles, not one universal model API.
 
 ### Inference protocol
 

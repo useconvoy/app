@@ -4,6 +4,9 @@ V1 platform work is planned on the `v1` branch. See the [platform design](docs/v
 and [implementation and hosting plan](docs/v1/implementation-plan.md) for milestones,
 service boundaries, testing, infrastructure, and the distinction between planned and implemented behavior.
 
+The first v1 executable reference is an optional [robot-arm simulation](integrations/simulation/README.md):
+MuJoCo/MetaWorld physics, a labeled scripted action policy, and reproducible episode evidence.
+
 Convoy's public website and physical Jetson demo live in this repository.
 The landing page introduces the deployment workflow being built for physical AI;
 the portal exposes a focused, working text-inference path on one configured Jetson.
