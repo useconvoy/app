@@ -244,8 +244,11 @@ coordinator = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "convoy-contracts", marker = "extra == 'coordinator'", editable = "../../control-plane/contracts" }]
-provides-extras = ["coordinator"]
+requires-dist = [
+    { name = "convoy-contracts", marker = "extra == 'coordinator'", editable = "../../control-plane/contracts" },
+    { name = "psutil", marker = "extra == 'local-host'", specifier = "==7.2.2" },
+]
+provides-extras = ["coordinator", "local-host"]
 
 [[package]]
 name = "convoy-contracts"
