@@ -25,8 +25,6 @@ from pathlib import Path
 import httpx
 from convoy_agent.agent import enroll
 
-from convoy_sim.runtimes import reference_manifest
-
 
 def free_port() -> int:
     with socket.socket() as sock:
@@ -87,7 +85,11 @@ def disposable_postgres(env: dict, evidence: dict, output: Path):
                 (output / "postgres-database.json").write_text(json.dumps(evidence["database"], indent=2) + "\n")
 
 
-def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bool = False) -> dict:
+def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bool = False,
+        manifest: dict | None = None, runtime_factory: str = "convoy_sim.runtimes:scripted",
+        coordinator_module: str = "convoy_sim.managed", policy_kind: str = "scripted", repeat: int = 1) -> dict:
+    if not 1 <= repeat <= 3:
+        raise ValueError("repeat must be between one and three")
     output.mkdir(parents=True, exist_ok=False, mode=0o700)
     os.chmod(output, 0o700)
     api_port, worker_port = free_port(), free_port()
@@ -103,7 +105,9 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
     # Explicit local configuration overrides inherited connection settings.
     for key in ("DATABASE_URL", "CONVOY_TEST_POSTGRES_URL", "CONVOY_SQLITE_WAL", "CONVOY_SEED_SIMULATOR"):
         env.pop(key, None)
-    manifest = reference_manifest()
+    if manifest is None:
+        from convoy_sim.runtimes import reference_manifest
+        manifest = reference_manifest()
     manifest_file = output / "release.json"
     manifest_file.write_text(json.dumps(manifest, indent=2) + "\n")
     processes, logs = [], []
@@ -132,7 +136,7 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
                 process.kill()
                 process.wait(timeout=5)
 
-    evidence = {"policy_kind": "scripted", "physics": "MuJoCo", "execution": "offline lockstep",
+    evidence = {"policy_kind": policy_kind, "physics": "MuJoCo", "execution": "offline lockstep",
                 "database": {"backend": "sqlite", "cleanup": "retained_in_output"},
                 "services": ["management API", "inference worker", "robot coordinator"], "cases": []}
     try:
@@ -154,7 +158,7 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
             processes.remove(migration)  # a completed bootstrap task is not a live service
         api_process = start("api", "convoy_server.cli", "serve", "--host", "127.0.0.1", "--port", api_port)
         worker = start("worker", "convoy_worker.cli", "--release", manifest_file,
-                       "--factory", "convoy_sim.runtimes:scripted", "--port", worker_port)
+                       "--factory", runtime_factory, "--port", worker_port)
         with httpx.Client(base_url=base, timeout=5) as api:
             health = wait_for(lambda: api.get("/api/health"), lambda response: response.status_code == 200).json()
             if postgres:
@@ -162,7 +166,8 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
                 assert health["db"]["schema"]["compatible"] is True, health
                 evidence["database"].update(server_version=health["db"]["server_version"],
                                             schema_revision=health["db"]["schema"]["revision"])
-            wait_for(lambda: httpx.get(worker_url + "/health"), lambda response: response.status_code == 200)
+            wait_for(lambda: httpx.get(worker_url + "/health"), lambda response: response.status_code == 200,
+                     timeout=120)
             response = api.post("/api/v1/auth/login", json={"email": email, "password": password})
             response.raise_for_status()
             api.headers["X-Convoy-Client"] = "web"
@@ -189,7 +194,7 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
                                                        "expected_generation": 0})
 
             def start_coordinator(label):
-                return start(label, "convoy_sim.managed", "--data-dir", output / "robot",
+                return start(label, coordinator_module, "--data-dir", output / "robot",
                              "--robot-id", robot["id"], "--worker-url", worker_url)
 
             coordinator = start_coordinator("coordinator")
@@ -219,7 +224,7 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
             def start_mission(seed):
                 key = str(uuid.uuid4())
                 body = {"deployment_id": deployment["id"], "expected_generation": deployment["generation"],
-                        "seed": seed, "ttl_s": 120}
+                        "seed": seed, "ttl_s": min(300, manifest["execution"]["mission_timeout_s"]),}
                 mission = post(f"/api/v1/robots/{robot['id']}/missions", body, key)
                 replay = post(f"/api/v1/robots/{robot['id']}/missions", body, key)
                 assert mission["id"] == replay["id"], "start retry created another mission"
@@ -228,16 +233,18 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
             def finish(mission):
                 result = wait_for(lambda: get(f"/api/v1/missions/{mission['id']}"),
                                   lambda item: item["state"] in {"completed", "failed", "cancelled", "unknown"},
-                                  timeout=130)
+                                  timeout=min(300, manifest["execution"]["mission_timeout_s"]) + 15)
                 episode = get(f"/api/v1/episodes/{result['episode_id']}") if result.get("episode_id") else None
                 return {"mission": result, "episode": episode}
 
-            mission = start_mission(0)
-            success = finish(mission)
-            assert success["mission"]["state"] == "completed", success
-            assert success["episode"] is not None
-            assert success["episode"]["summary"]["final_success"] is True, success
-            evidence["cases"].append({"case": "full_lifecycle", **success})
+            for repetition in range(repeat):
+                mission = start_mission(0)
+                success = finish(mission)
+                assert success["mission"]["state"] == "completed", success
+                assert success["episode"] is not None
+                assert success["episode"]["summary"]["final_success"] is True, success
+                label = "full_lifecycle" if repetition == 0 else f"full_lifecycle_repeat_{repetition + 1}"
+                evidence["cases"].append({"case": label, **success})
 
             if faults:
                 # Read-only evidence check ensures failures occur after actual
@@ -297,7 +304,7 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
                 assert 10 <= unavailable["episode"]["summary"]["steps"] < 500
                 evidence["cases"].append({"case": "inference_outage_stops_actions", **unavailable})
                 worker = start("worker-restarted", "convoy_worker.cli", "--release", manifest_file,
-                               "--factory", "convoy_sim.runtimes:scripted", "--port", worker_port)
+                               "--factory", runtime_factory, "--port", worker_port)
                 wait_for(lambda: httpx.get(worker_url + "/health"), lambda response: response.status_code == 200)
 
                 mission = start_mission(2)

@@ -6,9 +6,9 @@ name: website-checks
 on:
   push:
     branches: ["v1"]
-    paths: ["control-plane/**", "website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/**"]
+    paths: ["control-plane/**", "integrations/lerobot/**", "website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/**"]
   pull_request:
-    paths: ["control-plane/**", "website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/**"]
+    paths: ["control-plane/**", "integrations/lerobot/**", "website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/**"]
 
 permissions:
   contents: read
@@ -62,6 +62,9 @@ jobs:
       - run: uv run --frozen ruff check server agent contracts worker
       - run: uv run --frozen pytest -q server/tests
       - run: uv run --frozen pytest -q contracts/tests worker/tests
+      # These tests import only integration metadata/reset hooks, never model dependencies.
+      - run: uv run --frozen ruff check ../integrations/lerobot
+      - run: PYTHONPATH=../integrations/lerobot/src uv run --frozen pytest -q ../integrations/lerobot/tests
 
   agent-python310:
     runs-on: ubuntu-latest

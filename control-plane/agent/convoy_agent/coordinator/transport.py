@@ -63,5 +63,11 @@ class WorkerHTTP(JsonHTTP):
     def probe(self, release_digest: str, profile: str) -> dict:
         return self.post("/v1/probe", {"release_digest": release_digest, "profile": profile})
 
+    def start_session(self, identity: dict, grant: str) -> dict:
+        return self.call("POST", "/v1/sessions/start", {"identity": identity}, token=grant)
+
+    def end_session(self, identity: dict, grant: str) -> dict:
+        return self.call("POST", "/v1/sessions/end", {"identity": identity}, token=grant)
+
     def decide(self, request: dict, grant: str) -> dict:
         return self.call("POST", "/v1/decisions", request, token=grant, timeout_s=request["budget_ms"] / 1000)
