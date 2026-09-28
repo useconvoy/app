@@ -2,6 +2,11 @@
 
 September 27, 2026 · Proposed execution and hosting plan
 
+Current steering: start with robot-arm manipulation in MetaWorld/MuJoCo, then a
+qualified learned action policy. The existing deployment is a demo; production
+protection work is not a prerequisite. See [decision 001](decisions/001-simulation-reference.md)
+and the [executable reference](../../integrations/simulation/README.md).
+
 Companion: [Platform design](platform-design.md). This plan describes future implementation. The initial branch checkpoint contains documentation only; it does not provision infrastructure, change production, or demonstrate passing application tests.
 
 ## 1. Working agreement and current evidence
@@ -23,10 +28,10 @@ Verified during planning:
 
 | Milestone | Concrete result | Exit evidence |
 |---|---|---|
-| M0: Reproducible branch and checks | Pin tools; record a baseline; add relevant `v1` push checks; guard production deployment; provide consistent development/check commands | Existing applicable checks recorded with skips/failures explained; v1 code push runs tests and cannot invoke the production release path |
+| M0: Reproducible branch and checks | Pin tools; record a baseline; add relevant `v1` push checks; provide consistent development/check commands | Existing applicable checks recorded with skips/failures explained; relevant v1 pushes and PRs run tests |
 | M1: One controlled mission | Shared execution contract, robot/application identity, local coordinator, scripted planner and deterministic robot adapter, minimal mission UI/API | Start → accepted → running → outcome; cancellation, late reply, duplicate, and restart cases work through real Convoy processes |
 | M2: Hosted data foundation | Postgres migrations, organization/project ownership, role checks, durable outbox/jobs, artifact abstraction | Fresh/upgrade migration, competing-worker claims, tenant isolation, and restore/import fixtures pass against real Postgres |
-| M3: Real simulation and inference | Pinned Nav2/Gazebo inspection application, one local component, independent model worker, first provider connector | Same lifecycle with actual inference; task failures distinguish model, transport, deadline, and execution problems |
+| M3: Real simulation and inference | First an executable MetaWorld arm reference, then a compatible learned policy and independent model worker; Nav2/Gazebo remains a second application | Action → controller → physics → observation loop works; evidence distinguishes scripted/learned policies, task quality, and timing scope |
 | M4: Repeatable release operations | Candidate → evaluation → promotion → deployment → mission; paired activation; episode comparison and rollback | Update model/configuration, compare baseline, deploy to first robot, interrupt activation, reconcile or recover to a compatible bundle |
 | M5: Pilot operations | Capture/retention, quotas, signing, credential lifecycle, metrics/alerts, isolated staging, deployment and restore runbooks | Complete staging acceptance and partner commissioning with explicit gaps; second customer release uses the same machinery |
 | M6: Demonstrated portability | Second robot/task family and second provider or customer environment | Core lifecycle reused without a customer-specific fork; publish the actual supported combinations |
@@ -193,7 +198,7 @@ Keep three distinct labels in reports: deterministic contract robot, physics-bas
 
 ## 8. CI, commits, pushes, and release discipline
 
-For the first engineering commit, add a v1 push trigger and explicit production ref/environment controls. Include new contract/integration/infra paths in change detection. Avoid running identical full jobs twice for the same push/PR unnecessarily. Required checks must report a clear result even when some path-specific jobs are skipped. Untrusted pull-request code must not receive deployment secrets.
+For the first engineering commit, add a v1 push trigger. Production ref/environment controls are deferred until an actual production release requires them. Include new contract/integration/infra paths in change detection. Avoid running identical full jobs twice for the same push/PR unnecessarily. Required checks must report a clear result even when some path-specific jobs are skipped. Untrusted pull-request code must not receive deployment secrets.
 
 Use the same underlying test commands locally and in CI. Add a small wrapper only to make those commands easier to discover; do not invent a new test framework. Existing verification entry points include:
 
