@@ -124,6 +124,40 @@ def child_environment() -> dict[str, str]:
     return env
 
 
+def development_grants(output: Path) -> tuple[dict[str, str], dict[str, str]]:
+    """Generate disposable local keys; distribute only public documents to models.
+
+    This same-user harness verifies credential distribution, not OS isolation.
+    A hosted API must mount private material under its own service identity.
+    """
+    from convoy_contracts.grants import SigningKeys
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    private = output / "api-keys"
+    public = output / "verification"
+    private.mkdir(mode=0o700)
+    public.mkdir(mode=0o700)
+    active, keys = {}, []
+    for purpose in ("action", "planner"):
+        kid = purpose + "-" + uuid.uuid4().hex
+        active[purpose] = kid
+        pem = Ed25519PrivateKey.generate().private_bytes(
+            serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption(),
+        ).decode("ascii")
+        keys.append({"kid": kid, "purpose": purpose, "audience": "convoy-development-" + purpose,
+                     "private_key_pem": pem})
+    signing_path = private / "execution.json"
+    write_json(signing_path, {"schema_version": 1, "issuer": "convoy-development-api", "active": active, "keys": keys})
+    signer = SigningKeys(signing_path)
+    verifier_env = {}
+    for purpose in ("action", "planner"):
+        path = public / (purpose + ".json")
+        write_json(path, signer.verification_document(purpose))
+        verifier_env[f"CONVOY_{purpose.upper()}_VERIFICATION_KEYS_FILE"] = str(path)
+    return {"CONVOY_EXECUTION_SIGNING_KEYS_FILE": str(signing_path)}, verifier_env
+
+
 def journal_read(output: Path, query: str, parameters=()):
     path = output / "robot/coordinator/execution.sqlite3"
     with sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True, timeout=5) as journal:
@@ -318,15 +352,18 @@ def run(args) -> dict:
         load_registry(registry_path)  # Same bounded private registry parser used by the real owner.
         base = f"http://127.0.0.1:{pipeline.free_port()}"
         email, password = "developer@convoy.local", secrets.token_urlsafe(32)
+        api_signing, verification = development_grants(output)
         scoped = {name: secrets.token_urlsafe(48) for name in (
-            "CONVOY_EXECUTION_SECRET", "CONVOY_PLANNER_EXECUTION_SECRET",
             "CONVOY_WORKER_PROBE_TOKEN", "CONVOY_PLANNER_PROBE_TOKEN",
         )}
         api_env = {**child_environment(), "CONVOY_DATA_DIR": str(output / "server"), "CONVOY_SIMULATOR": "1",
                    "CONVOY_SCHEDULER_INPROCESS": "0", "CONVOY_ADMIN_EMAIL": email, "CONVOY_ADMIN_PASSWORD": password,
                    "CONVOY_PUBLIC_URL": base, "CONVOY_LOG_LEVEL": "WARNING",
-                   **{key: scoped[key] for key in ("CONVOY_EXECUTION_SECRET", "CONVOY_PLANNER_EXECUTION_SECRET")}}
-        coordinator_env = {**child_environment(), **scoped}
+                   **api_signing}
+        coordinator_env = {**child_environment(), **scoped, **verification}
+        evidence["authorization"] = {"mode": "Ed25519 JWT", "issuer": "convoy-development-api",
+            "private_signing_config": "API process only", "model_config": "purpose-scoped public verification files",
+            "same_user_development": True}
         api_child = start("api", api_env, "convoy_server.cli", "serve", "--host", "127.0.0.1", "--port", loopback_port(base))
         with httpx.Client(base_url=base, timeout=5, trust_env=False) as api:
             pipeline.wait_for(lambda: api.get("/api/health"), lambda response: response.status_code == 200)

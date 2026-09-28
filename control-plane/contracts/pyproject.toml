@@ -5,6 +5,9 @@ description = "Versioned, dependency-free Convoy execution contracts"
 requires-python = ">=3.10"
 dependencies = []
 
+[project.optional-dependencies]
+signing = ["PyJWT[crypto]==2.15.0", "cryptography==50.0.1"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

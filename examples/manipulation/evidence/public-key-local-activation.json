@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "source_commit": "20947f9161b349df028b9abbe6772d22324e7473",
+  "source_dirty": false,
+  "authorization": {
+    "mode": "Ed25519 JWT",
+    "issuer": "convoy-development-api",
+    "private_signing_config": "API process only",
+    "model_config": "purpose-scoped public verification files",
+    "same_user_development": true
+  },
+  "live_authority_distribution": {
+    "worker": {
+      "process_identity_verified": true,
+      "no_signing_environment": true,
+      "public_document_only": true,
+      "purpose": "action"
+    },
+    "planner": {
+      "process_identity_verified": true,
+      "no_signing_environment": true,
+      "public_document_only": true,
+      "purpose": "planner"
+    },
+    "api": {
+      "private_signing_config_present": true,
+      "legacy_secrets_absent": true,
+      "private_file_mode": "0o600"
+    },
+    "coordinator": {
+      "no_signing_environment": true,
+      "verification_files_present": true
+    },
+    "scope": "Observed live process environments; same OS user, not filesystem isolation."
+  },
+  "cases": [
+    {
+      "case": "A",
+      "generation": 1,
+      "state": "completed",
+      "actions": 54,
+      "success": true,
+      "action_trace_sha256": "06a12ed92be91e13d1a29cbdc962d39c0a09b33103580302a3df35b3ebe6b7a2",
+      "matches_direct_reference": true,
+      "planner_artifact_sha256": "10be7ddf81482cc1e801f7d4d3491f376c1ce49b5f511e51e23bd90d51967350",
+      "release_digest": "844edf2abd0d2b31015b3ebadeb644ebacb609409af9686ae77c3b0511f307a2",
+      "planner_duration_ms": 1001.5304579865187,
+      "episode_summary": {
+        "steps": 54,
+        "final_success": true,
+        "execution_mode": "lockstep_offline",
+        "policy_runtime": "lerobot-smolvla-metaworld-cpu-v1",
+        "planner_backend_kind": "llamacpp-text-model"
+      }
+    },
+    {
+      "case": "B",
+      "generation": 2,
+      "state": "completed",
+      "actions": 54,
+      "success": true,
+      "action_trace_sha256": "06a12ed92be91e13d1a29cbdc962d39c0a09b33103580302a3df35b3ebe6b7a2",
+      "matches_direct_reference": true,
+      "planner_artifact_sha256": "610d80ce4182a1c6cb0910174e9a0ac4826a4cdb177697c7024cfab068fec928",
+      "release_digest": "c26d3b783f8c55364ccd246411fc8b97566d3dd1d3eda34c3a2b489f6c14c304",
+      "planner_duration_ms": 961.3800409715623,
+      "episode_summary": {
+        "steps": 54,
+        "final_success": true,
+        "execution_mode": "lockstep_offline",
+        "policy_runtime": "lerobot-smolvla-metaworld-cpu-v1",
+        "planner_backend_kind": "llamacpp-text-model"
+      }
+    },
+    {
+      "case": "A-restored",
+      "generation": 3,
+      "state": "completed",
+      "actions": 54,
+      "success": true,
+      "action_trace_sha256": "06a12ed92be91e13d1a29cbdc962d39c0a09b33103580302a3df35b3ebe6b7a2",
+      "matches_direct_reference": true,
+      "planner_artifact_sha256": "10be7ddf81482cc1e801f7d4d3491f376c1ce49b5f511e51e23bd90d51967350",
+      "release_digest": "844edf2abd0d2b31015b3ebadeb644ebacb609409af9686ae77c3b0511f307a2",
+      "planner_duration_ms": 995.3880829853006,
+      "episode_summary": {
+        "steps": 54,
+        "final_success": true,
+        "execution_mode": "lockstep_offline",
+        "policy_runtime": "lerobot-smolvla-metaworld-cpu-v1",
+        "planner_backend_kind": "llamacpp-text-model"
+      }
+    }
+  ],
+  "accepted_plans": 3,
+  "applied_actions": 162,
+  "reference_trace_sha256": "06a12ed92be91e13d1a29cbdc962d39c0a09b33103580302a3df35b3ebe6b7a2",
+  "stored_action_grants": {
+    "signed_jwt_count": 3,
+    "signatures_verified_at_issue_time": true,
+    "original_expiries_preserved": true
+  },
+  "cleanup": {
+    "model_process_incarnations_gone": 9,
+    "model_listeners_closed": 12,
+    "graceful_owner_record": true,
+    "native_credentials_removed": true,
+    "api_listener_closed": true,
+    "forced_cleanup": false
+  },
+  "source_receipts": {
+    "local-activation-result.json": "5166ab07a7c32da565118408b5ba2269cb5e4cc85c216cd22ce66c4b8eba07e2",
+    "authority-distribution.json": "36789b89fb1a73f987f9d7ff88002f7e3eed1d10363f4b5fd0e4811a79ddc76d",
+    "linux_qualification_sha256": "803daf0738cc31a9c1382e261f11838fd084ad604d0317a21ccb9c2897107a83"
+  },
+  "scope": "One Mac CPU, real Qwen + SmolVLA, repeated seed0, offline lockstep; no Jetson, hosted, WAN, multi-seed or physical timing qualification.",
+  "trace_digest_encoding": "SHA-256 of compact sorted-key JSON list of sequence/action/reward/success; full numeric traces compared, not hash alone.",
+  "validation": {
+    "broad_suite": {
+      "passed": 378,
+      "skipped": 32,
+      "note": "Before final CLI/preflight review fixes. Includes server, contracts, worker, planner, local integration and gateway harness tests. Skips include opt-in PostgreSQL/fleet, legacy browser and environment-specific cases."
+    },
+    "final_focused_suite": {
+      "passed": 121,
+      "note": "After all implementation changes: local owner, coordinator bindings/execution, signed worker/planner tests."
+    },
+    "server_signing_lifecycle_suite": {
+      "passed": 31
+    },
+    "contract_suite": {
+      "passed": 63
+    },
+    "ruff": "passed",
+    "lock_checks": "All four locks passed with uv0.8.22",
+    "base_agent_dependency_check": "Agent and paired coordinator imported with third-party site packages disabled.",
+    "linux_arm64": {
+      "tests_passed": 54,
+      "python": "3.12.14",
+      "platform": "Linux 6.12.76 aarch64 glibc 2.41",
+      "PyJWT": "2.15.0",
+      "cryptography": "50.0.1",
+      "image": "sha256:1755fc0b6dda62def675768d0b2f32789ca8f7842911fdb3c0504c9924ec9d44",
+      "source_mount_readonly": true,
+      "existing_containers_unchanged": true,
+      "temporary_container_absent": true,
+      "current_source_matches_snapshot": true
+    }
+  },
+  "dependencies": {
+    "PyJWT": "2.15.0",
+    "cryptography": "50.0.1",
+    "Python": "3.12.13"
+  },
+  "review_script_sha256": "1b8f71a6c02cda46529c784e53e732b28be60299ce8e60b86446617bafba81dc",
+  "deployment_limits": [
+    "Private/public distribution was inspected on the first live binding; all local processes share one OS user.",
+    "Scripted Compose and unapplied AWS templates retain explicit HMAC configuration; migrate before remote trust boundaries.",
+    "Jetson authentication remains unavailable; no paid cloud resources provisioned."
+  ]
+}

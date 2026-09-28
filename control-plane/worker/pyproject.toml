@@ -3,7 +3,7 @@ name = "convoy-worker"
 version = "0.1.0"
 description = "Independent authenticated Convoy action-policy inference worker"
 requires-python = ">=3.11"
-dependencies = ["convoy-contracts", "fastapi>=0.115", "uvicorn>=0.30"]
+dependencies = ["convoy-contracts[signing]", "fastapi>=0.115", "uvicorn>=0.30"]
 
 [project.scripts]
 convoy-worker = "convoy_worker.cli:main"

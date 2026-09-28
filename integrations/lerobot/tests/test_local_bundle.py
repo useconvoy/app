@@ -149,6 +149,22 @@ def prepare(owner, deployment):
     return owner.prepare(deployment, deployment["release"]["manifest"])
 
 
+def configure_public_keys(bundles, tmp_path):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    for role, purpose in (("worker", "action"), ("planner", "planner")):
+        del bundles.options[f"{role}_execution_secret"]
+        public_key = Ed25519PrivateKey.generate().public_key().public_bytes(
+            serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode("ascii")
+        path = tmp_path / (purpose + ".json")
+        path.write_text(json.dumps({"schema_version": 1, "issuer": "test-api", "audience": purpose,
+                                    "purpose": purpose, "keys": [{"kid": purpose, "public_key_pem": public_key}]}))
+        path.chmod(0o600)
+        bundles.options[f"{role}_verification_keys_file"] = path
+
+
 def processes(owner):
     return [owner._supervisor.proc, *owner._children.values()]
 
@@ -270,10 +286,14 @@ def test_entry_and_unused_close_leave_previous_owned_child_untouched(bundles):
         child.wait(timeout=3)
 
 
-def test_fixed_launcher_records_manifest_and_scopes_child_environment(bundles, monkeypatch, tmp_path):
+@pytest.mark.parametrize("public_only", [False, True])
+def test_fixed_launcher_records_manifest_and_scopes_child_environment(bundles, monkeypatch, tmp_path, public_only):
     monkeypatch.setenv("CONVOY_DATABASE_URL", "private-database")
     monkeypatch.setenv("CONVOY_ADMIN_PASSWORD", "private-admin")
+    monkeypatch.setenv("CONVOY_EXECUTION_SIGNING_KEYS_FILE", "/private/api-signing.json")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "private-cloud")
+    if public_only:
+        configure_public_keys(bundles, tmp_path)
     invocation, child_cwd, absolute_sources = (tmp_path / name for name in ("invocation", "child", "absolute"))
     for path in (invocation / "src", child_cwd / "src", absolute_sources):
         path.mkdir(parents=True)
@@ -314,13 +334,50 @@ def test_fixed_launcher_records_manifest_and_scopes_child_environment(bundles, m
         assert planner[0][:4] == [sys.executable, "-m", "convoy_planner.cli", "serve"]
         for _, args, manifest in captured:
             assert manifest == recipe.manifest
-            assert not {"CONVOY_DATABASE_URL", "CONVOY_ADMIN_PASSWORD", "AWS_SECRET_ACCESS_KEY"} & args["env"].keys()
+            assert not {"CONVOY_DATABASE_URL", "CONVOY_ADMIN_PASSWORD", "AWS_SECRET_ACCESS_KEY",
+                        "CONVOY_EXECUTION_SIGNING_KEYS_FILE"} & args["env"].keys()
             assert args["env"]["PYTHONPATH"].split(os.pathsep) == [
                 str(invocation / "src"), str(invocation), str(absolute_sources),
             ]
         assert "CONVOY_PLANNER_EXECUTION_SECRET" not in worker[1]["env"]
         assert "CONVOY_EXECUTION_SECRET" not in planner[1]["env"]
-        assert worker[1]["env"]["CONVOY_EXECUTION_SECRET"] != planner[1]["env"]["CONVOY_PLANNER_EXECUTION_SECRET"]
+        if public_only:
+            for role, purpose, capture in (("worker", "ACTION", worker), ("planner", "PLANNER", planner)):
+                assert not {"CONVOY_EXECUTION_SECRET", "CONVOY_PLANNER_EXECUTION_SECRET"} & capture[1]["env"].keys()
+                assert capture[1]["env"][f"CONVOY_{purpose}_VERIFICATION_KEYS_FILE"] == str(
+                    bundles.options[f"{role}_verification_keys_file"],
+                )
+            assert "CONVOY_PLANNER_VERIFICATION_KEYS_FILE" not in worker[1]["env"]
+            assert "CONVOY_ACTION_VERIFICATION_KEYS_FILE" not in planner[1]["env"]
+        else:
+            assert worker[1]["env"]["CONVOY_EXECUTION_SECRET"] != planner[1]["env"]["CONVOY_PLANNER_EXECUTION_SECRET"]
+
+
+def test_bundle_rejects_mixed_or_partial_authorization_config(bundles, tmp_path):
+    with pytest.raises(ValueError, match="both public verification files or both legacy secrets"):
+        local_bundle.LocalBundleOwner(**bundles.options, worker_verification_keys_file=tmp_path / "action.json")
+    del bundles.options["worker_execution_secret"], bundles.options["planner_execution_secret"]
+    with pytest.raises(ValueError, match="both public verification files or both legacy secrets"):
+        local_bundle.LocalBundleOwner(**bundles.options, worker_verification_keys_file=tmp_path / "action.json")
+
+
+@pytest.mark.parametrize("role,fault", [("worker", "missing"), ("planner", "malformed"), ("worker", "unsafe")])
+def test_invalid_public_configuration_preserves_loaded_bundle(bundles, tmp_path, role, fault):
+    configure_public_keys(bundles, tmp_path)
+    with local_bundle.LocalBundleOwner(**bundles.options) as owner:
+        prepare(owner, bundles.deployments[0])
+        original = processes(owner)
+        path = bundles.options[f"{role}_verification_keys_file"]
+        if fault == "missing":
+            path.unlink()
+        elif fault == "malformed":
+            path.write_text("not valid public key configuration")
+        else:
+            path.chmod(0o666)
+        with pytest.raises(local_bundle.BundleError, match="bundle_preflight_failed"):
+            prepare(owner, bundles.deployments[1])
+        assert processes(owner) == original and all(child.poll() is None for child in original)
+        assert state(owner)["phase"] == "preflight_failed"
 
 
 def test_gateway_thread_start_failure_closes_bound_socket_and_native_child(bundles, monkeypatch):

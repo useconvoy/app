@@ -52,11 +52,12 @@ an overlay can change reachability without changing the execution protocol.
 The device initiates outbound traffic; a cloud ingress rule need not expose a
 robot-side controller to the Internet.
 
-The current API/worker HMAC execution key is shared. A worker compromise could
-therefore expose signing authority. Before hosting workers across customer or
-provider trust boundaries, move to API-private signing and worker verification
-keys with issuer/audience/key rotation, while retaining identity, expiry and
-release binding. Encryption alone does not solve this authority boundary.
+The API supports [private Ed25519 signing and public verification](../execution-signing.md)
+with purpose, issuer, audience and key rotation, retaining identity, expiry and
+release binding. The local activation harness selects this mode. Scripted Compose
+and unapplied AWS templates still use shared HMAC keys; migrate those templates
+and qualify isolated identities/mounts before crossing provider or customer trust
+boundaries. Encryption alone does not solve this authority boundary.
 
 Inference requests go directly from the coordinator to the worker, keeping the
 management database outside each decision. Management outages do not erase an

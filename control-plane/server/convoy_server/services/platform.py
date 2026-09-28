@@ -277,7 +277,7 @@ def create_deployment(db: Session, p: Principal, data: dict, *, evaluation_id: s
     if robot.profile == PAIRED_PROFILE and evaluation_id is None:
         # An evaluation is admitted by the API before its DB-only job creates
         # this deployment. That trusted internal path must not need signing keys.
-        planner_signing_secret()
+        validate_execution_signing(paired=True)
     if evaluation_id is None:
         require_promotion(db, release)
     robot.generation += 1
@@ -475,33 +475,70 @@ def claim(db: Session, robot: Robot, device: Device, mission_id: str, data: dict
         return claim_out(mission, release)
     if mission.state != "requested":
         raise HTTPException(409, "mission cannot be claimed in its current state")
-    secret = get_settings().execution_secret
-    if not secret or len(secret.encode()) < 32:
-        raise HTTPException(503, "execution signing is not configured")
-    if release.manifest["profile"] == PAIRED_PROFILE:
-        planner_signing_secret()
-    mission.grant = sign_grant(identity, secret, aware(mission.expires_at).timestamp())
+    validate_execution_signing(paired=release.manifest["profile"] == PAIRED_PROFILE)
+    mission.grant = _sign_execution_grant(identity, "action", aware(mission.expires_at).timestamp())
     mission.identity = identity
     mission.state = "starting"
     mission.updated_at = utcnow()
     return claim_out(mission, release)
 
 
-def planner_signing_secret() -> str:
+def _configured_signer():
+    """Only an explicit file enables asymmetric mode; never fall back from it."""
+    settings = get_settings()
+    if settings.execution_signing_keys_file is None:
+        return None
+    if settings.execution_secret is not None or settings.planner_execution_secret is not None:
+        raise HTTPException(503, "execution signing configuration is unavailable")
+    try:
+        # The optional crypto dependency is unnecessary for legacy HMAC installs.
+        from convoy_contracts.grants import SigningKeys
+
+        return SigningKeys(settings.execution_signing_keys_file)
+    except (ImportError, OSError, TypeError, ValueError):
+        raise HTTPException(503, "execution signing configuration is unavailable") from None
+
+
+def validate_execution_signing(*, paired: bool = False) -> None:
+    signer = _configured_signer()
+    if signer is not None:
+        try:
+            signer.verification_document("action")
+            if paired:
+                signer.verification_document("planner")
+        except (OSError, TypeError, ValueError):
+            raise HTTPException(503, "execution signing configuration is unavailable") from None
+        return
     settings = get_settings()
     if not settings.execution_secret or len(settings.execution_secret.encode()) < 32:
         raise HTTPException(503, "execution signing is not configured")
-    secret = settings.planner_execution_secret
-    if not secret or len(secret.encode()) < 32 or secret == settings.execution_secret:
+    planner = settings.planner_execution_secret
+    if paired and (not planner or len(planner.encode()) < 32 or planner == settings.execution_secret):
         raise HTTPException(503, "distinct planner execution signing is not configured")
-    return secret
+
+
+def _sign_execution_grant(identity: dict, purpose: str, expires_at: float) -> str:
+    signer = _configured_signer()
+    if signer is not None:
+        try:
+            return signer.sign(identity, purpose, expires_at)
+        except (OSError, TypeError, ValueError):
+            raise HTTPException(503, "execution signing configuration is unavailable") from None
+    validate_execution_signing(paired=purpose == "planner")
+    settings = get_settings()
+    if purpose == "action":
+        return sign_grant(identity, settings.execution_secret, expires_at)
+    return sign_planner_grant(identity, settings.planner_execution_secret, expires_at)
 
 
 def claim_out(mission: Mission, release: ApplicationRelease) -> dict:
+    # Reclaims retain their original persisted action token and authorization
+    # deadline, while configured key removal/conflict still fails closed.
+    validate_execution_signing(paired=release.manifest["profile"] == PAIRED_PROFILE)
     result = {"mission": mission_out(mission), "identity": mission.identity, "grant": mission.grant}
     if release.manifest["profile"] == PAIRED_PROFILE:
-        result["planner_grant"] = sign_planner_grant(
-            mission.identity, planner_signing_secret(), aware(mission.expires_at).timestamp(),
+        result["planner_grant"] = _sign_execution_grant(
+            mission.identity, "planner", aware(mission.expires_at).timestamp(),
         )
     return result
 

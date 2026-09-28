@@ -13,7 +13,7 @@ dependencies = [
   "httpx>=0.27",
   "python-multipart>=0.0.9",
   "convoy-agent",
-  "convoy-contracts",
+  "convoy-contracts[signing]",
   "psycopg[binary]>=3.2,<4",
   "alembic>=1.16,<2",
 ]

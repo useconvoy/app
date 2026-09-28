@@ -14,6 +14,7 @@ from ..schemas import LoginIn
 from ..security import verify_password
 from ..serialize import user_out
 from ..services.identity import IdentityError, throttle_check
+from ..services.platform import validate_execution_signing
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -50,10 +51,12 @@ def me(p: Principal = Depends(current_principal), db: DbSession = Depends(get_db
     inst = installation(db)
     s = get_settings()
     profiles = release_profiles() if s.simulator else frozenset()
-    if (not s.planner_execution_secret or len(s.planner_execution_secret.encode()) < 32
-            or not s.execution_secret or len(s.execution_secret.encode()) < 32
-            or s.planner_execution_secret == s.execution_secret):
-        profiles = profiles - {PAIRED_PROFILE}
+    try:
+        validate_execution_signing(paired=True)
+    except HTTPException:
+        # Invalid asymmetric configuration disables every execution purpose. Old
+        # HMAC installations retain their existing single-policy capability list.
+        profiles = frozenset() if s.execution_signing_keys_file is not None else profiles - {PAIRED_PROFILE}
     return {
         "user": user_out(p.user),
         "via": p.via,
