@@ -20,7 +20,7 @@ That coordinator checkpoint used a scripted policy and privileged simulator stat
 |---|---|---|
 | Console workflow | PRs #75 and #82 merged; deployment, evaluation, comparison and promotion verified against actual services | Paired component display and actual paired evaluation |
 | Learned inference | PR #78 merged; actual pretrained SmolVLA camera-policy evidence through managed missions | Extend the qualified task/seed envelope and qualify target compute |
-| Component pairing | Explicit bundle, separate planner authority, durable proposal and bounded local execution implemented on feature branch | Real-process controlled-planner qualification, then live Jetson LLM qualification; no universal plug-and-play claim |
+| Component pairing | Explicit bundle, separate planner authority and durable proposal qualified with a controlled planner plus actual SmolVLA/MuJoCo | Console paired evaluation, then live Jetson LLM qualification; no universal plug-and-play claim |
 | Release evaluation | PRs #80 and #82 merged; suites, leased jobs, comparison and promotion gates qualified locally and through the browser | Paired evidence and broader model/task qualification |
 | Durable hosting foundation | PostgreSQL migrations and concurrency checks, restartable evaluation jobs, local execution journal | Full tenant conversion, artifact storage/retention and database restore rehearsal |
 | Provider and hosting | PRs #79 and #81 merged; local service images/TLS/PostgreSQL and reviewed AWS CPU staging configuration | Account/region/budget, provisioned endpoint and hosted acceptance |
@@ -58,6 +58,14 @@ No paid infrastructure has been provisioned. Local development does not require 
 - Merged PR #82 adds evaluation, cancellation, comparison and promotion to the
   console. Browser acceptance drove real API/job/simulation processes through
   those actions and a gated mission start.
+- PR #83's clean source `00717ab` completed one paired seed-0 mission: a durable
+  accepted controlled proposal, 54 actual SmolVLA actions and benchmark success.
+  Every action matched the original direct trace. Mission wall time was 44.36
+  seconds for 0.675 simulated seconds. The [recorded evidence](../../examples/manipulation/evidence/paired-controlled-seed0.json)
+  identifies the deterministic planner explicitly; it does not establish LLM or
+  Jetson inference. The initial `14bb784` attempt stopped at planner readiness
+  with no mission admitted; the module-entrypoint bug was fixed and covered by a
+  subprocess HTTP probe before this successful run.
 - The actual container installation upgraded PostgreSQL from `0001_fleet` to
   `0002_evaluations`, preserved its robot/history, and completed two 500-action
   cases through the separate evaluation service. A subsequent mission used the

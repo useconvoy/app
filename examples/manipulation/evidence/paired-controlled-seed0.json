@@ -1,0 +1,315 @@
+{
+  "policy_kind": "pretrained_vision_language_action",
+  "physics": "MuJoCo",
+  "execution": "offline lockstep",
+  "database": {
+    "backend": "sqlite",
+    "cleanup": "retained_in_output"
+  },
+  "services": [
+    "management API",
+    "inference worker",
+    "robot coordinator",
+    "planner admission service"
+  ],
+  "cases": [
+    {
+      "case": "full_lifecycle",
+      "mission": {
+        "id": "mis_m1q4c62defuz",
+        "project_id": "prj_5bmymzzng2ca",
+        "robot_id": "rob_i44wxpr7gw8i",
+        "deployment_id": "dep_cd4jtxby3kgv",
+        "release_id": "apr_b74i9zluwiw0",
+        "release_digest": "843e66189c636f870fa08499ac27535ccf15a39a6ca020ec79f892e6f1a5c841",
+        "generation": 1,
+        "seed": 0,
+        "expires_at": 1790569823.085451,
+        "state": "completed",
+        "detail": "benchmark success reached",
+        "identity": {
+          "robot_id": "rob_i44wxpr7gw8i",
+          "device_id": "dev_8ogizj1xroak",
+          "mission_id": "mis_m1q4c62defuz",
+          "release_digest": "843e66189c636f870fa08499ac27535ccf15a39a6ca020ec79f892e6f1a5c841",
+          "boot_id": "session-1d08d282-6111-4d4a-a7d6-8276dfe961ea",
+          "incarnation": "e82bc913-2b40-475d-8773-8a61f8e8633e",
+          "authority_epoch": 1
+        },
+        "episode_id": "epi_taubcjnoxyga",
+        "created_at": "2026-09-28T04:25:23.085777Z",
+        "updated_at": "2026-09-28T04:26:07.549775Z"
+      },
+      "episode": {
+        "id": "epi_taubcjnoxyga",
+        "project_id": "prj_5bmymzzng2ca",
+        "mission_id": "mis_m1q4c62defuz",
+        "release_digest": "843e66189c636f870fa08499ac27535ccf15a39a6ca020ec79f892e6f1a5c841",
+        "state": "completed",
+        "detail": "benchmark success reached",
+        "summary": {
+          "ever_success": true,
+          "evidence_scope": "simulated_physics_with_rgb_and_proprioception",
+          "execution_mode": "lockstep_offline",
+          "final_success": true,
+          "placement": {
+            "planner": "development-local-controlled",
+            "policy": "development-local-cpu"
+          },
+          "planner_accepted": true,
+          "planner_backend_kind": "controlled-text-planner",
+          "planner_result": {
+            "deadline_monotonic_ns": 365344639985541,
+            "decision": {
+              "kind": "skill",
+              "parameters": {},
+              "skill_id": "pick_place_puck"
+            },
+            "identity": {
+              "authority_epoch": 1,
+              "boot_id": "session-1d08d282-6111-4d4a-a7d6-8276dfe961ea",
+              "device_id": "dev_8ogizj1xroak",
+              "incarnation": "e82bc913-2b40-475d-8773-8a61f8e8633e",
+              "mission_id": "mis_m1q4c62defuz",
+              "release_digest": "843e66189c636f870fa08499ac27535ccf15a39a6ca020ec79f892e6f1a5c841",
+              "robot_id": "rob_i44wxpr7gw8i"
+            },
+            "observation_digest": "ea8be901c42a69a53dac26871ee3213e795331ae7b3438e558346a5401b4775c",
+            "observation_id": "mis_m1q4c62defuz:task-admission",
+            "planner_artifact_sha256": "e7d2abf22af9ee355125dd2c9fb5e1949744b072b3d7fd112e707e24f9bef35f",
+            "planner_duration_ms": 0.02195802517235279,
+            "planner_incarnation": "04176bde8620a68451999d6389f4b7148f44c76651e4fa534877c5a0e38787ef",
+            "request_id": "9e5fc3d8-bf80-44b2-a43c-80a5e56078ca",
+            "runtime_generation": 1
+          },
+          "planner_runtime": "convoy-controlled-text-skill-v1",
+          "planner_scope": "deterministic fixed-skill admission; no text-model inference",
+          "policy_runtime": "lerobot-smolvla-metaworld-cpu-v1",
+          "profile": "metaworld-smolvla-text-skill-v1",
+          "reward_sum": 73.2133387966449,
+          "seed": 0,
+          "simulated_duration_s": 0.675,
+          "steps": 54,
+          "wall_duration_s": 44.363178250030614
+        },
+        "identity": {
+          "robot_id": "rob_i44wxpr7gw8i",
+          "device_id": "dev_8ogizj1xroak",
+          "mission_id": "mis_m1q4c62defuz",
+          "release_digest": "843e66189c636f870fa08499ac27535ccf15a39a6ca020ec79f892e6f1a5c841",
+          "boot_id": "session-1d08d282-6111-4d4a-a7d6-8276dfe961ea",
+          "incarnation": "e82bc913-2b40-475d-8773-8a61f8e8633e",
+          "authority_epoch": 1
+        },
+        "created_at": "2026-09-28T04:26:07.550579Z"
+      }
+    }
+  ],
+  "planner_evidence": "deterministic fixed-skill admission; no text-model inference",
+  "planner_backend_kind": "controlled-text-planner",
+  "configured_placement": {
+    "policy": "development-local-cpu",
+    "planner": "development-local-controlled"
+  },
+  "source_commit": "00717abed0844c87a4320ad71dd50c9b752c6819",
+  "source_dirty": false,
+  "status": "passed",
+  "release_digest": "843e66189c636f870fa08499ac27535ccf15a39a6ca020ec79f892e6f1a5c841",
+  "robot_id": "rob_i44wxpr7gw8i",
+  "artifact": {
+    "implementation_sha256": {
+      "convoy_lerobot/runtime.py": "e0203b083bb222258ef74308352b924e67c7f4bb565cd4fe94177432c8b14a3c",
+      "convoy_lerobot/adapter.py": "c440a36ac6eda667d62c24b355798d98f17368048b58c8a507a0b3c21cacd492",
+      "convoy_lerobot/managed.py": "f6529d4432e9d3adf8fd1ecbcf102a4e820901eabbafe78dd4abc2cebadc79bf",
+      "convoy_lerobot/artifact.py": "d566ecc5e5d11d9ba2a7353110ff7c4a88a689a039ee14fbc9b406dc5f8d70fc",
+      "convoy_contracts/execution.py": "ffd9808e1c724f13e6bfb1e4069f6a228e18f130a989f8827d70b2b42c1d1034"
+    },
+    "schema_version": 1,
+    "runtime": "lerobot-smolvla-metaworld-cpu-v1",
+    "profile": "metaworld-smolvla-pick-place-rgb-v1",
+    "assets": {
+      "policy_repo": "lerobot/smolvla_metaworld",
+      "policy_revision": "cd6778d2cfa724c1bf5fc637490548e54d81dc4c",
+      "policy_weight_sha256": "6d3ce9f40627a247fa1c289517ec67da495810a58305c9bb1ec8588dfda0a736",
+      "policy_weight_bytes": 906712520,
+      "base_repo": "HuggingFaceTB/SmolVLM2-500M-Video-Instruct",
+      "base_revision": "7b375e1b73b11138ff12fe22c8f2822d8fe03467",
+      "base_weights_downloaded": false,
+      "assets": {
+        "checkpoint/model.safetensors": "6d3ce9f40627a247fa1c289517ec67da495810a58305c9bb1ec8588dfda0a736",
+        "checkpoint/config.json": "11e0df27a2a87cf9c12d4c7121fc2347719a6d47ed081f53e71e7f07fa5a467e",
+        "checkpoint/policy_postprocessor.json": "536e18d810e9c0fcebe34522242d6c2f6e00accfb5b4b98219de756d0581c7cd",
+        "checkpoint/policy_preprocessor.json": "2afa103d9467bfd21d280389df749b33026b88c4794068c5018187c5b517917d",
+        "checkpoint/README.md": "d74879c230d10cf9764bbcdc82f2193b219484c610cb8ff55abde5377be8bf80",
+        "checkpoint/policy_postprocessor_step_0_unnormalizer_processor.safetensors": "c0c9c63faa7940ac521ada8c74baa83f993fdb64d8b127e29351c3cdeb81209f",
+        "checkpoint/train_config.json": "c4b2ce20b7fc03439680f16b1099d2d2a95dd53ac33858522febb1a3369fc52e",
+        "checkpoint/policy_preprocessor_step_5_normalizer_processor.safetensors": "c0c9c63faa7940ac521ada8c74baa83f993fdb64d8b127e29351c3cdeb81209f",
+        "base-assets/added_tokens.json": "74135b8664b56088c0006f1c8e848d79a8eba003411f72ebf1dc2ee96227be3a",
+        "base-assets/tokenizer_config.json": "dd9ce2ab89a3dd881bd9378f1a79b943a064b9275a7e1706d5b7b47b68977913",
+        "base-assets/special_tokens_map.json": "2dfea2a426162316ff1567c82bc6d36d9690cd9f90455f075c77daca78b45c60",
+        "base-assets/chat_template.json": "b585e3598909a5687f9f9d738d35223724dedef256b9b274e1cbfb32b13c74bf",
+        "base-assets/config.json": "ea6bc1237e96247f6258de3e202e2e62b93d6f386dc47e7b36b5588bf3a15e17",
+        "base-assets/tokenizer.json": "5ece781dc8d2b2f3e2f289ca0ae50b17cfc27dd27bfe7971bb8241e0b964331a",
+        "base-assets/processor_config.json": "f3ad45028447b3562b4752be0d5916d6806c1ef589091a469608dcf0faa1737c",
+        "base-assets/generation_config.json": "34835060c9f0f74d1acb456cc72ca32746d3843d9eb5f578f9cbffac1d2eb840",
+        "base-assets/merges.txt": "0b54e8aa4e53d5383e2e4bc635a56b43f9647f7b13832d5d9ecd8f82dac4f510",
+        "base-assets/vocab.json": "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79",
+        "base-assets/preprocessor_config.json": "149e315d9410368e5491455bb06e0f763426e9e56cca731c13b24404a29b6374"
+      }
+    },
+    "packages": {
+      "lerobot": "0.6.1",
+      "metaworld": "3.0.0",
+      "mujoco": "3.3.0",
+      "gymnasium": "1.2.1",
+      "numpy": "2.2.6",
+      "torch": "2.11.0",
+      "torchvision": "0.26.0",
+      "transformers": "5.5.4",
+      "safetensors": "0.8.0",
+      "huggingface-hub": "1.33.0",
+      "pillow": "12.3.0"
+    },
+    "observation_action_contract": {
+      "image": {
+        "encoding": "png-rgb8",
+        "width": 480,
+        "height": 480,
+        "camera": "lerobot-0.6.1-metaworld-corner2",
+        "camera_position": [
+          0.75,
+          0.075,
+          0.7
+        ],
+        "image_transform": "flip-both-axes",
+        "max_encoded_bytes": 1048576
+      },
+      "state": "upstream-agent-pos-first-four-float32",
+      "instruction": "Pick and place a puck to a goal",
+      "action": "normalized-cartesian-delta-and-gripper-four-float32",
+      "actions_per_replan": 1,
+      "stop_condition": "first-upstream-is-success-or-configured-horizon-at-most-500"
+    },
+    "execution": {
+      "device": "cpu",
+      "dtype": "float32",
+      "torch_threads": 4,
+      "strict_weight_load": true,
+      "load_base_vlm_weights": false,
+      "model_seed_per_mission": 0,
+      "actions_per_replan": 1,
+      "compile_model": false,
+      "preprocessing": "saved-processors-rgb-chw-float32-divide255-state4-task-v1",
+      "postprocessing": "saved-unnormalizer-then-clip-minus1-plus1-float32-v1",
+      "reset": "policy.reset-and-torch.manual_seed-before-every-mission-v1"
+    }
+  },
+  "qualification_scope": "controlled fixed-skill admission plus actual pretrained SmolVLA and MuJoCo; seed0 CPU offline lockstep; no text-model, Jetson, physical or real-time qualification",
+  "direct_comparison": {
+    "report_sha256": "6308a9d3643c24440e7c60d8a74650cde0080711e60968982de0fa4ea048d3b3",
+    "trace_sha256": "0223cba3f7822d13dafe58266086b051d89b3496aab2bd05e254d3196d79e072",
+    "direct_steps": 54,
+    "managed_steps": 54,
+    "direct_success": true,
+    "exact_actions_equal": true,
+    "note": "Same checkpoint, seed0, upstream camera and one-action replanning. Different processes/timing."
+  },
+  "planner_artifact": {
+    "schema_version": 1,
+    "runtime": "convoy-controlled-text-skill-v1",
+    "backend_kind": "controlled-text-planner",
+    "decision": {
+      "kind": "skill",
+      "skill_id": "pick_place_puck",
+      "parameters": {}
+    },
+    "protocol": {
+      "schema_version": 1,
+      "system_prompt": "You select a skill from a fixed robot catalog. The only skill is pick_place_puck: pick and place the puck at the goal in the qualified scene. Its parameters are empty. For that task return exactly {\"kind\":\"skill\",\"skill_id\":\"pick_place_puck\",\"parameters\":{}}. Otherwise return exactly {\"kind\":\"decline\",\"reason\":\"unsupported_task\"}. Return only one JSON object, without reasoning, markdown, comments or extra keys. /no_think",
+      "user_prompt": "Pick and place a puck to a goal",
+      "parser": "single-json-object-no-duplicate-keys-exact-catalog-v1",
+      "generation": {
+        "max_tokens": 128,
+        "temperature": 0.0,
+        "seed": 42,
+        "stream": false
+      },
+      "max_output_bytes": 2048
+    },
+    "catalog": {
+      "schema_version": 1,
+      "skills": [
+        {
+          "id": "pick_place_puck",
+          "parameters": {},
+          "instruction": "Pick and place a puck to a goal",
+          "action_profile": "metaworld-smolvla-pick-place-rgb-v1"
+        }
+      ],
+      "scope": "one-qualified-puck-and-goal-in-pinned-metaworld-scene"
+    },
+    "scope": "deterministic fixed-skill admission; no text model, model weights or Jetson inference",
+    "python": "3.12.13",
+    "packages": {
+      "fastapi": "0.141.1",
+      "pydantic": "2.13.5",
+      "uvicorn": "0.54.0"
+    },
+    "implementation_sha256": {
+      "convoy_planner/app.py": "0cd3ea859887c79e2850e9daa12b112d97db5f92a72cb5e6480e4016fbf7588f",
+      "convoy_planner/artifact.py": "1acec3ea508511175e91a65998449d1758f053f9c0744d82a42675e3e07ff7c1",
+      "convoy_planner/backend.py": "0108c3fadf8121638ab3c99b2b47a9eed76df1536518cf1c3e953aebb964db82",
+      "convoy_planner/protocol.py": "5fce656c6c496d86ffb925585604394be779172757a272bf453e49c696628483",
+      "convoy_planner/sessions.py": "92a54f699613fc1f570a145c48b443062e65d52a8bc898f668e60fbbcc5d087e",
+      "convoy_planner/controlled.py": "3b2730fbfbb9e6e7d3d38b45fa12e4cba186d1c09b8232523f184c232a57a790",
+      "convoy_contracts/pairing.py": "532c41e776897a7da89709232efe66f815a395a7d5e0869b79ac4f5d5dc0dfd5",
+      "convoy_contracts/execution.py": "ffd9808e1c724f13e6bfb1e4069f6a228e18f130a989f8827d70b2b42c1d1034"
+    }
+  },
+  "plans": [
+    {
+      "mission_id": "mis_m1q4c62defuz",
+      "request": {
+        "budget_ms": 29997.712541,
+        "deadline_monotonic_ns": 365344639985541,
+        "identity": {
+          "authority_epoch": 1,
+          "boot_id": "session-1d08d282-6111-4d4a-a7d6-8276dfe961ea",
+          "device_id": "dev_8ogizj1xroak",
+          "incarnation": "e82bc913-2b40-475d-8773-8a61f8e8633e",
+          "mission_id": "mis_m1q4c62defuz",
+          "release_digest": "843e66189c636f870fa08499ac27535ccf15a39a6ca020ec79f892e6f1a5c841",
+          "robot_id": "rob_i44wxpr7gw8i"
+        },
+        "observation_digest": "ea8be901c42a69a53dac26871ee3213e795331ae7b3438e558346a5401b4775c",
+        "observation_id": "mis_m1q4c62defuz:task-admission",
+        "request_id": "9e5fc3d8-bf80-44b2-a43c-80a5e56078ca"
+      },
+      "result": {
+        "deadline_monotonic_ns": 365344639985541,
+        "decision": {
+          "kind": "skill",
+          "parameters": {},
+          "skill_id": "pick_place_puck"
+        },
+        "identity": {
+          "authority_epoch": 1,
+          "boot_id": "session-1d08d282-6111-4d4a-a7d6-8276dfe961ea",
+          "device_id": "dev_8ogizj1xroak",
+          "incarnation": "e82bc913-2b40-475d-8773-8a61f8e8633e",
+          "mission_id": "mis_m1q4c62defuz",
+          "release_digest": "843e66189c636f870fa08499ac27535ccf15a39a6ca020ec79f892e6f1a5c841",
+          "robot_id": "rob_i44wxpr7gw8i"
+        },
+        "observation_digest": "ea8be901c42a69a53dac26871ee3213e795331ae7b3438e558346a5401b4775c",
+        "observation_id": "mis_m1q4c62defuz:task-admission",
+        "planner_artifact_sha256": "e7d2abf22af9ee355125dd2c9fb5e1949744b072b3d7fd112e707e24f9bef35f",
+        "planner_duration_ms": 0.02195802517235279,
+        "planner_incarnation": "04176bde8620a68451999d6389f4b7148f44c76651e4fa534877c5a0e38787ef",
+        "request_id": "9e5fc3d8-bf80-44b2-a43c-80a5e56078ca",
+        "runtime_generation": 1
+      },
+      "state": "accepted"
+    }
+  ]
+}

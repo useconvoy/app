@@ -120,3 +120,9 @@ The wrapper never downloads model weights. `paired-result.json` joins accepted
 durable plans with actual action/physics outcomes and keeps the controlled planner
 label. An optional direct report/trace comparison checks that policy actions still
 match the prior qualified seed0 rollout.
+
+The [recorded clean-source run](../../examples/manipulation/evidence/paired-controlled-seed0.json)
+accepted one controlled plan and reached benchmark success in 54 actual SmolVLA
+actions, all equal to the original direct trace. It took 44.36 wall seconds for
+0.675 simulated seconds. This qualifies the fixed-task integration, not a learned
+planner, Jetson deployment, real-time control or sustained physical placement.
