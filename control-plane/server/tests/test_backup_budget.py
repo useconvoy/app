@@ -319,11 +319,20 @@ def test_pinned_snapshot_completes_under_an_active_writer_without_restarts(app, 
     with session_scope() as db:
         assert w.acquire(db)
     out = tmp_path / "pinned.db"
+    copy_checkpoints = []
+
+    def record_copy_checkpoint(status, remaining, total):
+        # The callback runs before take_backup releases its source read transaction.
+        copy_checkpoints.append(time.monotonic())
+
     with _WriterLoop(live) as wl, _ApiWriterLoop(admin) as api:
         before = len(wl.commits)
         t0 = time.monotonic()
         with session_scope() as db:
-            r = bk.take_backup(db, str(out), worker=w, budget_s=BACKUP_ATTEMPT_S, source_lock_s=3.0)
+            r = bk.take_backup(
+                db, str(out), worker=w, budget_s=BACKUP_ATTEMPT_S, source_lock_s=3.0,
+                _step_hook=record_copy_checkpoint,
+            )
         t1 = time.monotonic()
         time.sleep(0.3)
         resumed = wl.commits_after(t1)
@@ -335,8 +344,14 @@ def test_pinned_snapshot_completes_under_an_active_writer_without_restarts(app, 
     pinned, released = r["snapshot_pinned_mono"], r["snapshot_released_mono"]
     assert t0 <= pinned < released <= t1 and round(released - pinned, 3) == r["source_lock_held_s"]
     assert r["source_mode"] == "delete"
-    # 1. the DELETE-mode snapshot really held the source lock: no foreign COMMIT completed inside it
-    assert not [w for w in wl.windows if pinned < w[1] < released], (pinned, released)
+    # 1. no foreign COMMIT completed while the DELETE-mode snapshot was certainly pinned.
+    # released is sampled after rollback/close, when a resumed writer may already have committed;
+    # the final copy callback is a synchronized checkpoint before the actual unlock.
+    last_copy_checkpoint = copy_checkpoints[-1]
+    assert pinned <= last_copy_checkpoint <= released
+    assert not [w for w in wl.windows if pinned < w[1] < last_copy_checkpoint], (
+        pinned, last_copy_checkpoint, released,
+    )
     # 2. the writer was mid-commit during the hold, and each such commit completed within one
     #    busy-handler poll of the release: the pause was the hold, nothing longer
     paused = [w for w in wl.windows if w[0] < released and w[1] > pinned]
