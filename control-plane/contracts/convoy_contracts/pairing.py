@@ -30,6 +30,7 @@ from .execution import (
 
 PAIRED_PROFILE = "metaworld-smolvla-text-skill-v1"
 PLANNER_RUNTIME = "convoy-llamacpp-text-skill-v1"
+CONTROLLED_PLANNER_RUNTIME = "convoy-controlled-text-skill-v1"
 FIXED_TASK = VISUAL_INSTRUCTION
 SKILL_ID = "pick_place_puck"
 CATALOG = {"schema_version": 1, "skills": [{"id": SKILL_ID, "parameters": {},
@@ -66,7 +67,7 @@ def validate_release_manifest(value: dict) -> dict:
     if action["profile"] != VISUAL_PROFILE:
         raise ValueError("paired release requires the qualified visual action profile")
     _keys(value["planner"], {"runtime", "artifact_sha256", "protocol_sha256"}, "planner")
-    if value["planner"]["runtime"] != PLANNER_RUNTIME:
+    if value["planner"]["runtime"] not in {PLANNER_RUNTIME, CONTROLLED_PLANNER_RUNTIME}:
         raise ValueError("unsupported planner runtime")
     _digest(value["planner"]["artifact_sha256"], "planner artifact")
     if value["planner"]["protocol_sha256"] != PLANNER_PROTOCOL_SHA256:
@@ -78,7 +79,9 @@ def validate_release_manifest(value: dict) -> dict:
     _keys(value["planning"], {"timeout_ms"}, "planning")
     _integer(value["planning"]["timeout_ms"], "planning timeout_ms", 1, 30000)
     # Explicit reference placement, without claiming hosted cloud or Jetson motor-policy qualification.
-    if value["placement"] != {"policy": "development-local-cpu", "planner": "development-jetson-lan"}:
+    planner_placement = ("development-local-controlled" if value["planner"]["runtime"] == CONTROLLED_PLANNER_RUNTIME
+                         else "development-jetson-lan")
+    if value["placement"] != {"policy": "development-local-cpu", "planner": planner_placement}:
         raise ValueError("unsupported qualification placement")
     return value
 

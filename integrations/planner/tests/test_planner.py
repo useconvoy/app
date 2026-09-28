@@ -10,6 +10,7 @@ import pytest
 from convoy_contracts.execution import VISUAL_PROFILE, canonical_digest, sign_grant
 from convoy_contracts.pairing import (
     CATALOG_SHA256,
+    CONTROLLED_PLANNER_RUNTIME,
     FIXED_TASK,
     PAIRED_PROFILE,
     PLANNER_PROTOCOL_SHA256,
@@ -23,6 +24,7 @@ from fastapi.testclient import TestClient
 from convoy_planner.app import create_app
 from convoy_planner.artifact import artifact_descriptor, artifact_digest, implementation_sources
 from convoy_planner.backend import GatewayBackend
+from convoy_planner.controlled import BACKEND_KIND, ControlledBackend, controlled_descriptor
 from convoy_planner.protocol import parse_decision
 from convoy_planner.sessions import Sessions
 
@@ -208,3 +210,24 @@ def test_active_session_retains_capacity_to_cancel_at_tombstone_limit():
     assert len(sessions.closed) == 1024 and sessions.owner is None
     with pytest.raises(HTTPException):
         sessions.check(active)
+
+
+def test_controlled_runtime_is_explicit_and_cannot_claim_real_model_provenance():
+    bundle = manifest(Backend())
+    descriptor = controlled_descriptor()
+    assert descriptor["backend_kind"] == BACKEND_KIND and "gateway" not in descriptor
+    bundle["planner"].update(runtime=CONTROLLED_PLANNER_RUNTIME, artifact_sha256=canonical_digest(descriptor))
+    bundle["placement"]["planner"] = "development-local-controlled"
+    backend = ControlledBackend()
+    client = TestClient(create_app(bundle, backend, execution_secret=SECRET, probe_token=PROBE))
+    identity, headers = authority(bundle)
+    probe = client.post("/v1/probe", json={"release_digest": identity["release_digest"], "profile": PAIRED_PROFILE},
+                        headers={"Authorization": "Bearer " + PROBE})
+    assert probe.status_code == 200 and probe.json()["runtime"] == CONTROLLED_PLANNER_RUNTIME
+    assert client.post("/v1/sessions/start", json={"identity": identity}, headers=headers).status_code == 200
+    assert client.post("/v1/plans", json=request(identity), headers=headers).json()["decision"] == DECISION
+    with pytest.raises(ValueError):
+        artifact_descriptor(backend.inspect())
+    with pytest.raises(ValueError):
+        create_app({**bundle, "placement": {"policy": "development-local-cpu", "planner": "development-jetson-lan"}},
+                   backend, execution_secret=SECRET, probe_token=PROBE)

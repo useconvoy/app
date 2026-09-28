@@ -10,9 +10,9 @@ import time
 
 from convoy_contracts.execution import IDENTITY_FIELDS, canonical_digest, validate_identity
 from convoy_contracts.pairing import (
+    CONTROLLED_PLANNER_RUNTIME,
     PAIRED_PROFILE,
     PLAN_ECHO_FIELDS,
-    PLANNER_RUNTIME,
     validate_plan_request,
     validate_plan_result,
     validate_release_manifest,
@@ -43,12 +43,22 @@ def create_app(manifest: dict, backend, *, execution_secret: str, probe_token: s
 
     def snapshot():
         identity = backend.inspect()
-        descriptor = artifact_descriptor(identity, fingerprints=sources)
+        if manifest["planner"]["runtime"] == CONTROLLED_PLANNER_RUNTIME:
+            from .controlled import ControlledBackend, controlled_descriptor, validate_controlled_identity
+
+            if not isinstance(backend, ControlledBackend):
+                raise ValueError("controlled profile requires its explicit controlled backend")
+            validate_controlled_identity(identity)
+            descriptor = controlled_descriptor(fingerprints=sources)
+            backend_incarnation = identity["backend_incarnation"]
+        else:
+            descriptor = artifact_descriptor(identity, fingerprints=sources)
+            backend_incarnation = identity["gateway_incarnation"]
         artifact = canonical_digest(descriptor)
         if artifact != manifest["planner"]["artifact_sha256"]:
             raise HTTPException(409, "loaded planner artifact differs from bundle")
         return identity, {"planner_artifact_sha256": artifact,
-                          "planner_incarnation": canonical_digest([incarnation, identity["gateway_incarnation"]]),
+                          "planner_incarnation": canonical_digest([incarnation, backend_incarnation]),
                           "runtime_generation": identity["runtime_generation"]}
 
     @app.middleware("http")
@@ -76,7 +86,7 @@ def create_app(manifest: dict, backend, *, execution_secret: str, probe_token: s
         try:
             _, identity = snapshot()
             return {"ready": True, "release_digest": digest, "profile": PAIRED_PROFILE,
-                    "runtime": PLANNER_RUNTIME, **identity}
+                    "runtime": manifest["planner"]["runtime"], **identity}
         except HTTPException:
             raise
         except Exception as error:

@@ -35,7 +35,7 @@ def validate_gateway_identity(value: dict) -> dict:
 def implementation_sources() -> dict[str, Path]:
     package = Path(__file__).parent
     return {**{f"convoy_planner/{name}": package / name for name in (
-        "app.py", "artifact.py", "backend.py", "protocol.py", "sessions.py",
+        "app.py", "artifact.py", "backend.py", "protocol.py", "sessions.py", "controlled.py",
     )}, "convoy_contracts/pairing.py": Path(pairing.__file__),
             "convoy_contracts/execution.py": Path(execution.__file__)}
 
