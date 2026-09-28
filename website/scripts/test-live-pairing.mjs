@@ -91,6 +91,8 @@ try {
   expect(recorded.steps).toBeGreaterThan(0);
   expect(recorded.steps).toBeLessThanOrEqual(manifest.action_manifest.execution.max_steps);
   const episode = await page.evaluate(async id => (await fetch(`/api/platform/episodes/${id}`)).json(), recorded.episode_id);
+  expect(episode.summary.planner_backend_kind).toBe(connection.planner_backend_kind);
+  expect(episode.summary.placement).toEqual(manifest.placement);
   expect(episode.summary.planner_accepted).toBe(true);
   expect(episode.summary.planner_result.decision).toEqual({ kind: 'skill', skill_id: manifest.task.skill_id, parameters: {} });
   expect(episode.summary.planner_result.planner_artifact_sha256).toBe(manifest.planner.artifact_sha256);
