@@ -9,8 +9,10 @@ resolution-markers = [
 [manifest]
 members = [
     "convoy-agent",
+    "convoy-contracts",
     "convoy-mvp",
     "convoy-server",
+    "convoy-worker",
 ]
 
 [[package]]
@@ -233,6 +235,20 @@ name = "convoy-agent"
 version = "0.1.0"
 source = { editable = "agent" }
 
+[package.optional-dependencies]
+coordinator = [
+    { name = "convoy-contracts" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "convoy-contracts", marker = "extra == 'coordinator'", editable = "contracts" }]
+provides-extras = ["coordinator"]
+
+[[package]]
+name = "convoy-contracts"
+version = "0.1.0"
+source = { editable = "contracts" }
+
 [[package]]
 name = "convoy-mvp"
 version = "0.1.0"
@@ -265,6 +281,7 @@ source = { editable = "server" }
 dependencies = [
     { name = "argon2-cffi" },
     { name = "convoy-agent" },
+    { name = "convoy-contracts" },
     { name = "croniter" },
     { name = "fastapi" },
     { name = "httpx" },
@@ -278,6 +295,7 @@ dependencies = [
 requires-dist = [
     { name = "argon2-cffi", specifier = ">=23.1" },
     { name = "convoy-agent", editable = "agent" },
+    { name = "convoy-contracts", editable = "contracts" },
     { name = "croniter", specifier = ">=3.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
@@ -285,6 +303,23 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "sqlalchemy", specifier = ">=2.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
+]
+
+[[package]]
+name = "convoy-worker"
+version = "0.1.0"
+source = { editable = "worker" }
+dependencies = [
+    { name = "convoy-contracts" },
+    { name = "fastapi" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "convoy-contracts", editable = "contracts" },
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "uvicorn", specifier = ">=0.30" },
 ]
 
 [[package]]

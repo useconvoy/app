@@ -5,6 +5,12 @@ description = "Convoy device agent for Jetson Orin Nano (stdlib only, outbound H
 requires-python = ">=3.10"
 dependencies = []
 
+[project.optional-dependencies]
+coordinator = ["convoy-contracts"]
+
+[tool.uv.sources]
+convoy-contracts = { workspace = true }
+
 [project.scripts]
 convoy-agent = "convoy_agent.cli:main"
 

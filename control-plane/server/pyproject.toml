@@ -13,10 +13,12 @@ dependencies = [
   "httpx>=0.27",
   "python-multipart>=0.0.9",
   "convoy-agent",
+  "convoy-contracts",
 ]
 
 [tool.uv.sources]
 convoy-agent = { workspace = true }
+convoy-contracts = { workspace = true }
 
 [project.scripts]
 convoy-server = "convoy_server.cli:main"

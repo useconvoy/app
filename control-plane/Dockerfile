@@ -91,6 +91,8 @@ WORKDIR /app
 COPY --chown=convoy:convoy pyproject.toml uv.lock ./
 COPY --chown=convoy:convoy server/ ./server/
 COPY --chown=convoy:convoy agent/ ./agent/
+COPY --chown=convoy:convoy contracts/ ./contracts/
+COPY --chown=convoy:convoy worker/ ./worker/
 COPY --chown=convoy:convoy docs/JETSON_GUIDE.md ./docs/JETSON_GUIDE.md
 # The venv is built on the image's own CPython (never a downloaded interpreter, whose `_sqlite3`
 # could carry a statically linked SQLite) and that is verified, not assumed.
