@@ -47,6 +47,10 @@ def acquire_db_lock(settings: Settings, *, exclusive: bool) -> Any:
     import fcntl
 
     from .migrations import db_file_path
+    from .postgres import enabled
+
+    if enabled(settings):
+        return None  # PostgreSQL ownership is transactional, never a local file lock.
 
     path = db_file_path(settings)
     if path is None:
@@ -222,8 +226,29 @@ def _configure_sqlite(dbapi_conn, _record) -> None:
 
 def make_engine(settings: Settings) -> Engine:
     url = settings.db_url
+    from sqlalchemy.engine import make_url
+
+    from .postgres import enabled
+
+    if enabled(settings):
+        parsed = make_url(url)
+        if parsed.drivername not in {"postgresql", "postgresql+psycopg"}:
+            raise RuntimeError("PostgreSQL uses the qualified psycopg driver")
+        return create_engine(
+            parsed.set(drivername="postgresql+psycopg"),
+            connect_args={
+                "connect_timeout": 5,
+                "application_name": "convoy",
+                "options": "-c timezone=UTC -c lock_timeout=5000 -c statement_timeout=30000",
+            },
+            isolation_level="READ COMMITTED",
+            pool_pre_ping=True,
+            pool_size=5,
+            max_overflow=5,
+            pool_timeout=5,
+        )
     if not url.startswith("sqlite"):
-        raise RuntimeError("Convoy MVP supports SQLite only; Postgres requires separate qualification")
+        raise RuntimeError("supported database backends are SQLite and PostgreSQL")
     if ":memory:" not in url:
         settings.data_dir.mkdir(parents=True, exist_ok=True)
     engine = create_engine(
@@ -240,6 +265,17 @@ def init_engine(settings: Settings | None = None) -> Engine:
     global _engine, _SessionLocal, _lock
     settings = settings or get_settings()
     from .migrations import db_file_path, ensure_schema
+    from .postgres import enabled, require_schema
+
+    if enabled(settings):
+        try:
+            _engine = make_engine(settings)
+            require_schema(_engine)
+            _SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False, autoflush=False)
+            return _engine
+        except Exception:
+            reset_engine()
+            raise
 
     if _lock is None:
         _lock = acquire_db_lock(settings, exclusive=False)
@@ -321,6 +357,10 @@ def change_journal_mode(settings: Settings, mode: str) -> dict[str, Any]:
     data-directory lock (refuses while any api/worker holds it), converts the file, verifies, and
     reports what the configuration must say for services to start again. Never touches backups."""
     from .migrations import db_file_path
+    from .postgres import enabled
+
+    if enabled(settings):
+        return {"ok": False, "error": "db-mode applies only to SQLite; PostgreSQL has no SQLite journal mode"}
 
     path = db_file_path(settings)
     if path is None or not path.exists():
@@ -346,6 +386,10 @@ def change_journal_mode(settings: Settings, mode: str) -> dict[str, Any]:
 
 def db_status() -> dict:
     eng = get_engine()
+    if eng.dialect.name == "postgresql":
+        from .postgres import status
+
+        return status(eng)
     with eng.connect() as c:
         mode = c.execute(text("PRAGMA journal_mode")).scalar()
         status = {
@@ -374,17 +418,41 @@ def session_factory() -> sessionmaker[Session]:
 
 
 class WriteConflict(Exception):
-    """Raised when BEGIN IMMEDIATE could not be obtained after bounded retries."""
+    """Raised when a bounded write transaction cannot acquire its database lock."""
 
 
 @contextmanager
 def write_txn(db: Session) -> Iterator[Session]:
-    """Scoped write transaction: BEGIN IMMEDIATE with bounded, jittered busy retry.
+    """Scoped write transaction: SQLite BEGIN IMMEDIATE or PostgreSQL advisory lock.
     Nested use inside an open write transaction is a no-op (joins the outer transaction)."""
     if db.info.get("in_write_txn"):
         yield db
         return
     db.rollback()  # discard any implicit read state
+    if db.get_bind().dialect.name == "postgresql":
+        from .postgres import WRITE_LOCK
+
+        try:
+            # Preserve SQLite's existing write serialization across API/worker
+            # processes. READ COMMITTED gives fresh reads after the lock wait.
+            db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": WRITE_LOCK})
+            db.info["in_write_txn"] = True
+            yield db
+            db.flush()
+            db.commit()
+        except OperationalError as error:
+            db.rollback()
+            if getattr(error.orig, "sqlstate", None) in {"55P03", "40001", "40P01"}:
+                raise WriteConflict(
+                    "database write contention; retry the complete idempotent request"
+                ) from error
+            raise
+        except BaseException:
+            db.rollback()
+            raise
+        finally:
+            db.info["in_write_txn"] = False
+        return
     for attempt in range(BUSY_RETRIES):
         try:
             db.execute(text("BEGIN IMMEDIATE"))

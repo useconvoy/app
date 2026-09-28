@@ -1,0 +1,45 @@
+name: postgres-checks
+
+on:
+  push:
+    branches: [v1]
+    paths: ["control-plane/**", "infra/development/postgres.compose.yml", ".github/workflows/postgres-checks.yml"]
+  pull_request:
+    paths: ["control-plane/**", "infra/development/postgres.compose.yml", ".github/workflows/postgres-checks.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17-bookworm@sha256:639ab7ceb90e13123085b741fb31ef493fba25463002f6da665352e7b534b652
+        env:
+          POSTGRES_USER: convoy
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: convoy_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U convoy -d convoy_ci"
+          --health-interval 2s --health-timeout 2s --health-retries 20
+    defaults:
+      run:
+        working-directory: control-plane
+    env:
+      CONVOY_TEST_POSTGRES_URL: postgresql+psycopg://convoy:ci-only@localhost:5432/convoy_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.22"
+          python-version: "3.12"
+      - run: uv sync --frozen --all-packages
+      - run: uv run --frozen ruff check server agent contracts worker
+      - run: uv run --frozen pytest -q server/tests/postgres
