@@ -278,6 +278,11 @@ managed = [
     { name = "convoy-server" },
     { name = "httpx" },
 ]
+paired = [
+    { name = "convoy-planner" },
+    { name = "convoy-server" },
+    { name = "httpx" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -289,10 +294,13 @@ dev = [
 requires-dist = [
     { name = "convoy-agent", extras = ["coordinator"], editable = "../../control-plane/agent" },
     { name = "convoy-contracts", editable = "../../control-plane/contracts" },
+    { name = "convoy-planner", marker = "extra == 'paired'", editable = "../planner" },
     { name = "convoy-server", marker = "extra == 'managed'", editable = "../../control-plane/server" },
+    { name = "convoy-server", marker = "extra == 'paired'", editable = "../../control-plane/server" },
     { name = "convoy-worker", editable = "../../control-plane/worker" },
     { name = "gymnasium", specifier = "==1.2.1" },
     { name = "httpx", marker = "extra == 'managed'", specifier = ">=0.27" },
+    { name = "httpx", marker = "extra == 'paired'", specifier = ">=0.27" },
     { name = "huggingface-hub", specifier = "==1.33.0" },
     { name = "lerobot", extras = ["smolvla"], specifier = "==0.6.1" },
     { name = "metaworld", specifier = "==3.0.0" },
@@ -304,10 +312,34 @@ requires-dist = [
     { name = "torchvision", specifier = "==0.26.0" },
     { name = "transformers", specifier = "==5.5.4" },
 ]
-provides-extras = ["managed"]
+provides-extras = ["managed", "paired"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "pytest", specifier = ">=8,<9" },
+    { name = "ruff", specifier = ">=0.12,<0.13" },
+]
+
+[[package]]
+name = "convoy-planner"
+version = "0.1.0"
+source = { editable = "../planner" }
+dependencies = [
+    { name = "convoy-contracts" },
+    { name = "fastapi" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "convoy-contracts", editable = "../../control-plane/contracts" },
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "uvicorn", specifier = ">=0.30" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "httpx", specifier = ">=0.27" },
     { name = "pytest", specifier = ">=8,<9" },
     { name = "ruff", specifier = ">=0.12,<0.13" },
 ]

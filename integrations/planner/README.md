@@ -95,3 +95,28 @@ faults. They cover strict parsing, source/model identity, one plan per mission,
 generation changes, readiness mismatch, cancellation, expiry and transport loss.
 They do not establish a real text model's success rate. Separate managed evidence
 must report the actual device/runtime identity, admitted plan and physics rollout.
+
+## Controlled composition harness
+
+The separate `convoy-controlled-text-skill-v1` runtime always selects the single
+qualified skill. Its artifact records the executing fixture source and explicitly
+contains no model weights or native binary identity. The real gateway path still
+requires complete verified model provenance. Controlled releases declare planner
+placement `development-local-controlled` and evidence kind
+`controlled-text-planner`; they cannot share a planner artifact with the real LLM.
+
+With the existing SmolVLA assets already present, run from the repository root:
+
+```sh
+uv run --project integrations/lerobot --extra paired --frozen \
+  python examples/manipulation/paired.py --output /path/to/fresh-private-evidence
+```
+
+This starts the API, controlled planner, pretrained SmolVLA action worker and
+MuJoCo coordinator as separate processes. `--serve` instead leaves a ready, idle
+stack with the evaluation worker for console use. `--postgres` uses the existing
+disposable-database mechanism; it requires its explicit configured test endpoint.
+The wrapper never downloads model weights. `paired-result.json` joins accepted
+durable plans with actual action/physics outcomes and keeps the controlled planner
+label. An optional direct report/trace comparison checks that policy actions still
+match the prior qualified seed0 rollout.
