@@ -11,10 +11,12 @@ import argparse
 import json
 import os
 import secrets
+import signal
 import socket
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -43,7 +45,7 @@ def wait_for(read, accept, *, timeout: float = 30):
     raise RuntimeError(f"timed out waiting for pipeline state; last={last}")
 
 
-def run(output: Path, *, faults: bool = False, manifest: dict | None = None,
+def run(output: Path, *, faults: bool = False, serve: bool = False, manifest: dict | None = None,
         runtime_factory: str = "convoy_sim.runtimes:scripted",
         coordinator_module: str = "convoy_sim.managed", policy_kind: str = "scripted", repeat: int = 1) -> dict:
     if not 1 <= repeat <= 3:
@@ -100,7 +102,7 @@ def run(output: Path, *, faults: bool = False, manifest: dict | None = None,
     except (OSError, subprocess.SubprocessError):
         evidence["source_commit"] = None
     try:
-        start("api", "convoy_server.cli", "serve", "--host", "127.0.0.1", "--port", api_port)
+        api_process = start("api", "convoy_server.cli", "serve", "--host", "127.0.0.1", "--port", api_port)
         worker = start("worker", "convoy_worker.cli", "--release", manifest_file,
                        "--factory", runtime_factory, "--port", worker_port)
         with httpx.Client(base_url=base, timeout=5) as api:
@@ -141,6 +143,24 @@ def run(output: Path, *, faults: bool = False, manifest: dict | None = None,
                              lambda item: item["state"] in {"ready", "blocked"})
             assert ready["state"] == "ready", ready
             assert get(f"/api/v1/missions?project_id={project['id']}") == [], "deployment started a mission"
+
+            if serve:
+                connection = output / "connection.json"
+                descriptor = os.open(connection, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(descriptor, "w") as stream:
+                    json.dump({"api_url": base, "worker_url": worker_url, "email": email,
+                               "password": password, "project_id": project["id"], "robot_id": robot["id"],
+                               "release_id": release["id"], "manifest_path": str(manifest_file),
+                               "harness_pid": os.getpid()}, stream)
+                print(f"Ready and idle. Local connection settings: {connection}", flush=True)
+                stopped = threading.Event()
+                signal.signal(signal.SIGTERM, lambda *_: stopped.set())
+                signal.signal(signal.SIGINT, lambda *_: stopped.set())
+                while not stopped.wait(0.5):
+                    if any(process.poll() is not None for process in processes):
+                        raise RuntimeError("a development service stopped; inspect its local log")
+                evidence.update(status="stopped", release_digest=release["digest"], robot_id=robot["id"])
+                return evidence
 
             def start_mission(seed):
                 key = str(uuid.uuid4())
@@ -200,6 +220,34 @@ def run(output: Path, *, faults: bool = False, manifest: dict | None = None,
                 assert 10 <= cancelled["episode"]["summary"]["steps"] < 500
                 evidence["cases"].append({"case": "cancel_running", **cancelled})
 
+                mission = start_mission(0)
+                wait_for(lambda: applied_count(mission["id"]), lambda count: count >= 10)
+                stop(api_process)
+
+                def local_mission_state():
+                    path = output / "robot" / "coordinator" / "execution.sqlite3"
+                    with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as journal:
+                        return journal.execute("SELECT state FROM missions WHERE id=?", (mission["id"],)).fetchone()[0]
+
+                assert wait_for(local_mission_state, lambda state: state in {"completed", "failed", "unknown"}) == "completed"
+                assert applied_count(mission["id"]) == 500
+                api_process = start("api-restarted", "convoy_server.cli", "serve", "--host", "127.0.0.1", "--port", api_port)
+                wait_for(lambda: api.get("/api/health"), lambda response: response.status_code == 200)
+                offline = finish(mission)
+                assert offline["mission"]["state"] == "completed", offline
+                evidence["cases"].append({"case": "management_outage_and_report_replay", **offline})
+
+                mission = start_mission(1)
+                wait_for(lambda: applied_count(mission["id"]), lambda count: count >= 10)
+                stop(worker)
+                unavailable = finish(mission)
+                assert unavailable["mission"]["state"] == "failed", unavailable
+                assert 10 <= unavailable["episode"]["summary"]["steps"] < 500
+                evidence["cases"].append({"case": "inference_outage_stops_actions", **unavailable})
+                worker = start("worker-restarted", "convoy_worker.cli", "--release", manifest_file,
+                               "--factory", runtime_factory, "--port", worker_port)
+                wait_for(lambda: httpx.get(worker_url + "/health"), lambda response: response.status_code == 200)
+
                 mission = start_mission(2)
                 wait_for(lambda: applied_count(mission["id"]), lambda count: count >= 10)
                 # Abrupt loss exercises durable command/mission reconciliation.
@@ -236,8 +284,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--faults", action="store_true")
+    parser.add_argument("--serve", action="store_true", help="leave a seeded, ready, idle stack for console use")
     args = parser.parse_args()
-    result = run(args.output.resolve(), faults=args.faults)
+    if args.serve and args.faults:
+        parser.error("choose the acceptance run (--faults) or an interactive stack (--serve)")
+    result = run(args.output.resolve(), faults=args.faults, serve=args.serve)
     print(json.dumps({"status": result["status"], "cases": [case["case"] for case in result["cases"]]}))
 
 

@@ -16,3 +16,21 @@ Use a new output directory on each run. The harness generates local credentials,
 The worker can host another installed runtime factory with `runtime`, `artifact_sha256` and `get_action(observation)` attributes; it must match the registered release. Load and hash the actual checkpoint in that factory. Changing the policy does not imply its observation/action semantics match this environment. The only implemented execution profile here is the pinned 39-value MetaWorld observation and four normalized displacement/gripper actions.
 
 For component configuration, read [the execution decision record](../../docs/v1/decisions/002-execution-pipeline.md). The authenticated management contract is visible at the API's `/api/docs` route. The general multi-customer/cloud platform remains under implementation.
+
+To use the console interactively, pass `--serve` instead of `--faults`. The stack
+stays ready and idle until interrupted. A private `connection.json` contains its
+local API URL and generated development login. Start the website with that
+`CONVOY_API_URL`, then open `/console`. The API, policy worker and coordinator all
+remain separate processes. Stop the harness to shut them down.
+
+For the single live browser acceptance after building the website, run from the
+repository root:
+
+```sh
+node website/scripts/test-live-console.mjs integrations/simulation/runs/YOUR_STACK/connection.json NEW_BROWSER_OUTPUT
+```
+
+The browser runner starts its own web process, signs in, redeploys, runs a real
+500-step episode, checks its task outcome, requests cancellation, verifies mobile
+layout and signs out. It stops its web process afterward. Ordinary CI includes
+this integration, plus the headless management/inference outage scenarios.

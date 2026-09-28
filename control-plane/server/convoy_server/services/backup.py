@@ -87,6 +87,12 @@ def is_convoy_db(path: Path) -> bool:
 
 
 def live_db_path() -> Path:
+    from ..postgres import enabled
+
+    if enabled(get_settings()):
+        raise BackupError(
+            "SQLite file backup/restore is unavailable for PostgreSQL; use external database tooling"
+        )
     p = db_file_path(get_settings())
     if p is None:
         raise BackupError("in-memory databases cannot be backed up or restored")
@@ -442,6 +448,14 @@ def restore_backup(file: str, *, confirm: bool, _fault: str | None = None) -> di
     expects; and no stale -wal/-shm of the OLD database survives beside the published file (a leftover
     WAL is self-consistent and would otherwise be applied to the replacement)."""
     s = get_settings()
+    from ..postgres import enabled
+
+    if enabled(s):
+        return {
+            "ok": False,
+            "error": "SQLite file restore cannot target PostgreSQL. Restore into an isolated "
+            "database using PostgreSQL tooling, quarantine it before serving, and rotate execution secrets.",
+        }
     src = Path(file)
     if not src.exists():
         return {"ok": False, "error": "backup file not found"}

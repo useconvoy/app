@@ -1,0 +1,66 @@
+name: console-checks
+
+on:
+  push:
+    branches: [v1]
+    paths: ["website/**", "control-plane/**", "integrations/simulation/**", "examples/manipulation/**", ".github/workflows/console-checks.yml"]
+  pull_request:
+    paths: ["website/**", "control-plane/**", "integrations/simulation/**", "examples/manipulation/**", ".github/workflows/console-checks.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-console:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.22"
+          python-version: "3.11"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run build
+      - run: uv sync --project ../integrations/simulation --frozen --extra managed
+      - name: Browser against real API, worker and physics
+        shell: bash
+        run: |
+          uv run --project ../integrations/simulation --frozen --extra managed python ../examples/manipulation/pipeline.py --serve --output ../integrations/simulation/runs/ci-console > /tmp/convoy-console-stack.log 2>&1 &
+          CONVOY_TEST_PID=$!
+          trap 'kill -TERM "$CONVOY_TEST_PID" 2>/dev/null || true; wait "$CONVOY_TEST_PID" || true' EXIT
+          python3 - <<'PY'
+          import time
+          from pathlib import Path
+          deadline = time.monotonic() + 30
+          ready = Path('../integrations/simulation/runs/ci-console/connection.json')
+          while not ready.exists():
+              if time.monotonic() >= deadline:
+                  raise RuntimeError('local acceptance stack did not become ready')
+              time.sleep(0.1)
+          PY
+          node scripts/test-live-console.mjs ../integrations/simulation/runs/ci-console/connection.json ../integrations/simulation/runs/ci-console-browser
+      # connection.json and the server/robot directories contain test credentials.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-console-evidence
+          path: |
+            integrations/simulation/runs/ci-console-browser/result.json
+            integrations/simulation/runs/ci-console-browser/*.png
+          if-no-files-found: ignore
+          retention-days: 7
