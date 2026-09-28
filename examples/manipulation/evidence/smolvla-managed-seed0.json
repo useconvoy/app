@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "scope": "Two identical seed0 missions verify reset and transport integration, not multi-seed model quality. Offline lockstep on Mac CPU; no physical or real-time qualification.",
+  "hardware": "macOS-15.3-arm64-arm-64bit",
+  "python": "3.12.13",
+  "source_base_commit": "b4781415fe221971306c91fb2f142064fc2b7ffe",
+  "source_worktree_was_dirty": true,
+  "source_files_sha256": {
+    "control-plane/contracts/convoy_contracts/execution.py": "ffd9808e1c724f13e6bfb1e4069f6a228e18f130a989f8827d70b2b42c1d1034",
+    "control-plane/worker/convoy_worker/app.py": "61631f342d297a608a32eeb096f6a841174c1ab0dfa79d6cb2afc54c3d2151f2",
+    "control-plane/worker/convoy_worker/sessions.py": "5a60a8d2217db75f2efd714f3595bfa940c2778eddfb6b82b6bab65a1aa233a7",
+    "control-plane/agent/convoy_agent/coordinator/engine.py": "5282c549abe312016c2370e1c7731659acdb287c0c92093e9e7bc021079468c7",
+    "control-plane/agent/convoy_agent/coordinator/transport.py": "37425ac090514ccc64003819b1fa89d3d00e64236d6e461edaefdad4ba65a3e2",
+    "control-plane/server/convoy_server/services/platform.py": "707c8b7c25df8ebb2a096a8a66839f0da5eb575774926646cb70fb52c3b4b715",
+    "integrations/lerobot/src/convoy_lerobot/artifact.py": "81fff7c4cd359da562394f33eea57482be562c8c90062439c5c97f1e471f177d",
+    "integrations/lerobot/src/convoy_lerobot/adapter.py": "c440a36ac6eda667d62c24b355798d98f17368048b58c8a507a0b3c21cacd492",
+    "integrations/lerobot/src/convoy_lerobot/runtime.py": "e0203b083bb222258ef74308352b924e67c7f4bb565cd4fe94177432c8b14a3c",
+    "integrations/lerobot/src/convoy_lerobot/managed.py": "f6529d4432e9d3adf8fd1ecbcf102a4e820901eabbafe78dd4abc2cebadc79bf"
+  },
+  "artifact_sha256": "5474aae7bfeb572710089cc524fc080c23e33c07633ba029896ce1ee43eea340",
+  "release_digest": "7bcb69c596334e6ee40690ce644340dd9899cf2a6f38819df8190b9c74ac1865",
+  "manifest": {
+    "schema_version": 1,
+    "profile": "metaworld-smolvla-pick-place-rgb-v1",
+    "policy": {
+      "runtime": "lerobot-smolvla-metaworld-cpu-v1",
+      "artifact_sha256": "5474aae7bfeb572710089cc524fc080c23e33c07633ba029896ce1ee43eea340"
+    },
+    "environment": {
+      "name": "pick-place-v3",
+      "metaworld": "3.0.0",
+      "mujoco": "3.3.0"
+    },
+    "execution": {
+      "max_steps": 500,
+      "decision_timeout_ms": 5000,
+      "mission_timeout_s": 300
+    }
+  },
+  "checkpoint_repo": "lerobot/smolvla_metaworld",
+  "checkpoint_revision": "cd6778d2cfa724c1bf5fc637490548e54d81dc4c",
+  "checkpoint_sha256": "6d3ce9f40627a247fa1c289517ec67da495810a58305c9bb1ec8588dfda0a736",
+  "packages": {
+    "lerobot": "0.6.1",
+    "metaworld": "3.0.0",
+    "mujoco": "3.3.0",
+    "gymnasium": "1.2.1",
+    "numpy": "2.2.6",
+    "torch": "2.11.0",
+    "torchvision": "0.26.0",
+    "transformers": "5.5.4",
+    "safetensors": "0.8.0",
+    "huggingface-hub": "1.33.0",
+    "pillow": "12.3.0"
+  },
+  "services": [
+    "management API",
+    "model inference worker",
+    "robot coordinator and MuJoCo simulator"
+  ],
+  "episodes": [
+    {
+      "ever_success": true,
+      "evidence_scope": "simulated_physics_with_rgb_and_proprioception",
+      "execution_mode": "lockstep_offline",
+      "final_success": true,
+      "policy_runtime": "lerobot-smolvla-metaworld-cpu-v1",
+      "profile": "metaworld-smolvla-pick-place-rgb-v1",
+      "reward_sum": 73.2133387966449,
+      "seed": 0,
+      "simulated_duration_s": 0.675,
+      "steps": 54,
+      "wall_duration_s": 46.991077124956064
+    },
+    {
+      "ever_success": true,
+      "evidence_scope": "simulated_physics_with_rgb_and_proprioception",
+      "execution_mode": "lockstep_offline",
+      "final_success": true,
+      "policy_runtime": "lerobot-smolvla-metaworld-cpu-v1",
+      "profile": "metaworld-smolvla-pick-place-rgb-v1",
+      "reward_sum": 73.2133387966449,
+      "seed": 0,
+      "simulated_duration_s": 0.675,
+      "steps": 54,
+      "wall_duration_s": 42.17963495803997
+    }
+  ],
+  "worker_timing_ms": {
+    "count": 108,
+    "p50": 735.2483754802961,
+    "p95_nearest_rank": 974.6738339890726,
+    "maximum": 1139.9901250260882
+  },
+  "per_mission_reset_check": {
+    "missions": 2,
+    "same_seed": 0,
+    "exact_actions_equal": true
+  },
+  "direct_comparison": {
+    "report_sha256": "6308a9d3643c24440e7c60d8a74650cde0080711e60968982de0fa4ea048d3b3",
+    "trace_sha256": "0223cba3f7822d13dafe58266086b051d89b3496aab2bd05e254d3196d79e072",
+    "direct_steps": 54,
+    "managed_steps": 54,
+    "direct_success": true,
+    "exact_actions_equal": true,
+    "note": "Same checkpoint, seed0, upstream camera and one-action replanning. Different processes/timing."
+  },
+  "actions_jsonl_sha256": "6ecdc57dc7b39e579b96533a1409323e87af484a8f9ae84c7ad0e233ee27458f",
+  "baseline_regression": "passed",
+  "focused_tests": 40
+}

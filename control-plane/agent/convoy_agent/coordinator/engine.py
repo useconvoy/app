@@ -19,9 +19,12 @@ from typing import Callable, Protocol
 
 from convoy_contracts.execution import (
     PROFILE,
+    PROFILES,
+    VISUAL_PROFILE,
     canonical_digest,
     validate_identity,
     validate_manifest,
+    validate_observation,
     validate_request,
     validate_result,
 )
@@ -35,7 +38,7 @@ TERMINAL = {"completed", "failed", "cancelled", "unknown"}
 
 @dataclass(frozen=True)
 class StepResult:
-    observation: list[float]
+    observation: list[float] | dict
     reward: float
     success: bool
     terminated: bool = False
@@ -45,7 +48,7 @@ class StepResult:
 class Adapter(Protocol):
     control_period_s: float
 
-    def reset(self, seed: int) -> list[float]: ...
+    def reset(self, seed: int) -> list[float] | dict: ...
     def step(self, action: list[float], command_id: str) -> StepResult: ...
     def close(self) -> None: ...
 
@@ -66,12 +69,15 @@ class Coordinator:
     def __init__(
         self, *, robot_id: str, device_id: str, journal: ExecutionJournal,
         control, worker, adapter_factory: Callable[[], Adapter],
-        poll_s: float = 0.1, clock_uncertainty_s: float = 0.25,
+        poll_s: float = 0.1, clock_uncertainty_s: float = 0.25, profile: str = PROFILE,
     ):
         if not math.isfinite(poll_s) or poll_s <= 0:
             raise ValueError("poll interval must be positive and finite")
         if not math.isfinite(clock_uncertainty_s) or clock_uncertainty_s < 0:
             raise ValueError("clock uncertainty must be nonnegative and finite")
+        if profile not in PROFILES:
+            raise ValueError("unsupported adapter profile")
+        self.profile = profile
         self.robot_id, self.device_id = robot_id, device_id
         self.journal, self.control, self.worker = journal, control, worker
         self.adapter_factory = adapter_factory
@@ -99,7 +105,7 @@ class Coordinator:
         value = self.control.get(self.prefix + "/desired")
         if value["robot"]["id"] != self.robot_id or value["robot"]["device_id"] != self.device_id:
             raise ValueError("control plane returned the wrong robot/device binding")
-        if value["robot"]["profile"] != PROFILE:
+        if value["robot"]["profile"] != self.profile:
             raise ValueError("unsupported robot execution profile")
         return value
 
@@ -188,13 +194,15 @@ class Coordinator:
             return
         release = deployment["release"]
         manifest = validate_manifest(release["manifest"])
+        if manifest["profile"] != self.profile:
+            raise ValueError("release does not match the adapter profile")
         if canonical_digest(manifest) != release["digest"]:
             raise ValueError("release content does not match immutable digest")
         ready_key = (deployment["id"], deployment["generation"], release["digest"])
         if self._ready != ready_key:
             try:
                 probe = self.worker.probe(release["digest"], manifest["profile"])
-                if probe.get("release_digest") != release["digest"] or probe.get("profile") != PROFILE:
+                if probe.get("release_digest") != release["digest"] or probe.get("profile") != self.profile:
                     raise ValueError("worker readiness identity mismatch")
             except Exception:
                 self.control.post(self.prefix + f"/deployments/{deployment['id']}/report", {
@@ -304,9 +312,8 @@ class Coordinator:
                 raise
             try:
                 outcome = adapter.step(result["action"], request["request_id"])
-                if (len(outcome.observation) != 39 or
-                        not all(math.isfinite(v) for v in outcome.observation) or
-                        not math.isfinite(outcome.reward)):
+                validate_observation(outcome.observation, self.profile)
+                if not math.isfinite(outcome.reward):
                     raise ValueError("adapter returned an invalid physical state")
                 self.journal.command_outcome(request, "applied", asdict(outcome))
                 return outcome
@@ -325,7 +332,10 @@ class Coordinator:
         self._cancel_reason, self._outstanding = None, None
         self._active_mission = mission["id"]
         summary = {
-            "execution_mode": "lockstep_offline", "evidence_scope": "simulated_physics_with_privileged_state",
+            "execution_mode": "lockstep_offline",
+            "evidence_scope": ("simulated_physics_with_rgb_and_proprioception" if self.profile == VISUAL_PROFILE
+                               else "simulated_physics_with_privileged_state"),
+            "profile": self.profile,
             "seed": mission["seed"], "steps": 0, "ever_success": False, "final_success": False,
             "reward_sum": 0.0, "simulated_duration_s": 0.0, "policy_runtime": manifest["policy"]["runtime"],
         }
@@ -351,6 +361,11 @@ class Coordinator:
             self.journal.mark_running(mission["id"])
             monitor = threading.Thread(target=self._monitor, args=(mission, done), daemon=True)
             monitor.start()
+            if self.profile == VISUAL_PROFILE:
+                session = self.worker.start_session(identity, claim["grant"])
+                if session != {"identity": identity, "next_sequence": 0}:
+                    raise ValueError("worker session identity or initial sequence mismatch")
+                self._check_live(deadline_ns)
             adapter = self.adapter_factory()
             observation = adapter.reset(mission["seed"])
             for sequence in range(manifest["execution"]["max_steps"]):
@@ -363,7 +378,7 @@ class Coordinator:
                     "observation": observation, "deadline_monotonic_ns": request_deadline,
                     "budget_ms": max(0.001, (request_deadline - time.monotonic_ns()) / 1e6),
                 }
-                validate_request(request)
+                validate_request(request, self.profile)
                 with self._submission:
                     self._check_live(request_deadline)
                     self._outstanding = request
@@ -374,9 +389,12 @@ class Coordinator:
                 summary["final_success"] = outcome.success
                 summary["ever_success"] |= outcome.success
                 summary["simulated_duration_s"] = (sequence + 1) * adapter.control_period_s
-                if outcome.terminated or outcome.truncated:
+                if (outcome.terminated or outcome.truncated or
+                        (self.profile == VISUAL_PROFILE and outcome.success)):
                     break
-            state, detail = "completed", "simulation horizon completed"
+            state = "completed"
+            detail = ("benchmark success reached" if self.profile == VISUAL_PROFILE and summary["final_success"]
+                      else "simulation horizon completed")
         except Cancelled as error:
             state, detail = "cancelled", str(error)
         except ExecutionUnknown as error:
@@ -406,6 +424,11 @@ class Coordinator:
             done.set()
             if monitor:
                 monitor.join(timeout=0.2)
+            if claimed and self.profile == VISUAL_PROFILE:
+                try:
+                    self.worker.end_session(identity, claim["grant"])
+                except Exception:
+                    log.warning("worker session close not acknowledged; original grant expiry remains in force")
             if adapter:
                 try:
                     adapter.close()

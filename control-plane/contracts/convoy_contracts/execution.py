@@ -1,4 +1,4 @@
-"""The first supported action profile. No controller or transport dependencies.
+"""Versioned action profiles. No controller or transport dependencies.
 
 Robot monotonic timestamps are opaque at the worker. The coordinator checks
 their original values when a result arrives, immediately before execution.
@@ -12,10 +12,29 @@ import hmac
 import json
 import math
 import re
+import struct
 import time
+import zlib
 from typing import Any
 
 PROFILE = "metaworld-sawyer-pick-place-v1"
+VISUAL_PROFILE = "metaworld-smolvla-pick-place-rgb-v1"
+PROFILES = frozenset({PROFILE, VISUAL_PROFILE})
+VISUAL_INSTRUCTION = "Pick and place a puck to a goal"
+MAX_PNG_BYTES = 1024 * 1024
+MAX_VISUAL_REQUEST_BYTES = ((MAX_PNG_BYTES + 2) // 3) * 4 + 16384
+# This versioned profile fixes these semantics; changing them requires a new profile.
+VISUAL_SPEC = {
+    "image": {"encoding": "png-rgb8", "width": 480, "height": 480,
+              "camera": "lerobot-0.6.1-metaworld-corner2",
+              "camera_position": [0.75, 0.075, 0.7], "image_transform": "flip-both-axes",
+              "max_encoded_bytes": MAX_PNG_BYTES},
+    "state": "upstream-agent-pos-first-four-float32",
+    "instruction": VISUAL_INSTRUCTION,
+    "action": "normalized-cartesian-delta-and-gripper-four-float32",
+    "actions_per_replan": 1,
+    "stop_condition": "first-upstream-is-success-or-configured-horizon-at-most-500",
+}
 IDENTITY_FIELDS = {
     "robot_id", "device_id", "mission_id", "boot_id", "incarnation", "release_digest", "authority_epoch",
 }
@@ -57,13 +76,14 @@ def _digest(value: Any, name: str) -> None:
 def validate_manifest(value: dict) -> dict:
     _keys(value, {"schema_version", "profile", "policy", "environment", "execution"}, "manifest")
     _integer(value["schema_version"], "schema_version", 1, 1)
-    if value["profile"] != PROFILE:
+    if not isinstance(value["profile"], str) or value["profile"] not in PROFILES:
         raise ValueError("unsupported action profile")
     policy = value["policy"]
     _keys(policy, {"runtime", "artifact_sha256"}, "policy")
     _text(policy["runtime"], "policy runtime")
     _digest(policy["artifact_sha256"], "artifact_sha256")
-    if value["environment"] != {"name": "pick-place-v3", "metaworld": "3.1.1", "mujoco": "3.3.0"}:
+    expected_metaworld = "3.0.0" if value["profile"] == VISUAL_PROFILE else "3.1.1"
+    if value["environment"] != {"name": "pick-place-v3", "metaworld": expected_metaworld, "mujoco": "3.3.0"}:
         raise ValueError("unsupported environment; the complete pinned simulator version is required")
     execution = value["execution"]
     _keys(execution, {"max_steps", "decision_timeout_ms", "mission_timeout_s"}, "execution")
@@ -89,7 +109,71 @@ def _vector(value: Any, count: int, name: str, bound: float) -> None:
         _number(item, name, -bound, bound)
 
 
-def validate_request(value: dict) -> dict:
+def visual_png_bytes(encoded: Any) -> bytes:
+    """Bounded, dependency-free PNG validation before any image-library decode.
+
+    The wire format intentionally accepts only noninterlaced RGB8 IHDR/IDAT/IEND.
+    It bounds both compressed bytes and inflated scanlines and verifies CRCs.
+    """
+    if not isinstance(encoded, str) or len(encoded) > ((MAX_PNG_BYTES + 2) // 3) * 4:
+        raise ValueError("visual image exceeds encoded size limit")
+    try:
+        data = base64.b64decode(encoded, validate=True)
+    except (ValueError, UnicodeError) as error:
+        raise ValueError("invalid base64 PNG") from error
+    if len(data) > MAX_PNG_BYTES or data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError("invalid or oversized PNG")
+    offset, chunks, compressed = 8, [], bytearray()
+    while offset < len(data):
+        if offset + 12 > len(data):
+            raise ValueError("truncated PNG")
+        size = struct.unpack(">I", data[offset:offset + 4])[0]
+        kind = data[offset + 4:offset + 8]
+        end = offset + 12 + size
+        if end > len(data) or kind not in {b"IHDR", b"IDAT", b"IEND"}:
+            raise ValueError("unsupported or truncated PNG chunk")
+        content = data[offset + 8:end - 4]
+        if zlib.crc32(kind + content) != struct.unpack(">I", data[end - 4:end])[0]:
+            raise ValueError("invalid PNG CRC")
+        if kind == b"IHDR" and (chunks or content != struct.pack(">IIBBBBB", 480, 480, 8, 2, 0, 0, 0)):
+            raise ValueError("image must be 480x480 noninterlaced RGB8")
+        if kind == b"IDAT":
+            compressed.extend(content)
+        if kind == b"IEND" and (size != 0 or end != len(data)):
+            raise ValueError("invalid PNG end")
+        chunks.append(kind)
+        offset = end
+    if len(chunks) < 3 or chunks[0] != b"IHDR" or chunks[-1] != b"IEND" or any(
+        kind != b"IDAT" for kind in chunks[1:-1]
+    ):
+        raise ValueError("invalid PNG structure")
+    scanline_bytes = 480 * (480 * 3 + 1)
+    try:
+        decoder = zlib.decompressobj()
+        pixels = decoder.decompress(compressed, scanline_bytes + 1)
+    except zlib.error as error:
+        raise ValueError("invalid PNG compression") from error
+    if (len(pixels) != scanline_bytes or not decoder.eof or decoder.unused_data or
+            decoder.unconsumed_tail or any(pixels[i] > 4 for i in range(0, scanline_bytes, 1441))):
+        raise ValueError("invalid or oversized PNG scanlines")
+    return data
+
+
+def validate_observation(value: Any, profile: str = PROFILE) -> Any:
+    if profile == PROFILE:
+        _vector(value, 39, "observation", 1e6)
+    elif profile == VISUAL_PROFILE:
+        _keys(value, {"image_png_base64", "state", "instruction"}, "visual observation")
+        _vector(value["state"], 4, "state", 1e6)
+        if value["instruction"] != VISUAL_INSTRUCTION:
+            raise ValueError("instruction does not match the visual task profile")
+        visual_png_bytes(value["image_png_base64"])
+    else:
+        raise ValueError("unsupported observation profile")
+    return value
+
+
+def validate_request(value: dict, profile: str = PROFILE) -> dict:
     _keys(value, {"identity", "request_id", "observation_id", "sequence", "observation",
                   "deadline_monotonic_ns", "budget_ms"}, "request")
     validate_identity(value["identity"])
@@ -98,7 +182,7 @@ def validate_request(value: dict) -> dict:
     _integer(value["sequence"], "sequence", 0, 2**53 - 1)
     _integer(value["deadline_monotonic_ns"], "deadline_monotonic_ns", 1, 2**63 - 1)
     _number(value["budget_ms"], "budget_ms", 0.001, 30000)
-    _vector(value["observation"], 39, "observation", 1e6)
+    validate_observation(value["observation"], profile)
     return value
 
 

@@ -12,7 +12,7 @@ from datetime import timedelta
 from typing import Any
 
 from convoy_contracts.execution import (
-    PROFILE,
+    PROFILES,
     canonical_digest,
     sign_grant,
     validate_identity,
@@ -63,7 +63,7 @@ def device_robot(db: Session, robot_id: str, device: Device) -> Robot:
     robot = db.scalar(select(Robot).where(Robot.id == robot_id, Robot.device_id == device.id))
     if robot is None:
         raise HTTPException(404, "robot not found")
-    if not device.simulated or not get_settings().simulator or robot.profile != PROFILE:
+    if not device.simulated or not get_settings().simulator or robot.profile not in PROFILES:
         raise HTTPException(409, "M1 execution supports the configured simulator profile only")
     return robot
 
@@ -210,7 +210,7 @@ def create_robot(db: Session, p: Principal, data: dict) -> dict:
     )
     if owned_enrollment is None and p.user.role != "admin":
         raise HTTPException(404, "device not found")
-    if not device.simulated or not get_settings().simulator or data["profile"] != PROFILE:
+    if not device.simulated or not get_settings().simulator or data["profile"] not in PROFILES:
         raise HTTPException(409, "M1 supports a simulated device and the MetaWorld profile only")
     if db.scalar(select(Robot.id).where(Robot.device_id == device.id)):
         raise HTTPException(409, "device is already attached to a robot")

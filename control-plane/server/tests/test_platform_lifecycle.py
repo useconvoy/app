@@ -7,7 +7,7 @@ from datetime import timedelta
 
 import pytest
 from conftest import WEB, FakeAgent, enrollment_token, login, make_user
-from convoy_contracts.execution import PROFILE, canonical_digest, verify_grant
+from convoy_contracts.execution import PROFILE, VISUAL_PROFILE, canonical_digest, verify_grant
 from convoy_server import migrations
 from convoy_server.db import make_engine, reset_engine, session_scope, write_txn
 from convoy_server.ids import utcnow
@@ -22,7 +22,8 @@ def post(client, path, body, key="create", expected=201):
 
 
 @pytest.fixture()
-def pipeline(app, admin, settings):
+def pipeline(app, admin, settings, request):
+    profile = getattr(request, "param", PROFILE)
     settings.execution_secret = "local-test-signing-secret-with-32-bytes"
     agent = FakeAgent(app)
     assert agent.enroll(enrollment_token(admin)).status_code == 200
@@ -30,14 +31,14 @@ def pipeline(app, admin, settings):
     robot = post(
         admin,
         "/api/v1/robots",
-        {"project_id": project["id"], "device_id": agent.device_id, "name": "Sawyer", "profile": PROFILE},
+        {"project_id": project["id"], "device_id": agent.device_id, "name": "Sawyer", "profile": profile},
     )
     application = post(admin, "/api/v1/applications", {"project_id": project["id"], "name": "Pick-place"})
     manifest = {
         "schema_version": 1,
-        "profile": PROFILE,
+        "profile": profile,
         "policy": {"runtime": "test-scripted", "artifact_sha256": "1" * 64},
-        "environment": {"name": "pick-place-v3", "metaworld": "3.1.1", "mujoco": "3.3.0"},
+        "environment": {"name": "pick-place-v3", "metaworld": "3.0.0" if profile == VISUAL_PROFILE else "3.1.1", "mujoco": "3.3.0"},
         "execution": {"max_steps": 100, "decision_timeout_ms": 500, "mission_timeout_s": 120},
     }
     release = post(admin, f"/api/v1/applications/{application['id']}/releases", {"manifest": manifest})
@@ -85,6 +86,7 @@ def claim(pipeline, mission):
     return response.json(), body
 
 
+@pytest.mark.parametrize("pipeline", [PROFILE, VISUAL_PROFILE], indirect=True)
 def test_lifecycle_is_idempotent_fenced_and_produces_immutable_episode(pipeline):
     p = pipeline
     mission = start(p)

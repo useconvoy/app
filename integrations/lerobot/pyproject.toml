@@ -1,0 +1,39 @@
+[project]
+name = "convoy-lerobot"
+version = "0.1.0"
+description = "Pinned, optional SmolVLA visual policy and MetaWorld simulator integration"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "convoy-contracts", "convoy-agent[coordinator]", "convoy-worker",
+  "lerobot[smolvla]==0.6.1", "metaworld==3.0.0", "mujoco==3.3.0",
+  "gymnasium==1.2.1", "numpy==2.2.6", "torch==2.11.0", "torchvision==0.26.0",
+  "transformers==5.5.4", "safetensors==0.8.0", "huggingface-hub==1.33.0",
+  "pillow==12.3.0",
+]
+
+[project.optional-dependencies]
+managed = ["convoy-server", "httpx>=0.27"]
+
+[tool.uv.sources]
+convoy-agent = { path = "../../control-plane/agent", editable = true }
+convoy-contracts = { path = "../../control-plane/contracts", editable = true }
+convoy-worker = { path = "../../control-plane/worker", editable = true }
+convoy-server = { path = "../../control-plane/server", editable = true }
+
+[dependency-groups]
+dev = ["pytest>=8,<9", "ruff>=0.12,<0.13"]
+
+[build-system]
+requires = ["hatchling>=1.26,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/convoy_lerobot"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "W"]
+ignore = ["E501"]

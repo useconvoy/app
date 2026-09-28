@@ -354,3 +354,34 @@ def test_adapter_failure_after_intent_is_unknown_not_retried(setup):
         engine._apply(adapter, request, worker.decide(request, "grant"))
     assert adapter.steps == 1
     assert journal.db.execute("SELECT state FROM commands").fetchone()[0] == "intended"
+
+
+def test_visual_session_ack_must_match_before_adapter_creation_and_uncertain_start_is_closed(setup):
+    from convoy_contracts.execution import VISUAL_PROFILE
+
+    engine, journal, control, worker, adapter = setup
+    engine.profile = VISUAL_PROFILE
+    control.desired["robot"]["profile"] = VISUAL_PROFILE
+    release = control.desired["deployment"]["release"]
+    release["manifest"]["profile"] = VISUAL_PROFILE
+    release["manifest"]["environment"]["metaworld"] = "3.0.0"
+    release["digest"] = canonical_digest(release["manifest"])
+    engine.tick()
+    mission = control.request_mission()
+    mission["release_digest"] = release["digest"]
+    original_post = control.post
+
+    def post(path, body):
+        result = original_post(path, body)
+        if path.endswith("/claim"):
+            result["identity"]["release_digest"] = release["digest"]
+        return result
+
+    control.post = post
+    closed = []
+    worker.start_session = lambda identity, grant: {"identity": identity, "next_sequence": 1}
+    worker.end_session = lambda identity, grant: closed.append(identity)
+    engine.adapter_factory = lambda: (_ for _ in ()).throw(AssertionError("must not create an adapter"))
+    engine.tick()
+    assert journal.get("mission")["state"] == "failed"
+    assert len(closed) == 1 and adapter.steps == 0
