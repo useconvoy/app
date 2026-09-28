@@ -13,7 +13,10 @@
   mechanism also covers agents run outside systemd and a crashed agent that systemd restarts.
 * the child's output is drained by a reader thread into bounded memory (first K KiB of startup lines
   for backend evidence + a ring of the last N KiB) and a size-capped per-launch file (R29-fu); the
-  on-disk footprint stays bounded however chatty the runtime is"""
+  on-disk footprint stays bounded however chatty the runtime is
+* opt-in `process_owner` replaces the legacy Linux ownership path with a caller-held OwnedProcess
+  lock and verified Darwin/Linux recovery. Only a known single foreground child is supported;
+  unresolved legacy records block migration. See docs/v1/owned-process-recovery.md."""
 
 from __future__ import annotations
 
@@ -221,11 +224,15 @@ def http_json(
 
 class RuntimeSupervisor:
     def __init__(
-        self, workdir: Path, *, simulate: bool = False, sensors=None, sim_faults: dict[str, Any] | None = None
+        self, workdir: Path, *, simulate: bool = False, sensors=None, sim_faults: dict[str, Any] | None = None,
+        process_owner=None,
     ):
         self.workdir = Path(workdir)
         self.workdir.mkdir(parents=True, exist_ok=True)
         self.simulate = simulate
+        if process_owner is not None and simulate:
+            raise ValueError("owned foreground processes require a real runtime")
+        self.process_owner = process_owner
         self.sensors = sensors
         self.sim_faults = dict(sim_faults or {})
         self.proc: subprocess.Popen | None = None
@@ -309,6 +316,34 @@ class RuntimeSupervisor:
                 raise RuntimeError_("RUNTIME_UNAVAILABLE", "loaded runtime provenance unavailable")
             return json.loads(json.dumps(self._provenance))
 
+    def ownership_fingerprints(self) -> dict[str, str]:
+        """Additional source/dependency identity for opt-in foreground ownership.
+
+        Fingerprint the installed backend bytes, including its native extension;
+        a version string alone would miss another platform's implementation.
+        Legacy gateways retain their original two-source identity shape.
+        """
+        if self.process_owner is None:
+            return {}
+        from .owned_process import _psutil
+
+        psutil = _psutil()
+        package = Path(psutil.__file__).parent
+        files = {
+            str(path.relative_to(package)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(package.rglob("*"))
+            if path.is_file() and path.suffix in {".py", ".so"}
+        }
+        if not any(name.endswith(".so") for name in files):
+            raise RuntimeError_("OWNERSHIP_IDENTITY_MISSING", "native process identity backend unavailable")
+        backend = json.dumps({"version": psutil.__version__, "files": files}, sort_keys=True,
+                             separators=(",", ":")).encode()
+        return {
+            **{name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
+               for name in ("owned_process.py", "runtime_args.py")},
+            "psutil-7.2.2": hashlib.sha256(backend).hexdigest(),
+        }
+
     def start(
         self,
         *,
@@ -339,17 +374,27 @@ class RuntimeSupervisor:
                 model_sha = digest.hexdigest()
                 if model_sha != expected_sha:
                     raise RuntimeError_("MODEL_DIGEST_MISMATCH", "model bytes differ from pinned launch identity")
+            if self.process_owner is not None:
+                if binary is None or not binary.is_file():
+                    raise RuntimeError_("RUNTIME_BINARY_MISSING", "llama-server binary not found in the runtime artifact")
+                if self._reader is not None and self._reader.is_alive():
+                    raise RuntimeError_("RUNTIME_DRAIN_PENDING", "previous native output has not finished draining")
+                # Recover under the caller's lifetime ownership lock BEFORE changing
+                # credentials or launching another native runtime.
+                self.reap_orphan()
             # A rejected pin is not a launch: do not rotate credentials or begin
             # generation/uptime accounting until the model preflight succeeds.
             self.config = cfg
             self.release_id = release_id
             self.port = free_port()
             self.api_key = secrets.token_urlsafe(32)
-            self.api_key_file = self.workdir / "runtime.key"
-            fd = os.open(str(self.api_key_file), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w") as f:
-                f.write(self.api_key)
-            os.chmod(self.api_key_file, 0o600)
+            self.api_key_file = None
+            if self.process_owner is None:
+                self.api_key_file = self.workdir / "runtime.key"
+                fd = os.open(str(self.api_key_file), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w") as f:
+                    f.write(self.api_key)
+                os.chmod(self.api_key_file, 0o600)
             self.generation += 1
             self.started_at = self.clock()
             self._open_interval(self.started_at)
@@ -393,15 +438,23 @@ class RuntimeSupervisor:
                     raise RuntimeError_(
                         "RUNTIME_BINARY_MISSING", "llama-server binary not found in the runtime artifact"
                     )
-                self.argv = argv_for(
-                    cfg,
-                    model_path=str(model_path),
-                    template_path=str(template_path) if template_path else None,
-                    host="127.0.0.1",
-                    port=self.port,
-                    api_key_file=str(self.api_key_file),
-                    binary=str(binary),
-                )
+                def native_argv(key_path: str) -> list[str]:
+                    self.api_key_file = Path(key_path)
+                    if self.process_owner is not None:
+                        # The unique ownership marker is also llama-server's private
+                        # key-file argument. No unsupported native flag is introduced.
+                        with self.api_key_file.open("w") as stream:
+                            stream.write(self.api_key)
+                            stream.flush()
+                            os.fsync(stream.fileno())
+                    self.argv = argv_for(
+                        cfg, model_path=str(model_path),
+                        template_path=str(template_path) if template_path else None,
+                        host="127.0.0.1", port=self.port, api_key_file=key_path,
+                        binary=str(binary.resolve() if self.process_owner is not None else binary),
+                    )
+                    return self.argv
+
                 env = scrub_env(dict(os.environ))
                 if lib_dir:
                     env["LD_LIBRARY_PATH"] = str(lib_dir) + (
@@ -410,17 +463,21 @@ class RuntimeSupervisor:
                 self.log_path = self.workdir / f"runtime.{self.generation}.log"  # per-launch identity (R29)
                 for old in sorted(self.workdir.glob("runtime.*.log"))[:-5]:
                     old.unlink(missing_ok=True)
-                self.reap_orphan()  # never launch a second child while a provably-owned one may live
-                self.proc = subprocess.Popen(
-                    self.argv,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    env=env,
-                    cwd=str(self.workdir),
-                    start_new_session=True,
-                )
+                if self.process_owner is not None:
+                    self.proc = self.process_owner.start(
+                        native_argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                        env=env, cwd=self.workdir,
+                    )
+                else:
+                    self.reap_orphan()  # legacy Linux agent ownership remains unchanged
+                    self.proc = subprocess.Popen(
+                        native_argv(str(self.api_key_file)), stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT, env=env, cwd=str(self.workdir),
+                        start_new_session=True,
+                    )
                 self._kill_sent = False  # a new child: escalation state belongs to this launch
-                self._write_child_record(self.proc.pid)
+                if self.process_owner is None:
+                    self._write_child_record(self.proc.pid)
                 self._reader = _LogReader(
                     self.proc.stdout,
                     self.log_path,
@@ -592,6 +649,15 @@ class RuntimeSupervisor:
         after proving its identity (same pid + start time AND our api-key-file marker in its cmdline);
         otherwise just discard the record. Never signals an unrelated pid."""
         path = self._record_path()
+        if self.process_owner is not None:
+            # The old Linux-only record is not proof under the new backend. Do not
+            # discard it, adopt it, or silently start alongside a possible orphan.
+            if path.exists():
+                raise RuntimeError_("LEGACY_OWNERSHIP_UNRESOLVED", "legacy native ownership needs explicit recovery")
+            self.orphan_note = self.process_owner.recover(
+                terminate_timeout=min(30.0, timeout_s), kill_timeout=3.0,
+            )
+            return self.orphan_note
         if not path.exists():
             return {"action": "none"}
         try:
@@ -733,6 +799,42 @@ class RuntimeSupervisor:
 
         if True:
             t0 = time.monotonic()
+            if self.process_owner is not None:
+                from .owned_process import OwnershipError
+
+                if self._record_path().exists():
+                    return {"stopped": False, "seconds": round(time.monotonic() - t0, 3),
+                            "method": "owned_process", "reason": "legacy_ownership_unresolved"}
+                remaining = left()
+                budget = min(30.0, timeout_s) + 3.0 if remaining is None else remaining
+                kill_window = min(3.0, budget / 2)
+                try:
+                    result = self.process_owner.stop(
+                        terminate_timeout=min(30.0, max(0.0, budget - kill_window)),
+                        kill_timeout=kill_window,
+                    )
+                except OwnershipError as error:
+                    return {"stopped": False, "seconds": round(time.monotonic() - t0, 3),
+                            "method": "owned_process", "reason": error.code}
+                rc = self.proc.poll() if self.proc is not None else None
+                if self.proc is not None and rc is None:
+                    # A missing record is not stronger evidence than our live
+                    # child handle. Keep its credentials and output ownership.
+                    return {"stopped": False, "seconds": round(time.monotonic() - t0, 3),
+                            "method": "owned_process", "reason": "child_exit_unverified",
+                            "pid": self.proc.pid}
+                if self._reader is not None:
+                    self._reader.join(timeout=5.0 if left() is None else left())
+                    if self._reader.is_alive():
+                        return {"stopped": False, "seconds": round(time.monotonic() - t0, 3),
+                                "method": "owned_process", "reason": "output_drain_incomplete",
+                                "pid": result.get("pid")}
+                self.proc = None
+                self.stopped_at = self.clock()
+                self._close_interval(self.stopped_at)
+                self._cleanup_key()
+                return {"stopped": True, "seconds": round(time.monotonic() - t0, 3),
+                        "method": "owned_process", "exit_code": rc, "pid": result.get("pid")}
             if self.simulate:
                 if self.sim:
                     self.sim.stop()

@@ -117,6 +117,18 @@ def test_artifact_binds_bytes_and_semantics_but_not_current_launch(tmp_path):
     changed = tmp_path / "protocol.py"
     changed.write_text(sources["convoy_planner/protocol.py"].read_text() + "\n# changed source\n")
     assert artifact_descriptor(backend.identity, {**sources, "convoy_planner/protocol.py": changed}) != artifact_descriptor(backend.identity)
+    legacy = artifact_digest(backend.identity)
+    backend.identity["implementation_sha256"].update({
+        "owned_process.py": "2" * 64, "runtime_args.py": "3" * 64, "psutil-7.2.2": "4" * 64,
+    })
+    owned = artifact_digest(backend.identity)
+    assert owned != legacy
+    backend.identity["implementation_sha256"]["psutil-7.2.2"] = "5" * 64
+    assert artifact_digest(backend.identity) != owned
+    incomplete = copy.deepcopy(backend.identity)
+    del incomplete["implementation_sha256"]["owned_process.py"]
+    with pytest.raises(ValueError, match="unsupported gateway implementation"):
+        artifact_digest(incomplete)
     backend.identity["simulated"] = True
     with pytest.raises(ValueError):
         artifact_digest(backend.identity)

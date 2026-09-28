@@ -242,6 +242,9 @@ source = { editable = "../../control-plane/agent" }
 coordinator = [
     { name = "convoy-contracts" },
 ]
+local-host = [
+    { name = "psutil" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -282,6 +285,7 @@ managed = [
     { name = "httpx" },
 ]
 paired = [
+    { name = "convoy-agent", extra = ["local-host"] },
     { name = "convoy-planner" },
     { name = "convoy-server" },
     { name = "httpx" },
@@ -296,6 +300,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "convoy-agent", extras = ["coordinator"], editable = "../../control-plane/agent" },
+    { name = "convoy-agent", extras = ["local-host"], marker = "extra == 'paired'", editable = "../../control-plane/agent" },
     { name = "convoy-contracts", editable = "../../control-plane/contracts" },
     { name = "convoy-planner", marker = "extra == 'paired'", editable = "../planner" },
     { name = "convoy-server", marker = "extra == 'managed'", editable = "../../control-plane/server" },

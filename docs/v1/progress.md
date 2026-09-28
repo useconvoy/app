@@ -95,5 +95,18 @@ already configured worker/planner identities. It does not itself replace their
 model processes. The next activation slice must stage a registered local recipe,
 switch at an idle boundary, verify observed component identities, and support an
 explicit restore to a prior bundle. Persistent packaging alone does not close
-that gap. Process ownership after a supervisor crash also requires qualification
-on macOS; the existing native orphan check relies on Linux `/proc`.
+that gap.
+
+PR #86 adds component/stage diagnostics to durable terminal episodes and the
+console. The full agent suite passed (227 passed, four skipped), with 37 focused
+checks on its final source and browser acceptance through a 500-action scripted
+MuJoCo mission and cancellation.
+
+PR #87 adds the optional foreground process ownership prerequisite. Thirteen
+focused checks passed on both Darwin and Linux, including an owner killed before
+PID persistence, exact child recovery, and an untouched unrelated sentinel.
+PR #88 connects it to the real model supervisor. Clean source `a0d3bc5` loaded
+actual Qwen, served one fixed-skill request, survived an owner kill with the native
+child left alive, verified that orphan's exit, and loaded a second configuration.
+Both requests succeeded and all owned resources stopped. Deployment-driven paired
+activation and explicit restore remain outstanding.
