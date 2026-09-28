@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import ssl
 import urllib.error
@@ -13,6 +14,16 @@ class RemoteError(Exception):
     def __init__(self, status: int):
         self.status = status
         super().__init__(f"remote HTTP {status}")
+
+
+class TransportError(Exception):
+    """A bounded local classification; never retains endpoint or response text."""
+
+    def __init__(self, category: str):
+        if category not in {"deadline", "transport", "protocol"}:
+            raise ValueError("unsupported transport failure category")
+        self.category = category
+        super().__init__(category)
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -44,13 +55,24 @@ class JsonHTTP:
         )
         try:
             with self.opener.open(request, timeout=timeout_s or self.timeout_s) as response:
+                declared = response.headers.get("Content-Length")
+                length = int(declared) if declared is not None else None
+                if length is not None and not 0 <= length <= 131072:
+                    raise TransportError("protocol")
                 content = response.read(131073)
-                if len(content) > 131072:
-                    raise ValueError("JSON response exceeds 128 KiB")
+                if len(content) > 131072 or (length is not None and len(content) != length):
+                    raise TransportError("protocol")
                 return json.loads(content, parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite JSON")))
         except urllib.error.HTTPError as error:
             error.close()
             raise RemoteError(error.code) from None
+        except (TimeoutError, urllib.error.URLError) as error:
+            timed_out = isinstance(error, TimeoutError) or isinstance(getattr(error, "reason", None), TimeoutError)
+            raise TransportError("deadline" if timed_out else "transport") from None
+        except OSError:
+            raise TransportError("transport") from None
+        except (ValueError, http.client.HTTPException):
+            raise TransportError("protocol") from None
 
     def get(self, path: str):
         return self.call("GET", path)

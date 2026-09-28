@@ -70,6 +70,8 @@ try {
   await page.getByRole('button', { name: 'View episode', exact: true }).first().click();
   await expect(page.locator('.console-episode')).toContainText('Succeeded');
   await expect(page.locator('.console-episode')).toContainText('500');
+  await expect(page.locator('.console-diagnosis')).toHaveCount(0);
+  await expect(page.locator('.console-episode details')).not.toHaveAttribute('open');
   await page.screenshot({ path: path.join(output, 'console.png'), fullPage: true });
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Robots', exact: true })).toBeVisible();
@@ -77,6 +79,10 @@ try {
   await start.click();
   await page.getByRole('button', { name: 'Request cancellation', exact: true }).click({ timeout: 5000 });
   await expect(rows.first()).toContainText('cancelled', { timeout: 15000 });
+  await page.getByRole('button', { name: 'View episode', exact: true }).first().click();
+  await expect(page.locator('.console-diagnosis')).toContainText('Where execution stopped');
+  await expect(page.locator('.console-diagnosis')).toContainText('Cancellation requested');
+  await expect(page.locator('.console-diagnosis')).not.toContainText('authorization had elapsed');
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
   await page.screenshot({ path: path.join(output, 'console-mobile.png'), fullPage: true });
@@ -86,6 +92,7 @@ try {
   report.status = 'passed';
   report.checks = ['user authentication', 'paired registration disabled without API capability', 'new deployment generation', 'explicit mission start', '500 real physics steps',
     'benchmark success separate from completion', 'session survives reload', 'acknowledged cancellation',
+    'persisted execution diagnosis displayed', 'no inferred authorization expiry', 'technical details collapsed',
     'mobile without overflow', 'logout'];
   console.log(JSON.stringify(report));
 } finally {

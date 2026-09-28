@@ -129,6 +129,34 @@ def test_retained_completed_mission_does_not_block_next_deployment(setup):
     assert adapter.steps == 2
 
 
+@pytest.mark.parametrize("elapsed", [False, True])
+def test_policy_rejection_reports_origin_without_inventing_expiry_or_replaying(setup, monkeypatch, elapsed):
+    engine, journal, control, worker, adapter = setup
+    engine.tick()
+    mission = control.request_mission()
+
+    def reject(request, grant):
+        if elapsed:
+            monkeypatch.setattr("convoy_agent.coordinator.engine.time.time", lambda: mission["expires_at"] + 1)
+        raise RemoteError(401)
+
+    worker.decide = reject
+    control.fail_terminal = True
+    with pytest.raises(OSError):
+        engine.tick()
+    saved = json.loads(journal.get("mission")["report_json"])
+    failure = saved["summary"]["failure"]
+    assert {key: failure[key] for key in ("component", "phase", "category", "http_status", "authorization_elapsed", "sequence")} == {
+        "component": "action_policy", "phase": "policy_inference", "category": "authorization",
+        "http_status": 401, "authorization_elapsed": elapsed, "sequence": 0,
+    }
+    assert failure["request_id"] and adapter.steps == journal.command_count("mission") == 0
+    control.fail_terminal = False
+    engine.tick()
+    engine.tick()
+    assert control.reports[-1] == saved and adapter.steps == 0
+
+
 def test_cancellation_between_desired_and_claim_acks_without_authority_or_actions(setup):
     engine, journal, control, worker, adapter = setup
     engine.tick()

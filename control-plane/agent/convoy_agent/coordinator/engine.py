@@ -37,6 +37,7 @@ from convoy_contracts.pairing import (
     validate_release_manifest,
 )
 
+from .diagnostics import failure_detail, failure_record
 from .journal import ExecutionJournal
 from .transport import RemoteError
 
@@ -73,6 +74,10 @@ class ExecutionUnknown(Exception):
     pass
 
 
+class PlannerDeclined(ValueError):
+    pass
+
+
 class Coordinator:
     def __init__(
         self, *, robot_id: str, device_id: str, journal: ExecutionJournal,
@@ -103,6 +108,8 @@ class Coordinator:
         self._inference_thread: threading.Thread | None = None
         self._cleanup_thread: threading.Thread | None = None
         self._ready: tuple[str, int, str] | None = None
+        self._failure_phase = "mission_claim"
+        self._failure_request: dict | None = None
         self.prefix = f"/api/agent/v1/robots/{robot_id}"
         journal.recover()
 
@@ -202,7 +209,9 @@ class Coordinator:
             self.journal.prepare(mission["id"], None)
             self.journal.finish(mission["id"], {
                 "identity": None, "state": "cancelled", "detail": "cancelled before local admission",
-                "summary": {"steps": 0, "execution_mode": "lockstep_offline"},
+                "summary": {"steps": 0, "execution_mode": "lockstep_offline",
+                            "failure": failure_record("mission_claim", Cancelled(), category="cancelled",
+                                                      authorization_elapsed=time.time() >= mission["expires_at"])},
             })
             self._flush_reports(desired)
             return
@@ -310,7 +319,18 @@ class Coordinator:
             raise DecisionExpired("local decision deadline expired")
 
     def _decide(self, request: dict, grant: str) -> dict:
+        self._phase("policy_inference", request)
         return self._call_bounded(request["deadline_monotonic_ns"], lambda: self.worker.decide(request, grant))
+
+    def _phase(self, phase: str, request: dict | None = None) -> None:
+        # Only the execution thread updates context. Background polling/cleanup
+        # cannot change the failure's origin while a request is outstanding.
+        self._failure_phase, self._failure_request = phase, request
+
+    def _failure(self, error: Exception, mission: dict, category: str | None = None) -> dict:
+        return failure_record(self._failure_phase, error, category=category,
+                              authorization_elapsed=time.time() >= mission["expires_at"],
+                              request=self._failure_request)
 
     def _call_bounded(self, deadline_ns: int, operation: Callable) -> dict:
         """Cancellation/deadline releases the supervisor even during blocked I/O.
@@ -342,6 +362,7 @@ class Coordinator:
 
     def _plan(self, mission: dict, manifest: dict, identity: dict, grant: str,
               mission_deadline_ns: int, summary: dict) -> None:
+        self._phase("planner_session")
         deadline = min(mission_deadline_ns, time.monotonic_ns() + manifest["planning"]["timeout_ms"] * 1_000_000)
         session = self._call_bounded(deadline, lambda: self.planner.start_session(identity, grant))
         expected = {"identity": identity, "next_sequence": 0, **(self._planner_readiness or {})}
@@ -363,6 +384,7 @@ class Coordinator:
         # Persist the original proposal request before network I/O. Recovery never
         # regenerates a plan or resumes an accepted skill after an ambiguous crash.
         self.journal.request_plan(request)
+        self._phase("planner_proposal", request)
         result = validate_plan_result(self._call_bounded(deadline, lambda: self.planner.propose(request, grant)))
         with self._submission:
             self._check_live(deadline)
@@ -379,9 +401,10 @@ class Coordinator:
             self.journal.record_plan(request, result, accepted=accepted)
             summary.update(planner_result=result, planner_accepted=accepted)
             if not accepted:
-                raise ValueError("planner declined the fixed supported task")
+                raise PlannerDeclined("planner declined the fixed supported task")
 
     def _apply(self, adapter: Adapter, request: dict, raw_result: dict) -> StepResult:
+        self._phase("action_admission", request)
         result = validate_result(raw_result)
         with self._submission:
             if self._outstanding != request:
@@ -398,6 +421,7 @@ class Coordinator:
                 self.journal.command_outcome(request, "not_applied")
                 raise
             try:
+                self._phase("adapter_step", request)
                 outcome = adapter.step(result["action"], request["request_id"])
                 validate_observation(outcome.observation, self.action_profile)
                 if not math.isfinite(outcome.reward):
@@ -440,6 +464,7 @@ class Coordinator:
         done = threading.Event()
         self._cancel_reason, self._outstanding = None, None
         self._active_mission = mission["id"]
+        self._phase("mission_claim")
         summary = {
             "execution_mode": "lockstep_offline",
             "evidence_scope": ("simulated_physics_with_rgb_and_proprioception" if self.action_profile == VISUAL_PROFILE
@@ -470,6 +495,7 @@ class Coordinator:
             remaining = min(remaining, policy["execution"]["mission_timeout_s"])
             deadline_ns = time.monotonic_ns() + int(remaining * 1e9)
             self._check_live(deadline_ns)
+            self._phase("running_acknowledgement")
             acknowledgement = self._report(mission["id"], {"identity": identity, "state": "running"})
             acknowledged_state = acknowledgement.get("mission", {}).get("state")
             if acknowledged_state == "cancel_requested":
@@ -482,13 +508,16 @@ class Coordinator:
             if self.profile == PAIRED_PROFILE:
                 self._plan(mission, manifest, identity, claim["planner_grant"], deadline_ns, summary)
             if self.action_profile == VISUAL_PROFILE:
+                self._phase("policy_session")
                 session = self._call_bounded(deadline_ns, lambda: self.worker.start_session(identity, claim["grant"]))
                 if session != {"identity": identity, "next_sequence": 0}:
                     raise ValueError("worker session identity or initial sequence mismatch")
                 self._check_live(deadline_ns)
+            self._phase("adapter_initialization")
             adapter = self.adapter_factory()
             observation = adapter.reset(mission["seed"])
             for sequence in range(policy["execution"]["max_steps"]):
+                self._phase("policy_inference")
                 request_deadline = min(deadline_ns, time.monotonic_ns() +
                                        policy["execution"]["decision_timeout_ms"] * 1_000_000)
                 self._check_live(request_deadline)
@@ -498,6 +527,7 @@ class Coordinator:
                     "observation": observation, "deadline_monotonic_ns": request_deadline,
                     "budget_ms": max(0.001, (request_deadline - time.monotonic_ns()) / 1e6),
                 }
+                self._phase("action_admission", request)
                 validate_request(request, self.action_profile)
                 with self._submission:
                     self._check_live(request_deadline)
@@ -517,9 +547,17 @@ class Coordinator:
                       else "simulation horizon completed")
         except Cancelled as error:
             state, detail = "cancelled", str(error)
+            summary["failure"] = self._failure(error, mission, "cancelled")
         except ExecutionUnknown as error:
             state, detail = "unknown", str(error)
+            summary["failure"] = self._failure(error, mission, "uncertain")
+        except (DecisionExpired, PlannerDeclined) as error:
+            state = "failed" if claimed else "unknown"
+            summary["failure"] = self._failure(error, mission,
+                                               "deadline" if isinstance(error, DecisionExpired) else "declined")
+            detail = failure_detail(summary["failure"])
         except RemoteError as error:
+            summary["failure"] = self._failure(error, mission)
             if error.status == 410 and not claimed:
                 # The backend committed expiry and an immutable failed episode.
                 state, detail = "failed", "mission authorization expired before claim"
@@ -528,7 +566,7 @@ class Coordinator:
                 self.journal.acknowledge(mission["id"])
                 return
             state = "failed" if claimed else "unknown"
-            detail = "inference or management request rejected"
+            detail = failure_detail(summary["failure"])
             if error.status == 409 and not claimed:
                 try:
                     current = self._desired().get("mission")
@@ -537,9 +575,11 @@ class Coordinator:
                 if (current and current["id"] == mission["id"] and
                         current["state"] == "cancel_requested" and current.get("identity") is None):
                     state, detail, report_identity = "cancelled", "cancelled before local admission", None
+                    summary["failure"] = self._failure(error, mission, "cancelled")
         except Exception as error:
             state = "failed" if claimed else "unknown"
-            detail = type(error).__name__ + ": execution stopped without retrying a command"
+            summary["failure"] = self._failure(error, mission)
+            detail = failure_detail(summary["failure"])
         finally:
             done.set()
             if monitor:
@@ -547,9 +587,14 @@ class Coordinator:
             if adapter:
                 try:
                     adapter.close()
-                except Exception:
+                except Exception as error:
                     state, detail = "unknown", "adapter cleanup outcome is uncertain"
+                    if "failure" in summary:
+                        summary["preceding_failure"] = summary["failure"]
+                    self._phase("adapter_cleanup")
+                    summary["failure"] = self._failure(error, mission, "uncertain")
             self._outstanding = None
+            self._failure_request = None
             self._active_mission = None
         summary["wall_duration_s"] = time.monotonic() - started
         self.journal.finish(mission["id"], {

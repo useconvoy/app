@@ -18,9 +18,9 @@ That coordinator checkpoint used a scripted policy and privileged simulator stat
 
 | Area | Current state | Next evidence needed |
 |---|---|---|
-| Console workflow | PRs #75 and #82 merged; deployment, evaluation, comparison and promotion verified against actual services | Paired component display and actual paired evaluation |
+| Console workflow | PRs #75, #82 and #84 merged; deployment, evaluation, comparison, promotion and paired display verified against actual services | Repeat the workflow with independently activated candidate components |
 | Learned inference | PR #78 merged; actual pretrained SmolVLA camera-policy evidence through managed missions | Extend the qualified task/seed envelope and qualify target compute |
-| Component pairing | Explicit bundle, separate planner authority and durable proposal qualified with a controlled planner plus actual SmolVLA/MuJoCo | Console paired evaluation, then live Jetson LLM qualification; no universal plug-and-play claim |
+| Component pairing | PRs #83–#85 merged; controlled and actual Qwen admission plus SmolVLA/MuJoCo qualified locally; paired console evaluation verified | Live Jetson qualification and deployment-driven component activation; no universal plug-and-play claim |
 | Release evaluation | PRs #80 and #82 merged; suites, leased jobs, comparison and promotion gates qualified locally and through the browser | Paired evidence and broader model/task qualification |
 | Durable hosting foundation | PostgreSQL migrations and concurrency checks, restartable evaluation jobs, local execution journal | Full tenant conversion, artifact storage/retention and database restore rehearsal |
 | Provider and hosting | PRs #79 and #81 merged; local service images/TLS/PostgreSQL and reviewed AWS CPU staging configuration | Account/region/budget, provisioned endpoint and hosted acceptance |
@@ -82,3 +82,18 @@ remains unverified. A text LLM is not treated as a
 compatible arm action policy. Compatible edge inference, a separate cloud planner,
 paired activation, cloud hosting, complete tenancy and artifact/retention work
 remain outstanding. No paid cloud resources have been provisioned.
+
+PR #85's clean source `c7d9166` completed actual Qwen text-model admission in
+897 ms followed by 54 SmolVLA actions and the benchmark success signal. All
+actions matched the direct seed-0 trace; active wall time was 46.34 seconds for
+0.675 simulated seconds. The [record](../../examples/manipulation/evidence/paired-qwen-local-seed0.json)
+also preserves earlier readiness and sleep-interrupted failures. All inference
+ran on the developer Mac CPU; this does not qualify Jetson/cloud placement.
+
+An implementation audit confirmed that selecting a deployment currently checks
+already configured worker/planner identities. It does not itself replace their
+model processes. The next activation slice must stage a registered local recipe,
+switch at an idle boundary, verify observed component identities, and support an
+explicit restore to a prior bundle. Persistent packaging alone does not close
+that gap. Process ownership after a supervisor crash also requires qualification
+on macOS; the existing native orphan check relies on Linux `/proc`.
