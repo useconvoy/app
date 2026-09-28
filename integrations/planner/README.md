@@ -154,6 +154,20 @@ proposal, action trace and task outcome. Failed attempts retain their pipeline
 report; they are not changed into passing samples. `--serve` supports manual
 console evaluation against these processes.
 
+The [recorded actual-model run](../../examples/manipulation/evidence/paired-qwen-local-seed0.json)
+used pinned Qwen2.5-1.5B-Instruct Q4_K_M and llama.cpp on a Mac CPU. Qwen selected
+the catalog skill in 897 ms; the accepted plan led to 54 actual SmolVLA/MuJoCo
+actions and the first benchmark success signal. All actions exactly matched the
+original direct seed0 trace. The episode took 46.34 active wall seconds for
+0.675 simulated seconds. This is fixed-task integration evidence, not general
+planning, real-time performance or Jetson/cloud qualification.
+
+The record also retains two earlier failed attempts: an unrecognized native CPU
+log label prevented readiness, and a later mission stopped after three actions
+when host sleep outlasted its signed authorization. Neither is counted as a
+passing sample. The successful run used a new mission with the original prompt,
+parser and deadlines; its owned native process and gateway stopped cleanly.
+
 For a local CPU development fixture, `examples/manipulation/local_gateway.py`
 can own the existing `RuntimeSupervisor` and native gateway in a fresh private
 directory. It requires a version-1 asset receipt with a pinned model path, byte
