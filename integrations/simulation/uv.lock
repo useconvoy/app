@@ -228,6 +228,7 @@ dependencies = [
     { name = "metaworld" },
     { name = "mujoco" },
     { name = "numpy" },
+    { name = "packaging" },
     { name = "scipy" },
 ]
 
@@ -261,6 +262,7 @@ requires-dist = [
     { name = "metaworld", specifier = "==3.1.1" },
     { name = "mujoco", specifier = "==3.3.0" },
     { name = "numpy", specifier = "==2.2.6" },
+    { name = "packaging", specifier = "==26.3" },
     { name = "scipy", specifier = "==1.15.3" },
 ]
 provides-extras = ["video", "managed"]
