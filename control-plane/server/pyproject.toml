@@ -24,6 +24,7 @@ convoy-contracts = { workspace = true }
 
 [project.scripts]
 convoy-server = "convoy_server.cli:main"
+convoy-evaluations = "convoy_server.evaluation_worker:main"
 
 [build-system]
 requires = ["hatchling"]

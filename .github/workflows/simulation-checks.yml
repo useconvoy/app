@@ -54,11 +54,14 @@ jobs:
       - run: uv sync --frozen --extra managed
       - run: uv run --frozen --extra managed ruff check src tests ../../examples/manipulation
       - run: uv run --frozen --extra managed python ../../examples/manipulation/pipeline.py --faults --output runs/ci-pipeline
+      - run: uv run --frozen --extra managed python ../../examples/manipulation/evaluate.py --output runs/ci-evaluation
       # Do not upload the surrounding directory: it contains generated credentials.
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: managed-pipeline-result
-          path: integrations/simulation/runs/ci-pipeline/pipeline-result.json
+          path: |
+            integrations/simulation/runs/ci-pipeline/pipeline-result.json
+            integrations/simulation/runs/ci-evaluation/evaluation-result.json
           if-no-files-found: ignore
           retention-days: 7

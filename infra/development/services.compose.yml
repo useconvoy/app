@@ -91,6 +91,24 @@ services:
     mem_limit: 384m
     cpus: 1
 
+  evaluations:
+    image: convoy-v1-api:local
+    init: true
+    environment: *api-environment
+    command: [convoy-evaluations]
+    depends_on:
+      api: {condition: service_healthy}
+    # Checks DB/schema access; episode/job progress is observed through the API.
+    healthcheck:
+      test: [CMD, python, -c, "from convoy_server.db import init_engine; init_engine()"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 1
+
   web:
     image: convoy-v1-web:local
     build: {context: ../../website}

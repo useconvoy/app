@@ -125,9 +125,9 @@ def main():
         compose("run", "--rm", "--no-deps", "-T", "certificates", capture=True, stdin=json.dumps(certificates))
         compose("up", "-d", "--wait", "postgres")
         # Explicit offline migrations precede API/jobs startup, including on upgrades.
-        compose("stop", "simulator", "jobs", "api")
+        compose("stop", "simulator", "evaluations", "jobs", "api")
         compose("run", "--rm", "--no-deps", "migrate")
-        compose("up", "-d", "--wait", "api", "jobs", "web", "inference")
+        compose("up", "-d", "--wait", "api", "jobs", "evaluations", "web", "inference")
         bootstrap = compose("run", "--rm", "--no-deps", "acceptance", "python",
                             "/app/packaging/acceptance.py", "bootstrap", capture=True)
         private_json(STATE / "installation.json", json.loads(bootstrap.stdout))
