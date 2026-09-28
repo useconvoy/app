@@ -1,9 +1,11 @@
 # Fixed-task planner adapter
 
-This optional process composes a text model already owned by the legacy Convoy
-agent with the qualified visual pick-and-place policy. It selects the one fixed
-catalog skill or declines it. It does not load a model, control a robot, perceive
-the camera image, invent a task, or establish general planning performance.
+This optional adapter composes an owned text model with the qualified visual
+pick-and-place policy. It selects the one fixed catalog skill or declines it.
+`convoy-planner serve` attaches to an existing gateway; the separate
+[Linux ARM64 image](../../infra/planner/README.md) packages the model owner,
+loopback gateway and adapter together. Neither mode controls a robot, perceives
+the camera image, invents a task or establishes general planning performance.
 
 The initial placement is the planner adapter beside the existing Jetson gateway
 and the action policy/simulator on the development Mac. These are development
@@ -31,10 +33,12 @@ Use the returned `planner` object to create the paired application manifest.
 paired profile also fixes the task, skill catalog, planner protocol, placement,
 and original planning deadline; see `convoy_contracts.pairing`.
 
-Provision `CONVOY_PLANNER_EXECUTION_SECRET` and `CONVOY_PLANNER_PROBE_TOKEN` through
-the deployment secret mechanism. The planner execution key must differ from the
-action worker key. The control plane signs a purpose-scoped `planner_grant` with
-the planner key; the ordinary action grant does not authorize this service.
+Provision `CONVOY_PLANNER_VERIFICATION_KEYS_FILE` and `CONVOY_PLANNER_PROBE_TOKEN`
+through the deployment mechanism. The file contains only public planner keys;
+the API retains private signing authority. An action grant does not authorize
+this service. Legacy HMAC mode remains for explicit development fixtures and
+cannot coexist with public-key configuration. The owned Linux launcher accepts
+only public verification. See [execution signing](../../docs/v1/execution-signing.md).
 
 ```sh
 uv run --frozen convoy-planner serve \
