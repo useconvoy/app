@@ -5,10 +5,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, errorText, MutationAttempts, terminal, timestamp } from "@/lib/platform/client";
 import type { Account, Application, Deployment, Device, Episode, EvaluationRun, Mission, Project, Qualification, Release, Robot } from "@/lib/platform/client";
 import { Evaluations } from "./Evaluations";
+import { ReleaseDetails } from "./ReleaseDetails";
+import { PAIRED_PROFILE, releaseComponents } from "@/lib/platform/manifest";
 
 const PROFILES = [
   { id: "metaworld-sawyer-pick-place-v1", label: "Sawyer · state observations" },
   { id: "metaworld-smolvla-pick-place-rgb-v1", label: "Sawyer · camera observations (SmolVLA)" },
+  { id: PAIRED_PROFILE, label: "Sawyer · text planner + camera action policy" },
 ];
 const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 
@@ -97,12 +100,12 @@ function Workspace({ account, onSessionEnd }: { account: Account; onSessionEnd: 
         <label>Project<select value={project?.id ?? ""} onChange={event => setProjectId(event.target.value)}><option value="" disabled>{projects.length ? "Choose a project" : "No projects yet"}</option>{projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         {writable && <form onSubmit={event => void create(event)}><label>New project name<input name="name" maxLength={120} required /></label><button className="btn btn-secondary" disabled={busy}>Create project</button></form>}
       </section>
-      {project ? <ProjectWorkspace key={project.id} project={project} writable={writable} canDispatch={!paused && account.installation.simulator} onSessionEnd={onSessionEnd} /> : <p>Create a project to connect a simulator and register an application release.</p>}
+      {project ? <ProjectWorkspace key={project.id} project={project} writable={writable} canDispatch={!paused && account.installation.simulator} executionProfiles={account.installation.execution_profiles ?? []} onSessionEnd={onSessionEnd} /> : <p>Create a project to connect a simulator and register an application release.</p>}
     </main>
   </>;
 }
 
-function ProjectWorkspace({ project, writable, canDispatch, onSessionEnd }: { project: Project; writable: boolean; canDispatch: boolean; onSessionEnd: () => void }) {
+function ProjectWorkspace({ project, writable, canDispatch, executionProfiles, onSessionEnd }: { project: Project; writable: boolean; canDispatch: boolean; executionProfiles: string[]; onSessionEnd: () => void }) {
   const [robots, setRobots] = useState<Robot[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
@@ -136,7 +139,8 @@ function ProjectWorkspace({ project, writable, canDispatch, onSessionEnd }: { pr
   const robotMissions = robot ? missions.filter(item => item.robot_id === robot.id) : [];
   const active = robotMissions.find(item => !terminal(item.state));
   const reserved = !!robot?.evaluation_id;
-  const profileMatches = !!robot && robot.profile === release?.manifest.profile;
+  const profileMatches = !!robot && !!release && robot.profile === releaseComponents(release.manifest).profile;
+  const pairedRegistration = executionProfiles.includes(PAIRED_PROFILE);
   const qualified = !!release && qualification?.release_id === release.id && qualification.deployment_allowed;
 
   const refresh = useCallback(async (afterMutation = false) => {
@@ -212,9 +216,10 @@ function ProjectWorkspace({ project, writable, canDispatch, onSessionEnd }: { pr
           })}><label>Simulator name<input name="name" defaultValue="Sawyer simulator" required maxLength={120} /></label><button className="btn btn-secondary" disabled={disabled || !canDispatch}>Create enrollment command</button></form>
           {enrollment && <><p className="console-note">This command contains a one-use credential. It is shown only in this session.</p><pre className="console-code">{enrollment}</pre><button onClick={() => void navigator.clipboard.writeText(enrollment).then(() => setNotice("Enrollment command copied.")).catch(() => setError("Copy the enrollment command manually."))}>Copy command</button></>}
           <form onSubmit={event => submit(event, async data => {
+            if (data.get("profile") === PAIRED_PROFILE && !pairedRegistration) throw new Error("This server has not enabled the paired simulator profile.");
             const created = await attempts.current.submit<Robot>("robots", { project_id: project.id, device_id: data.get("device"), name: data.get("name"), profile: data.get("profile") });
             setRobotId(created.id); setNotice("Simulator registered. Configure a release before deployment.");
-          })}><label>Enrolled device<select name="device" required defaultValue=""><option value="" disabled>Choose an enrolled simulator</option>{devices.filter(item => item.simulated && !robots.some(bound => bound.device_id === item.id)).map(item => <option key={item.id} value={item.id}>{item.name} · {item.id}</option>)}</select></label><label>Robot name<input name="name" required maxLength={120} /></label><label>Simulator profile<select name="profile" defaultValue={PROFILES[0].id}>{PROFILES.map(profile => <option key={profile.id} value={profile.id}>{profile.label}</option>)}</select></label><p className="console-note">Choose the observation format supported by your simulator and release. Registration does not install its policy or dependencies.</p><button className="btn btn-secondary" disabled={disabled || !canDispatch}>Register robot</button></form>
+          })}><label>Enrolled device<select name="device" required defaultValue=""><option value="" disabled>Choose an enrolled simulator</option>{devices.filter(item => item.simulated && !robots.some(bound => bound.device_id === item.id)).map(item => <option key={item.id} value={item.id}>{item.name} · {item.id}</option>)}</select></label><label>Robot name<input name="name" required maxLength={120} /></label><label>Simulator profile<select name="profile" defaultValue={PROFILES[0].id}>{PROFILES.map(profile => <option key={profile.id} value={profile.id} disabled={profile.id === PAIRED_PROFILE && !pairedRegistration}>{profile.label}{profile.id === PAIRED_PROFILE && !pairedRegistration ? " · server support required" : ""}</option>)}</select></label><p className="console-note">Choose the profile supported by your simulator and release. The paired option requires explicit server support. Registration does not install models, acknowledge component readiness, or qualify physical hardware.</p><button className="btn btn-secondary" disabled={disabled || !canDispatch}>Register robot</button></form>
           <p className="console-note">The coordinator must also be configured on that host with this robot ID and a verified inference worker.</p>
         </details>
       </section>
@@ -225,7 +230,7 @@ function ProjectWorkspace({ project, writable, canDispatch, onSessionEnd }: { pr
           setApplicationId(created.id); setReleases([]); setReleaseId(""); setNotice("Application created. Register a pinned release manifest.");
         })}><label>Application name<input name="name" maxLength={120} required /></label><button className="btn btn-secondary" disabled={disabled}>Create application</button></form></details>
         <label>Release<select value={release?.id ?? ""} onChange={event => setReleaseId(event.target.value)}><option value="" disabled>No release selected</option>{releases.map(item => <option key={item.id} value={item.id}>{item.id} · {item.digest.slice(0, 12)}</option>)}</select></label>
-        {release && <p className="console-note">Profile <code>{release.manifest.profile}</code><br />Policy runtime <code>{release.manifest.policy.runtime}</code><br />Pinned digest <code>{release.digest}</code></p>}
+        {release && <ReleaseDetails release={release} />}
         <details><summary>Register a release manifest</summary><p>Use the manifest produced by your policy build. Registration records its identity; deployment readiness is acknowledged separately by the coordinator.</p>
           <label>Upload manifest JSON<input type="file" accept="application/json,.json" onChange={event => void readManifest(event.target.files?.[0])} /></label>
           <form onSubmit={event => submit(event, async () => {

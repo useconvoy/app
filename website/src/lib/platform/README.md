@@ -10,7 +10,9 @@ The console supports project creation, simulated device enrollment and robot bin
 
 A ready deployment is the last acknowledged state, not evidence of current robot health. Control-plane snapshots refresh every three seconds. Failed qualification reads also disable admission; stale reads for a previous selection cannot qualify a different release. Lost polling does not claim that execution stopped. The coordinator, inference worker and `convoy-evaluations` job must be running separately. Evaluation workers must already serve the selected release; this console does not provision or hot-swap them. Signing out revokes session-backed evaluations' authority for new cases.
 
-New APIs enforce project ownership within one installation. The existing device/enrollment APIs remain installation-wide; do not expose this as a fully isolated multi-tenant service. Registration offers the two supported Sawyer simulation profiles: state observations and camera observations for SmolVLA. Robot and release profile identifiers and the release policy runtime remain visible. Registration records the choice; it does not install or provision the corresponding simulator or model.
+New APIs enforce project ownership within one installation. The existing device/enrollment APIs remain installation-wide; do not expose this as a fully isolated multi-tenant service. Registration offers the two Sawyer simulation profiles: state observations and camera observations for SmolVLA. The third paired text-planner/camera-policy option requires the API to explicitly include `metaworld-smolvla-text-skill-v1` in `auth/me` → `installation.execution_profiles`; it stays disabled on an older or unconfigured server. This capability describes backend support/configuration, not component readiness.
+
+The manifest display handles both schema 1 single-policy and schema 2 paired releases. Paired releases show the nested action runtime, planner runtime, fixed task, artifact/protocol identities and declared placement. The supported planner placements are a development Jetson on the LAN or the local controlled fixture. The controlled runtime is explicitly labeled deterministic admission without text-model inference. Robot and suite compatibility uses the top-level paired profile, not the nested visual action profile. Registration records identities; it does not install or provision components or qualify physical hardware. Model names are not inferred from runtime labels or artifact digests.
 
 `pnpm test:platform` checks the proxy's route/scope allowlist, session forwarding, mutation origin checks, body bounds, cookie handling and safe errors. `pnpm typecheck`, `pnpm lint`, `pnpm check:tokens`, and `pnpm build` check the application. End-to-end validation must additionally run the browser against the actual API/coordinator/worker; mocked transport tests do not establish the robot lifecycle.
 
@@ -31,3 +33,13 @@ promotes one, then deploys and starts an ordinary successful mission. It registe
 an unpromoted second release and delays a real qualification response while
 switching selections to check stale-read gating. Only the response delivery is
 delayed; no evaluation/mission results are mocked. The flow also enrolls and registers a camera-profile device and the recorded SmolVLA manifest, checking profile display without running visual inference. CI runs both browser flows.
+
+`node scripts/test-live-pairing.mjs CONNECTION_JSON NEW_OUTPUT_DIRECTORY` targets
+an already-running paired API, evaluation job, coordinator, planner and learned
+action worker. Its private descriptor uses the same connection fields as the
+standard harness plus `planner_backend_kind: "controlled-text-planner"`. It checks
+the nested manifest display, explicit registration capability, one paired seed-0
+evaluation, accepted planner evidence, real action count, promotion and mobile
+layout. It starts/stops only its own web server and browser. This check's controlled
+planner does not qualify a Jetson/cloud planning model; declared placement is not
+host attestation. Keep the descriptor, credentials and process logs private.

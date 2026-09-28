@@ -48,6 +48,11 @@ try {
   await page.getByLabel('Password', { exact: true }).fill(connection.password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Robots', exact: true })).toBeVisible();
+  const connect = page.locator('summary', { hasText: 'Connect a simulator' });
+  await connect.click();
+  await expect(page.getByRole('combobox', { name: 'Simulator profile', exact: true })
+    .locator('option[value="metaworld-smolvla-text-skill-v1"]')).toHaveJSProperty('disabled', true);
+  await connect.click();
   const deploy = page.getByRole('button', { name: 'Request deployment', exact: true });
   await expect(deploy).toBeEnabled();
   const before = await page.locator('[aria-labelledby="deployment-heading"]').innerText();
@@ -79,7 +84,7 @@ try {
   await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
   expect(failures).toEqual([]);
   report.status = 'passed';
-  report.checks = ['user authentication', 'new deployment generation', 'explicit mission start', '500 real physics steps',
+  report.checks = ['user authentication', 'paired registration disabled without API capability', 'new deployment generation', 'explicit mission start', '500 real physics steps',
     'benchmark success separate from completion', 'session survives reload', 'acknowledged cancellation',
     'mobile without overflow', 'logout'];
   console.log(JSON.stringify(report));

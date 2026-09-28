@@ -1,12 +1,14 @@
+import type { ReleaseManifest } from "./manifest";
+
 export interface Project { id: string; name: string }
 export interface Robot { id: string; project_id: string; device_id: string; name: string; profile: string; generation: number; evaluation_id: string | null }
 export interface Application { id: string; project_id: string; name: string }
-export interface Release { id: string; application_id: string; digest: string; manifest: Record<string, unknown> & { profile: string; policy: { runtime: string; artifact_sha256: string } } }
+export interface Release { id: string; application_id: string; digest: string; manifest: ReleaseManifest }
 export interface Deployment { id: string; robot_id: string; release_id: string; generation: number; state: string; detail: string; observed_at: string | null }
 export interface Mission { id: string; robot_id: string; deployment_id: string; release_id: string; state: string; detail: string; episode_id: string | null; seed: number; expires_at: number; updated_at: string }
 export interface Episode { id: string; mission_id: string; state: string; detail: string; release_digest: string; summary: Record<string, unknown> }
 export interface Device { id: string; name: string; simulated: boolean; status: string }
-export interface Account { user: { email: string; role: string }; installation: { simulator: boolean; dispatch_paused_at: string | null; quarantined_at: string | null } }
+export interface Account { user: { email: string; role: string }; installation: { simulator: boolean; execution_profiles?: string[]; dispatch_paused_at: string | null; quarantined_at: string | null } }
 export interface EvaluationSuite { id: string; application_id: string; digest: string; spec: { name: string; seeds: number[]; min_successes: number; scorer: string; contract: Record<string, unknown> } }
 export interface EvaluationCase { seed: number; mission_id: string | null; episode_id: string | null }
 export interface EvaluationReport { passed: boolean; successes: number; min_successes: number; case_count: number; median_wall_s: number | null; suite_digest: string; release_digest: string; cases: (EvaluationCase & { state: string; passed: boolean; evidence_valid: boolean; steps: number | null; wall_duration_s: number | null })[] }

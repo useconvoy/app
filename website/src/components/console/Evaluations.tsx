@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, errorText, MutationAttempts, terminal, timestamp } from "@/lib/platform/client";
 import type { Application, EvaluationComparison, EvaluationRun, EvaluationSuite, Qualification, Release, Robot } from "@/lib/platform/client";
+import { releaseComponents } from "@/lib/platform/manifest";
 
 interface Props {
   application: Application;
@@ -52,7 +53,8 @@ export function Evaluations({ application, release, robot, runs, qualification, 
   const reservation = runs.find(item => item.id === robot?.evaluation_id)
     ?? (extraReservation?.id === robot?.evaluation_id ? extraReservation : null);
   const report = selectedRun?.report;
-  const profileMatches = robot?.profile === release.manifest.profile && suite?.spec.contract.profile === release.manifest.profile;
+  const releaseProfile = releaseComponents(release.manifest).profile;
+  const profileMatches = robot?.profile === releaseProfile && suite?.spec.contract.profile === releaseProfile;
   const disabled = busy || !writable || !loaded;
 
   useEffect(() => {
