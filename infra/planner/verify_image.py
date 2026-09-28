@@ -421,6 +421,7 @@ def run_cases(args, output: Path, image: str, temporary: Path) -> dict:
         startup.signal_owner()
         result = startup.terminal(expected_exit=0)
         startup.evidence["startup_interruption_exercised"] = not observed["ready_exists"] and result["status"] == "interrupted"
+        assert startup.evidence["startup_interruption_exercised"], "readiness won the startup interruption race"
     finally:
         startup.close()
     return {"success": True, "image_id": image, "release_digest": canonical_digest(manifest),
