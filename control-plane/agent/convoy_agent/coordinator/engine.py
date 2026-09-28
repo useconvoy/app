@@ -19,14 +19,22 @@ from typing import Callable, Protocol
 
 from convoy_contracts.execution import (
     PROFILE,
-    PROFILES,
     VISUAL_PROFILE,
     canonical_digest,
     validate_identity,
-    validate_manifest,
     validate_observation,
     validate_request,
     validate_result,
+)
+from convoy_contracts.pairing import (
+    CONTROLLED_PLANNER_RUNTIME,
+    PAIRED_PROFILE,
+    action_manifest,
+    release_profiles,
+    validate_plan_request,
+    validate_plan_result,
+    validate_planner_identity,
+    validate_release_manifest,
 )
 
 from .journal import ExecutionJournal
@@ -70,14 +78,19 @@ class Coordinator:
         self, *, robot_id: str, device_id: str, journal: ExecutionJournal,
         control, worker, adapter_factory: Callable[[], Adapter],
         poll_s: float = 0.1, clock_uncertainty_s: float = 0.25, profile: str = PROFILE,
+        planner=None,
     ):
         if not math.isfinite(poll_s) or poll_s <= 0:
             raise ValueError("poll interval must be positive and finite")
         if not math.isfinite(clock_uncertainty_s) or clock_uncertainty_s < 0:
             raise ValueError("clock uncertainty must be nonnegative and finite")
-        if profile not in PROFILES:
+        if profile not in release_profiles():
             raise ValueError("unsupported adapter profile")
+        if profile == PAIRED_PROFILE and planner is None:
+            raise ValueError("paired execution requires a configured planner")
         self.profile = profile
+        self.planner = planner
+        self._planner_readiness = None
         self.robot_id, self.device_id = robot_id, device_id
         self.journal, self.control, self.worker = journal, control, worker
         self.adapter_factory = adapter_factory
@@ -88,9 +101,14 @@ class Coordinator:
         self._active_mission: str | None = None
         self._outstanding: dict | None = None
         self._inference_thread: threading.Thread | None = None
+        self._cleanup_thread: threading.Thread | None = None
         self._ready: tuple[str, int, str] | None = None
         self.prefix = f"/api/agent/v1/robots/{robot_id}"
         journal.recover()
+
+    @property
+    def action_profile(self) -> str:
+        return VISUAL_PROFILE if self.profile == PAIRED_PROFILE else self.profile
 
     def request_stop(self) -> None:
         self.stop.set()
@@ -193,7 +211,7 @@ class Coordinator:
         if deployment is None:
             return
         release = deployment["release"]
-        manifest = validate_manifest(release["manifest"])
+        manifest = validate_release_manifest(release["manifest"])
         if manifest["profile"] != self.profile:
             raise ValueError("release does not match the adapter profile")
         if canonical_digest(manifest) != release["digest"]:
@@ -204,22 +222,46 @@ class Coordinator:
                 probe = self.worker.probe(release["digest"], manifest["profile"])
                 if probe.get("release_digest") != release["digest"] or probe.get("profile") != self.profile:
                     raise ValueError("worker readiness identity mismatch")
+                if self.profile == PAIRED_PROFILE:
+                    policy = action_manifest(manifest)["policy"]
+                    if probe.get("runtime") != policy["runtime"] or probe.get("artifact_sha256") != policy["artifact_sha256"]:
+                        raise ValueError("loaded action policy does not match the paired release")
+                    planner = self.planner.probe(release["digest"], self.profile)
+                    if (planner.get("ready") is not True or planner.get("release_digest") != release["digest"]
+                            or planner.get("profile") != self.profile
+                            or planner.get("runtime") != manifest["planner"]["runtime"]
+                            or planner.get("planner_artifact_sha256") != manifest["planner"]["artifact_sha256"]):
+                        raise ValueError("planner readiness identity mismatch")
+                    self._planner_readiness = validate_planner_identity({
+                        key: planner[key] for key in (
+                            "planner_artifact_sha256", "planner_incarnation", "runtime_generation",
+                        )
+                    })
             except Exception:
                 self.control.post(self.prefix + f"/deployments/{deployment['id']}/report", {
                     "generation": deployment["generation"], "state": "blocked",
-                    "release_digest": release["digest"], "detail": "inference worker readiness probe failed",
+                    "release_digest": release["digest"], "detail": "application component readiness probe failed",
                 })
                 raise
-            if mission is None:
+            unclaimed_current_request = (
+                mission is not None and mission["state"] == "requested" and mission.get("identity") is None
+                and not mission.get("execution_started", False)
+                and mission["deployment_id"] == deployment["id"]
+                and mission["generation"] == deployment["generation"]
+                and mission["release_digest"] == release["digest"]
+            )
+            if mission is None or unclaimed_current_request:
                 self.control.post(self.prefix + f"/deployments/{deployment['id']}/report", {
                     "generation": deployment["generation"], "state": "ready", "release_digest": release["digest"],
                 })
             elif deployment.get("state") != "ready":
-                return  # readiness may only be reported while idle
+                return  # never refresh readiness for an admitted or unresolved execution
             self._ready = ready_key
             # Fresh desired state avoids using a request cancelled during the probe.
             return
         if mission:
+            if self._cleanup_thread and self._cleanup_thread.is_alive():
+                return  # one bounded cleanup attempt; never accumulate remote close threads
             if self._inference_thread and self._inference_thread.is_alive():
                 return  # no unbounded abandoned requests after cancellation/timeouts
             if (mission["deployment_id"] != deployment["id"] or
@@ -268,31 +310,76 @@ class Coordinator:
             raise DecisionExpired("local decision deadline expired")
 
     def _decide(self, request: dict, grant: str) -> dict:
+        return self._call_bounded(request["deadline_monotonic_ns"], lambda: self.worker.decide(request, grant))
+
+    def _call_bounded(self, deadline_ns: int, operation: Callable) -> dict:
         """Cancellation/deadline releases the supervisor even during blocked I/O.
 
         Only the supervisor can submit to the adapter. A late transport result
         stays in this call's private queue and cannot execute an action.
         """
+        self._check_live(deadline_ns)
         inbox: queue.Queue = queue.Queue(maxsize=1)
 
         def invoke() -> None:
             try:
-                inbox.put((True, self.worker.decide(request, grant)))
+                inbox.put((True, operation()))
             except Exception as error:
                 inbox.put((False, error))
 
         self._inference_thread = threading.Thread(target=invoke, daemon=True)
         self._inference_thread.start()
         while True:
-            self._check_live(request["deadline_monotonic_ns"])
+            self._check_live(deadline_ns)
             try:
                 okay, result = inbox.get(timeout=min(0.025, max(
-                    0.000001, (request["deadline_monotonic_ns"] - time.monotonic_ns()) / 1e9)))
+                    0.000001, (deadline_ns - time.monotonic_ns()) / 1e9)))
             except queue.Empty:
                 continue
             if not okay:
                 raise result
             return result
+
+    def _plan(self, mission: dict, manifest: dict, identity: dict, grant: str,
+              mission_deadline_ns: int, summary: dict) -> None:
+        deadline = min(mission_deadline_ns, time.monotonic_ns() + manifest["planning"]["timeout_ms"] * 1_000_000)
+        session = self._call_bounded(deadline, lambda: self.planner.start_session(identity, grant))
+        expected = {"identity": identity, "next_sequence": 0, **(self._planner_readiness or {})}
+        if session != expected:
+            self._ready = None
+            raise ValueError("planner session changed since paired readiness")
+        self._check_live(deadline)
+        request = {
+            "identity": identity, "request_id": str(uuid.uuid4()),
+            "observation_id": f"{mission['id']}:task-admission",
+            "observation_digest": canonical_digest({
+                "scope": "fixed_task_admission", "seed": mission["seed"],
+                "task": manifest["task"], "catalog_sha256": manifest["catalog_sha256"],
+            }),
+            "deadline_monotonic_ns": deadline,
+            "budget_ms": max(0.001, (deadline - time.monotonic_ns()) / 1e6),
+        }
+        validate_plan_request(request)
+        # Persist the original proposal request before network I/O. Recovery never
+        # regenerates a plan or resumes an accepted skill after an ambiguous crash.
+        self.journal.request_plan(request)
+        result = validate_plan_result(self._call_bounded(deadline, lambda: self.planner.propose(request, grant)))
+        with self._submission:
+            self._check_live(deadline)
+            for key in ("identity", "request_id", "observation_id", "observation_digest", "deadline_monotonic_ns"):
+                if result[key] != request[key]:
+                    raise ValueError(f"planner result {key} does not match the original request")
+            for key, value in self._planner_readiness.items():
+                if result[key] != value:
+                    self._ready = None
+                    raise ValueError("planner runtime changed within the admitted session")
+            accepted = result["decision"] == {
+                "kind": "skill", "skill_id": manifest["task"]["skill_id"], "parameters": {},
+            }
+            self.journal.record_plan(request, result, accepted=accepted)
+            summary.update(planner_result=result, planner_accepted=accepted)
+            if not accepted:
+                raise ValueError("planner declined the fixed supported task")
 
     def _apply(self, adapter: Adapter, request: dict, raw_result: dict) -> StepResult:
         result = validate_result(raw_result)
@@ -312,7 +399,7 @@ class Coordinator:
                 raise
             try:
                 outcome = adapter.step(result["action"], request["request_id"])
-                validate_observation(outcome.observation, self.profile)
+                validate_observation(outcome.observation, self.action_profile)
                 if not math.isfinite(outcome.reward):
                     raise ValueError("adapter returned an invalid physical state")
                 self.journal.command_outcome(request, "applied", asdict(outcome))
@@ -322,7 +409,29 @@ class Coordinator:
                 # uncertain physical command must never be blindly retried.
                 raise ExecutionUnknown("adapter command outcome is uncertain") from error
 
+    def _close_sessions(self, identity: dict, claim: dict) -> None:
+        """Best-effort network cleanup after the local terminal outcome is durable.
+
+        A stuck remote close cannot prevent cancellation reporting. New mission
+        admission waits for this single thread, so failures cannot grow a queue
+        of abandoned cleanup calls. Original grants are never extended.
+        """
+        def close() -> None:
+            endpoints = [(self.worker, claim["grant"])] if self.action_profile == VISUAL_PROFILE else []
+            if self.profile == PAIRED_PROFILE:
+                endpoints.append((self.planner, claim["planner_grant"]))
+            for endpoint, grant in endpoints:
+                try:
+                    endpoint.end_session(identity, grant)
+                except Exception:
+                    log.warning("component close not acknowledged; original grant expiry remains in force")
+
+        self._cleanup_thread = threading.Thread(target=close, daemon=True)
+        self._cleanup_thread.start()
+        self._cleanup_thread.join(timeout=0.025)
+
     def _run_mission(self, mission: dict, manifest: dict) -> None:
+        policy = action_manifest(manifest)
         identity = self.journal.identity(mission, self.device_id, self.robot_id)
         validate_identity(identity)
         self.journal.prepare(mission["id"], identity)
@@ -333,12 +442,21 @@ class Coordinator:
         self._active_mission = mission["id"]
         summary = {
             "execution_mode": "lockstep_offline",
-            "evidence_scope": ("simulated_physics_with_rgb_and_proprioception" if self.profile == VISUAL_PROFILE
+            "evidence_scope": ("simulated_physics_with_rgb_and_proprioception" if self.action_profile == VISUAL_PROFILE
                                else "simulated_physics_with_privileged_state"),
             "profile": self.profile,
             "seed": mission["seed"], "steps": 0, "ever_success": False, "final_success": False,
-            "reward_sum": 0.0, "simulated_duration_s": 0.0, "policy_runtime": manifest["policy"]["runtime"],
+            "reward_sum": 0.0, "simulated_duration_s": 0.0, "policy_runtime": policy["policy"]["runtime"],
         }
+        if self.profile == PAIRED_PROFILE:
+            controlled = manifest["planner"]["runtime"] == CONTROLLED_PLANNER_RUNTIME
+            summary.update(
+                planner_accepted=False, planner_runtime=manifest["planner"]["runtime"],
+                planner_backend_kind="controlled-text-planner" if controlled else "llamacpp-text-model",
+                planner_scope=("deterministic fixed-skill admission; no text-model inference" if controlled
+                               else "text-only fixed-task routing; no image understanding"),
+                placement=manifest["placement"],
+            )
         state, detail = "unknown", "claim outcome is uncertain"
         started = time.monotonic()
         claimed = False
@@ -349,7 +467,7 @@ class Coordinator:
                 raise ValueError("claim returned a different execution identity")
             claimed = True
             remaining = float(mission["expires_at"]) - time.time() - self.clock_uncertainty_s
-            remaining = min(remaining, manifest["execution"]["mission_timeout_s"])
+            remaining = min(remaining, policy["execution"]["mission_timeout_s"])
             deadline_ns = time.monotonic_ns() + int(remaining * 1e9)
             self._check_live(deadline_ns)
             acknowledgement = self._report(mission["id"], {"identity": identity, "state": "running"})
@@ -361,16 +479,18 @@ class Coordinator:
             self.journal.mark_running(mission["id"])
             monitor = threading.Thread(target=self._monitor, args=(mission, done), daemon=True)
             monitor.start()
-            if self.profile == VISUAL_PROFILE:
-                session = self.worker.start_session(identity, claim["grant"])
+            if self.profile == PAIRED_PROFILE:
+                self._plan(mission, manifest, identity, claim["planner_grant"], deadline_ns, summary)
+            if self.action_profile == VISUAL_PROFILE:
+                session = self._call_bounded(deadline_ns, lambda: self.worker.start_session(identity, claim["grant"]))
                 if session != {"identity": identity, "next_sequence": 0}:
                     raise ValueError("worker session identity or initial sequence mismatch")
                 self._check_live(deadline_ns)
             adapter = self.adapter_factory()
             observation = adapter.reset(mission["seed"])
-            for sequence in range(manifest["execution"]["max_steps"]):
+            for sequence in range(policy["execution"]["max_steps"]):
                 request_deadline = min(deadline_ns, time.monotonic_ns() +
-                                       manifest["execution"]["decision_timeout_ms"] * 1_000_000)
+                                       policy["execution"]["decision_timeout_ms"] * 1_000_000)
                 self._check_live(request_deadline)
                 request = {
                     "identity": identity, "request_id": str(uuid.uuid4()),
@@ -378,7 +498,7 @@ class Coordinator:
                     "observation": observation, "deadline_monotonic_ns": request_deadline,
                     "budget_ms": max(0.001, (request_deadline - time.monotonic_ns()) / 1e6),
                 }
-                validate_request(request, self.profile)
+                validate_request(request, self.action_profile)
                 with self._submission:
                     self._check_live(request_deadline)
                     self._outstanding = request
@@ -390,10 +510,10 @@ class Coordinator:
                 summary["ever_success"] |= outcome.success
                 summary["simulated_duration_s"] = (sequence + 1) * adapter.control_period_s
                 if (outcome.terminated or outcome.truncated or
-                        (self.profile == VISUAL_PROFILE and outcome.success)):
+                        (self.action_profile == VISUAL_PROFILE and outcome.success)):
                     break
             state = "completed"
-            detail = ("benchmark success reached" if self.profile == VISUAL_PROFILE and summary["final_success"]
+            detail = ("benchmark success reached" if self.action_profile == VISUAL_PROFILE and summary["final_success"]
                       else "simulation horizon completed")
         except Cancelled as error:
             state, detail = "cancelled", str(error)
@@ -424,11 +544,6 @@ class Coordinator:
             done.set()
             if monitor:
                 monitor.join(timeout=0.2)
-            if claimed and self.profile == VISUAL_PROFILE:
-                try:
-                    self.worker.end_session(identity, claim["grant"])
-                except Exception:
-                    log.warning("worker session close not acknowledged; original grant expiry remains in force")
             if adapter:
                 try:
                     adapter.close()
@@ -440,4 +555,6 @@ class Coordinator:
         self.journal.finish(mission["id"], {
             "identity": report_identity, "state": state, "detail": detail[:1000], "summary": summary,
         })
+        if claimed and self.action_profile == VISUAL_PROFILE:
+            self._close_sessions(identity, claim)
         self._flush_reports({"mission": mission})

@@ -1,7 +1,7 @@
 # Decision 004: qualify a planner and an action policy as one application
 
-Status: planned implementation, following the single-policy and evaluation
-milestones. This document does not claim a paired runtime is operational.
+Status: implementation and qualification on the component-pairing feature branch.
+Live Jetson model admission and hosted edge/cloud execution remain unqualified.
 
 ## The next behavior
 
@@ -71,6 +71,27 @@ prepared bundle is blocked. A lost acknowledgement causes reconciliation with
 the recorded generation and loaded identities. This is per-robot convergence,
 not an atomic transaction across the network.
 
+After a transient probe failure, the same queued, never-claimed mission may
+regain readiness without changing its generation or original expiry. Server
+reconciliation expires only requests for which no execution authority was ever
+issued. An admitted or uncertain execution cannot be cleared by a readiness probe.
+
+The API is the sole mission-grant signer. The action worker and planner have
+different signing keys and grant purposes. The evaluation service has database
+access but no model signing keys; it reconciles authorized runs through normal
+deployments and missions. The coordinator holds a device credential and receives
+short-lived mission grants. Model calls bypass the API and database. Remote
+session cleanup happens after the local terminal record is durable, so a stalled
+service cannot delay cancellation reporting.
+
+The development harness runs API, action worker, planner and simulator/coordinator
+as separate local processes; `--serve` also starts the evaluation job process.
+The explicit controlled planner has its own runtime identifier and local placement.
+It makes a deterministic skill selection and does not stand in as evidence of LLM
+inference. The real gateway adapter requires independently captured loaded-model,
+runtime, binary, configuration and implementation hashes. See the
+[planner package](../../../integrations/planner/README.md) for both entrypoints.
+
 ## The existing Jetson model
 
 The historical Jetson installation serves a text LLM through the Convoy gateway.
@@ -90,11 +111,12 @@ bounded parser that rejects extra text and unsupported proposals.
 
 ## Evidence before merging the executable slice
 
-Use a small integration pack with real processes: supported proposal and actual
-physics rollout; unsupported task; malformed/late/wrong-release proposal; planner
-loss before admission and after the local skill begins; cancellation during
-planning; coordinator restart with an accepted proposal; and component mismatch
-at readiness. Keep model-quality cases separate from deterministic fault inputs.
+Use a real-process supported proposal plus actual learned-policy physics rollout.
+Focused contract, HTTP-service and coordinator integration checks cover declined,
+malformed, late and wrong-release proposals; planner loss before admission and
+after the local skill begins; cancellation during planning and stalled session
+I/O; coordinator restart with an accepted proposal; and component mismatch at
+readiness. Keep model-quality cases separate from deterministic fault inputs.
 The report joins both component identities, the planner decision, local action
 history and the final task outcome. Existing single-policy and evaluation
 behavior must remain functional.

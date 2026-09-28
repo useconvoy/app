@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from convoy_contracts.pairing import PAIRED_PROFILE, release_profiles
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
@@ -48,11 +49,17 @@ def logout(request: Request, response: Response, db: DbSession = Depends(get_db)
 def me(p: Principal = Depends(current_principal), db: DbSession = Depends(get_db)):
     inst = installation(db)
     s = get_settings()
+    profiles = release_profiles() if s.simulator else frozenset()
+    if (not s.planner_execution_secret or len(s.planner_execution_secret.encode()) < 32
+            or not s.execution_secret or len(s.execution_secret.encode()) < 32
+            or s.planner_execution_secret == s.execution_secret):
+        profiles = profiles - {PAIRED_PROFILE}
     return {
         "user": user_out(p.user),
         "via": p.via,
         "installation": {
             "simulator": s.simulator,
+            "execution_profiles": sorted(profiles),
             "quarantined_at": iso(inst.quarantined_at),
             "quarantine_reason": inst.quarantine_reason,
             "dispatch_paused_at": iso(inst.dispatch_paused_at),

@@ -87,7 +87,9 @@ def disposable_postgres(env: dict, evidence: dict, output: Path):
 
 def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bool = False,
         manifest: dict | None = None, runtime_factory: str = "convoy_sim.runtimes:scripted",
-        coordinator_module: str = "convoy_sim.managed", policy_kind: str = "scripted", repeat: int = 1) -> dict:
+        coordinator_module: str = "convoy_sim.managed", policy_kind: str = "scripted", repeat: int = 1,
+        planner_command: tuple[str, ...] | None = None, planner_evidence: str | None = None,
+        planner_backend_kind: str | None = None) -> dict:
     if not 1 <= repeat <= 3:
         raise ValueError("repeat must be between one and three")
     output.mkdir(parents=True, exist_ok=False, mode=0o700)
@@ -103,11 +105,27 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
            "CONVOY_EXECUTION_SECRET": secrets.token_urlsafe(48),
            "CONVOY_WORKER_PROBE_TOKEN": secrets.token_urlsafe(48), "CONVOY_LOG_LEVEL": "WARNING"}
     # Explicit local configuration overrides inherited connection settings.
-    for key in ("DATABASE_URL", "CONVOY_TEST_POSTGRES_URL", "CONVOY_SQLITE_WAL", "CONVOY_SEED_SIMULATOR"):
+    for key in ("DATABASE_URL", "CONVOY_TEST_POSTGRES_URL", "CONVOY_SQLITE_WAL", "CONVOY_SEED_SIMULATOR",
+                "CONVOY_PLANNER_EXECUTION_SECRET", "CONVOY_PLANNER_PROBE_TOKEN"):
         env.pop(key, None)
     if manifest is None:
         from convoy_sim.runtimes import reference_manifest
         manifest = reference_manifest()
+    from convoy_contracts.pairing import PAIRED_PROFILE, action_manifest
+    policy = action_manifest(manifest)
+    paired = manifest["profile"] == PAIRED_PROFILE
+    if paired != bool(planner_command):
+        raise ValueError("paired manifest and explicit planner command must be configured together")
+    if paired and faults:
+        raise ValueError("the scripted 500-step fault pack does not qualify the paired visual profile")
+    planner_port, planner_url = None, None
+    if paired:
+        planner_port = free_port()
+        while planner_port in {api_port, worker_port}:
+            planner_port = free_port()
+        planner_url = f"http://127.0.0.1:{planner_port}"
+        env.update(CONVOY_PLANNER_EXECUTION_SECRET=secrets.token_urlsafe(48),
+                   CONVOY_PLANNER_PROBE_TOKEN=secrets.token_urlsafe(48))
     manifest_file = output / "release.json"
     manifest_file.write_text(json.dumps(manifest, indent=2) + "\n")
     processes, logs = [], []
@@ -117,11 +135,23 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
         log = (output / f"{label}.log").open("w")
         logs.append(log)
         child_env = dict(env)
-        if module in {"convoy_worker.cli", "convoy_sim.managed"}:
+        is_planner = planner_command and module == planner_command[0]
+        if module in {"convoy_worker.cli", coordinator_module} or is_planner:
             for key in ("DATABASE_URL", "CONVOY_ADMIN_EMAIL", "CONVOY_ADMIN_PASSWORD", "CONVOY_DATA_DIR"):
                 child_env.pop(key, None)
-        if module == "convoy_sim.managed":
+        if module == coordinator_module or is_planner:
             child_env.pop("CONVOY_EXECUTION_SECRET", None)
+        if module in {"convoy_worker.cli", coordinator_module}:
+            child_env.pop("CONVOY_PLANNER_EXECUTION_SECRET", None)
+        if is_planner:
+            child_env.pop("CONVOY_WORKER_PROBE_TOKEN", None)
+        elif module == "convoy_worker.cli":
+            child_env.pop("CONVOY_PLANNER_PROBE_TOKEN", None)
+        if module == "convoy_server.evaluation_worker":
+            for key in ("CONVOY_ADMIN_EMAIL", "CONVOY_ADMIN_PASSWORD", "CONVOY_EXECUTION_SECRET",
+                        "CONVOY_PLANNER_EXECUTION_SECRET", "CONVOY_WORKER_PROBE_TOKEN",
+                        "CONVOY_PLANNER_PROBE_TOKEN"):
+                child_env.pop(key, None)
         process = subprocess.Popen([sys.executable, "-m", module, *map(str, args)], env=child_env,
                                    stdout=log, stderr=subprocess.STDOUT)
         processes.append(process)
@@ -139,6 +169,12 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
     evidence = {"policy_kind": policy_kind, "physics": "MuJoCo", "execution": "offline lockstep",
                 "database": {"backend": "sqlite", "cleanup": "retained_in_output"},
                 "services": ["management API", "inference worker", "robot coordinator"], "cases": []}
+    if paired:
+        if not planner_evidence or not planner_backend_kind:
+            raise ValueError("paired acceptance must explicitly describe its planner evidence scope")
+        evidence.update(planner_evidence=planner_evidence, planner_backend_kind=planner_backend_kind,
+                        configured_placement=manifest["placement"])
+        evidence["services"].append("planner admission service")
     try:
         source_root = Path(__file__).resolve().parents[2]
         evidence["source_commit"] = subprocess.check_output(
@@ -159,6 +195,9 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
         api_process = start("api", "convoy_server.cli", "serve", "--host", "127.0.0.1", "--port", api_port)
         worker = start("worker", "convoy_worker.cli", "--release", manifest_file,
                        "--factory", runtime_factory, "--port", worker_port)
+        if paired:
+            start("planner", planner_command[0], *planner_command[1:], "--manifest", manifest_file,
+                  "--port", planner_port)
         with httpx.Client(base_url=base, timeout=5) as api:
             health = wait_for(lambda: api.get("/api/health"), lambda response: response.status_code == 200).json()
             if postgres:
@@ -168,6 +207,9 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
                                             schema_revision=health["db"]["schema"]["revision"])
             wait_for(lambda: httpx.get(worker_url + "/health"), lambda response: response.status_code == 200,
                      timeout=120)
+            if paired:
+                wait_for(lambda: httpx.get(planner_url + "/health"), lambda response: response.status_code == 200,
+                         timeout=30)
             response = api.post("/api/v1/auth/login", json={"email": email, "password": password})
             response.raise_for_status()
             api.headers["X-Convoy-Client"] = "web"
@@ -195,7 +237,8 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
 
             def start_coordinator(label):
                 return start(label, coordinator_module, "--data-dir", output / "robot",
-                             "--robot-id", robot["id"], "--worker-url", worker_url)
+                             "--robot-id", robot["id"], "--worker-url", worker_url,
+                             *(["--planner-url", planner_url] if paired else []))
 
             coordinator = start_coordinator("coordinator")
             ready = wait_for(lambda: get(f"/api/v1/deployments/{deployment['id']}"),
@@ -204,13 +247,16 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
             assert get(f"/api/v1/missions?project_id={project['id']}") == [], "deployment started a mission"
 
             if serve:
+                start("evaluations", "convoy_server.evaluation_worker")
                 connection = output / "connection.json"
                 descriptor = os.open(connection, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
                 with os.fdopen(descriptor, "w") as stream:
                     json.dump({"api_url": base, "worker_url": worker_url, "email": email,
                                "password": password, "project_id": project["id"], "robot_id": robot["id"],
                                "release_id": release["id"], "manifest_path": str(manifest_file),
-                               "harness_pid": os.getpid()}, stream)
+                               "harness_pid": os.getpid(), "planner_url": planner_url,
+                               "planner_evidence": planner_evidence,
+                               "planner_backend_kind": planner_backend_kind}, stream)
                 print(f"Ready and idle. Local connection settings: {connection}", flush=True)
                 stopped = threading.Event()
                 signal.signal(signal.SIGTERM, lambda *_: stopped.set())
@@ -224,7 +270,7 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
             def start_mission(seed):
                 key = str(uuid.uuid4())
                 body = {"deployment_id": deployment["id"], "expected_generation": deployment["generation"],
-                        "seed": seed, "ttl_s": min(300, manifest["execution"]["mission_timeout_s"]),}
+                        "seed": seed, "ttl_s": min(300, policy["execution"]["mission_timeout_s"]),}
                 mission = post(f"/api/v1/robots/{robot['id']}/missions", body, key)
                 replay = post(f"/api/v1/robots/{robot['id']}/missions", body, key)
                 assert mission["id"] == replay["id"], "start retry created another mission"
@@ -233,7 +279,7 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
             def finish(mission):
                 result = wait_for(lambda: get(f"/api/v1/missions/{mission['id']}"),
                                   lambda item: item["state"] in {"completed", "failed", "cancelled", "unknown"},
-                                  timeout=min(300, manifest["execution"]["mission_timeout_s"]) + 15)
+                                  timeout=min(300, policy["execution"]["mission_timeout_s"]) + 15)
                 episode = get(f"/api/v1/episodes/{result['episode_id']}") if result.get("episode_id") else None
                 return {"mission": result, "episode": episode}
 

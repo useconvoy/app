@@ -18,12 +18,12 @@ That coordinator checkpoint used a scripted policy and privileged simulator stat
 
 | Area | Current state | Next evidence needed |
 |---|---|---|
-| Console workflow | PR #75 merged; deployment and mission flow verified against actual services | Evaluation, comparison and promotion controls are being integrated |
+| Console workflow | PRs #75 and #82 merged; deployment, evaluation, comparison and promotion verified against actual services | Paired component display and actual paired evaluation |
 | Learned inference | PR #78 merged; actual pretrained SmolVLA camera-policy evidence through managed missions | Extend the qualified task/seed envelope and qualify target compute |
-| Component pairing | Single bounded action-policy profile | Explicit local/remote component manifest, compatible pair activation and timing qualification; no universal plug-and-play claim |
-| Release evaluation | PR #80 merged; immutable suites, leased jobs, comparison and promotion gates qualified locally | Browser flow and broader model/task qualification |
+| Component pairing | Explicit bundle, separate planner authority, durable proposal and bounded local execution implemented on feature branch | Real-process controlled-planner qualification, then live Jetson LLM qualification; no universal plug-and-play claim |
+| Release evaluation | PRs #80 and #82 merged; suites, leased jobs, comparison and promotion gates qualified locally and through the browser | Paired evidence and broader model/task qualification |
 | Durable hosting foundation | PostgreSQL migrations and concurrency checks, restartable evaluation jobs, local execution journal | Full tenant conversion, artifact storage/retention and database restore rehearsal |
-| Provider and hosting | PR #79 merged; local ARM64 service images, internal TLS, persistent PostgreSQL | AWS staging infrastructure review, account/region/budget, provisioned endpoint and hosted acceptance |
+| Provider and hosting | PRs #79 and #81 merged; local service images/TLS/PostgreSQL and reviewed AWS CPU staging configuration | Account/region/budget, provisioned endpoint and hosted acceptance |
 | Networking | Direct HTTP, bounded requests/deadlines, verified TLS; six pipeline fault cases qualified | Wider delay/loss/load matrix and target-site latency measurements |
 | Hardware/second embodiment | Simulation only | Partner adapter, real controller authority/recovery, qualified model/hardware pair |
 
@@ -52,6 +52,12 @@ No paid infrastructure has been provisioned. Local development does not require 
   separate-process acceptance ran four 500-step physics missions across two
   suite executions, recovered after killing the job process without admitting
   another copy of a case, and enforced the promotion gate.
+- Merged PR #81 adds reviewed AWS CPU staging infrastructure and a documented
+  cost model. Validation used local runtime checks and mocked Terraform plans;
+  no cloud resources were created.
+- Merged PR #82 adds evaluation, cancellation, comparison and promotion to the
+  console. Browser acceptance drove real API/job/simulation processes through
+  those actions and a gated mission start.
 - The actual container installation upgraded PostgreSQL from `0001_fleet` to
   `0002_evaluations`, preserved its robot/history, and completed two 500-action
   cases through the separate evaluation service. A subsequent mission used the
