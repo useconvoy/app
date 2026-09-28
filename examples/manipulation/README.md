@@ -34,3 +34,41 @@ The browser runner starts its own web process, signs in, redeploys, runs a real
 500-step episode, checks its task outcome, requests cancellation, verifies mobile
 layout and signs out. It stops its web process afterward. Ordinary CI includes
 this integration, plus the headless management/inference outage scenarios.
+
+## Use a disposable PostgreSQL database
+
+Start the [local PostgreSQL service](../../docs/v1/postgresql-development.md), then
+run from `integrations/simulation`:
+
+```sh
+CONVOY_TEST_POSTGRES_URL='postgresql+psycopg://convoy:convoy-local-only@127.0.0.1:55432/convoy_dev' \
+  uv run --frozen --extra managed python ../../examples/manipulation/pipeline.py \
+  --postgres --faults --output runs/postgres-reference
+```
+
+`--postgres` explicitly opts into the database named by
+`CONVOY_TEST_POSTGRES_URL` as an administrative connection endpoint. That identity
+needs permission to create databases. The harness creates a new random
+`convoy_pipeline_*` database, applies the packaged migration, runs the real API,
+worker and simulator, then drops **only that newly created database** after its
+processes stop. It never migrates, clears or drops the configured endpoint
+database. The flag also works with `--serve`; stopping the interactive stack
+discards its PostgreSQL fleet state.
+
+The six acceptance cases cover a successful task, redeployment and idle restart,
+cancellation after actions, continued local execution during management outage
+and later report replay, stopping actions when inference disappears, and abrupt
+coordinator loss that requires explicit recovery. These use real HTTP and physics
+with the same assertions as the SQLite run. The result identifies the database
+backend, server/schema versions and cleanup outcome without recording the URL or
+database credentials. The existing offline-lockstep/scripted-policy limits apply.
+
+Normal completion, failed assertions and handled interrupts clean up the task
+database. An uncatchable process/host loss or database outage can prevent cleanup;
+`postgres-database.json` records the owned database name for manual recovery.
+The ordinary SQLite mode still retains its database in the output directory;
+neither mode changes the robot's local SQLite execution journal.
+
+PostgreSQL CI runs the ten database-boundary cases, one real database
+ownership/collision/abort check, and this six-case managed pipeline. It uploads
+only `pipeline-result.json`, never the surrounding credential directory.

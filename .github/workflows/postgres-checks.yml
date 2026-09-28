@@ -3,9 +3,9 @@ name: postgres-checks
 on:
   push:
     branches: [v1]
-    paths: ["control-plane/**", "infra/development/postgres.compose.yml", ".github/workflows/postgres-checks.yml"]
+    paths: ["control-plane/**", "integrations/simulation/**", "examples/manipulation/**", "infra/development/postgres.compose.yml", ".github/workflows/postgres-checks.yml"]
   pull_request:
-    paths: ["control-plane/**", "infra/development/postgres.compose.yml", ".github/workflows/postgres-checks.yml"]
+    paths: ["control-plane/**", "integrations/simulation/**", "examples/manipulation/**", "infra/development/postgres.compose.yml", ".github/workflows/postgres-checks.yml"]
 
 permissions:
   contents: read
@@ -43,3 +43,19 @@ jobs:
       - run: uv sync --frozen --all-packages
       - run: uv run --frozen ruff check server agent contracts worker
       - run: uv run --frozen pytest -q server/tests/postgres
+      - run: uv sync --frozen --extra managed
+        working-directory: integrations/simulation
+      - run: uv run --frozen --extra managed ruff check ../../examples/manipulation
+        working-directory: integrations/simulation
+      - run: uv run --frozen --extra managed pytest -q ../../examples/manipulation/test_pipeline_database.py
+        working-directory: integrations/simulation
+      - run: uv run --frozen --extra managed python ../../examples/manipulation/pipeline.py --postgres --faults --output runs/ci-postgres-pipeline
+        working-directory: integrations/simulation
+      # Only the result is shareable; other output contains generated credentials.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: postgres-pipeline-result
+          path: integrations/simulation/runs/ci-postgres-pipeline/pipeline-result.json
+          if-no-files-found: ignore
+          retention-days: 7
