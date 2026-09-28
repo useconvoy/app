@@ -112,7 +112,10 @@ uv run --project integrations/planner --extra owned --frozen \
   --output /private/new-planner-proof
 ```
 
-The image acceptance is being completed for this slice. Its final receipt must
-distinguish real model proposals from deterministic lifecycle fault tests and
-must preserve failed attempts. No cloud, Jetson or physical action-policy claim
-follows from a local planner response.
+The [recorded qualification](../../docs/v1/linux-planner-image.md) passed on
+clean `afe128b`: a real Qwen proposal, signed admission and replay rejection,
+native loss, startup interruption and complete cleanup. It includes an ownership
+fix proved with direct and recovered Linux thread-group regressions. The final
+request took 12.58 seconds within its 30-second budget; this is not a low-latency
+benchmark. Failed attempts remain preserved. No cloud, Jetson or physical
+action-policy claim follows from this local planner response.

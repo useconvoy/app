@@ -145,5 +145,14 @@ DML, denied DDL, private signer materialization and stable claim/reclaim expiry;
 public-only inference admitted a signed action and rejected planner/HMAC grants
 and conflicting configuration, then shut down gracefully. See the
 [qualification](public-key-hosting.md) and [sanitized receipt](../../examples/manipulation/evidence/public-key-hosting.json).
-These are local results. No paid cloud resources were provisioned; Linux Qwen,
-remote planner and Jetson qualification remain outstanding.
+These are local results. No paid cloud resources were provisioned.
+
+The [Linux ARM64 planner slice](linux-planner-image.md) packages the actual Qwen
+runtime independently. Clean `afe128b` passed image inspection, one signed real
+proposal in 12.58 seconds, purpose/replay rejection, native loss, startup
+interruption and complete cleanup. A deterministic Linux regression also proved
+and fixed premature stopped records when a main thread exited before its other
+threads. The final local checks were 85 passed with two Linux-only skips, plus
+all 15 ownership tests on Linux. Hosted CI could not start due to account billing.
+This is planner packaging qualification within a 30-second contract; remote
+HTTPS pairing, cloud/WAN and Jetson qualification remain outstanding.

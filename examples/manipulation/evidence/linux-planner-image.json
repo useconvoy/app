@@ -1,0 +1,357 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "date": "2026-09-28",
+  "qualification_source_commit": "afe128b55e18ee063a580dc24da6de0020a1674d",
+  "pull_request": "https://github.com/useconvoy/app/pull/92",
+  "scope": "local Linux ARM64 CPU planner image; one real fixed-catalog Qwen proposal in the final acceptance",
+  "not_qualified": [
+    "cloud deployment",
+    "WAN timing",
+    "Jetson",
+    "action-policy or physics in this image check",
+    "physical robot",
+    "two-second response target",
+    "concurrency or performance SLA"
+  ],
+  "image": {
+    "local_docker_id": "sha256:21b6b05064cf8a44f02439e64ba34f1368fe379eac4c0e70ecb36afb3e0f3a11",
+    "bytes": 1150143664,
+    "host": {
+      "system": "Linux",
+      "machine": "aarch64"
+    },
+    "python": "3.12.14",
+    "launcher_sha256": "64dc8ba47b403171a10367fbe5db46059afd73850537bf9c1249d03a0bd60a5d",
+    "cpus_limit": 2,
+    "memory_limit_gib": 4
+  },
+  "model": {
+    "name": "Qwen2.5-1.5B-Instruct Q4_K_M",
+    "sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+    "bytes": 1117320736
+  },
+  "native": {
+    "source": {
+      "commit": "5266f24da75dc449bd56cbed7addb9c8e4a6a73e",
+      "dirty": false,
+      "repo": "https://github.com/ggml-org/llama.cpp"
+    },
+    "build_host": {
+      "system": "Linux",
+      "machine": "aarch64",
+      "libc": "glibc 2.36",
+      "cpu_baseline": "armv8-a"
+    },
+    "archive_sha256": "dbf78e4f4289ef73c5bcdb866246e967c2c1af1054071a2286fc9741b0945204",
+    "binary_sha256": "f388de1b3a88d7e97a3a510d7085a6ec945fdf245e3daa2400c2f4ce20d40734",
+    "builder_base": "debian:bookworm-slim@sha256:0c8bbb8e987a035fe1d9704eb2e571b7e9a836e1caa46345290674b45b69e417",
+    "executed_recipe_sha256": {
+      "package_linux_native.py": "6b2e24fb87c3d9ea980c3ca0b53f9afce531ff408ca6e754e08b377c8d503d83",
+      "linux-native.Dockerfile": "c70ba8aeb8a3d01c145419c5968cede2ec4b8b0d1bbf89acdd3fd5ff20184abd"
+    },
+    "network_during_compile": "none",
+    "validation": {
+      "baseline_compile_commands_checked": 343,
+      "help_passed": true,
+      "model_inference_tested": false,
+      "non_system_closure_packaged": true,
+      "version_passed": true,
+      "version": "version: 0.4.0-dev (build 1, commit 5266f24)\nbuilt with GNU 12.2.0 for Linux aarch64",
+      "deterministic_archive_verified": true,
+      "fresh_extraction_version_passed": true
+    },
+    "build_scope_note": "Native receipt predates image inference. Exact executed packaging source is preserved; final helper has a later lint-only change."
+  },
+  "planner": {
+    "runtime": "convoy-llamacpp-text-skill-v1",
+    "artifact_sha256": "6c5539d8592293fd658422422c8c527a36afff91a18f75c267b421e0aa512ee3",
+    "protocol_sha256": "5bfb3115ff1cee4e9bea4399dadb33bd4481c95fd12433372e43f71817fd8afc"
+  },
+  "release_digest": "12e276e1bfc653f650916fa124e07db8af5c5a2d1cd33d2c70e7c9a1e341b5f7",
+  "effective_configuration": {
+    "ctx_size": 2048,
+    "n_predict": 128,
+    "batch_size": 256,
+    "ubatch_size": 128,
+    "parallel": 1,
+    "gpu_layers": 0,
+    "cache_ram_mib": 0,
+    "context_shift": false,
+    "fit": "off",
+    "flash_attn": "auto",
+    "temperature": 0.0,
+    "seed": 42,
+    "health_timeout_s": 120,
+    "request_deadline_s": 30,
+    "queue_depth": 4
+  },
+  "observed_native": {
+    "build_info": "b1-5266f24",
+    "binary_sha256": "f388de1b3a88d7e97a3a510d7085a6ec945fdf245e3daa2400c2f4ce20d40734",
+    "chat_template_sha256": "4e9918361c284a93880606d182d64da6a9fe97cdc1f5c5a78c1c8840444246fc",
+    "backend": "CPU",
+    "gpu_offloaded_layers": null,
+    "gpu_total_layers": null,
+    "n_ctx": null,
+    "total_slots": 1
+  },
+  "cases": {
+    "inspect": {
+      "status": "stopped",
+      "exit_code": 0,
+      "cleanup": {
+        "native_stopped": true,
+        "gateway_closed": true,
+        "gateway_drained": true,
+        "planner_closed": true,
+        "native_marker_removed": true,
+        "listeners_closed": true
+      },
+      "native_stop": {
+        "stopped": true,
+        "method": "owned_process",
+        "seconds": 0.056,
+        "exit_code": 0
+      },
+      "native_record": {
+        "state": "stopped",
+        "result": "verified_exit",
+        "exit_code": null
+      },
+      "container_removed": true,
+      "published_listener_closed": true
+    },
+    "serve": {
+      "status": "stopped",
+      "exit_code": 0,
+      "cleanup": {
+        "native_stopped": true,
+        "gateway_closed": true,
+        "gateway_drained": true,
+        "planner_closed": true,
+        "native_marker_removed": true,
+        "listeners_closed": true
+      },
+      "native_stop": {
+        "stopped": true,
+        "method": "owned_process",
+        "seconds": 0.056,
+        "exit_code": 0
+      },
+      "native_record": {
+        "state": "stopped",
+        "result": "verified_exit",
+        "exit_code": null
+      },
+      "container_removed": true,
+      "published_listener_closed": true,
+      "model_request_count": 1,
+      "http_duration_ms": 12581.572292023338,
+      "plan": {
+        "observation_digest": "6d019f439578b4dedd70c296b4577346d3a9cc646f415b3dfdda27ffc6e6ccc9",
+        "identity": {
+          "robot_id": "image-check",
+          "device_id": "image-check",
+          "mission_id": "image-check",
+          "boot_id": "image-check",
+          "incarnation": "704e6b36a6014f588b4e2bd62b3ece55",
+          "authority_epoch": 1,
+          "release_digest": "12e276e1bfc653f650916fa124e07db8af5c5a2d1cd33d2c70e7c9a1e341b5f7"
+        },
+        "request_id": "3611f5805f4f41c7bcb93c1a6c7b9a5c",
+        "deadline_monotonic_ns": 376053109636500,
+        "observation_id": "qualified-fixed-task",
+        "planner_artifact_sha256": "6c5539d8592293fd658422422c8c527a36afff91a18f75c267b421e0aa512ee3",
+        "planner_incarnation": "837f3a4b7f5e4e4188cae8df660a42f8eb0311d40706bb4fd2ac2adb666b9a1b",
+        "runtime_generation": 1,
+        "decision": {
+          "kind": "skill",
+          "skill_id": "pick_place_puck",
+          "parameters": {}
+        },
+        "planner_duration_ms": 12572.07917300002
+      },
+      "repeat_plan_rejected": true,
+      "action_purpose_rejected": true,
+      "resources": {
+        "memory.peak": "220430336",
+        "memory.max": "4294967296",
+        "cpu.max": "200000 100000"
+      }
+    },
+    "native-loss": {
+      "status": "failed",
+      "exit_code": 1,
+      "cleanup": {
+        "native_stopped": true,
+        "gateway_closed": true,
+        "gateway_drained": true,
+        "planner_closed": true,
+        "native_marker_removed": true,
+        "listeners_closed": true
+      },
+      "native_stop": {
+        "stopped": true,
+        "method": "owned_process",
+        "seconds": 0.003,
+        "exit_code": -9
+      },
+      "native_record": {
+        "state": "stopped",
+        "result": "verified_exit",
+        "exit_code": null
+      },
+      "container_removed": true,
+      "published_listener_closed": true,
+      "native_signal_identity_verified": true,
+      "readiness_failed_after_native_loss": true
+    },
+    "startup-sigterm": {
+      "status": "interrupted",
+      "exit_code": 0,
+      "cleanup": {
+        "native_stopped": true,
+        "gateway_closed": true,
+        "gateway_drained": true,
+        "planner_closed": true,
+        "native_marker_removed": true,
+        "listeners_closed": true
+      },
+      "native_stop": {
+        "stopped": true,
+        "method": "owned_process",
+        "seconds": 0.029,
+        "exit_code": -15
+      },
+      "native_record": {
+        "state": "stopped",
+        "result": "verified_exit",
+        "exit_code": null
+      },
+      "container_removed": true,
+      "published_listener_closed": true,
+      "startup_interruption_exercised": true
+    }
+  },
+  "resource_scope": "Raw cgroup charge for a warmed-cache container; not total model footprint or AWS sizing evidence.",
+  "timing_scope": "One observed request under the 30-second mission-start contract; not a distribution or a two-second qualification.",
+  "checks": {
+    "local_affected_suite": {
+      "passed": 85,
+      "linux_cases_skipped_on_macos": 2
+    },
+    "linux_ownership_suite": {
+      "passed": 15,
+      "includes_new_direct_and_recovered_thread_group_cases": true,
+      "helper_sha256": "50a0069c3f47fbfe06dcfa14aa268ae6fab91d2f8a8a2cf5025e170f0629ce54",
+      "test_sha256": "ca24bca4a165d15126ee9ad56851d992a4bedd12bd26dde0474f06882e19b455"
+    },
+    "ruff": "passed",
+    "diff": "passed",
+    "hosted_ci": {
+      "status": "blocked_before_execution",
+      "checked_source_commit": "afe128b55e18ee063a580dc24da6de0020a1674d",
+      "reason": "GitHub reported recent account payments failed or spending limit needs increase",
+      "planner_job_steps": 0,
+      "planner_check_id": 108882967083
+    }
+  },
+  "whole_process_exit_proof": {
+    "before_fix": {
+      "before_stop": {
+        "leader_status": "zombie",
+        "popen_returncode": null,
+        "listener_open": true
+      },
+      "native_stop": {
+        "stopped": false,
+        "seconds": 0.002,
+        "method": "owned_process",
+        "reason": "child_exit_unverified",
+        "pid": 8
+      },
+      "elapsed_s": 0.002,
+      "after_stop": {
+        "owner_record": "stopped",
+        "popen_returncode": null,
+        "listener_open": true
+      },
+      "cleanup": {
+        "stopped": true,
+        "seconds": 0.001,
+        "method": "owned_process",
+        "exit_code": 0,
+        "pid": null
+      },
+      "listener_closed": true
+    },
+    "after_fix": {
+      "before_stop": {
+        "leader_status": "zombie",
+        "popen_returncode": null,
+        "listener_open": true
+      },
+      "native_stop": {
+        "stopped": true,
+        "seconds": 1.52,
+        "method": "owned_process",
+        "exit_code": 0,
+        "pid": 7
+      },
+      "elapsed_s": 1.52,
+      "after_stop": {
+        "owner_record": "stopped",
+        "popen_returncode": 0,
+        "listener_open": false
+      },
+      "cleanup": {
+        "stopped": true,
+        "seconds": 0.0,
+        "method": "owned_process",
+        "exit_code": null,
+        "pid": null
+      },
+      "listener_closed": true
+    },
+    "original_startup_failure_attribution": "consistent with this confirmed bug, not conclusively established by the original limited diagnostics"
+  },
+  "preserved_attempts": [
+    {
+      "name": "acceptance-01",
+      "success": false,
+      "model_requests": 0,
+      "reason": "harness incorrectly required a GPU offload count; CPU-only runtime reports unavailable"
+    },
+    {
+      "name": "acceptance-02",
+      "success": false,
+      "model_requests": 1,
+      "real_plan_passed": true,
+      "reason": "startup interruption cleanup unresolved"
+    },
+    {
+      "name": "startup-diagnostic-01..06",
+      "startup_passes": 6,
+      "model_requests": 0,
+      "scope": "diagnostics-only repetitions did not establish a fix"
+    },
+    {
+      "name": "ownership-linux-check-01",
+      "tests_executed": 0,
+      "reason": "scratch test-image directory permissions; corrected only in test packaging"
+    }
+  ],
+  "cleanup": {
+    "original_services_count": 8,
+    "original_services_unchanged": true,
+    "temporary_credentials_removed": true,
+    "all_qualification_containers_removed": true
+  },
+  "evidence_sha256": {
+    "acceptance-03/result.json": "a12040708d6674b554aebfbb977cbea014761c07ffaaf417d4dc0b6ae0338f45",
+    "acceptance-03/verify-image-source.py": "5d2aa8dda62ec0dc5e91c979f2e02b9e58700cf42728199c95c476b2e176beed",
+    "ownership-linux-check-02/result.json": "cbf2d29ae5db38f84d0e4a3fbb39d5d2acad970697a7edf49da2b8164fbcb889",
+    "leader-exit-diagnostic-02/lifecycle.json": "86dd78801b6bcf90e1d60009c857f46e9c278916f8ea91efba912a3bdfacc647"
+  }
+}
