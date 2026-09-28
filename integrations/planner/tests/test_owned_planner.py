@@ -236,3 +236,18 @@ def test_serve_needs_planner_verifier_before_asset_loading(signing_keys, monkeyp
     args = SimpleNamespace(mode="serve", manifest=tmp_path / "never-read.json", assets=tmp_path / "no-assets")
     with pytest.raises(ValueError):
         owned.preflight(args)
+
+
+@pytest.mark.parametrize("failure", ["result", "exception"])
+def test_native_cleanup_retains_bounded_failure_reason(lifetime, monkeypatch, failure):
+    def stop(**_):
+        if failure == "exception":
+            raise RuntimeError("private path and credential must never be retained")
+        return {"stopped": False, "method": "owned_process", "reason": "child_exit_unverified",
+                "seconds": 0.25, "pid": 123, "private_detail": "must not appear"}
+    monkeypatch.setattr(lifetime.supervisor, "stop", stop)
+    assert lifetime.close()["native_stopped"] is False
+    expected = ({"stopped": False, "method": "owned_process", "reason": "child_exit_unverified", "seconds": 0.25}
+                if failure == "result" else {"stopped": False, "error_type": "RuntimeError"})
+    assert lifetime.evidence["native_stop"] == expected
+    assert lifetime.failure == "cleanup_unresolved"

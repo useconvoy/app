@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import platform
 import signal
@@ -267,8 +268,23 @@ class OwnedPlanner:
             # Reserve some of the total budget to drain HTTP handlers after native exit.
             native = self.supervisor.stop(deadline=deadline - min(2, self.stop_timeout_s / 4))
             result["native_stopped"] = native.get("stopped") is True
-        except Exception:
-            pass
+            # Keep only bounded supervisor facts, never exception messages,
+            # argv, paths or credentials. A stopped ownership record alone is
+            # weaker than the supervisor's retained-child/reader checks.
+            detail = {"stopped": result["native_stopped"]}
+            for key in ("method", "reason"):
+                value = native.get(key)
+                if isinstance(value, str) and 0 < len(value) <= 128 and all(
+                        char.isascii() and (char.isalnum() or char == "_") for char in value):
+                    detail[key] = value
+            seconds = native.get("seconds")
+            if type(seconds) in (int, float) and math.isfinite(seconds) and 0 <= seconds <= 180:
+                detail["seconds"] = seconds
+            if type(native.get("exit_code")) is int and -(2**31) <= native["exit_code"] < 2**31:
+                detail["exit_code"] = native["exit_code"]
+            self.evidence["native_stop"] = detail
+        except Exception as error:
+            self.evidence["native_stop"] = {"stopped": False, "error_type": type(error).__name__[:128]}
         if closer is not None and closer.ident is not None:
             closer.join(max(0, deadline - time.monotonic()))
         result["gateway_closed"] = (gateway_closed.is_set() and closer is not None
