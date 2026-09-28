@@ -157,17 +157,24 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if res.get("ok") else 1
     if args.cmd == "doctor":
         from .db import JournalModeError, db_status, init_engine, sqlite_attestation
+        from .migrations import SchemaError
 
         try:
             init_engine()
         except JournalModeError as e:
             print(json.dumps({"ok": False, "error": str(e), "sqlite": sqlite_attestation()}, indent=2))
             return 3
+        except SchemaError as e:
+            print(json.dumps({"ok": False, "error": str(e)}, indent=2))
+            return 3
         st = get_settings()
+        database = db_status()
+        if "sqlite_version" in database:
+            database["attestation"] = sqlite_attestation()
         print(
             json.dumps(
                 {
-                    "db": {**db_status(), "attestation": sqlite_attestation()},
+                    "db": database,
                     "data_dir": str(st.data_dir),
                     "simulator": st.simulator,
                     "public_url": st.public_url,

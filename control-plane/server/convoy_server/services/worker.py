@@ -222,6 +222,33 @@ def worker_health(settings: Any) -> dict[str, Any]:
     from datetime import datetime, timezone
 
     from ..migrations import db_file_path
+    from ..postgres import enabled
+
+    if enabled(settings):
+        from sqlalchemy import text
+        from sqlalchemy.exc import SQLAlchemyError
+
+        from ..db import make_engine
+
+        engine = make_engine(settings)
+        try:
+            with engine.connect() as connection:
+                row = connection.execute(
+                    text("SELECT owner, fence, expires_at FROM scheduler_leases WHERE name='scheduler'")
+                ).first()
+            if row is None:
+                return {"ok": False, "backend": "postgresql", "error": "no scheduler lease yet"}
+            return {
+                "ok": row.expires_at > datetime.now(timezone.utc),
+                "backend": "postgresql",
+                "owner": row.owner,
+                "fence": row.fence,
+                "expires_at": row.expires_at.isoformat(),
+            }
+        except SQLAlchemyError:
+            return {"ok": False, "backend": "postgresql", "error": "database health query failed"}
+        finally:
+            engine.dispose()
 
     path = db_file_path(settings)
     if path is None or not path.exists():
