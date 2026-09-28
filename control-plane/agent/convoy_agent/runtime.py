@@ -341,14 +341,17 @@ class RuntimeSupervisor:
             self.evidence = {}
             self._provenance = {}
             model_sha = None
-            if not self.simulate:
+            expected_sha = (spec.get("model", {}).get("file") or {}).get("sha256")
+            # Historical low-level callers may not provide a concrete pin. Preserve
+            # their lifecycle behavior but leave provenance incomplete: the paired
+            # planner refuses it rather than inferring an identity from a filename.
+            if not self.simulate and expected_sha is not None:
                 digest = hashlib.sha256()
                 with model_path.open("rb") as model_source:
                     for block in iter(lambda: model_source.read(1024 * 1024), b""):
                         digest.update(block)
                 model_sha = digest.hexdigest()
-                expected_sha = (spec.get("model", {}).get("file") or {}).get("sha256")
-                if expected_sha is not None and model_sha != expected_sha:
+                if model_sha != expected_sha:
                     raise RuntimeError_("MODEL_DIGEST_MISMATCH", "model bytes differ from pinned launch identity")
             self._reader = None  # evidence and tails come only from THIS launch
             if self.simulate:
