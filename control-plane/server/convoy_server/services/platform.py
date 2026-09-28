@@ -12,11 +12,16 @@ from datetime import timedelta
 from typing import Any
 
 from convoy_contracts.execution import (
-    PROFILES,
     canonical_digest,
     sign_grant,
     validate_identity,
-    validate_manifest,
+)
+from convoy_contracts.pairing import (
+    PAIRED_PROFILE,
+    action_manifest,
+    release_profiles,
+    sign_planner_grant,
+    validate_release_manifest,
 )
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -63,7 +68,7 @@ def device_robot(db: Session, robot_id: str, device: Device) -> Robot:
     robot = db.scalar(select(Robot).where(Robot.id == robot_id, Robot.device_id == device.id))
     if robot is None:
         raise HTTPException(404, "robot not found")
-    if not device.simulated or not get_settings().simulator or robot.profile not in PROFILES:
+    if not device.simulated or not get_settings().simulator or robot.profile not in release_profiles():
         raise HTTPException(409, "M1 execution supports the configured simulator profile only")
     return robot
 
@@ -211,7 +216,7 @@ def create_robot(db: Session, p: Principal, data: dict) -> dict:
     )
     if owned_enrollment is None and p.user.role != "admin":
         raise HTTPException(404, "device not found")
-    if not device.simulated or not get_settings().simulator or data["profile"] not in PROFILES:
+    if not device.simulated or not get_settings().simulator or data["profile"] not in release_profiles():
         raise HTTPException(409, "M1 supports a simulated device and the MetaWorld profile only")
     if db.scalar(select(Robot.id).where(Robot.device_id == device.id)):
         raise HTTPException(409, "device is already attached to a robot")
@@ -232,7 +237,7 @@ def create_application(db: Session, p: Principal, data: dict) -> dict:
 def create_release(db: Session, p: Principal, app_id: str, data: dict) -> dict:
     app = resource_for(db, Application, app_id, p)
     try:
-        manifest = validate_manifest(data["manifest"])
+        manifest = validate_release_manifest(data["manifest"])
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     digest = canonical_digest(manifest)
@@ -269,6 +274,10 @@ def create_deployment(db: Session, p: Principal, data: dict, *, evaluation_id: s
         raise HTTPException(404, "release not found in robot project")
     if release.manifest["profile"] != robot.profile:
         raise HTTPException(409, "release profile does not match robot")
+    if robot.profile == PAIRED_PROFILE and evaluation_id is None:
+        # An evaluation is admitted by the API before its DB-only job creates
+        # this deployment. That trusted internal path must not need signing keys.
+        planner_signing_secret()
     if evaluation_id is None:
         require_promotion(db, release)
     robot.generation += 1
@@ -302,7 +311,7 @@ def create_mission(db: Session, p: Principal, robot_id: str, data: dict, *, eval
     release = db.get(ApplicationRelease, deployment.release_id)
     if evaluation_id is None:
         require_promotion(db, release)
-    ttl = min(data["ttl_s"], release.manifest["execution"]["mission_timeout_s"])
+    ttl = min(data["ttl_s"], action_manifest(release.manifest)["execution"]["mission_timeout_s"])
     row = Mission(
         id=new_id("mis"),
         project_id=robot.project_id,
@@ -328,6 +337,25 @@ def cancel_mission(db: Session, p: Principal, mission_id: str, data: dict) -> di
     return mission_out(row)
 
 
+def expire_unclaimed_mission(db: Session, mission: Mission | None) -> bool:
+    """Called under write_txn: expiry may settle only authority never granted."""
+    if (
+        mission is None
+        or mission.state != "requested"
+        or mission.identity is not None
+        or mission.execution_started
+        or aware(mission.expires_at) > utcnow()
+    ):
+        return False
+    finish(db, mission, {
+        "state": "failed",
+        "identity": None,
+        "detail": "authorization expired before claim",
+        "summary": {"reason": "authorization_expired"},
+    })
+    return True
+
+
 def desired(db: Session, robot: Robot) -> dict:
     from .evaluations import active_for_robot
 
@@ -337,6 +365,9 @@ def desired(db: Session, robot: Robot) -> dict:
     mission = db.scalar(
         select(Mission).where(Mission.robot_id == robot.id).order_by(Mission.created_at.desc())
     )
+    # Polling must release an expired, never-claimed request even when component
+    # readiness is blocked and the coordinator cannot reach the claim endpoint.
+    expire_unclaimed_mission(db, mission)
     deployed = None
     if deployment:
         deployed = deployment_out(deployment)
@@ -360,10 +391,19 @@ def report_deployment(db: Session, robot: Robot, deployment_id: str, data: dict)
         or data["release_digest"] != release.digest
     ):
         raise HTTPException(409, "stale deployment generation or release digest")
-    if data["state"] == "ready" and unresolved_mission(db, robot):
+    pending = unresolved_mission(db, robot)
+    if data["state"] == "ready" and pending:
         if row.state == "ready" and row.detail == data["detail"]:
             return deployment_out(row)
-        raise HTTPException(409, "new ready acknowledgement requires an idle robot")
+        if not (
+            pending.state == "requested"
+            and pending.identity is None
+            and not pending.execution_started
+            and pending.deployment_id == row.id
+            and pending.generation == row.generation
+            and pending.release_digest == release.digest
+        ):
+            raise HTTPException(409, "new ready acknowledgement requires an idle or unclaimed queued robot")
     row.state = data["state"]
     row.detail = data["detail"]
     row.observed_at = utcnow()
@@ -404,17 +444,7 @@ def claim(db: Session, robot: Robot, device: Device, mission_id: str, data: dict
     if mission.state in TERMINAL or mission.state == "cancel_requested":
         raise HTTPException(409, "mission is terminal or cancellation was requested")
     if aware(mission.expires_at) <= utcnow():
-        if mission.state == "requested":
-            finish(
-                db,
-                mission,
-                {
-                    "state": "failed",
-                    "identity": None,
-                    "detail": "authorization expired before claim",
-                    "summary": {"reason": "authorization_expired"},
-                },
-            )
+        if expire_unclaimed_mission(db, mission):
             return {"expired": True}
         raise HTTPException(
             410, "mission authorization expired; reconcile local execution and report outcome"
@@ -442,17 +472,38 @@ def claim(db: Session, robot: Robot, device: Device, mission_id: str, data: dict
     if mission.identity is not None:
         if mission.identity != identity or mission.state == "unknown":
             raise HTTPException(409, "mission already claimed; explicit execution recovery is required")
-        return {"mission": mission_out(mission), "identity": identity, "grant": mission.grant}
+        return claim_out(mission, release)
     if mission.state != "requested":
         raise HTTPException(409, "mission cannot be claimed in its current state")
     secret = get_settings().execution_secret
     if not secret or len(secret.encode()) < 32:
         raise HTTPException(503, "execution signing is not configured")
+    if release.manifest["profile"] == PAIRED_PROFILE:
+        planner_signing_secret()
     mission.grant = sign_grant(identity, secret, aware(mission.expires_at).timestamp())
     mission.identity = identity
     mission.state = "starting"
     mission.updated_at = utcnow()
-    return {"mission": mission_out(mission), "identity": identity, "grant": mission.grant}
+    return claim_out(mission, release)
+
+
+def planner_signing_secret() -> str:
+    settings = get_settings()
+    if not settings.execution_secret or len(settings.execution_secret.encode()) < 32:
+        raise HTTPException(503, "execution signing is not configured")
+    secret = settings.planner_execution_secret
+    if not secret or len(secret.encode()) < 32 or secret == settings.execution_secret:
+        raise HTTPException(503, "distinct planner execution signing is not configured")
+    return secret
+
+
+def claim_out(mission: Mission, release: ApplicationRelease) -> dict:
+    result = {"mission": mission_out(mission), "identity": mission.identity, "grant": mission.grant}
+    if release.manifest["profile"] == PAIRED_PROFILE:
+        result["planner_grant"] = sign_planner_grant(
+            mission.identity, planner_signing_secret(), aware(mission.expires_at).timestamp(),
+        )
+    return result
 
 
 def report_mission(db: Session, robot: Robot, mission_id: str, data: dict) -> dict:

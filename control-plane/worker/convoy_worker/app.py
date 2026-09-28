@@ -11,11 +11,11 @@ from convoy_contracts.execution import (
     VISUAL_PROFILE,
     canonical_digest,
     validate_identity,
-    validate_manifest,
     validate_request,
     validate_result,
     verify_grant,
 )
+from convoy_contracts.pairing import action_manifest, validate_release_manifest
 from fastapi import FastAPI, Header, HTTPException, Request
 
 from .sessions import Sessions
@@ -29,14 +29,15 @@ class Runtime(Protocol):
 
 
 def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str, probe_token: str) -> FastAPI:
-    validate_manifest(manifest)
+    validate_release_manifest(manifest)
+    policy_manifest = action_manifest(manifest)
     if len(execution_secret.encode()) < 32 or len(probe_token) < 32:
         raise ValueError("configure distinct execution and probe secrets of at least 32 characters")
     if secrets.compare_digest(execution_secret, probe_token):
         raise ValueError("execution and probe secrets must be distinct")
-    if manifest["policy"] != {"runtime": runtime.runtime, "artifact_sha256": runtime.artifact_sha256}:
+    if policy_manifest["policy"] != {"runtime": runtime.runtime, "artifact_sha256": runtime.artifact_sha256}:
         raise ValueError("loaded runtime/artifact does not match the release manifest")
-    visual = manifest["profile"] == VISUAL_PROFILE
+    visual = policy_manifest["profile"] == VISUAL_PROFILE
     if visual and (getattr(runtime, "profile", None) != VISUAL_PROFILE or
                    not callable(getattr(runtime, "reset_session", None))):
         raise ValueError("visual runtime must declare its profile and implement per-mission reset")
@@ -80,7 +81,7 @@ def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str, probe
             raise HTTPException(401, str(error)) from error
         try:
             if decision:
-                validate_request(body, manifest["profile"])
+                validate_request(body, policy_manifest["profile"])
             else:
                 if set(body) != {"identity"}:
                     raise ValueError("session requires exactly identity")
@@ -132,7 +133,7 @@ def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str, probe
     @app.post("/v1/decisions")
     def decision(body: dict, authorization: str = Header(default="")):
         grant = authorize(body, authorization, decision=True)
-        if body["budget_ms"] > manifest["execution"]["decision_timeout_ms"]:
+        if body["budget_ms"] > policy_manifest["execution"]["decision_timeout_ms"]:
             raise HTTPException(422, "budget exceeds release limit")
         if not admitted.acquire(blocking=False):
             raise HTTPException(429, "worker busy; no queued decisions", headers={"Retry-After": "1"})
@@ -141,7 +142,7 @@ def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str, probe
         try:
             grant = recheck_grant(authorization)
             if visual:
-                session = sessions.reserve(grant, body, manifest["execution"]["max_steps"])
+                session = sessions.reserve(grant, body, policy_manifest["execution"]["max_steps"])
             action = runtime.get_action(body["observation"])
             duration_ms = (time.monotonic() - started) * 1000
             # This is a worker-local admission bound, never a substitute for the

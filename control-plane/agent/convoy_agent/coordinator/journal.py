@@ -43,6 +43,11 @@ class ExecutionJournal:
                     result_json TEXT NOT NULL, state TEXT NOT NULL,
                     observation_json TEXT, PRIMARY KEY(mission_id, sequence)
                 );
+                CREATE TABLE IF NOT EXISTS plans (
+                    mission_id TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE,
+                    request_json TEXT NOT NULL, result_json TEXT,
+                    state TEXT NOT NULL
+                );
             """)
             with self.db:
                 binding = encode({"robot_id": robot_id, "device_id": device_id})
@@ -133,6 +138,21 @@ class ExecutionJournal:
                 (request["identity"]["mission_id"], request["sequence"], request["request_id"],
                  encode(request), encode(result)),
             )
+
+    def request_plan(self, request: dict) -> None:
+        with self.db:
+            self.db.execute("INSERT INTO plans VALUES (?, ?, ?, NULL, 'requested')", (
+                request["identity"]["mission_id"], request["request_id"], encode(request),
+            ))
+
+    def record_plan(self, request: dict, result: dict, *, accepted: bool) -> None:
+        with self.db:
+            changed = self.db.execute(
+                "UPDATE plans SET result_json=?, state=? WHERE request_id=? AND request_json=? AND state='requested'",
+                (encode(result), "accepted" if accepted else "declined", request["request_id"], encode(request)),
+            )
+            if changed.rowcount != 1:
+                raise ValueError("planner decision does not match an outstanding durable request")
 
     def command_outcome(self, request: dict, state: str, observation: dict | None = None) -> None:
         with self.db:

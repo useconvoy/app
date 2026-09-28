@@ -268,7 +268,9 @@ def list_episodes(mission_id: Id, p: PrincipalRead, db: Database):
 
 @router.get("/api/agent/v1/robots/{robot_id}/desired")
 def desired(robot_id: str, device: DeviceIdentity, db: Database):
-    return service.desired(db, service.device_robot(db, robot_id, device))
+    # Reconciliation may expire an unclaimed request. Serialize it with claim and
+    # revalidate the admitted device before making that durable state transition.
+    return _device_write(db, device, robot_id, lambda robot: service.desired(db, robot))
 
 
 def _device_write(db: Session, device: Device, robot_id: str, action):

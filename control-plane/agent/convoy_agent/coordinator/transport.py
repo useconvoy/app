@@ -71,3 +71,8 @@ class WorkerHTTP(JsonHTTP):
 
     def decide(self, request: dict, grant: str) -> dict:
         return self.call("POST", "/v1/decisions", request, token=grant, timeout_s=request["budget_ms"] / 1000)
+
+
+class PlannerHTTP(WorkerHTTP):
+    def propose(self, request: dict, grant: str) -> dict:
+        return self.call("POST", "/v1/plans", request, token=grant, timeout_s=request["budget_ms"] / 1000)

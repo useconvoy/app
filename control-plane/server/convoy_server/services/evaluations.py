@@ -12,6 +12,12 @@ from datetime import timedelta
 from statistics import median
 
 from convoy_contracts.execution import PROFILE, canonical_digest
+from convoy_contracts.pairing import (
+    PAIRED_PROFILE,
+    action_manifest,
+    evaluation_contract,
+    validate_plan_result,
+)
 from fastapi import HTTPException
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -35,7 +41,7 @@ LEASE_SECONDS = 15
 
 
 def contract(manifest: dict) -> dict:
-    return {key: value for key, value in manifest.items() if key != "policy"}
+    return evaluation_contract(manifest)
 
 
 def suite_out(row: EvaluationSuite) -> dict:
@@ -152,10 +158,14 @@ def create_run(db: Session, p: Principal, data: dict) -> dict:
         raise HTTPException(404, "release or robot not found in suite application/project")
     if contract(release.manifest) != suite.spec["contract"] or robot.profile != release.manifest["profile"]:
         raise HTTPException(409, "candidate interface, environment or execution envelope differs from suite")
+    if release.manifest["profile"] == PAIRED_PROFILE:
+        # Only the API admits this run and issues later mission grants. The
+        # separate evaluation job needs database access, never either signer.
+        platform.planner_signing_secret()
     require_available(db, robot.id)
     if platform.unresolved_mission(db, robot):
         raise HTTPException(409, "robot has an active or unresolved mission")
-    ttl = min(300, release.manifest["execution"]["mission_timeout_s"])
+    ttl = min(300, action_manifest(release.manifest)["execution"]["mission_timeout_s"])
     row = EvaluationRun(
         id=new_id("eva"),
         project_id=suite.project_id,
@@ -253,6 +263,7 @@ def compare(db: Session, p: Principal, run_id: str, baseline_id: str) -> dict:
 def finish_run(db: Session, row: EvaluationRun, state: str, detail: str) -> None:
     suite = db.get(EvaluationSuite, row.suite_id)
     release = db.get(ApplicationRelease, row.release_id)
+    policy = action_manifest(release.manifest)
     cases = []
     durations = []
     for case in cases_for(db, row.id):
@@ -260,17 +271,33 @@ def finish_run(db: Session, row: EvaluationRun, state: str, detail: str) -> None
         summary = episode.summary if episode else {}
         steps = summary.get("steps")
         duration = summary.get("wall_duration_s")
-        maximum = release.manifest["execution"]["max_steps"]
+        maximum = policy["execution"]["max_steps"]
+        planner_valid = True
+        if release.manifest["profile"] == PAIRED_PROFILE:
+            planner_valid = False
+            try:
+                proposal = validate_plan_result(summary.get("planner_result"))
+                planner_valid = (
+                    summary.get("planner_accepted") is True
+                    and proposal["identity"] == episode.identity
+                    and proposal["planner_artifact_sha256"] == release.manifest["planner"]["artifact_sha256"]
+                    and proposal["decision"] == {
+                        "kind": "skill", "skill_id": release.manifest["task"]["skill_id"], "parameters": {},
+                    }
+                )
+            except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
+                pass
         valid = (
             episode is not None
             and episode.release_digest == release.digest
             and type(summary.get("seed")) is int
             and summary["seed"] == case.seed
             and summary.get("execution_mode") == "lockstep_offline"
-            and summary.get("policy_runtime") == release.manifest["policy"]["runtime"]
+            and summary.get("policy_runtime") == policy["policy"]["runtime"]
+            and planner_valid
             and type(steps) is int
             and 1 <= steps <= maximum
-            and (release.manifest["profile"] != PROFILE or steps == maximum)
+            and (policy["profile"] != PROFILE or steps == maximum)
             and type(duration) in (int, float)
             and 0 <= duration <= 86400
             and math.isfinite(duration)
@@ -304,8 +331,10 @@ def finish_run(db: Session, row: EvaluationRun, state: str, detail: str) -> None
         "cases": cases,
         "median_wall_s": median(durations) if durations else None,
         "scope": suite.spec["scope"],
-        "policy": release.manifest["policy"],
+        "policy": policy["policy"],
     }
+    if release.manifest["profile"] == PAIRED_PROFILE:
+        row.report = {**row.report, "planner": release.manifest["planner"]}
     row.lease_owner = row.lease_until = None
     row.updated_at = utcnow()
     audit(db, None, "evaluation.finished", row.id, state=state, passed=row.report["passed"])
@@ -440,7 +469,7 @@ def step_job(run_id: str, owner: str, epoch: int) -> bool:
                 "deployment_id": deployment.id,
                 "expected_generation": deployment.generation,
                 "seed": current.seed,
-                "ttl_s": min(300, release.manifest["execution"]["mission_timeout_s"]),
+                "ttl_s": min(300, action_manifest(release.manifest)["execution"]["mission_timeout_s"]),
             },
             evaluation_id=row.id,
         )

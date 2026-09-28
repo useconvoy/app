@@ -15,6 +15,14 @@ from convoy_contracts.execution import (
     canonical_digest,
     sign_grant,
 )
+from convoy_contracts.pairing import (
+    CATALOG_SHA256,
+    PAIRED_PROFILE,
+    PLANNER_PROTOCOL_SHA256,
+    PLANNER_RUNTIME,
+    SKILL_ID,
+    sign_planner_grant,
+)
 from convoy_worker.app import create_app
 from convoy_worker.sessions import Sessions
 from fastapi import HTTPException
@@ -66,6 +74,36 @@ class Runtime:
 
 def client(runtime):
     return TestClient(create_app(MANIFEST, runtime, execution_secret=SECRET, probe_token=PROBE))
+
+
+def test_paired_worker_executes_child_policy_only_with_complete_bundle_authority():
+    bundle = {"schema_version": 2, "profile": PAIRED_PROFILE, "action_manifest": MANIFEST,
+              "planner": {"runtime": PLANNER_RUNTIME, "artifact_sha256": "b" * 64,
+                          "protocol_sha256": PLANNER_PROTOCOL_SHA256},
+              "task": {"instruction": VISUAL_INSTRUCTION, "skill_id": SKILL_ID},
+              "catalog_sha256": CATALOG_SHA256, "planning": {"timeout_ms": 1000},
+              "placement": {"policy": "development-local-cpu", "planner": "development-jetson-lan"}}
+    runtime = Runtime()
+    with TestClient(create_app(bundle, runtime, execution_secret=SECRET, probe_token=PROBE)) as api:
+        digest = canonical_digest(bundle)
+        probe_auth = {"Authorization": "Bearer " + PROBE}
+        response = api.post("/v1/probe", json={"release_digest": digest, "profile": PAIRED_PROFILE},
+                            headers=probe_auth)
+        assert response.status_code == 200
+        assert response.json()["artifact_sha256"] == MANIFEST["policy"]["artifact_sha256"]
+        assert api.post("/v1/probe", json={"release_digest": canonical_digest(MANIFEST),
+                                         "profile": VISUAL_PROFILE}, headers=probe_auth).status_code == 409
+        child = identity()
+        assert api.post("/v1/sessions/start", json={"identity": child}, headers=headers(child)).status_code == 409
+        paired = {**child, "release_digest": digest}
+        planner_auth = {"Authorization": "Bearer " + sign_planner_grant(paired, SECRET, time.time() + 60)}
+        assert api.post("/v1/sessions/start", json={"identity": paired}, headers=planner_auth).status_code == 401
+        assert runtime.resets == []
+        auth = headers(paired)
+        assert api.post("/v1/sessions/start", json={"identity": paired}, headers=auth).status_code == 200
+        action = api.post("/v1/decisions", json=request(paired), headers=auth)
+        assert action.status_code == 200 and action.json()["identity"] == paired
+        assert runtime.resets == [paired] and runtime.calls == 1
 
 
 def test_each_mission_resets_once_and_duplicate_or_changed_observation_never_reuses_actions():
