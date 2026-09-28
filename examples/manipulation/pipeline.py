@@ -1,8 +1,9 @@
 """Exercise the real API, inference worker and robot coordinator as separate processes.
 
-Run in integrations/simulation with its `managed` extra. All services bind only
-loopback, use generated credentials and are stopped on exit. Retains local state
-and evidence in a fresh private output directory. This uses a SCRIPTED policy.
+Run in integrations/simulation with its `managed` extra. Owned services bind only
+loopback and stop on exit. An explicit external planner remains owned by its
+caller and requires existing Ed25519 authority. Retains local state and evidence
+in a fresh private directory. The default policy is SCRIPTED.
 """
 
 from __future__ import annotations
@@ -24,6 +25,48 @@ from pathlib import Path
 
 import httpx
 from convoy_agent.agent import enroll
+from convoy_agent.coordinator.transport import PlannerHTTP
+
+EXECUTION_ENV = {
+    "CONVOY_EXECUTION_SECRET", "CONVOY_PLANNER_EXECUTION_SECRET",
+    "CONVOY_EXECUTION_SIGNING_KEYS_FILE", "CONVOY_EXECUTION_SIGNING_JSON",
+    "CONVOY_ACTION_VERIFICATION_KEYS_FILE", "CONVOY_ACTION_VERIFICATION_JSON",
+    "CONVOY_PLANNER_VERIFICATION_KEYS_FILE", "CONVOY_PLANNER_VERIFICATION_JSON",
+}
+PROBE_ENV = {"CONVOY_WORKER_PROBE_TOKEN", "CONVOY_PLANNER_PROBE_TOKEN"}
+
+
+def process_environment(env: dict, *, role: str) -> dict:
+    """Pass only the execution authority used by this owned service."""
+    allowed = {
+        "api": {"CONVOY_EXECUTION_SIGNING_KEYS_FILE", "CONVOY_EXECUTION_SECRET", "CONVOY_PLANNER_EXECUTION_SECRET"},
+        "worker": {"CONVOY_ACTION_VERIFICATION_KEYS_FILE", "CONVOY_EXECUTION_SECRET", "CONVOY_WORKER_PROBE_TOKEN"},
+        "planner": {"CONVOY_PLANNER_VERIFICATION_KEYS_FILE", "CONVOY_PLANNER_EXECUTION_SECRET", "CONVOY_PLANNER_PROBE_TOKEN"},
+        "coordinator": PROBE_ENV,
+        "jobs": set(),
+    }[role]
+    result = {key: value for key, value in env.items() if key not in (EXECUTION_ENV | PROBE_ENV) - allowed}
+    if role in {"worker", "planner", "coordinator"}:
+        for key in ("DATABASE_URL", "CONVOY_ADMIN_EMAIL", "CONVOY_ADMIN_PASSWORD", "CONVOY_DATA_DIR"):
+            result.pop(key, None)
+    elif role == "jobs":
+        result.pop("CONVOY_ADMIN_EMAIL", None)
+        result.pop("CONVOY_ADMIN_PASSWORD", None)
+    return result
+
+
+def probe_external_planner(client: PlannerHTTP, manifest: dict) -> dict:
+    from convoy_contracts.execution import canonical_digest
+    from convoy_contracts.pairing import validate_planner_identity
+
+    reply = client.probe(canonical_digest(manifest), manifest["profile"])
+    if (reply.get("ready") is not True or reply.get("release_digest") != canonical_digest(manifest)
+            or reply.get("profile") != manifest["profile"] or reply.get("runtime") != manifest["planner"]["runtime"]
+            or reply.get("planner_artifact_sha256") != manifest["planner"]["artifact_sha256"]):
+        raise ValueError("external planner readiness differs from the requested release")
+    return validate_planner_identity({key: reply.get(key) for key in (
+        "planner_artifact_sha256", "planner_incarnation", "runtime_generation",
+    )})
 
 
 def free_port() -> int:
@@ -89,9 +132,42 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
         manifest: dict | None = None, runtime_factory: str = "convoy_sim.runtimes:scripted",
         coordinator_module: str = "convoy_sim.managed", policy_kind: str = "scripted", repeat: int = 1,
         planner_command: tuple[str, ...] | None = None, planner_evidence: str | None = None,
-        planner_backend_kind: str | None = None) -> dict:
+        planner_backend_kind: str | None = None, external_planner_url: str | None = None,
+        planner_ca_file: Path | None = None, planner_probe_token: str | None = None,
+        execution_signing_keys_file: Path | None = None) -> dict:
     if not 1 <= repeat <= 3:
         raise ValueError("repeat must be between one and three")
+    if manifest is None:
+        from convoy_sim.runtimes import reference_manifest
+        manifest = reference_manifest()
+    from convoy_contracts.pairing import PAIRED_PROFILE, action_manifest
+    policy = action_manifest(manifest)
+    paired = manifest["profile"] == PAIRED_PROFILE
+    external = external_planner_url is not None
+    if (paired != (bool(planner_command) or external)) or (planner_command and external):
+        raise ValueError("paired releases require exactly one owned planner command or external planner endpoint")
+    if paired and faults:
+        raise ValueError("the scripted 500-step fault pack does not qualify the paired visual profile")
+    if paired and (not planner_evidence or not planner_backend_kind):
+        raise ValueError("paired acceptance must explicitly describe its planner evidence scope")
+    if not external and (planner_ca_file is not None or planner_probe_token is not None):
+        raise ValueError("explicit planner trust and probe settings require an external endpoint")
+    external_client = None
+    if external:
+        if (execution_signing_keys_file is None or not isinstance(planner_probe_token, str)
+                or len(planner_probe_token) < 32):
+            raise ValueError("external planner requires existing signing authority and a planner probe credential")
+        external_client = PlannerHTTP(external_planner_url, planner_probe_token, ca_file=planner_ca_file)
+        if planner_ca_file is not None:
+            planner_ca_file = Path(planner_ca_file).absolute()
+    documents = {}
+    if execution_signing_keys_file is not None:
+        from convoy_contracts.grants import SigningKeys
+
+        execution_signing_keys_file = Path(execution_signing_keys_file).absolute()
+        signer = SigningKeys(execution_signing_keys_file)
+        purposes = ("action", "planner") if planner_command else ("action",)
+        documents = {purpose: signer.verification_document(purpose) for purpose in purposes}
     output.mkdir(parents=True, exist_ok=False, mode=0o700)
     os.chmod(output, 0o700)
     api_port, worker_port = free_port(), free_port()
@@ -102,30 +178,33 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
     env = {**os.environ, "CONVOY_DATA_DIR": str(output / "server"), "CONVOY_SIMULATOR": "1",
            "CONVOY_SCHEDULER_INPROCESS": "0", "CONVOY_ADMIN_EMAIL": email,
            "CONVOY_ADMIN_PASSWORD": password, "CONVOY_PUBLIC_URL": base,
-           "CONVOY_EXECUTION_SECRET": secrets.token_urlsafe(48),
            "CONVOY_WORKER_PROBE_TOKEN": secrets.token_urlsafe(48), "CONVOY_LOG_LEVEL": "WARNING"}
     # Explicit local configuration overrides inherited connection settings.
     for key in ("DATABASE_URL", "CONVOY_TEST_POSTGRES_URL", "CONVOY_SQLITE_WAL", "CONVOY_SEED_SIMULATOR",
-                "CONVOY_PLANNER_EXECUTION_SECRET", "CONVOY_PLANNER_PROBE_TOKEN"):
+                "CONVOY_PLANNER_PROBE_TOKEN", *EXECUTION_ENV):
         env.pop(key, None)
-    if manifest is None:
-        from convoy_sim.runtimes import reference_manifest
-        manifest = reference_manifest()
-    from convoy_contracts.pairing import PAIRED_PROFILE, action_manifest
-    policy = action_manifest(manifest)
-    paired = manifest["profile"] == PAIRED_PROFILE
-    if paired != bool(planner_command):
-        raise ValueError("paired manifest and explicit planner command must be configured together")
-    if paired and faults:
-        raise ValueError("the scripted 500-step fault pack does not qualify the paired visual profile")
-    planner_port, planner_url = None, None
-    if paired:
+    if execution_signing_keys_file is not None:
+        env["CONVOY_EXECUTION_SIGNING_KEYS_FILE"] = str(execution_signing_keys_file)
+        public = output / "verification"
+        public.mkdir(mode=0o700)
+        for purpose, document in documents.items():
+            path = public / (purpose + ".json")
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w") as stream:
+                json.dump(document, stream)
+            env[f"CONVOY_{purpose.upper()}_VERIFICATION_KEYS_FILE"] = str(path.absolute())
+    else:
+        env["CONVOY_EXECUTION_SECRET"] = secrets.token_urlsafe(48)
+        if paired:
+            env["CONVOY_PLANNER_EXECUTION_SECRET"] = secrets.token_urlsafe(48)
+    planner_port, planner_url = None, external_planner_url
+    if planner_command:
         planner_port = free_port()
         while planner_port in {api_port, worker_port}:
             planner_port = free_port()
         planner_url = f"http://127.0.0.1:{planner_port}"
-        env.update(CONVOY_PLANNER_EXECUTION_SECRET=secrets.token_urlsafe(48),
-                   CONVOY_PLANNER_PROBE_TOKEN=secrets.token_urlsafe(48))
+    if paired:
+        env["CONVOY_PLANNER_PROBE_TOKEN"] = planner_probe_token if external else secrets.token_urlsafe(48)
     manifest_file = output / "release.json"
     manifest_file.write_text(json.dumps(manifest, indent=2) + "\n")
     processes, logs = [], []
@@ -134,24 +213,11 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
     def start(label, module, *args):
         log = (output / f"{label}.log").open("w")
         logs.append(log)
-        child_env = dict(env)
         is_planner = planner_command and module == planner_command[0]
-        if module in {"convoy_worker.cli", coordinator_module} or is_planner:
-            for key in ("DATABASE_URL", "CONVOY_ADMIN_EMAIL", "CONVOY_ADMIN_PASSWORD", "CONVOY_DATA_DIR"):
-                child_env.pop(key, None)
-        if module == coordinator_module or is_planner:
-            child_env.pop("CONVOY_EXECUTION_SECRET", None)
-        if module in {"convoy_worker.cli", coordinator_module}:
-            child_env.pop("CONVOY_PLANNER_EXECUTION_SECRET", None)
-        if is_planner:
-            child_env.pop("CONVOY_WORKER_PROBE_TOKEN", None)
-        elif module == "convoy_worker.cli":
-            child_env.pop("CONVOY_PLANNER_PROBE_TOKEN", None)
-        if module == "convoy_server.evaluation_worker":
-            for key in ("CONVOY_ADMIN_EMAIL", "CONVOY_ADMIN_PASSWORD", "CONVOY_EXECUTION_SECRET",
-                        "CONVOY_PLANNER_EXECUTION_SECRET", "CONVOY_WORKER_PROBE_TOKEN",
-                        "CONVOY_PLANNER_PROBE_TOKEN"):
-                child_env.pop(key, None)
+        role = ("planner" if is_planner else "worker" if module == "convoy_worker.cli"
+                else "coordinator" if module == coordinator_module
+                else "api" if module == "convoy_server.cli" and args[0] == "serve" else "jobs")
+        child_env = process_environment(env, role=role)
         process = subprocess.Popen([sys.executable, "-m", module, *map(str, args)], env=child_env,
                                    stdout=log, stderr=subprocess.STDOUT)
         processes.append(process)
@@ -170,11 +236,10 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
                 "database": {"backend": "sqlite", "cleanup": "retained_in_output"},
                 "services": ["management API", "inference worker", "robot coordinator"], "cases": []}
     if paired:
-        if not planner_evidence or not planner_backend_kind:
-            raise ValueError("paired acceptance must explicitly describe its planner evidence scope")
         evidence.update(planner_evidence=planner_evidence, planner_backend_kind=planner_backend_kind,
-                        configured_placement=manifest["placement"])
+                        configured_placement=manifest["placement"], planner_ownership="external" if external else "harness")
         evidence["services"].append("planner admission service")
+    evidence["execution_authority"] = "ed25519" if execution_signing_keys_file is not None else "development-hmac"
     try:
         source_root = Path(__file__).resolve().parents[2]
         evidence["source_commit"] = subprocess.check_output(
@@ -186,6 +251,8 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
     except (OSError, subprocess.SubprocessError):
         evidence["source_commit"] = None
     try:
+        if external_client is not None:
+            evidence["external_planner_probe_before_deployment"] = probe_external_planner(external_client, manifest)
         if postgres:
             database_resources.enter_context(disposable_postgres(env, evidence, output))
             migration = start("migration", "convoy_server.cli", "migrate")
@@ -195,7 +262,7 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
         api_process = start("api", "convoy_server.cli", "serve", "--host", "127.0.0.1", "--port", api_port)
         worker = start("worker", "convoy_worker.cli", "--release", manifest_file,
                        "--factory", runtime_factory, "--port", worker_port)
-        if paired:
+        if planner_command:
             start("planner", planner_command[0], *planner_command[1:], "--manifest", manifest_file,
                   "--port", planner_port)
         with httpx.Client(base_url=base, timeout=5) as api:
@@ -207,7 +274,7 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
                                             schema_revision=health["db"]["schema"]["revision"])
             wait_for(lambda: httpx.get(worker_url + "/health"), lambda response: response.status_code == 200,
                      timeout=120)
-            if paired:
+            if planner_command:
                 wait_for(lambda: httpx.get(planner_url + "/health"), lambda response: response.status_code == 200,
                          timeout=30)
             response = api.post("/api/v1/auth/login", json={"email": email, "password": password})
@@ -238,7 +305,8 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
             def start_coordinator(label):
                 return start(label, coordinator_module, "--data-dir", output / "robot",
                              "--robot-id", robot["id"], "--worker-url", worker_url,
-                             *(["--planner-url", planner_url] if paired else []))
+                             *(["--planner-url", planner_url] if paired else []),
+                             *(["--planner-ca-file", planner_ca_file] if planner_ca_file is not None else []))
 
             coordinator = start_coordinator("coordinator")
             ready = wait_for(lambda: get(f"/api/v1/deployments/{deployment['id']}"),
@@ -255,6 +323,7 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
                                "password": password, "project_id": project["id"], "robot_id": robot["id"],
                                "release_id": release["id"], "manifest_path": str(manifest_file),
                                "harness_pid": os.getpid(), "planner_url": planner_url,
+                               "planner_ownership": "external" if external else "harness" if paired else None,
                                "planner_evidence": planner_evidence,
                                "planner_backend_kind": planner_backend_kind}, stream)
                 print(f"Ready and idle. Local connection settings: {connection}", flush=True)
@@ -381,7 +450,7 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
         for process in reversed(processes):
             try:
                 stop(process)
-            except BaseException as error:
+            except BaseException as error:  # noqa: BLE001 - still attempt every owned service's cleanup
                 cleanup_errors.append(f"process cleanup: {type(error).__name__}: {error}")
         for log in logs:
             try:
@@ -390,7 +459,7 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
                 cleanup_errors.append(f"log cleanup: {error}")
         try:
             database_resources.close()  # after attempting to stop every service
-        except BaseException as error:
+        except BaseException as error:  # noqa: BLE001 - preserve all cleanup failures in final evidence
             cleanup_errors.append(f"database cleanup: {type(error).__name__}: {error}")
         if cleanup_errors:
             evidence.update(status="failed", cleanup_errors=cleanup_errors)
