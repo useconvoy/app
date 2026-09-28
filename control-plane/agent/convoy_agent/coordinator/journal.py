@@ -43,6 +43,9 @@ class ExecutionJournal:
                     result_json TEXT NOT NULL, state TEXT NOT NULL,
                     observation_json TEXT, PRIMARY KEY(mission_id, sequence)
                 );
+                CREATE TABLE IF NOT EXISTS bundle_bindings (
+                    binding_id TEXT PRIMARY KEY, observation_json TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS plans (
                     mission_id TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE,
                     request_json TEXT NOT NULL, result_json TEXT,
@@ -73,6 +76,32 @@ class ExecutionJournal:
             if not self.lock.closed:
                 fcntl.flock(self.lock, fcntl.LOCK_UN)
                 self.lock.close()
+
+    def observe_binding(self, *, deployment_id: str, generation: int, binding_id: str,
+                        observation: dict, planner_readiness: dict) -> None:
+        """Commit probed local evidence before ready ack; never execution authority.
+
+        A binding ID names one immutable set of component incarnations. The latest
+        observation survives restart, but callers must re-prepare/probe before use.
+        Mission intent/recovery records are deliberately untouched.
+        """
+        immutable = encode({"observation": observation, "planner_readiness": planner_readiness})
+        current = encode({"deployment_id": deployment_id, "generation": generation,
+                          "binding_id": binding_id, "observation": observation,
+                          "planner_readiness": planner_readiness})
+        with self.db:
+            old = self.db.execute("SELECT observation_json FROM bundle_bindings WHERE binding_id=?",
+                                  (binding_id,)).fetchone()
+            if old is not None and old[0] != immutable:
+                raise ValueError("cannot change an observed bundle binding identity")
+            self.db.execute("INSERT OR IGNORE INTO bundle_bindings VALUES (?, ?)", (binding_id, immutable))
+            previous = self.db.execute("SELECT value FROM meta WHERE key='observed_bundle'").fetchone()
+            if previous is None or previous[0] != current:
+                self.db.execute("INSERT OR REPLACE INTO meta VALUES ('observed_bundle', ?)", (current,))
+
+    def observed_binding(self) -> dict | None:
+        row = self.db.execute("SELECT value FROM meta WHERE key='observed_bundle'").fetchone()
+        return json.loads(row[0]) if row else None
 
     def identity(self, mission: dict, device_id: str, robot_id: str) -> dict:
         return {

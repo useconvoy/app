@@ -111,7 +111,7 @@ export function Evaluations({ application, release, robot, runs, qualification, 
             const created = await attempts.current.submit<EvaluationRun>("evaluations", { suite_id: suite.id, release_id: release.id, robot_id: robot.id });
             setRunId(created.id); setNotice("Evaluation requested. Its reserved robot will execute the persisted cases.");
           })}>Evaluate selected release</button>
-          <p className="console-note">Uses {robot?.name ?? "the selected robot"} and release <code>{release.id}</code>. Its inference worker must already serve that release. Stay signed in: signing out revokes this evaluation’s authority to admit new cases.</p>
+          <p className="console-note">Uses {robot?.name ?? "the selected robot"} and release <code>{release.id}</code>. Evaluation waits for the selected release to be ready. Stay signed in: signing out revokes this evaluation’s authority to admit new cases.</p>
           {!profileMatches && <p className="console-note">The robot, release and suite must use the same observation profile. Select a matching robot and suite, or create a suite from this release.</p>}
         </>}
         <details><summary>Create an immutable suite</summary><form onSubmit={event => {

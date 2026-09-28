@@ -1,0 +1,215 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "source_commit": "d74912aca808b3bb8a64876322fc43f2d26c7781",
+  "source_dirty": false,
+  "pull_request": "https://github.com/useconvoy/app/pull/89",
+  "scope": "One local CPU installation; Qwen2.5-1.5B-Instruct Q4_K_M text-only fixed-skill admission and real pretrained SmolVLA actions in MuJoCo/MetaWorld. Same model weights, different planner context sizes. One fixed seed; no Jetson, cloud, physical-robot, general-reliability or real-time qualification.",
+  "installation": {
+    "single_api_coordinator_journal_database": true,
+    "database": "SQLite",
+    "robot": "simulated Sawyer pick-place",
+    "model_processes_managed_by_coordinator": true
+  },
+  "releases": {
+    "A": {
+      "release_digest": "abf11e9eb08c4a4e3445044fb5144d3eb35796d3f98aa38d9c5a236d21ac36de",
+      "planner_artifact_sha256": "3383f4652d5f1739ce89443472732e286fcd4b8b78bd16997556a85621c76b4d",
+      "action_artifact_sha256": "873f36dac22eb58303364e8e7cbd4780e2e9664447a218b708a63450f9395f67",
+      "context": 2048
+    },
+    "B": {
+      "release_digest": "da63245986b3284509bb9b19f260ac419e3a05f00f2b4ca45000d62ee96adf5d",
+      "planner_artifact_sha256": "7479f8c12ab94c60a29463a27d3925d642f91a1ef0d576446293cbfe4933f0c6",
+      "action_artifact_sha256": "873f36dac22eb58303364e8e7cbd4780e2e9664447a218b708a63450f9395f67",
+      "context": 4096
+    }
+  },
+  "sequence": [
+    {
+      "generation": 1,
+      "configuration": "A",
+      "trigger": "deployment API",
+      "mission_id": "mis_fj0t8xqlluv5",
+      "mission_state": "completed",
+      "actions": 54,
+      "success": true
+    },
+    {
+      "generation": 2,
+      "configuration": "B",
+      "trigger": "deployment API",
+      "mission_id": "mis_pohd75tr8iq8",
+      "mission_state": "completed",
+      "actions": 54,
+      "success": true
+    },
+    {
+      "generation": 3,
+      "configuration": "A",
+      "trigger": "deployment API",
+      "mission_id": "mis_lf1jb6azf6l2",
+      "mission_state": "completed",
+      "actions": 54,
+      "success": true
+    },
+    {
+      "generation": 4,
+      "configuration": "B",
+      "trigger": "browser deployment and explicit Start",
+      "mission_id": "mis_l6atsslwvhti",
+      "mission_state": "completed",
+      "actions": 54,
+      "success": true
+    },
+    {
+      "generation": 5,
+      "configuration": "A",
+      "trigger": "browser evaluation",
+      "mission_id": "mis_ntql8ou1l6q4",
+      "mission_state": "completed",
+      "actions": 54,
+      "success": true
+    },
+    {
+      "generation": 6,
+      "configuration": "B",
+      "trigger": "browser evaluation",
+      "mission_id": "mis_0ip0cghgrdhb",
+      "mission_state": "completed",
+      "actions": 54,
+      "success": true
+    },
+    {
+      "generation": 7,
+      "configuration": "A",
+      "trigger": "browser restore through ordinary deployment",
+      "mission_id": null,
+      "mission_state": "not started",
+      "actions": 0,
+      "success": null
+    }
+  ],
+  "planner_and_actions": {
+    "accepted_real_plans": 6,
+    "applied_actions": 324,
+    "actions_per_mission": 54,
+    "all_six_traces_match_direct_seed0_reference": true,
+    "missions": [
+      {
+        "mission_id": "mis_fj0t8xqlluv5",
+        "plan_accepted": true,
+        "planner_artifact_sha256": "3383f4652d5f1739ce89443472732e286fcd4b8b78bd16997556a85621c76b4d",
+        "actions": 54,
+        "exact_match_to_direct_seed0": true,
+        "trace_sha256": "f1a0dc50f129526b4526c0d03a713bdb49eaffb1814e485ee88be60ef92c043f"
+      },
+      {
+        "mission_id": "mis_pohd75tr8iq8",
+        "plan_accepted": true,
+        "planner_artifact_sha256": "7479f8c12ab94c60a29463a27d3925d642f91a1ef0d576446293cbfe4933f0c6",
+        "actions": 54,
+        "exact_match_to_direct_seed0": true,
+        "trace_sha256": "f1a0dc50f129526b4526c0d03a713bdb49eaffb1814e485ee88be60ef92c043f"
+      },
+      {
+        "mission_id": "mis_lf1jb6azf6l2",
+        "plan_accepted": true,
+        "planner_artifact_sha256": "3383f4652d5f1739ce89443472732e286fcd4b8b78bd16997556a85621c76b4d",
+        "actions": 54,
+        "exact_match_to_direct_seed0": true,
+        "trace_sha256": "f1a0dc50f129526b4526c0d03a713bdb49eaffb1814e485ee88be60ef92c043f"
+      },
+      {
+        "mission_id": "mis_l6atsslwvhti",
+        "plan_accepted": true,
+        "planner_artifact_sha256": "7479f8c12ab94c60a29463a27d3925d642f91a1ef0d576446293cbfe4933f0c6",
+        "actions": 54,
+        "exact_match_to_direct_seed0": true,
+        "trace_sha256": "f1a0dc50f129526b4526c0d03a713bdb49eaffb1814e485ee88be60ef92c043f"
+      },
+      {
+        "mission_id": "mis_ntql8ou1l6q4",
+        "plan_accepted": true,
+        "planner_artifact_sha256": "3383f4652d5f1739ce89443472732e286fcd4b8b78bd16997556a85621c76b4d",
+        "actions": 54,
+        "exact_match_to_direct_seed0": true,
+        "trace_sha256": "f1a0dc50f129526b4526c0d03a713bdb49eaffb1814e485ee88be60ef92c043f"
+      },
+      {
+        "mission_id": "mis_0ip0cghgrdhb",
+        "plan_accepted": true,
+        "planner_artifact_sha256": "7479f8c12ab94c60a29463a27d3925d642f91a1ef0d576446293cbfe4933f0c6",
+        "actions": 54,
+        "exact_match_to_direct_seed0": true,
+        "trace_sha256": "f1a0dc50f129526b4526c0d03a713bdb49eaffb1814e485ee88be60ef92c043f"
+      }
+    ]
+  },
+  "evaluations": {
+    "same_immutable_suite": true,
+    "suite_digest": "8bb2d0940983b29925e46ab58de950ac5ac4c725f03b06006f4d0f7ee8efaecd",
+    "cases_per_configuration": 1,
+    "both_passed": true,
+    "success_count_delta": 0,
+    "promoted_configuration": "B",
+    "application_gate_enabled": false,
+    "restored_configuration": "A",
+    "restore_generation": 7,
+    "no_automatic_seventh_mission": true
+  },
+  "cleanup": {
+    "bindings_checked": 7,
+    "component_process_incarnations_checked": 21,
+    "recorded_listeners_checked": 28,
+    "all_previous_and_final_processes_exited": true,
+    "all_recorded_listeners_closed": true,
+    "no_native_credentials_remain": true,
+    "harness_graceful": true,
+    "no_forced_harness_cleanup": true,
+    "browser_web_and_job_exited_without_force": true
+  },
+  "browser_checks": [
+    "three A/B/A completed missions and restored A generation3 ready in console",
+    "UI release selector activated B generation4 without auto-start",
+    "explicit fourth seed0 mission completed with real planner and learned-action evidence",
+    "evaluation job activated A generation5 and recorded a passing actual-model case",
+    "evaluation job activated B generation6 and recorded a passing actual-model case",
+    "compared same immutable suite, explicitly promoted B, no implicit gate or deployment",
+    "ordinary restore A generation7 ready with six completed missions and no automatic seventh mission",
+    "mobile without horizontal overflow",
+    "logout",
+    "no browser page errors"
+  ],
+  "browser_capture_note": "Screenshots record the successful run before two explanatory sentences were updated; behavior and layout are unchanged.",
+  "validation": {
+    "full_agent": {
+      "passed": 268,
+      "skipped": 4,
+      "seconds": 557.56,
+      "note": "Run started before the final native-reader cleanup fix; the subsequent focused run covers that fix and all affected modules."
+    },
+    "final_focused": {
+      "passed": 111
+    },
+    "isolated_ci_integration_step": {
+      "passed": 31,
+      "uv": "0.8.22",
+      "heavy_model_packages_installed": false
+    },
+    "ruff": "passed",
+    "native_qualification": "native-qwen-local-activation.json",
+    "console_copy": {
+      "typecheck": "passed",
+      "targeted_eslint": "passed",
+      "scope": "Two explanatory sentences only; no behavior or layout changes."
+    }
+  },
+  "limitations": [
+    "A/B use identical weights; this does not compare model capability.",
+    "The comparison uses one seed, not statistical evidence of general reliability.",
+    "Latency observations were collected alongside other tests, not isolated benchmarks.",
+    "Detailed observed-bundle console state, hosted placement and arbitrary model adapters remain follow-ups.",
+    "Web cleanup used retained child exit and OS process/listener inventory; exact web-port history was unavailable in the bounded log."
+  ]
+}

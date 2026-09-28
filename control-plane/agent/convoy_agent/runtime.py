@@ -824,11 +824,16 @@ class RuntimeSupervisor:
                             "method": "owned_process", "reason": "child_exit_unverified",
                             "pid": self.proc.pid}
                 if self._reader is not None:
-                    self._reader.join(timeout=5.0 if left() is None else left())
-                    if self._reader.is_alive():
-                        return {"stopped": False, "seconds": round(time.monotonic() - t0, 3),
-                                "method": "owned_process", "reason": "output_drain_incomplete",
-                                "pid": result.get("pid")}
+                    if self._reader.ident is None:
+                        # Thread startup failed: the child is now proven stopped,
+                        # and no reader owns this pipe. join() would always raise.
+                        self._reader.pipe.close()
+                    else:
+                        self._reader.join(timeout=5.0 if left() is None else left())
+                        if self._reader.is_alive():
+                            return {"stopped": False, "seconds": round(time.monotonic() - t0, 3),
+                                    "method": "owned_process", "reason": "output_drain_incomplete",
+                                    "pid": result.get("pid")}
                 self.proc = None
                 self.stopped_at = self.clock()
                 self._close_interval(self.stopped_at)

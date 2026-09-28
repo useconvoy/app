@@ -7,6 +7,7 @@ qualification of real-time physical control.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import math
@@ -37,6 +38,7 @@ from convoy_contracts.pairing import (
     validate_release_manifest,
 )
 
+from .binding import BindingObservation, BundleOwner, PreparedBinding
 from .diagnostics import failure_detail, failure_record
 from .journal import ExecutionJournal
 from .transport import RemoteError
@@ -83,7 +85,7 @@ class Coordinator:
         self, *, robot_id: str, device_id: str, journal: ExecutionJournal,
         control, worker, adapter_factory: Callable[[], Adapter],
         poll_s: float = 0.1, clock_uncertainty_s: float = 0.25, profile: str = PROFILE,
-        planner=None,
+        planner=None, bundle_owner: BundleOwner | None = None,
     ):
         if not math.isfinite(poll_s) or poll_s <= 0:
             raise ValueError("poll interval must be positive and finite")
@@ -91,9 +93,13 @@ class Coordinator:
             raise ValueError("clock uncertainty must be nonnegative and finite")
         if profile not in release_profiles():
             raise ValueError("unsupported adapter profile")
-        if profile == PAIRED_PROFILE and planner is None:
+        if bundle_owner is not None and profile != PAIRED_PROFILE:
+            raise ValueError("local bundle ownership currently supports paired execution only")
+        if profile == PAIRED_PROFILE and planner is None and bundle_owner is None:
             raise ValueError("paired execution requires a configured planner")
         self.profile = profile
+        self.bundle_owner = bundle_owner
+        self._binding_id: str | None = None
         self.planner = planner
         self._planner_readiness = None
         self.robot_id, self.device_id = robot_id, device_id
@@ -187,25 +193,155 @@ class Coordinator:
             self.journal.acknowledge(row["id"])
         return not self.journal.pending()
 
+    def _idle(self) -> bool:
+        return not (self.stop.is_set() or self._active_mission is not None or self._outstanding is not None
+                    or (self._cleanup_thread and self._cleanup_thread.is_alive())
+                    or (self._inference_thread and self._inference_thread.is_alive()))
+
+    def _invalidate_readiness(self) -> None:
+        self._ready = None
+        self._planner_readiness = None
+        self._binding_id = None
+
+    def _mission_view(self, desired: dict) -> tuple[bool, dict | None]:
+        mission = desired.get("mission")
+        if mission is None:
+            return True, None
+        recorded = self.journal.get(mission["id"])
+        resolved = mission["state"] in {"completed", "failed", "cancelled"}
+        if mission["state"] == "unknown" or (recorded and recorded["state"] == "unknown"
+                                              and not (recorded["reported"] and resolved)):
+            return False, mission  # explicit external recovery is required
+        if recorded and recorded["report_json"] is None:
+            return False, mission
+        if resolved:
+            return True, None  # retained terminal history fences replay, not a future release
+        if recorded and recorded["reported"]:
+            return False, mission  # a local report cannot overrule visible remote admission
+        return True, mission
+
+    @staticmethod
+    def _unclaimed(mission: dict, state: str) -> bool:
+        return (mission["state"] == state and mission.get("identity") is None
+                and mission.get("execution_started", False) is False)
+
+    @classmethod
+    def _eligible(cls, mission: dict | None, deployment: dict) -> bool:
+        return mission is None or (
+            cls._unclaimed(mission, "requested") and mission["deployment_id"] == deployment["id"]
+            and mission["generation"] == deployment["generation"]
+            and mission["release_digest"] == deployment["release"]["digest"]
+        )
+
+    def _probe(self, worker, planner, release: dict, manifest: dict) -> dict | None:
+        probe = worker.probe(release["digest"], manifest["profile"])
+        if (probe.get("release_digest") != release["digest"] or probe.get("profile") != self.profile
+                or (self.bundle_owner is not None and probe.get("ready") is not True)):
+            raise ValueError("worker readiness identity mismatch")
+        if self.profile != PAIRED_PROFILE:
+            return None
+        policy = action_manifest(manifest)["policy"]
+        if probe.get("runtime") != policy["runtime"] or probe.get("artifact_sha256") != policy["artifact_sha256"]:
+            raise ValueError("loaded action policy does not match the paired release")
+        probe = planner.probe(release["digest"], self.profile)
+        if (probe.get("ready") is not True or probe.get("release_digest") != release["digest"]
+                or probe.get("profile") != self.profile
+                or probe.get("runtime") != manifest["planner"]["runtime"]
+                or probe.get("planner_artifact_sha256") != manifest["planner"]["artifact_sha256"]):
+            raise ValueError("planner readiness identity mismatch")
+        return validate_planner_identity({key: probe[key] for key in (
+            "planner_artifact_sha256", "planner_incarnation", "runtime_generation",
+        )})
+
+    def _activation_fence(self, desired: dict, deployment: dict, mission: dict | None) -> bool:
+        current = desired.get("deployment")
+        allowed, current_mission = self._mission_view(desired)
+        return bool(self._idle() and allowed and current is not None
+                    and current["id"] == deployment["id"]
+                    and current["generation"] == deployment["generation"]
+                    and current["release"]["digest"] == deployment["release"]["digest"]
+                    and canonical_digest(current["release"]["manifest"]) == deployment["release"]["digest"]
+                    and self._eligible(current_mission, current)
+                    and current_mission == mission)
+
+    def _prepare_binding(self, deployment: dict, manifest: dict, mission: dict | None, ready_key: tuple) -> bool:
+        """Probe candidates without rebinding execution; True permits a later mission below."""
+        was_ready = self._ready == ready_key
+        try:
+            candidate = self.bundle_owner.prepare(copy.deepcopy(deployment), copy.deepcopy(manifest))
+            if (not isinstance(candidate, PreparedBinding) or not isinstance(candidate.observation, BindingObservation)
+                    or not isinstance(candidate.binding_id, str) or not 1 <= len(candidate.binding_id) <= 128
+                    or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-"
+                           for c in candidate.binding_id)
+                    or candidate.worker is None or candidate.planner is None):
+                raise ValueError("invalid local bundle binding")
+            observation = asdict(candidate.observation)
+            if observation != {
+                "release_digest": deployment["release"]["digest"], "profile": self.profile,
+                "action_artifact_sha256": action_manifest(manifest)["policy"]["artifact_sha256"],
+                "planner_artifact_sha256": manifest["planner"]["artifact_sha256"],
+            }:
+                raise ValueError("local bundle observation differs from the immutable release")
+            was_ready = was_ready and self._binding_id == candidate.binding_id
+            if not was_ready:
+                self._invalidate_readiness()
+            planner_readiness = self._probe(candidate.worker, candidate.planner, deployment["release"], manifest)
+            # Slow staging/probes may outlive deployment or mission authority.
+            fresh = self._desired()
+            if not self._activation_fence(fresh, deployment, mission):
+                self._invalidate_readiness()
+                return False
+            with self._submission:
+                if not self._idle():
+                    self._invalidate_readiness()
+                    return False
+                self.journal.observe_binding(
+                    deployment_id=deployment["id"], generation=deployment["generation"],
+                    binding_id=candidate.binding_id, observation=observation, planner_readiness=planner_readiness,
+                )
+                self.worker, self.planner = candidate.worker, candidate.planner
+                self._planner_readiness = planner_readiness
+                self._binding_id = candidate.binding_id
+            if not was_ready or fresh["deployment"].get("state") != "ready":
+                self.control.post(self.prefix + f"/deployments/{deployment['id']}/report", {
+                    "generation": deployment["generation"], "state": "ready",
+                    "release_digest": deployment["release"]["digest"],
+                })
+                self._ready = ready_key
+                return False  # next tick must obtain fresh authority before claim
+            return True
+        except Exception:
+            self._invalidate_readiness()
+            # Never report an old deployment's failure over newly admitted authority.
+            try:
+                if self._activation_fence(self._desired(), deployment, mission):
+                    self.control.post(self.prefix + f"/deployments/{deployment['id']}/report", {
+                        "generation": deployment["generation"], "state": "blocked",
+                        "release_digest": deployment["release"]["digest"],
+                        "detail": "application component readiness probe failed",
+                    })
+            except Exception:
+                pass  # retry from fresh desired state; original failure is the diagnosis
+            raise
+
     def tick(self) -> None:
+        try:
+            self._tick()
+        except Exception:
+            self._invalidate_readiness()
+            raise
+
+    def _tick(self) -> None:
         desired = self._desired()
-        if not self._flush_reports(desired):
+        if not self._flush_reports(desired) or not self._idle():
             return
         deployment = desired.get("deployment")
-        mission = desired.get("mission")
-        if mission:
-            recorded = self.journal.get(mission["id"])
-            remotely_resolved = mission["state"] in {"completed", "failed", "cancelled"}
-            if mission["state"] == "unknown" or (recorded and recorded["state"] == "unknown"
-                                                  and not (recorded["reported"] and remotely_resolved)):
-                return  # explicit external recovery is required
-            if recorded and recorded["report_json"] is None:
-                return
-            if (recorded and recorded["reported"]) or mission["state"] in {"completed", "failed", "cancelled"}:
-                # A retained terminal mission fences replay, not future releases.
-                mission = None
+        allowed, mission = self._mission_view(desired)
+        if not allowed:
+            return
         if mission and mission["state"] == "cancel_requested":
-            # A cancelled queued mission has no authority identity to echo.
+            if not self._unclaimed(mission, "cancel_requested"):
+                return  # another incarnation's cancellation is not ours to acknowledge
             self.journal.prepare(mission["id"], None)
             self.journal.finish(mission["id"], {
                 "identity": None, "state": "cancelled", "detail": "cancelled before local admission",
@@ -215,9 +351,7 @@ class Coordinator:
             })
             self._flush_reports(desired)
             return
-        if mission and mission["state"] not in {"requested"}:
-            return  # do not seize another incarnation's execution
-        if deployment is None:
+        if deployment is None or not self._eligible(mission, deployment):
             return
         release = deployment["release"]
         manifest = validate_release_manifest(release["manifest"])
@@ -226,57 +360,24 @@ class Coordinator:
         if canonical_digest(manifest) != release["digest"]:
             raise ValueError("release content does not match immutable digest")
         ready_key = (deployment["id"], deployment["generation"], release["digest"])
-        if self._ready != ready_key:
+        if self.bundle_owner is not None:
+            if not self._prepare_binding(deployment, manifest, mission, ready_key):
+                return
+        elif self._ready != ready_key:
             try:
-                probe = self.worker.probe(release["digest"], manifest["profile"])
-                if probe.get("release_digest") != release["digest"] or probe.get("profile") != self.profile:
-                    raise ValueError("worker readiness identity mismatch")
-                if self.profile == PAIRED_PROFILE:
-                    policy = action_manifest(manifest)["policy"]
-                    if probe.get("runtime") != policy["runtime"] or probe.get("artifact_sha256") != policy["artifact_sha256"]:
-                        raise ValueError("loaded action policy does not match the paired release")
-                    planner = self.planner.probe(release["digest"], self.profile)
-                    if (planner.get("ready") is not True or planner.get("release_digest") != release["digest"]
-                            or planner.get("profile") != self.profile
-                            or planner.get("runtime") != manifest["planner"]["runtime"]
-                            or planner.get("planner_artifact_sha256") != manifest["planner"]["artifact_sha256"]):
-                        raise ValueError("planner readiness identity mismatch")
-                    self._planner_readiness = validate_planner_identity({
-                        key: planner[key] for key in (
-                            "planner_artifact_sha256", "planner_incarnation", "runtime_generation",
-                        )
-                    })
+                self._planner_readiness = self._probe(self.worker, self.planner, release, manifest)
             except Exception:
                 self.control.post(self.prefix + f"/deployments/{deployment['id']}/report", {
                     "generation": deployment["generation"], "state": "blocked",
                     "release_digest": release["digest"], "detail": "application component readiness probe failed",
                 })
                 raise
-            unclaimed_current_request = (
-                mission is not None and mission["state"] == "requested" and mission.get("identity") is None
-                and not mission.get("execution_started", False)
-                and mission["deployment_id"] == deployment["id"]
-                and mission["generation"] == deployment["generation"]
-                and mission["release_digest"] == release["digest"]
-            )
-            if mission is None or unclaimed_current_request:
-                self.control.post(self.prefix + f"/deployments/{deployment['id']}/report", {
-                    "generation": deployment["generation"], "state": "ready", "release_digest": release["digest"],
-                })
-            elif deployment.get("state") != "ready":
-                return  # never refresh readiness for an admitted or unresolved execution
+            self.control.post(self.prefix + f"/deployments/{deployment['id']}/report", {
+                "generation": deployment["generation"], "state": "ready", "release_digest": release["digest"],
+            })
             self._ready = ready_key
-            # Fresh desired state avoids using a request cancelled during the probe.
             return
         if mission:
-            if self._cleanup_thread and self._cleanup_thread.is_alive():
-                return  # one bounded cleanup attempt; never accumulate remote close threads
-            if self._inference_thread and self._inference_thread.is_alive():
-                return  # no unbounded abandoned requests after cancellation/timeouts
-            if (mission["deployment_id"] != deployment["id"] or
-                    mission["generation"] != deployment["generation"] or
-                    mission["release_digest"] != release["digest"]):
-                raise ValueError("mission does not match the ready deployment")
             self._run_mission(mission, manifest)
 
     def run(self, *, once: bool = False) -> None:

@@ -11,6 +11,7 @@ import importlib
 import logging
 import os
 import signal
+from contextlib import ExitStack
 from pathlib import Path
 
 from convoy_contracts.pairing import PAIRED_PROFILE
@@ -26,8 +27,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--robot-id", required=True)
-    parser.add_argument("--worker-url", required=True)
-    parser.add_argument("--planner-url", required=True)
+    parser.add_argument("--worker-url")
+    parser.add_argument("--planner-url")
+    parser.add_argument("--local-registry", type=Path,
+                        help="trusted local SmolVLA/Qwen recipe registry; loads the requested paired bundle")
     parser.add_argument("--worker-ca-file")
     parser.add_argument("--planner-ca-file")
     parser.add_argument("--adapter-factory", default="convoy_lerobot.adapter:VisualMetaWorldAdapter")
@@ -36,6 +39,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--clock-uncertainty-seconds", type=float, default=0.25)
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args(argv)
+    if args.local_registry:
+        if any((args.worker_url, args.planner_url, args.worker_ca_file, args.planner_ca_file)):
+            parser.error("local registry and externally managed model endpoints are mutually exclusive")
+        if args.adapter_factory != "convoy_lerobot.adapter:VisualMetaWorldAdapter":
+            parser.error("local activation currently requires the qualified visual simulator adapter")
+    elif not args.worker_url or not args.planner_url:
+        parser.error("configure both worker/planner URLs or a local registry")
     cfg = AgentConfig(args.data_dir)
     if not cfg.credential or not cfg.data.get("simulate"):
         parser.error("enroll this simulator before starting its paired coordinator")
@@ -50,19 +60,33 @@ def main(argv: list[str] | None = None) -> int:
     factory = getattr(importlib.import_module(module), name)
     logging.basicConfig(level=logging.INFO)
     control = JsonHTTP(args.server or cfg.data["server"], cfg.credential, ca_file=cfg.data.get("ca_file"))
-    worker = WorkerHTTP(args.worker_url, worker_token, ca_file=args.worker_ca_file)
-    planner = PlannerHTTP(args.planner_url, planner_token, ca_file=args.planner_ca_file)
-    journal = ExecutionJournal(args.data_dir / "coordinator", args.robot_id, cfg.data["device_id"])
-    try:
+    with ExitStack() as resources:
+        journal = ExecutionJournal(args.data_dir / "coordinator", args.robot_id, cfg.data["device_id"])
+        resources.callback(journal.close)
+        bundle_owner = None
+        if args.local_registry:
+            # The optional integration owns only installed, fixed launchers. It
+            # acquires role locks here; mission recovery gates any later launch.
+            from convoy_lerobot.local_bundle import LocalBundleOwner
+
+            bundle_owner = resources.enter_context(LocalBundleOwner(
+                args.data_dir / "local-bundle", args.local_registry,
+                worker_execution_secret=os.environ.get("CONVOY_EXECUTION_SECRET", ""),
+                planner_execution_secret=os.environ.get("CONVOY_PLANNER_EXECUTION_SECRET", ""),
+                worker_probe_token=worker_token, planner_probe_token=planner_token,
+            ))
+            worker, planner = None, None
+        else:
+            worker = WorkerHTTP(args.worker_url, worker_token, ca_file=args.worker_ca_file)
+            planner = PlannerHTTP(args.planner_url, planner_token, ca_file=args.planner_ca_file)
         coordinator = Coordinator(robot_id=args.robot_id, device_id=cfg.data["device_id"], journal=journal,
                                   control=control, worker=worker, planner=planner, adapter_factory=factory,
+                                  bundle_owner=bundle_owner,
                                   profile=PAIRED_PROFILE, poll_s=args.poll_seconds,
                                   clock_uncertainty_s=args.clock_uncertainty_seconds)
         signal.signal(signal.SIGINT, lambda *_: coordinator.request_stop())
         signal.signal(signal.SIGTERM, lambda *_: coordinator.request_stop())
         coordinator.run(once=args.once)
-    finally:
-        journal.close()
     return 0
 
 
