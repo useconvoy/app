@@ -8,6 +8,7 @@ dependencies = [
   "gymnasium==1.2.1",
   "mujoco==3.3.0",
   "numpy==2.2.6",
+  "packaging==26.3", # Gymnasium's MuJoCo renderer imports it at runtime.
   "scipy==1.15.3",
 ]
 
