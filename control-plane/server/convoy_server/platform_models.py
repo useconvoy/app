@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from .models import TS, Base, _now
+from .models import INT64, TS, Base, _now
 
 
 class Project(Base):
@@ -26,7 +26,7 @@ class Robot(Base):
     device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"), unique=True)
     name: Mapped[str] = mapped_column(String(120))
     profile: Mapped[str] = mapped_column(String(80))
-    generation: Mapped[int] = mapped_column(Integer, default=0)
+    generation: Mapped[int] = mapped_column(INT64, default=0)
     created_at: Mapped[datetime] = mapped_column(TS, default=_now)
 
 
@@ -55,7 +55,7 @@ class Deployment(Base):
     project_id: Mapped[str] = mapped_column(ForeignKey("platform_projects.id"), index=True)
     robot_id: Mapped[str] = mapped_column(ForeignKey("platform_robots.id"), index=True)
     release_id: Mapped[str] = mapped_column(ForeignKey("platform_releases.id"))
-    generation: Mapped[int] = mapped_column(Integer)
+    generation: Mapped[int] = mapped_column(INT64)
     state: Mapped[str] = mapped_column(String(24), default="requested")
     detail: Mapped[str] = mapped_column(Text, default="")
     observed_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
@@ -70,8 +70,8 @@ class Mission(Base):
     deployment_id: Mapped[str] = mapped_column(ForeignKey("platform_deployments.id"))
     release_id: Mapped[str] = mapped_column(ForeignKey("platform_releases.id"))
     release_digest: Mapped[str] = mapped_column(String(64))
-    generation: Mapped[int] = mapped_column(Integer)
-    seed: Mapped[int] = mapped_column(Integer)
+    generation: Mapped[int] = mapped_column(INT64)
+    seed: Mapped[int] = mapped_column(INT64)
     expires_at: Mapped[datetime] = mapped_column(TS)
     state: Mapped[str] = mapped_column(String(24), default="requested")
     identity: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)

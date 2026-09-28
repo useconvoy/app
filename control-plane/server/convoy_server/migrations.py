@@ -345,6 +345,10 @@ def migrate_database(settings: Settings, *, dry_run: bool = False) -> dict[str, 
     import shutil
 
     from .db import DbLocked, acquire_db_lock, make_engine
+    from .postgres import enabled, migrate
+
+    if enabled(settings):
+        return migrate(settings, dry_run=dry_run)
 
     path = db_file_path(settings)
     if path is None or not path.exists():
