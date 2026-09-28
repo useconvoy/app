@@ -217,7 +217,9 @@ def test_mode_mismatch_refusal_precedes_schema_work_on_an_additive_upgrade_candi
     eng = db.init_engine(replace(settings, sqlite_wal=True))
     try:
         upgraded = _evidence(path)
-        assert upgraded["user_version"] == 3 and "usage_unknown_intervals" in upgraded["rows"]
+        from convoy_server.migrations import SCHEMA_VERSION
+
+        assert upgraded["user_version"] == SCHEMA_VERSION and "usage_unknown_intervals" in upgraded["rows"]
         with eng.connect() as conn:
             assert conn.execute(text("PRAGMA journal_mode")).scalar() == "wal"
     finally:

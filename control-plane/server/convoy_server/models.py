@@ -557,3 +557,7 @@ class FixtureModel(Base):
     files: Mapped[list[Any]] = mapped_column(JSON, default=list)
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(TS, default=_now)
+
+
+# Register additive lifecycle tables with the same migration metadata.
+from . import platform_models as _platform_models  # noqa: E402, F401

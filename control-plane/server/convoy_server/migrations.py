@@ -27,7 +27,8 @@ log = logging.getLogger("convoy.migrations")
 # Schema 3 also carries the ADDITIVE table `usage_unknown_intervals` (explicit unobserved intervals from
 # schema-2 usage records). A v3 database that predates it gains the table at startup through the ordinary
 # `plan_migration` -> `add_tables` path; no version bump or rebuild is involved.
-SCHEMA_VERSION = 3
+# Schema 4 adds the platform application lifecycle; old text release records are unchanged.
+SCHEMA_VERSION = 4
 
 
 class SchemaError(RuntimeError):
