@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "check:tokens": "node scripts/check-tokens.mjs",
     "test:e2e": "playwright test",
-    "verify": "npm run typecheck && npm run lint && npm run check:tokens && npm run build && npm run test:e2e"
+    "test:platform": "bash scripts/test-platform.sh",
+    "verify": "npm run typecheck && npm run lint && npm run check:tokens && bash scripts/test-portal.sh && npm run test:platform && npm run build && npm run test:e2e"
   },
   "dependencies": {
     "next": "16.3.4",
