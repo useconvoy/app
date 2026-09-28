@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
   push:
     branches: [v1]
-    paths: ["infra/development/services.py", "infra/development/services.compose.yml", "infra/development/containers/**", "infra/development/reference.Dockerfile*", "control-plane/Dockerfile", "control-plane/uv.lock", "website/Dockerfile", "website/pnpm-lock.yaml", "integrations/simulation/pyproject.toml", "integrations/simulation/uv.lock", ".github/workflows/service-images.yml"]
+    paths: ["infra/development/services.py", "infra/development/services.compose.yml", "infra/development/containers/**", "infra/development/reference.Dockerfile*", "infra/aws-v1/**", "control-plane/Dockerfile", "control-plane/uv.lock", "website/Dockerfile", "website/pnpm-lock.yaml", "integrations/simulation/pyproject.toml", "integrations/simulation/uv.lock", ".github/workflows/service-images.yml"]
   pull_request:
-    paths: ["infra/development/services.py", "infra/development/services.compose.yml", "infra/development/containers/**", "infra/development/reference.Dockerfile*", "control-plane/Dockerfile", "control-plane/uv.lock", "website/Dockerfile", "website/pnpm-lock.yaml", "integrations/simulation/pyproject.toml", "integrations/simulation/uv.lock", ".github/workflows/service-images.yml"]
+    paths: ["infra/development/services.py", "infra/development/services.compose.yml", "infra/development/containers/**", "infra/development/reference.Dockerfile*", "infra/aws-v1/**", "control-plane/Dockerfile", "control-plane/uv.lock", "website/Dockerfile", "website/pnpm-lock.yaml", "integrations/simulation/pyproject.toml", "integrations/simulation/uv.lock", ".github/workflows/service-images.yml"]
 
 permissions:
   contents: read
@@ -28,6 +28,11 @@ jobs:
           printf 'harmless device credential sentinel\n' > integrations/simulation/runs/image-boundary/credential
           printf 'harmless build-output sentinel\n' > integrations/simulation/dist/sentinel.txt
           python3 infra/development/services.py up
+      - name: Verify AWS runtime roles using the existing API build
+        run: |
+          docker build -f infra/aws-v1/api.Dockerfile \
+            --build-arg BASE_IMAGE=convoy-v1-api:local -t convoy-v1-aws-api:local .
+          python3 infra/aws-v1/verify_runtime.py --api-image convoy-v1-aws-api:local
       - name: Verify private native runs were excluded from the image
         run: >-
           docker run --rm --entrypoint python convoy-v1-reference:local -c

@@ -1,0 +1,8 @@
+**
+!infra/
+!infra/aws-v1/
+!infra/aws-v1/runtime/
+!infra/aws-v1/runtime/entrypoint.py
+!infra/aws-v1/runtime/bootstrap.py
+!infra/aws-v1/runtime/hosted.py
+!infra/aws-v1/runtime/rds-ca.pem
