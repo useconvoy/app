@@ -25,7 +25,7 @@ export function Hero() {
             <div className="hero-actions">
               <a href={HERO.primary.href} className="btn btn-primary">{HERO.primary.label}<ArrowGlyph /></a>
               <a href={HERO.secondary.href} className="hero-secondary">{HERO.secondary.label}<span aria-hidden="true">↗</span></a>
-              <a href="/portal" className="hero-secondary">Open demo<span aria-hidden="true">↗</span></a>
+              <a href="/app/device" className="hero-secondary">Open demo<span aria-hidden="true">↗</span></a>
             </div>
           </div>
         </div>

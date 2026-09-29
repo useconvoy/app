@@ -88,3 +88,29 @@ test("session forwarding hardens cookies, strips unrelated cookies, and redacts 
     assert.doesNotMatch(await failed.text(), /private-token|database-path/);
   } finally { globalThis.fetch = fetch; }
 });
+
+test("replay is read-only and accepts only bounded frame paths without path or URL inputs", () => {
+  for (const path of ["episodes/epi_one/replay", "episodes/epi_one/replay/frames/54"]) {
+    assert.equal(allowedPlatformPath(path.split("/"), "GET", new URLSearchParams()), `/api/v1/${path}`);
+    assert.equal(allowedPlatformPath(path.split("/"), "POST", new URLSearchParams()), null);
+    assert.equal(allowedPlatformPath(path.split("/"), "GET", new URLSearchParams("path=/private/file")), null);
+  }
+  for (const frame of ["-1", "1.2", "10000", "..", "anything"]) {
+    assert.equal(allowedPlatformPath(["episodes", "epi_one", "replay", "frames", frame], "GET", new URLSearchParams()), null);
+  }
+});
+
+ test("private HTTP is explicit and restricted to the existing Compose service", () => {
+  const previous = process.env.CONVOY_API_INTERNAL_HTTP;
+  try {
+    delete process.env.CONVOY_API_INTERNAL_HTTP;
+    assert.throws(() => platformOrigin("http://control-plane:8080"));
+    process.env.CONVOY_API_INTERNAL_HTTP = "1";
+    assert.equal(platformOrigin("http://control-plane:8080"), "http://control-plane:8080");
+    assert.throws(() => platformOrigin("http://external.test"));
+    assert.throws(() => platformOrigin("http://control-plane:8081"));
+  } finally {
+    if (previous === undefined) delete process.env.CONVOY_API_INTERNAL_HTTP;
+    else process.env.CONVOY_API_INTERNAL_HTTP = previous;
+  }
+});

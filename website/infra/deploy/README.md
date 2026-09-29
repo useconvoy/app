@@ -19,6 +19,12 @@ UID/GID 10001. Preserve the existing device identity and history when initially
 provisioning it. The API is `control-plane:8080` on the default Compose network;
 no host port is published. Host Caddy routing for agents is provisioned separately.
 
+The workspace also uses the existing API: Compose supplies
+`CONVOY_API_URL=http://control-plane:8080` and `CONVOY_API_INTERNAL_HTTP=1`.
+This opt-in permits HTTP only to that exact private service origin. Management
+mutations use `CONVOY_CONSOLE_ORIGIN`, falling back to `PORTAL_PUBLIC_ORIGIN`.
+Management sign-in remains separate from restricted device-demo access.
+
 `web.env` supplies the configuration documented in `src/lib/portal/README.md`.
 Compose interpolation applies to unquoted and double-quoted dotenv values. Put
 the complete scrypt hash in **single quotes** to preserve its dollar delimiters:

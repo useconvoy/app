@@ -14,6 +14,7 @@ from ..db import get_db, write_txn
 from ..models import Device
 from ..platform_models import Application, ApplicationRelease, Deployment, Episode, Mission, Project, Robot
 from ..services import platform as service
+from ..services import replay
 
 router = APIRouter(tags=["application lifecycle"])
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
@@ -255,6 +256,16 @@ def cancel_mission(
 @router.get("/api/v1/episodes/{episode_id}")
 def get_episode(episode_id: str, p: PrincipalRead, db: Database):
     return service.episode_out(service.resource_for(db, Episode, episode_id, p))
+
+
+@router.get("/api/v1/episodes/{episode_id}/replay")
+def get_replay(episode_id: str, p: PrincipalRead, db: Database):
+    return replay.manifest(service.resource_for(db, Episode, episode_id, p))
+
+
+@router.get("/api/v1/episodes/{episode_id}/replay/frames/{index}")
+def get_replay_frame(episode_id: str, index: int, p: PrincipalRead, db: Database):
+    return replay.frame(service.resource_for(db, Episode, episode_id, p), index)
 
 
 @router.get("/api/v1/episodes")

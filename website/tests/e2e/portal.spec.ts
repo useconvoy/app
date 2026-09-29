@@ -40,14 +40,14 @@ test("landing opens portal, credentials sign in and sign out", async ({ page }) 
   await mockSession(page, snapshot(), false);
   await page.goto("/");
   await page.locator(".hero-actions").getByRole("link", { name: "Open demo" }).click();
-  await expect(page.getByRole("heading", { name: "Open the portal" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Open device tools" })).toBeVisible();
   await page.getByLabel("Email", { exact: true }).fill("fixture@example.test");
   await page.getByLabel("Password", { exact: true }).fill("fixture-only");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Your Jetson, observed." })).toBeVisible();
   await expect(page.getByText("Contract Jetson", { exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page.getByRole("heading", { name: "Open the portal" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Open device tools" })).toBeVisible();
 });
 
 test("device, usage and traces retain measurement provenance and exact data", async ({ page }) => {
@@ -203,4 +203,18 @@ for (const width of [1440, 768, 390, 320]) test(`portal is accessible and fits a
     expect(result.violations, JSON.stringify(result.violations, null, 2)).toEqual([]);
     if (width === 1440 || width === 390) await page.screenshot({ path: `tests/screenshots/portal-${view.toLowerCase()}-${width}.png`, fullPage: true });
   }
+});
+
+test("workspace navigation keeps device tools and management access distinct", async ({ page }) => {
+  await mockSession(page);
+  await page.route("**/api/platform/auth/me", route => route.fulfill({ status: 401, json: { error: "Sign in" } }));
+  await page.goto("/app/device");
+  await expect(page.getByRole("heading", { name: "Your Jetson, observed." })).toBeVisible();
+  await page.getByRole("navigation", { name: "Workspace", exact: true }).getByRole("link", { name: "Robot applications" }).click();
+  await expect(page.getByRole("heading", { name: "Your next robot release." })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start mission" })).toHaveCount(0);
+  await page.getByRole("navigation", { name: "Workspace", exact: true }).getByRole("link", { name: "Device & inference" }).click();
+  await expect(page.getByRole("heading", { name: "Your Jetson, observed." })).toBeVisible();
+  await navigate(page, "Chat");
+  await expect(page.getByRole("heading", { name: "Talk to your model." })).toBeVisible();
 });

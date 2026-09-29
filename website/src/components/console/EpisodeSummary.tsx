@@ -1,3 +1,4 @@
+import { EpisodeReplay } from "./EpisodeReplay";
 import type { Episode } from "@/lib/platform/client";
 import { executionDiagnosis } from "@/lib/platform/diagnosis";
 
@@ -12,6 +13,7 @@ export function EpisodeSummary({ episode }: { episode: Episode }) {
       {diagnosis.authorizationNotice && <p className="console-note">{diagnosis.authorizationNotice}</p>}
     </div>}
     <p className="console-note">Release digest <code>{episode.release_digest}</code></p>
+    <EpisodeReplay key={episode.id} episodeId={episode.id} />
     <details><summary>Technical details</summary><pre className="console-code">{JSON.stringify(episode.summary, null, 2)}</pre></details>
     <p className="console-note">This is the coordinator-reported summary. Mission completion and benchmark task success are separate outcomes.</p>
   </>;
