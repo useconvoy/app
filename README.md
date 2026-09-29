@@ -1,11 +1,18 @@
 # Convoy
 
-V1 platform work is planned on the `v1` branch. See the [platform design](docs/v1/platform-design.md)
-and [implementation and hosting plan](docs/v1/implementation-plan.md) for milestones,
-service boundaries, testing, infrastructure, and the distinction between planned and implemented behavior.
+Convoy combines device inference and robot application deployment in one workspace.
+Open `/app` on your deployment: **Robot applications** manages projects, releases,
+simulator enrollment, evaluations, deployment and missions; **Device & inference**
+retains the physical-device chat, usage and traces. Camera episodes can be watched
+inside mission history. See the [workspace and replay guide](docs/v1/unified-workspace.md).
 
-The first v1 executable reference is an optional [robot-arm simulation](integrations/simulation/README.md):
-MuJoCo/MetaWorld physics, a labeled scripted action policy, and reproducible episode evidence.
+The implemented simulation path includes MetaWorld/MuJoCo, a labeled scripted
+baseline, a learned SmolVLA policy, and a Qwen text planner selecting a fixed skill.
+Local CPU, owned-process activation and external planner endpoints are supported
+by the documented reference profiles. This is not general physical-robot support.
+See [local activation](docs/v1/local-activation.md), the
+[platform design](docs/v1/platform-design.md), and the
+[implementation and hosting plan](docs/v1/implementation-plan.md).
 
 Convoy's public website and physical Jetson demo live in this repository.
 The landing page introduces the deployment workflow being built for physical AI;
@@ -18,8 +25,11 @@ the portal exposes a focused, working text-inference path on one configured Jets
 - [Physical verification record](control-plane/docs/VERIFICATION.md)
 
 ```text
-website/        Next.js landing page, authenticated portal, bounded server-side API
+website/        Next.js landing page, unified workspace, bounded server-side APIs
 control-plane/  Python control-plane and outbound device-agent source
+integrations/   Simulation, learned action-policy and planner adapters
+examples/       Executable experiments and acceptance harnesses
+infra/          Local service stacks and optional cloud provisioning
 docs/           Architecture, walkthrough, and acceptance scope
 ```
 

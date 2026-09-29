@@ -1,3 +1,5 @@
+import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
+import "@/styles/workspace.css";
 import type { Metadata } from "next";
 import { Console } from "@/components/console/Console";
 import "@/styles/console.css";
@@ -9,4 +11,4 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, googleBot: { index: false, follow: false } },
 };
 
-export default function ConsolePage() { return <Console />; }
+export default function ConsolePage() { return <WorkspaceShell><Console /></WorkspaceShell>; }

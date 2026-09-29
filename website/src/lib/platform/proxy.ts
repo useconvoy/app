@@ -24,8 +24,10 @@ const messages: Record<number, string> = {
 export function platformOrigin(value = process.env.CONVOY_API_URL ?? "http://127.0.0.1:8080"): string {
   const url = new URL(value);
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  // Opt-in for the existing single-host Compose network; never browser supplied.
+  const compose = process.env.CONVOY_API_INTERNAL_HTTP === "1" && url.origin === "http://control-plane:8080";
   if (url.username || url.password || url.search || url.hash || url.pathname !== "/"
-      || (url.protocol !== "https:" && !(local && url.protocol === "http:"))) {
+      || (url.protocol !== "https:" && !((local || compose) && url.protocol === "http:"))) {
     throw new ProxyFailure(503, "The management connection is not configured correctly.");
   }
   return url.origin;
@@ -41,7 +43,8 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
     allowed = /^(auth\/me|projects|devices)$/.test(path)
       || new RegExp(`^(devices|deployments|missions|episodes)/${ID}$`).test(path)
       || new RegExp(`^applications/${ID}/(releases|evaluation-suites|evaluation-gate)$`).test(path)
-      || new RegExp(`^evaluation-suites/${ID}$`).test(path);
+      || new RegExp(`^evaluation-suites/${ID}$`).test(path)
+      || new RegExp(`^episodes/${ID}/replay(?:/frames/[0-9]{1,4})?$`).test(path);
     if (["robots", "applications", "missions", "evaluations"].includes(path)) { allowed = true; keys = ["project_id"]; required = keys; }
     if (path === "deployments") { allowed = true; keys = ["project_id", "robot_id"]; required = ["project_id"]; }
     if (path === "episodes") { allowed = true; keys = ["mission_id"]; required = keys; }
@@ -63,7 +66,7 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
 }
 
 function consoleOrigin(request: Request): string {
-  const configured = process.env.CONVOY_CONSOLE_ORIGIN;
+  const configured = process.env.CONVOY_CONSOLE_ORIGIN ?? process.env.PORTAL_PUBLIC_ORIGIN;
   const actual = new URL(request.url).origin;
   if (!configured) return actual;
   const parsed = new URL(configured);

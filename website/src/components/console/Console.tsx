@@ -16,7 +16,7 @@ const PROFILES = [
 ];
 const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 
-function Brand() { return <Link className="console-brand" href="/">Convoy <span>/ console</span></Link>; }
+function Brand() { return <Link className="console-brand" href="/app">Convoy <span>/ applications</span></Link>; }
 function Status({ state }: { state: string }) {
   return <span className={`console-status console-status-${["ready", "completed"].includes(state) ? "success" : ["failed", "unknown", "blocked"].includes(state) ? "warning" : "neutral"}`}>{state.replaceAll("_", " ")}</span>;
 }
@@ -60,7 +60,7 @@ function Login({ initialError, onLogin }: { initialError: string | null; onLogin
       <label>Password<input name="password" type="password" autoComplete="current-password" required /></label>
       {error && <Alert>{error}</Alert>}
       <button className="btn btn-primary" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
-    </form><p className="console-note">This console uses the management API. The Jetson demo remains at <Link href="/portal">/portal</Link>.</p>
+    </form><p className="console-note">Your management account controls projects and deployments. <Link href="/app/device">Device & inference</Link> uses the configured device demo access.</p>
   </section></main>;
 }
 

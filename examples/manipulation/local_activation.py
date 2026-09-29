@@ -329,6 +329,7 @@ def run(args) -> dict:
         api_env = {**child_environment(), "CONVOY_DATA_DIR": str(output / "server"), "CONVOY_SIMULATOR": "1",
                    "CONVOY_SCHEDULER_INPROCESS": "0", "CONVOY_ADMIN_EMAIL": email, "CONVOY_ADMIN_PASSWORD": password,
                    "CONVOY_PUBLIC_URL": base, "CONVOY_LOG_LEVEL": "WARNING",
+                   "CONVOY_REPLAY_JOURNAL": str(output / "robot/coordinator/execution.sqlite3"),
                    **api_signing}
         coordinator_env = {**child_environment(), **scoped, **verification}
         evidence["authorization"] = {"mode": "Ed25519 JWT", "issuer": "convoy-development-api",

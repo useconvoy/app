@@ -1,6 +1,6 @@
 # Application console
 
-`/console` uses the authenticated lifecycle APIs on the existing Python management server. It does not use the Jetson demo's shared operator token or portal session. The demo at `/portal` is unchanged.
+`/app/applications` (also available at `/console`)  uses the authenticated lifecycle APIs on the existing Python management server. It does not use the Jetson demo's shared operator token or portal session. The demo at `/portal` is unchanged.
 
 Set server-side `CONVOY_API_URL` to the API origin (default `http://127.0.0.1:8080`). HTTP is permitted only for literal localhost addresses; remote origins require HTTPS. Set `CONVOY_CONSOLE_ORIGIN` to the exact public console origin when a reverse proxy changes the request origin. Neither setting is exposed as a browser-selected endpoint.
 
@@ -43,3 +43,5 @@ evaluation, accepted planner evidence, real action count, promotion and mobile
 layout. It starts/stops only its own web server and browser. This check's controlled
 planner does not qualify a Jetson/cloud planning model; declared placement is not
 host attestation. Keep the descriptor, credentials and process logs private.
+
+Episode camera playback and the shared device/application navigation are documented in [the workspace guide](../../../../docs/v1/unified-workspace.md).

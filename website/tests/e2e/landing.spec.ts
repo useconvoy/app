@@ -239,7 +239,7 @@ test.describe("landing page", () => {
       expect(response.status(), path).toBe(308);
       expect(response.headers()["location"], path).toBe("/");
     }
-    for (const path of ["/app", "/sign-in", "/api/auth/workos"]) {
+    for (const path of ["/sign-in", "/api/auth/workos"]) {
       const response = await page.request.get(path, { maxRedirects: 0 });
       expect(response.status(), path).toBe(404);
     }

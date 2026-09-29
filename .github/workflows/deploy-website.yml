@@ -60,6 +60,7 @@ jobs:
           pnpm run lint
           pnpm run check:tokens
           bash scripts/test-portal.sh
+          pnpm run test:platform
           pnpm run build
           cp -r public .next/standalone/
           cp -r .next/static .next/standalone/.next/

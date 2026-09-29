@@ -1,3 +1,5 @@
+import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
+import "@/styles/workspace.css";
 import type { Metadata } from "next";
 import { Portal } from "@/components/portal/Portal";
 import "@/styles/portal.css";
@@ -9,4 +11,4 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, googleBot: { index: false, follow: false } },
 };
 
-export default function PortalPage() { return <Portal />; }
+export default function PortalPage() { return <WorkspaceShell><Portal /></WorkspaceShell>; }

@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
   // needs the image optimizer.
   images: { unoptimized: true },
   // Previous marketing paths keep their landing redirect. The new demo uses
-  // /portal and /api/portal; the old /app and /sign-in console stays retired.
+  // /app is the shared workspace; /portal and /console remain compatible entry points.
   async redirects() {
     return [
       // One public host. Caddy serves both names to this app with the

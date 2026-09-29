@@ -2,7 +2,7 @@ name: simulation-checks
 
 on:
   push:
-    branches: [v1]
+    branches: [main, v1]
     paths: ["integrations/simulation/**", "control-plane/**", "examples/manipulation/**", ".github/workflows/simulation-checks.yml"]
   pull_request:
     paths: ["integrations/simulation/**", "control-plane/**", "examples/manipulation/**", ".github/workflows/simulation-checks.yml"]
