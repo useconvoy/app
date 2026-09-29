@@ -65,7 +65,7 @@ jobs:
       # Metadata, reset and owned foreground-process tests; no model dependencies or downloads.
       - run: uv run --frozen ruff check ../integrations/lerobot
       - run: PYTHONPATH=../integrations/lerobot/src:../integrations/planner/src uv run --frozen --all-packages --extra local-host pytest -q ../integrations/lerobot/tests
-      - run: PYTHONPATH=../integrations/lerobot/src:../integrations/planner/src uv run --frozen pytest -q ../examples/manipulation/test_real_planner.py ../examples/manipulation/test_local_gateway.py ../examples/manipulation/test_pipeline_external.py
+      - run: PYTHONPATH=../integrations/lerobot/src:../integrations/planner/src uv run --frozen pytest -q ../examples/manipulation/test_real_planner.py ../examples/manipulation/test_local_gateway.py ../examples/manipulation/test_pipeline_external.py ../examples/manipulation/test_external_planner.py
 
   planner:
     runs-on: ubuntu-latest
