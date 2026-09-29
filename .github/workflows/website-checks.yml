@@ -1,11 +1,11 @@
 name: website-checks
 
-# Pull-request and v1 integration gates for the website/BFF, API, Python 3.10 device agent and
+# Pull-request, main and v1 integration gates for the website/BFF, API, Python 3.10 device agent and
 # existing-host deployment contract. The retired MVP web app is not bundled.
 
 on:
   push:
-    branches: ["v1"]
+    branches: ["main", "v1"]
     paths: ["control-plane/**", "integrations/lerobot/**", "integrations/planner/**", "infra/planner/**", "examples/manipulation/**", "website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/**"]
   pull_request:
     paths: ["control-plane/**", "integrations/lerobot/**", "integrations/planner/**", "infra/planner/**", "examples/manipulation/**", "website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/**"]

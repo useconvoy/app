@@ -2,7 +2,7 @@ name: postgres-checks
 
 on:
   push:
-    branches: [v1]
+    branches: [main, v1]
     paths: ["control-plane/**", "integrations/simulation/**", "examples/manipulation/**", "infra/development/postgres.compose.yml", ".github/workflows/postgres-checks.yml"]
   pull_request:
     paths: ["control-plane/**", "integrations/simulation/**", "examples/manipulation/**", "infra/development/postgres.compose.yml", ".github/workflows/postgres-checks.yml"]

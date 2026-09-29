@@ -3,7 +3,7 @@ name: aws-staging-checks
 on:
   workflow_dispatch:
   push:
-    branches: [v1]
+    branches: [main, v1]
     paths: ["infra/aws-v1/**", "infra/aws-planner-trial/**", "infra/runtime/**", ".github/workflows/aws-staging-checks.yml"]
   pull_request:
     paths: ["infra/aws-v1/**", "infra/aws-planner-trial/**", "infra/runtime/**", ".github/workflows/aws-staging-checks.yml"]

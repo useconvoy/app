@@ -3,7 +3,7 @@ name: service-images
 on:
   workflow_dispatch:
   push:
-    branches: [v1]
+    branches: [main, v1]
     paths: ["infra/development/services.py", "infra/development/services.compose.yml", "infra/development/containers/**", "infra/development/tests/**", "infra/development/reference.Dockerfile*", "infra/runtime/**", "infra/aws-v1/**", "control-plane/Dockerfile", "control-plane/uv.lock", "website/Dockerfile", "website/pnpm-lock.yaml", "integrations/simulation/pyproject.toml", "integrations/simulation/uv.lock", ".github/workflows/service-images.yml"]
   pull_request:
     paths: ["infra/development/services.py", "infra/development/services.compose.yml", "infra/development/containers/**", "infra/development/tests/**", "infra/development/reference.Dockerfile*", "infra/runtime/**", "infra/aws-v1/**", "control-plane/Dockerfile", "control-plane/uv.lock", "website/Dockerfile", "website/pnpm-lock.yaml", "integrations/simulation/pyproject.toml", "integrations/simulation/uv.lock", ".github/workflows/service-images.yml"]

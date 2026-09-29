@@ -2,7 +2,7 @@ name: console-checks
 
 on:
   push:
-    branches: [v1]
+    branches: [main, v1]
     paths: ["website/**", "control-plane/**", "integrations/simulation/**", "examples/manipulation/**", ".github/workflows/console-checks.yml"]
   pull_request:
     paths: ["website/**", "control-plane/**", "integrations/simulation/**", "examples/manipulation/**", ".github/workflows/console-checks.yml"]
