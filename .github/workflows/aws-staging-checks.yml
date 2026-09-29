@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
   push:
     branches: [v1]
-    paths: ["infra/aws-v1/**", "infra/runtime/**", ".github/workflows/aws-staging-checks.yml"]
+    paths: ["infra/aws-v1/**", "infra/aws-planner-trial/**", "infra/runtime/**", ".github/workflows/aws-staging-checks.yml"]
   pull_request:
-    paths: ["infra/aws-v1/**", "infra/runtime/**", ".github/workflows/aws-staging-checks.yml"]
+    paths: ["infra/aws-v1/**", "infra/aws-planner-trial/**", "infra/runtime/**", ".github/workflows/aws-staging-checks.yml"]
 
 permissions:
   contents: read
@@ -45,6 +45,12 @@ jobs:
           terraform -chdir=infra/aws-v1 init -backend=false -input=false -lockfile=readonly
           terraform -chdir=infra/aws-v1 validate
           terraform -chdir=infra/aws-v1 test -var-file=example.tfvars
+      - name: Validate isolated planner trial and run four mocked plans
+        run: |
+          terraform -chdir=infra/aws-planner-trial fmt -check -recursive
+          terraform -chdir=infra/aws-planner-trial init -backend=false -input=false -lockfile=readonly
+          terraform -chdir=infra/aws-planner-trial validate
+          terraform -chdir=infra/aws-planner-trial test -var-file=example.tfvars
       - uses: astral-sh/setup-uv@v6
         with:
           version: "0.8.22"
