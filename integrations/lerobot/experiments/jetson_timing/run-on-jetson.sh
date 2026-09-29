@@ -15,6 +15,8 @@ docker run --rm --init --name "convoy-timing-$RUN" --runtime nvidia --network no
   --memory 4500m --memory-swap 4500m --cpus 4 --shm-size 256m \
   --cap-drop ALL --security-opt no-new-privileges:true --user "$(id -u):$(id -g)" \
   -e HOME=/tmp -e CUDA_CACHE_PATH=/tmp/cuda-cache -e CONVOY_EXPERIMENT_IMAGE="$IMAGE_ID" \
+  -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics \
+  -e MUJOCO_GL="${CONVOY_TIMING_GL:-egl}" \
   -v "$ROOT/repo:/repo:ro" -v "$ROOT/assets:/assets:ro" -v "$ROOT/results:/results" \
   "$IMAGE" --output "/results/$RUN" "$@"
 RESULT=$?

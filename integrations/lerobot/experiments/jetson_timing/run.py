@@ -70,8 +70,12 @@ def calibrate(seed):
             rendering.append(time.monotonic() - start)
             if pixels.shape != (480, 480, 3):
                 raise ValueError(f"unexpected camera shape {pixels.shape}")
+        from OpenGL import GL
+        renderer = {name: (GL.glGetString(token) or b"unknown").decode()
+                    for name, token in (("vendor", GL.GL_VENDOR), ("renderer", GL.GL_RENDERER),
+                                        ("version", GL.GL_VERSION))}
         return {"physics_step_s": distribution(physics), "camera_render_s": distribution(rendering),
-                "control_period_s": float(env.dt), "camera_shape": list(pixels.shape)}
+                "control_period_s": float(env.dt), "camera_shape": list(pixels.shape), "opengl": renderer}
     finally:
         wrapper.close()
 
@@ -81,6 +85,7 @@ def episode(args, seed, output, connection=None, process=None):
 
     wrapper, env, observation = create_environment(seed)
     dt = float(env.dt)
+    initial_state_sha256 = hashlib.sha256(np.asarray(observation, dtype="<f8").tobytes()).hexdigest()
     playback = Playback(args.max_age)
     frames, events = [], []
     inference_times, render_times, physics_times, ages, lags = [], [], [], [], []
@@ -93,6 +98,9 @@ def episode(args, seed, output, connection=None, process=None):
     steps = 0
     try:
         for tick in range(args.steps):
+            if time.monotonic() - started >= args.max_wall:
+                status = "wall_budget_exhausted"
+                break
             target = started + tick * dt
             if args.mode == "realtime":
                 time.sleep(max(0, target - time.monotonic()))
@@ -136,6 +144,12 @@ def episode(args, seed, output, connection=None, process=None):
                         raise RuntimeError("drop injection is only supported in realtime mode")
                     offline_action = message["actions"][0]
 
+            if args.policy == "scripted" and args.record and time.monotonic() >= next_frame and len(frames) < 120:
+                captured = time.monotonic()
+                frames.append((captured - started, wrapper.render().copy()))
+                render_times.append(time.monotonic() - captured)
+                next_frame = captured + .1
+
             now = time.monotonic()
             lag = max(0, now - target) if args.mode == "realtime" else 0
             if args.mode == "realtime" and lag > args.max_lag:
@@ -167,8 +181,12 @@ def episode(args, seed, output, connection=None, process=None):
                 status = "success" if success else "terminated" if terminated else "truncated"
                 break
         wall = time.monotonic() - started
+        if args.record and len(frames) < 120:
+            # Final-state capture occurs after the timed loop, with no further step.
+            frames.append((wall, wrapper.render().copy()))
         result = {
             "seed": seed, "status": status, "success": success, "steps": steps,
+            "initial_state_sha256": initial_state_sha256,
             "wall_s": wall, "simulated_s": steps * dt, "real_time_factor": steps * dt / wall,
             "physics_lag_s": distribution(lags), "physics_step_s": distribution(physics_times),
             "camera_render_s": distribution(render_times), "inference_s": distribution(inference_times),
@@ -177,7 +195,7 @@ def episode(args, seed, output, connection=None, process=None):
             "policy_requests": requested, "policy_results": completed,
             "stale_results": rejected, "dropped_results": dropped,
             "fallback_ticks": fallback, "fallback_fraction": fallback / steps if steps else None,
-            "timing_pass": args.mode == "realtime" and status != "simulator_overrun"
+            "timing_pass": args.mode == "realtime" and status in {"success", "horizon", "terminated", "truncated"}
                            and bool(lags) and distribution(lags)["p95"] <= dt,
             "parent_peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
         }
@@ -212,6 +230,7 @@ def main():
     parser.add_argument("--chunk-size", type=int, default=50)
     parser.add_argument("--max-age", type=float, default=.625)
     parser.add_argument("--max-lag", type=float, default=.25)
+    parser.add_argument("--max-wall", type=float, default=90)
     parser.add_argument("--policy-delay-ms", type=float, default=0)
     parser.add_argument("--drop-every", type=int, default=0)
     parser.add_argument("--record", action="store_true")
@@ -220,7 +239,7 @@ def main():
     seeds = [int(s) for s in args.seeds.split(",")]
     if (not 1 <= args.steps <= 500 or not 1 <= args.chunk_size <= 50 or not 1 <= len(seeds) <= 20
             or len(set(seeds)) != len(seeds) or any(s < 0 or s >= 2**32 for s in seeds)
-            or any(not math.isfinite(v) or v <= 0 for v in (args.max_age, args.max_lag))
+            or any(not math.isfinite(v) or v <= 0 for v in (args.max_age, args.max_lag, args.max_wall))
             or not math.isfinite(args.policy_delay_ms) or not 0 <= args.policy_delay_ms <= 5000
             or args.drop_every < 0):
         parser.error("invalid bounded experiment configuration")
@@ -232,6 +251,7 @@ def main():
     manifest = {"schema_version": 1, "profile": "jetson-timing-experimental-v1", "config": config,
                 "platform": platform.platform(), "python": platform.python_version(),
                 "container_image": os.environ.get("CONVOY_EXPERIMENT_IMAGE"),
+                "render_backend": os.environ.get("MUJOCO_GL"),
                 "source_sha256": {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
                                   for p in Path(__file__).parent.glob("*.py")},
                 "packages": {name: importlib.metadata.version(name) for name in
@@ -281,7 +301,8 @@ def main():
                 process.kill()
                 process.join(3)
             connection.close()
-        summary["task_success_rate"] = sum(e["success"] for e in summary["episodes"]) / len(seeds)
+        summary["task_success_rate"] = (sum(e["success"] for e in summary["episodes"]) / len(seeds)
+                                        if args.mode != "calibrate" else None)
         write_json(args.output / "summary.json", summary)
         print(json.dumps(summary, indent=2))
 

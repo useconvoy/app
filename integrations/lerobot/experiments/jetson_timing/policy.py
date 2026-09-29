@@ -22,6 +22,15 @@ class VisualPolicy:
         torch.set_num_interop_threads(1)
         if device == "cuda" and not torch.cuda.is_available():
             raise RuntimeError("CUDA requested but unavailable; no silent CPU fallback")
+        if device == "cuda":
+            # Device discovery does not prove that this wheel contains usable
+            # Orin kernels. Check both the NumPy bridge and CUDA before weights.
+            probe = torch.from_numpy(np.ones((4, 4), dtype=np.float32)).to(device)
+            _ = probe.sum().item()
+            result = (probe @ probe).cpu().numpy()
+            if not np.all(result == 4):
+                raise RuntimeError("CUDA/NumPy preflight produced incorrect values")
+            del probe, result
         self.np, self.torch, self.device, self.chunk_size = np, torch, device, chunk_size
         cfg = SmolVLAConfig.from_pretrained(str(root / "checkpoint"))
         cfg.device, cfg.load_vlm_weights = device, False

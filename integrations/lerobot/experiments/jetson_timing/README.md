@@ -9,6 +9,35 @@ The first question is whether the Jetson can run the local loop. Cloud planner
 integration follows only after this gate; the delay/drop flags below inject
 **action-policy result delivery faults**, not cloud planning latency.
 
+## Hardware qualification status (2026-09-29)
+
+**The colocated learned-policy loop is not qualified.** On an 8 GB Orin,
+JetPack/L4T 36.4.7, the current Dockerfile built successfully and passed
+`pip check`, but its PyTorch 2.10.0+cu126 runtime failed a tiny CUDA reduction
+with `no kernel image is available for execution on the device`. A matrix probe
+also failed with `CUBLAS_STATUS_ALLOC_FAILED`. CUDA device discovery alone
+incorrectly appeared healthy. The policy worker now checks an actual reduction,
+matrix operation and NumPy conversion before loading weights.
+
+The image used for the following measurements was
+`sha256:de1e0c40688aa727d9ef4e446a5f80f995907ea6cd4a902578dc04a7ba1de6ba`.
+
+| Trial | Result |
+| --- | --- |
+| Isolated physics/camera calibration | Physics p95 2.09 ms; camera p95 7.18 ms; NVIDIA Tegra Orin EGL renderer |
+| Scripted controller, seeds 0/1/2, recording off | 3/3 benchmark successes and timing passes; per-episode physics-lag p95 0.090–0.099 ms |
+| Same scripted controller, camera recording on | 3/3 benchmark successes, 0/3 timing passes; physics-lag p95 19.7–20.5 ms versus the 12.5 ms limit |
+| Learned action policy | CUDA preflight fails; no learned-action timing or task-success result |
+
+These are short smoke episodes (53–56 actions, about 0.7 seconds), not sustained
+load qualification. The scripted controller has privileged state and is not a
+learned model. Camera work in the physics process missed timing even without
+learned inference, so it must be separated before qualifying the complete loop.
+The no-recording result diagnoses that overhead; it is not a substitute for the
+camera-enabled learned-policy experiment. No cloud-planner or delay/drop trial
+has run. Keep this profile experimental until a supported Orin/Python/LeRobot
+runtime and an independent camera loop pass the same timing criteria.
+
 ## Timing semantics
 
 - The parent process owns MuJoCo and the camera. A spawned child owns inference.
@@ -38,10 +67,16 @@ integration follows only after this gate; the delay/drop flags below inject
 ## Isolated installation
 
 Use a JetPack-compatible NVIDIA PyTorch base, resolved to an immutable digest.
-The Dockerfile preserves NVIDIA's installed Torch/Torchvision versions and installs
-the other experiment dependencies in an isolated virtual environment. The complete
+The Dockerfile uses the vendor image's graphics libraries but installs stable
+PyTorch CUDA 12.6 wheels and experiment dependencies in an isolated virtual environment. The complete
 resolved package list is saved inside the image at `/opt/experiment-packages.txt`.
 The exact image ID and observed packages must accompany each qualification.
+The initial vendor Torch build could execute a CUDA tensor but could not bridge
+NumPy 2, and its Torchvision prerelease did not satisfy LeRobot's declared minimum.
+The current recipe does not inherit those Python packages. Stable Torch/Torchvision
+wheels are hash-pinned and `pip check` must succeed, but this is insufficient for
+Orin GPU compatibility (see the failed hardware qualification above). This is a distinct
+experimental runtime, not a reuse of the qualified CPU package lock.
 
 ```sh
 docker build --build-arg BASE_IMAGE=nvcr.io/nvidia/pytorch@sha256:<verified-digest> \
