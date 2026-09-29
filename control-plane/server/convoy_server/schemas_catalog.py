@@ -56,6 +56,8 @@ class RuntimeConfigIn(BaseModel):
     n_predict: int = Field(default=128, ge=1, le=4096)
     batch_size: int = Field(default=256, ge=1, le=4096)
     ubatch_size: int = Field(default=128, ge=1, le=4096)
+    threads: int | None = Field(default=None, ge=1, le=256)
+    threads_batch: int | None = Field(default=None, ge=1, le=256)
     parallel: Literal[1] = 1
     gpu_layers: int | Literal["all"] = "all"
     cache_ram_mib: Literal[0] = 0
@@ -68,6 +70,15 @@ class RuntimeConfigIn(BaseModel):
     request_deadline_s: int = Field(default=30, ge=1, le=300)
     queue_depth: int = Field(default=4, ge=1, le=16)
     sim: dict[str, Any] | None = None
+
+    @field_validator("threads", "threads_batch", mode="before")
+    @classmethod
+    def _explicit_threads(cls, v):
+        # Omitted defaults disappear through exclude_none. An explicitly supplied
+        # value must match the agent's exact-int contract, including no null/auto.
+        if type(v) is not int:
+            raise ValueError("thread counts must be explicit integers")
+        return v
 
     @field_validator("gpu_layers")
     @classmethod

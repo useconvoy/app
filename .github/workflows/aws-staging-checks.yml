@@ -1,0 +1,62 @@
+name: aws-staging-checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, v1]
+    paths: ["infra/aws-v1/**", "infra/aws-planner-trial/**", "infra/runtime/**", ".github/workflows/aws-staging-checks.yml"]
+  pull_request:
+    paths: ["infra/aws-v1/**", "infra/aws-planner-trial/**", "infra/runtime/**", ".github/workflows/aws-staging-checks.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TERRAFORM_VERSION: "1.14.7"
+      TF_IN_AUTOMATION: "true"
+      AWS_EC2_METADATA_DISABLED: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Terraform and verify its official checksum
+        shell: bash
+        run: |
+          install_dir="$RUNNER_TEMP/convoy-terraform"
+          mkdir -p "$install_dir"
+          cd "$install_dir"
+          archive="terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
+          checksums="terraform_${TERRAFORM_VERSION}_SHA256SUMS"
+          release="https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}"
+          curl --fail --silent --show-error --location --retry 3 "$release/$archive" --output "$archive"
+          curl --fail --silent --show-error --location --retry 3 "$release/$checksums" --output "$checksums"
+          grep " $archive\$" "$checksums" | sha256sum -c
+          unzip -q "$archive"
+          echo "$install_dir" >> "$GITHUB_PATH"
+      - name: Validate real provider schema and run three mocked plans
+        run: |
+          terraform -chdir=infra/aws-v1 fmt -check -recursive
+          terraform -chdir=infra/aws-v1 init -backend=false -input=false -lockfile=readonly
+          terraform -chdir=infra/aws-v1 validate
+          terraform -chdir=infra/aws-v1 test -var-file=example.tfvars
+      - name: Validate isolated planner trial and run four mocked plans
+        run: |
+          terraform -chdir=infra/aws-planner-trial fmt -check -recursive
+          terraform -chdir=infra/aws-planner-trial init -backend=false -input=false -lockfile=readonly
+          terraform -chdir=infra/aws-planner-trial validate
+          terraform -chdir=infra/aws-planner-trial test -var-file=example.tfvars
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.22"
+          python-version: "3.12"
+      - name: Lint hosting helpers without installing model dependencies
+        run: uvx --from ruff==0.16.7 ruff check infra/aws-v1 infra/runtime
+      - name: Verify role-scoped key bootstrap without model dependencies
+        working-directory: control-plane
+        run: uv run --frozen --all-packages pytest -q ../infra/runtime/tests

@@ -23,7 +23,7 @@ export async function request<T>(path: string, options?: RequestInit): Promise<T
   return data as T;
 }
 export function errorText(error: unknown): string { return error instanceof Error ? error.message : "The connection could not be completed. Try again."; }
-export function Mark() { return <Link href="/" className="convoy-wordmark portal-wordmark" aria-label="Convoy home"><Image src={BRAND.iconSvg} alt="" width={30} height={30} />Convoy</Link>; }
+export function Mark() { return <Link href="/app" className="convoy-wordmark portal-wordmark" aria-label="Convoy workspace"><Image src={BRAND.iconSvg} alt="" width={30} height={30} />Convoy</Link>; }
 export function Badge({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "success" | "warning" | "error" }) { return <span className={`portal-badge portal-badge-${tone}`}>{children}</span>; }
 export function Notice({ children, error = false }: { children: React.ReactNode; error?: boolean }) { return <div className={`portal-notice${error ? " portal-notice-error" : ""}`} role={error ? "alert" : "status"}>{children}</div>; }
 
@@ -65,7 +65,7 @@ function Login({ onLogin, initialError }: { onLogin: () => void; initialError: s
     <Mark />
     <div className="portal-auth-layout">
       <div className="portal-auth-copy"><p className="portal-eyebrow">Convoy / Jetson demo</p><h1>A real model.<br />A real device.</h1><p>Talk to the model on our Jetson. Follow each request through its response, measured usage, and device telemetry.</p><div className="portal-auth-foot"><span className="portal-signal" />On-device inference</div></div>
-      <section className="portal-auth-card" aria-labelledby="sign-in-heading"><p className="portal-eyebrow">Demo access</p><h2 id="sign-in-heading">Open the portal</h2><p>Sign in with your demo credentials.</p>
+      <section className="portal-auth-card" aria-labelledby="sign-in-heading"><p className="portal-eyebrow">Device access</p><h2 id="sign-in-heading">Open device tools</h2><p>Sign in with your device demo credentials. Project access is managed separately.</p>
         <form onSubmit={(event) => void login(event)}>
           <label htmlFor="portal-email">Email</label><input id="portal-email" type="email" autoComplete="username" className="field-input" required value={email} onChange={(e) => setEmail(e.target.value)} />
           <label htmlFor="portal-password">Password</label><input id="portal-password" type="password" autoComplete="current-password" className="field-input" required value={password} onChange={(e) => setPassword(e.target.value)} />
@@ -110,7 +110,7 @@ function Workspace({ onSessionEnd }: { onSessionEnd: () => void }) {
   }, []);
   useEffect(() => { const initial = window.setTimeout(() => void refresh(), 0); const timer = window.setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 10000); return () => { window.clearTimeout(initial); window.clearInterval(timer); }; }, [refresh]);
   useEffect(() => { const timer = window.setInterval(() => { setNow(Date.now()); setMonotonicNow(performance.now()); }, 1000); return () => window.clearInterval(timer); }, []);
-  function navigate(next: View) { setView(next); window.history.pushState(null, "", `/portal${next === "device" ? "" : `?view=${next}`}`); }
+  function navigate(next: View) { setView(next); window.history.pushState(null, "", `/app/device${next === "device" ? "" : `?view=${next}`}`); }
   async function logout() { try { await request<PortalSession>("session", { method: "DELETE" }); onSessionEnd(); } catch (cause) { setError(errorText(cause)); } }
   function openTrace(id: string) { setTraceId(id); navigate("traces"); }
   const stale = !!error || (receivedAt !== null && monotonicNow - receivedAt > 30000);
@@ -121,8 +121,8 @@ function Workspace({ onSessionEnd }: { onSessionEnd: () => void }) {
   const statusLabel = identityStatus ?? (stale ? "Refresh needed" : live ? "Online" : "No recent live contact");
   return <div className="portal-shell">
     <a href="#portal-main" className="portal-skip">Skip to content</a>
-    <aside className="portal-sidebar"><Mark /><div className="portal-workspace-label">Jetson demo</div>
-      <nav aria-label="Portal">{views.map((item, index) => <a key={item} href={`/portal${item === "device" ? "" : `?view=${item}`}`} aria-current={view === item ? "page" : undefined} onClick={(event) => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) { event.preventDefault(); navigate(item); } }}><span className="portal-nav-number" aria-hidden="true">0{index + 1}</span>{item[0].toUpperCase() + item.slice(1)}<span className="portal-nav-arrow" aria-hidden="true">↗</span></a>)}</nav>
+    <aside className="portal-sidebar"><Mark /><div className="portal-workspace-label">Device & inference</div>
+      <nav aria-label="Portal">{views.map((item, index) => <a key={item} href={`/app/device${item === "device" ? "" : `?view=${item}`}`} aria-current={view === item ? "page" : undefined} onClick={(event) => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) { event.preventDefault(); navigate(item); } }}><span className="portal-nav-number" aria-hidden="true">0{index + 1}</span>{item[0].toUpperCase() + item.slice(1)}<span className="portal-nav-arrow" aria-hidden="true">↗</span></a>)}</nav>
       <div className="portal-sidebar-bottom"><p>Inference on a physical Jetson.<br />Measurements from the device.</p><Link className="text-link" href="/">Convoy website ↗</Link></div>
     </aside>
     <div className="portal-workarea">

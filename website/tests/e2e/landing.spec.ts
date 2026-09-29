@@ -193,6 +193,9 @@ test.describe("landing page", () => {
     await page.getByRole("button", {name:"Menu", exact:true}).click();
     await page.setViewportSize({width:1280, height:800});
     await expect(page.locator("[data-mobile-menu]")).toBeHidden();
+    // Desktop CSS hides the menu before the matchMedia handler clears its state.
+    // Observe that reset before reversing the viewport and potentially coalescing the events.
+    await expect(page.locator(".mobile-menu-trigger")).toHaveAttribute("aria-expanded", "false");
     await page.setViewportSize({width:390, height:844});
     await expect(page.getByRole("button", {name:"Menu", exact:true})).toHaveAttribute("aria-expanded", "false");
   });
@@ -236,7 +239,7 @@ test.describe("landing page", () => {
       expect(response.status(), path).toBe(308);
       expect(response.headers()["location"], path).toBe("/");
     }
-    for (const path of ["/app", "/sign-in", "/api/auth/workos"]) {
+    for (const path of ["/sign-in", "/api/auth/workos"]) {
       const response = await page.request.get(path, { maxRedirects: 0 });
       expect(response.status(), path).toBe(404);
     }

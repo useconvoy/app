@@ -1,14 +1,21 @@
 name: website-checks
 
-# Pull-request gates for the website/BFF, API, Python 3.10 device agent and
+# Pull-request, main and v1 integration gates for the website/BFF, API, Python 3.10 device agent and
 # existing-host deployment contract. The retired MVP web app is not bundled.
 
 on:
+  push:
+    branches: ["main", "v1"]
+    paths: ["control-plane/**", "integrations/lerobot/**", "integrations/planner/**", "infra/planner/**", "examples/manipulation/**", "website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/**"]
   pull_request:
-    paths: ["control-plane/**", "website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/**"]
+    paths: ["control-plane/**", "integrations/lerobot/**", "integrations/planner/**", "infra/planner/**", "examples/manipulation/**", "website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/**"]
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   checks:
@@ -30,6 +37,7 @@ jobs:
       - run: pnpm run lint
       - run: pnpm run check:tokens
       - run: bash scripts/test-portal.sh
+      - run: pnpm run test:platform
       - run: pnpm run build
         env:
           NEXT_PUBLIC_SITE_URL: https://deployconvoy.com
@@ -51,8 +59,29 @@ jobs:
           version: "0.8.22"
           python-version: "3.12"
       - run: uv sync --frozen --all-packages
-      - run: uv run --frozen ruff check server agent
+      - run: uv run --frozen ruff check server agent contracts worker
       - run: uv run --frozen pytest -q server/tests
+      - run: uv run --frozen pytest -q contracts/tests worker/tests
+      # Metadata, reset and owned foreground-process tests; no model dependencies or downloads.
+      - run: uv run --frozen ruff check ../integrations/lerobot
+      - run: PYTHONPATH=../integrations/lerobot/src:../integrations/planner/src uv run --frozen --all-packages --extra local-host pytest -q ../integrations/lerobot/tests
+      - run: PYTHONPATH=../integrations/lerobot/src:../integrations/planner/src uv run --frozen pytest -q ../examples/manipulation/test_real_planner.py ../examples/manipulation/test_local_gateway.py ../examples/manipulation/test_pipeline_external.py ../examples/manipulation/test_external_planner.py
+
+  planner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: integrations/planner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.22"
+          python-version: "3.10"
+      - run: uv sync --frozen --extra owned
+      - run: uv run --frozen --extra owned ruff check . ../../infra/planner
+      - run: uv run --frozen --extra owned pytest -q tests ../../infra/planner/tests
 
   agent-python310:
     runs-on: ubuntu-latest
@@ -62,8 +91,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-      - run: python -m pip install pytest pytest-timeout -e control-plane/agent
+      - run: python -m pip install pytest pytest-timeout -e control-plane/contracts -e control-plane/agent
       - run: python -m pytest -q control-plane/agent/tests
+      - run: python -m pip install -e 'control-plane/agent[local-host]'
+      - run: python -m pytest -q control-plane/agent/tests/test_owned_process.py control-plane/agent/tests/test_owned_runtime.py
 
   deployment-contract:
     runs-on: ubuntu-latest

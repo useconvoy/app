@@ -1,7 +1,7 @@
 # Convoy landing page. Standalone Next.js output served by `node server.js`
 # on port 3000; the same image works under docker compose behind Caddy on
 # the Lightsail box (see README.md) or anywhere else a container runs.
-ARG NODE_IMAGE=node:22-alpine
+ARG NODE_IMAGE=node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
 
 FROM ${NODE_IMAGE} AS base
 ENV PNPM_HOME=/pnpm

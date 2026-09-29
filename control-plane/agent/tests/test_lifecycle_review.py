@@ -1449,7 +1449,9 @@ def test_tls_private_ca_is_additive_and_scoped_to_the_control_plane(tmp_path):
     key, cert = tmp_path / "ca.key", tmp_path / "ca.pem"
     r = subprocess.run(
         ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", str(key), "-out", str(cert),
-         "-days", "1", "-subj", "/CN=convoy-private-ca", "-addext", "subjectAltName=IP:127.0.0.1,DNS:localhost"],
+         "-days", "1", "-subj", "/CN=convoy-private-ca", "-addext", "subjectAltName=IP:127.0.0.1,DNS:localhost",
+         "-addext", "basicConstraints=critical,CA:TRUE",
+         "-addext", "keyUsage=critical,digitalSignature,keyEncipherment,keyCertSign,cRLSign"],
         capture_output=True, text=True,
     )  # fmt: skip
     if r.returncode != 0:

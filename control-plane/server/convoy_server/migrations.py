@@ -27,7 +27,9 @@ log = logging.getLogger("convoy.migrations")
 # Schema 3 also carries the ADDITIVE table `usage_unknown_intervals` (explicit unobserved intervals from
 # schema-2 usage records). A v3 database that predates it gains the table at startup through the ordinary
 # `plan_migration` -> `add_tables` path; no version bump or rebuild is involved.
-SCHEMA_VERSION = 3
+# Schema 4 adds the platform application lifecycle; old text release records are unchanged.
+# Schema 5 adds immutable evaluation suites, durable case jobs and release gates.
+SCHEMA_VERSION = 5
 
 
 class SchemaError(RuntimeError):
@@ -344,6 +346,10 @@ def migrate_database(settings: Settings, *, dry_run: bool = False) -> dict[str, 
     import shutil
 
     from .db import DbLocked, acquire_db_lock, make_engine
+    from .postgres import enabled, migrate
+
+    if enabled(settings):
+        return migrate(settings, dry_run=dry_run)
 
     path = db_file_path(settings)
     if path is None or not path.exists():

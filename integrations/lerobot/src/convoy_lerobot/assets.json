@@ -1,0 +1,30 @@
+{
+  "policy_repo": "lerobot/smolvla_metaworld",
+  "policy_revision": "cd6778d2cfa724c1bf5fc637490548e54d81dc4c",
+  "policy_weight_sha256": "6d3ce9f40627a247fa1c289517ec67da495810a58305c9bb1ec8588dfda0a736",
+  "policy_weight_bytes": 906712520,
+  "base_repo": "HuggingFaceTB/SmolVLM2-500M-Video-Instruct",
+  "base_revision": "7b375e1b73b11138ff12fe22c8f2822d8fe03467",
+  "base_weights_downloaded": false,
+  "assets": {
+    "checkpoint/model.safetensors": "6d3ce9f40627a247fa1c289517ec67da495810a58305c9bb1ec8588dfda0a736",
+    "checkpoint/config.json": "11e0df27a2a87cf9c12d4c7121fc2347719a6d47ed081f53e71e7f07fa5a467e",
+    "checkpoint/policy_postprocessor.json": "536e18d810e9c0fcebe34522242d6c2f6e00accfb5b4b98219de756d0581c7cd",
+    "checkpoint/policy_preprocessor.json": "2afa103d9467bfd21d280389df749b33026b88c4794068c5018187c5b517917d",
+    "checkpoint/README.md": "d74879c230d10cf9764bbcdc82f2193b219484c610cb8ff55abde5377be8bf80",
+    "checkpoint/policy_postprocessor_step_0_unnormalizer_processor.safetensors": "c0c9c63faa7940ac521ada8c74baa83f993fdb64d8b127e29351c3cdeb81209f",
+    "checkpoint/train_config.json": "c4b2ce20b7fc03439680f16b1099d2d2a95dd53ac33858522febb1a3369fc52e",
+    "checkpoint/policy_preprocessor_step_5_normalizer_processor.safetensors": "c0c9c63faa7940ac521ada8c74baa83f993fdb64d8b127e29351c3cdeb81209f",
+    "base-assets/added_tokens.json": "74135b8664b56088c0006f1c8e848d79a8eba003411f72ebf1dc2ee96227be3a",
+    "base-assets/tokenizer_config.json": "dd9ce2ab89a3dd881bd9378f1a79b943a064b9275a7e1706d5b7b47b68977913",
+    "base-assets/special_tokens_map.json": "2dfea2a426162316ff1567c82bc6d36d9690cd9f90455f075c77daca78b45c60",
+    "base-assets/chat_template.json": "b585e3598909a5687f9f9d738d35223724dedef256b9b274e1cbfb32b13c74bf",
+    "base-assets/config.json": "ea6bc1237e96247f6258de3e202e2e62b93d6f386dc47e7b36b5588bf3a15e17",
+    "base-assets/tokenizer.json": "5ece781dc8d2b2f3e2f289ca0ae50b17cfc27dd27bfe7971bb8241e0b964331a",
+    "base-assets/processor_config.json": "f3ad45028447b3562b4752be0d5916d6806c1ef589091a469608dcf0faa1737c",
+    "base-assets/generation_config.json": "34835060c9f0f74d1acb456cc72ca32746d3843d9eb5f578f9cbffac1d2eb840",
+    "base-assets/merges.txt": "0b54e8aa4e53d5383e2e4bc635a56b43f9647f7b13832d5d9ecd8f82dac4f510",
+    "base-assets/vocab.json": "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79",
+    "base-assets/preprocessor_config.json": "149e315d9410368e5491455bb06e0f763426e9e56cca731c13b24404a29b6374"
+  }
+}

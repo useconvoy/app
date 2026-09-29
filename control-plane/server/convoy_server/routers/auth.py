@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from convoy_contracts.pairing import PAIRED_PROFILE, release_profiles
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
@@ -13,6 +14,7 @@ from ..schemas import LoginIn
 from ..security import verify_password
 from ..serialize import user_out
 from ..services.identity import IdentityError, throttle_check
+from ..services.platform import validate_execution_signing
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -48,11 +50,19 @@ def logout(request: Request, response: Response, db: DbSession = Depends(get_db)
 def me(p: Principal = Depends(current_principal), db: DbSession = Depends(get_db)):
     inst = installation(db)
     s = get_settings()
+    profiles = release_profiles() if s.simulator else frozenset()
+    try:
+        validate_execution_signing(paired=True)
+    except HTTPException:
+        # Invalid asymmetric configuration disables every execution purpose. Old
+        # HMAC installations retain their existing single-policy capability list.
+        profiles = frozenset() if s.execution_signing_keys_file is not None else profiles - {PAIRED_PROFILE}
     return {
         "user": user_out(p.user),
         "via": p.via,
         "installation": {
             "simulator": s.simulator,
+            "execution_profiles": sorted(profiles),
             "quarantined_at": iso(inst.quarantined_at),
             "quarantine_reason": inst.quarantine_reason,
             "dispatch_paused_at": iso(inst.dispatch_paused_at),

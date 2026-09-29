@@ -54,6 +54,10 @@ def create_app(settings: Settings | None = None, *, start_scheduler: bool | None
 
     for r in (auth.router, users.router, enrollment.router):
         app.include_router(r)
+    from .routers import evaluations, platform
+
+    app.include_router(platform.router)
+    app.include_router(evaluations.router)
     _include_optional(app)
 
     @app.exception_handler(HTTPException)
@@ -63,6 +67,16 @@ def create_app(settings: Settings | None = None, *, start_scheduler: bool | None
         )
 
     from fastapi.exceptions import RequestValidationError
+
+    from .db import WriteConflict
+
+    @app.exception_handler(WriteConflict)
+    async def _write_conflict(request: Request, exc: WriteConflict):
+        return JSONResponse(
+            {"error": "database busy; retry the complete request with the same idempotency key"},
+            status_code=503,
+            headers={"Retry-After": "1"},
+        )
 
     @app.exception_handler(RequestValidationError)
     async def _validation_exc(request: Request, exc: RequestValidationError):

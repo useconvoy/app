@@ -14,6 +14,15 @@ def _bool(name: str, default: bool = False) -> bool:
 
 @dataclass
 class Settings:
+    execution_signing_keys_file: str | None = field(
+        default_factory=lambda: os.environ.get("CONVOY_EXECUTION_SIGNING_KEYS_FILE"), repr=False
+    )
+    execution_secret: str | None = field(
+        default_factory=lambda: os.environ.get("CONVOY_EXECUTION_SECRET"), repr=False
+    )
+    planner_execution_secret: str | None = field(
+        default_factory=lambda: os.environ.get("CONVOY_PLANNER_EXECUTION_SECRET"), repr=False
+    )
     data_dir: Path = field(default_factory=lambda: Path(os.environ.get("CONVOY_DATA_DIR", "./data")))
     database_url: str | None = field(default_factory=lambda: os.environ.get("DATABASE_URL"))
     simulator: bool = field(default_factory=lambda: _bool("CONVOY_SIMULATOR", False))

@@ -1,0 +1,72 @@
+name: service-images
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, v1]
+    paths: ["infra/development/services.py", "infra/development/services.compose.yml", "infra/development/containers/**", "infra/development/tests/**", "infra/development/reference.Dockerfile*", "infra/runtime/**", "infra/aws-v1/**", "control-plane/Dockerfile", "control-plane/uv.lock", "website/Dockerfile", "website/pnpm-lock.yaml", "integrations/simulation/pyproject.toml", "integrations/simulation/uv.lock", ".github/workflows/service-images.yml"]
+  pull_request:
+    paths: ["infra/development/services.py", "infra/development/services.compose.yml", "infra/development/containers/**", "infra/development/tests/**", "infra/development/reference.Dockerfile*", "infra/runtime/**", "infra/aws-v1/**", "control-plane/Dockerfile", "control-plane/uv.lock", "website/Dockerfile", "website/pnpm-lock.yaml", "integrations/simulation/pyproject.toml", "integrations/simulation/uv.lock", ".github/workflows/service-images.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  container-mission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify isolated installation configuration
+        run: python3 -m unittest discover -s infra/development/tests -v
+      - name: Build and provision independent services
+        run: |
+          mkdir -p integrations/simulation/runs/image-boundary integrations/simulation/dist
+          printf 'harmless private-run sentinel\n' > integrations/simulation/runs/image-boundary/connection.json
+          printf 'harmless device credential sentinel\n' > integrations/simulation/runs/image-boundary/credential
+          printf 'harmless build-output sentinel\n' > integrations/simulation/dist/sentinel.txt
+          python3 infra/development/services.py up
+      - name: Verify AWS runtime roles using the existing API build
+        run: |
+          docker build -f infra/aws-v1/api.Dockerfile \
+            --build-arg BASE_IMAGE=convoy-v1-api:local -t convoy-v1-aws-api:local .
+          docker build -f infra/aws-v1/inference.Dockerfile \
+            --build-arg BASE_IMAGE=convoy-v1-reference:local -t convoy-v1-aws-inference:local .
+          python3 infra/aws-v1/verify_runtime.py --api-image convoy-v1-aws-api:local --inference-image convoy-v1-aws-inference:local
+      - name: Verify private native runs were excluded from the image
+        run: >-
+          docker run --rm --entrypoint python convoy-v1-reference:local -c
+          "from pathlib import Path; root=Path('/app/integrations/simulation');
+          assert {p.name for p in root.iterdir()} <= {'.venv', 'pyproject.toml', 'uv.lock', 'src'},
+          'unexpected local state was copied into the reference image'"
+      - name: Verify real mission through the console API
+        run: |
+          python3 infra/development/services.py verify
+          cp infra/development/.services/evidence.json infra/development/.services/evidence-first.json
+      - name: Preserve installation across teardown and restart
+        run: |
+          python3 infra/development/services.py down
+          python3 infra/development/services.py up --skip-build
+          python3 infra/development/services.py verify
+      # Only named evidence/build outputs; .env, connection.json, keys and device
+      # credentials must never be uploaded with the artifact.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: service-mission-evidence
+          path: |
+            infra/development/.services/evidence*.json
+            infra/development/.services/build-*.log
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Remove this disposable installation
+        if: always()
+        run: |
+          if test -f infra/development/.services/.env; then
+            python3 infra/development/services.py down --delete-data
+          fi

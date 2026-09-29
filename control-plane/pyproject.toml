@@ -5,7 +5,7 @@ description = "Convoy: fleet model releases, evals, rollouts and telemetry for J
 requires-python = ">=3.10"
 
 [tool.uv.workspace]
-members = ["server", "agent"]
+members = ["server", "agent", "contracts", "worker"]
 
 [tool.uv]
 package = false

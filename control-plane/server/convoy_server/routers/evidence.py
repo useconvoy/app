@@ -326,6 +326,7 @@ def overview(p: Principal = Depends(require_role("viewer")), db: DbSession = Dep
 @router.get("/v1/settings")
 def settings_view(p: Principal = Depends(require_role("viewer"))):
     s = get_settings()
+    database = db_status()
     return {
         "retention": {
             "detail_days": s.retention_detail_days,
@@ -337,7 +338,8 @@ def settings_view(p: Principal = Depends(require_role("viewer"))):
         "heartbeat_interval_s": s.heartbeat_interval_s,
         "simulator": s.simulator,
         "public_url": s.public_url,
-        "sqlite": db_status(),
+        "database": database,
+        "sqlite": database if "sqlite_version" in database else None,
         "artifact_quota_bytes": s.artifact_quota_bytes,
         "max_upload_bytes": s.max_upload_bytes,
         "hardware_validation": HARDWARE_VALIDATION,
@@ -372,6 +374,12 @@ def list_backups(p: Principal = Depends(require_role("admin")), db: DbSession = 
 
 @router.post("/v1/admin/backups", status_code=201)
 def take_backup_now(p: Principal = Depends(require_role("admin")), db: DbSession = Depends(get_db)):
+    from ..postgres import enabled
     from ..services.backup import take_backup
+
+    if enabled(get_settings()):
+        raise HTTPException(
+            501, "PostgreSQL backups are externally managed; no Convoy backup has been created"
+        )
 
     return take_backup(db, None)

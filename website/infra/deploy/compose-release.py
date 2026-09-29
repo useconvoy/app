@@ -31,7 +31,8 @@ def deploy(document, sha, with_api):
         "image": "node:22-alpine", "restart": "unless-stopped",
         "working_dir": "/app", "command": ["node", "server.js"], "user": "node",
         "labels": {"io.convoy.portal": "true"},
-        "environment": {"NODE_ENV": "production", "PORT": "3000", "HOSTNAME": "0.0.0.0", "NEXT_TELEMETRY_DISABLED": "1"},
+        "environment": {"NODE_ENV": "production", "PORT": "3000", "HOSTNAME": "0.0.0.0", "NEXT_TELEMETRY_DISABLED": "1",
+                        "CONVOY_API_URL": "http://control-plane:8080", "CONVOY_API_INTERNAL_HTTP": "1"},
         "volumes": [f"./releases/{sha}:/app:ro"], "expose": ["3000"],
     })
     if with_api:
