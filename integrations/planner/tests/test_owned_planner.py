@@ -14,14 +14,14 @@ import httpx
 import psutil
 import pytest
 from convoy_agent.owned_process import OwnedProcess
-from fastapi.testclient import TestClient
-from test_planner import PROBE, Backend, manifest
-from test_signed_planner import keys as signing_keys  # noqa: F401
-from test_signed_planner import verifier
 
 # Imported pytest fixture; test parameters intentionally use its registration name.
 # ruff: noqa: F811
 from convoy_planner import owned
+from fastapi.testclient import TestClient
+from test_planner import PROBE, Backend, manifest
+from test_signed_planner import keys as signing_keys  # noqa: F401
+from test_signed_planner import verifier
 
 
 def receipt():
@@ -236,6 +236,39 @@ def test_serve_needs_planner_verifier_before_asset_loading(signing_keys, monkeyp
     args = SimpleNamespace(mode="serve", manifest=tmp_path / "never-read.json", assets=tmp_path / "no-assets")
     with pytest.raises(ValueError):
         owned.preflight(args)
+
+
+@pytest.mark.parametrize("placement", ["development-local", "development-remote-cpu", "development-jetson-lan"])
+def test_cpu_placement_is_a_declaration_not_hosted_evidence(lifetime, signing_keys, monkeypatch, tmp_path, placement):
+    for name in owned.FORBIDDEN_ENV:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("CONVOY_PLANNER_VERIFICATION_KEYS_FILE", str(signing_keys.paths["planner"]))
+    monkeypatch.setenv("CONVOY_PLANNER_PROBE_TOKEN", PROBE)
+    bundle = manifest(lifetime.backend)
+    bundle["placement"]["planner"] = placement
+    path = tmp_path / "release.json"
+    path.write_text(json.dumps(bundle))
+    monkeypatch.setattr(owned, "validate_text_receipt", lambda _: receipt())
+    monkeypatch.setattr(owned.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(owned.platform, "machine", lambda: "aarch64")
+    args = SimpleNamespace(mode="serve", manifest=path, assets=path)
+    if placement == "development-jetson-lan":
+        with pytest.raises(ValueError, match="CPU placement declaration"):
+            owned.preflight(args)
+    else:
+        _, validated, authorization = owned.preflight(args)
+        lifetime.application(validated, authorization)
+        assert lifetime.evidence["declared_placement"] == bundle["placement"]
+        assert "no cloud" in lifetime.evidence["scope"]
+
+
+def test_owner_cannot_reinterpret_an_abbreviated_manifest_after_wrapper_validation(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["owned", "serve", "--assets", "/assets", "--output", "/state", "--man", "/other"])
+    monkeypatch.setattr(owned, "run", lambda _: pytest.fail("invalid arguments reached native owner"))
+    with pytest.raises(SystemExit) as error:
+        owned.main()
+    assert error.value.code == 2
+    assert "unrecognized arguments: --man" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("failure", ["result", "exception"])

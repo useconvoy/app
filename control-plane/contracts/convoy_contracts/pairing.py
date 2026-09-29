@@ -81,7 +81,7 @@ def validate_release_manifest(value: dict) -> dict:
     # Explicit reference placement, without claiming hosted cloud or Jetson motor-policy qualification.
     planner_placements = (("development-local-controlled",)
                           if value["planner"]["runtime"] == CONTROLLED_PLANNER_RUNTIME
-                          else ("development-jetson-lan", "development-local"))
+                          else ("development-jetson-lan", "development-local", "development-remote-cpu"))
     _keys(value["placement"], {"policy", "planner"}, "placement")
     if (value["placement"]["policy"] != "development-local-cpu"
             or value["placement"]["planner"] not in planner_placements):
