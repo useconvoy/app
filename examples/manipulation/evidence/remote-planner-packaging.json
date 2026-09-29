@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "scope": "Actual Qwen fixed-task admission and pretrained SmolVLA/MuJoCo, seed0 CPU offline lockstep; verified host-to-Caddy TLS and private Docker network to Linux ARM64 planner. No WAN, AWS, Jetson, physical robot, general planning or timing-SLA qualification.",
+  "source_commit": "a7e8bd2ee70d498b8a8983a6bbde615e3b076894",
+  "source_dirty": false,
+  "driver_sha256": "972aacdb6681a625f570f49e146e7d85c7b6386b29bd2ebbaeea5df013763aa7",
+  "release_delivery": "injected-json",
+  "planner_image_id": "sha256:0caf16abf319aa5fbb1d71c22af0bb2f20d8c33196e518ee1461ce79e44ae394",
+  "release_digest": "4950f583d72ae6f5b833f12665dde4ebf3fc031cd63c199cdd7367985da0ef50",
+  "tls": {
+    "hostname": "localhost",
+    "ca_sha256": "c98f9f5b00ff6e1ac279eac4dcbeaa6199ccbc4316158d6a7073f17e7b8eb354",
+    "certificate_sha256": "be2c0095e9a2acc5378f6ad4dad8eb07c68d446b03a640ba38f6be24be845c78",
+    "proxy_retries": 0,
+    "upstream": "private HTTP within the internal Docker network",
+    "wrong_ca_handshake_rejected": true
+  },
+  "wrong_ca_pipeline": {
+    "rejected": true,
+    "local_processes_started": 0,
+    "actions": 0
+  },
+  "pipeline_wall_seconds": 82.6739919160027,
+  "direct_comparison": {
+    "report_sha256": "6308a9d3643c24440e7c60d8a74650cde0080711e60968982de0fa4ea048d3b3",
+    "trace_sha256": "0223cba3f7822d13dafe58266086b051d89b3496aab2bd05e254d3196d79e072",
+    "direct_steps": 54,
+    "managed_steps": 54,
+    "direct_success": true,
+    "exact_actions_equal": true,
+    "note": "Same checkpoint, seed0, upstream camera and one-action replanning. Different processes/timing."
+  },
+  "actions_sha256": "685224e6a7ef91698808fa58570dfb0ef490987b538e084468d033d6db27fdc2",
+  "cleanup": {
+    "credentials_removed": true,
+    "original_services_unchanged": true,
+    "ingress_removed": true,
+    "network_removed": true,
+    "ingress_network_removed": true,
+    "planner_removed": true,
+    "tls_listener_closed": true,
+    "errors": []
+  },
+  "pr": "https://github.com/useconvoy/app/pull/94",
+  "planner_artifact_sha256": "a54891c78f22089e78f700984cc4addc6b688217a92f80083c2f8327b05e767e",
+  "accepted_plans": 1,
+  "planner_duration_ms": 23953.123178001988,
+  "steps": 54,
+  "final_success": true,
+  "simulated_duration_s": 0.675,
+  "mission_wall_seconds": 67.48563141701743,
+  "declared_placement": {
+    "planner": "development-local",
+    "policy": "development-local-cpu"
+  },
+  "planner_shutdown": {
+    "native_stopped": true,
+    "gateway_closed": true,
+    "gateway_drained": true,
+    "planner_closed": true,
+    "native_marker_removed": true,
+    "listeners_closed": true
+  },
+  "planner_exit_code": 0,
+  "build": {
+    "image_id": "sha256:0caf16abf319aa5fbb1d71c22af0bb2f20d8c33196e518ee1461ce79e44ae394",
+    "size_bytes": 1150144594,
+    "image_platform": "linux/arm64",
+    "asset_receipt_sha256": "82aa42bbe544331e59c1386b8fb135b35777a594f350284acc3e7985c3ef3d27",
+    "Dockerfile_sha256": "d2d3f58e5d69a2d93e5a91a7c278fd5877f50642c361a11956db21f4bbbd7cea",
+    "dockerignore_sha256": "51afd0e690d5a36a33fdeea270c76b67405218161f882c09d5faba1513cdf445",
+    "entrypoint.py_sha256": "153a69f8665e505916ec38f0a11bb06396a56f15e79f82af89627c9af8f7f500",
+    "duration_s": 39.44679233303759,
+    "original_services_unchanged": true
+  },
+  "validation": {
+    "python_tests_passed": 52,
+    "typescript": "passed with existing matching dependencies and Node24.19.0",
+    "platform_tests_passed": 5,
+    "ruff": "passed with project configurations",
+    "independent_review": "no confirmed blockers",
+    "hosted_ci": "No hosted CI success claimed; account billing has prevented jobs starting"
+  }
+}

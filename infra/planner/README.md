@@ -148,3 +148,10 @@ matching the direct seed-0 reference. The harness checks certificate trust,
 private planner networking, exact live identity and complete cleanup. This is
 local Docker networking, with TLS terminating at the proxy; cloud/WAN and Jetson
 qualification remain separate.
+
+The [release-injection qualification](../../docs/v1/remote-planner-packaging.md)
+rebuilt this image after adding bounded release delivery and the remote CPU
+declaration. Clean `a7e8bd2` passed another real network mission with
+`--inject-release`: one accepted plan and 54 successful learned actions matching
+the direct reference. Its new image/artifact identity must be used for a cloud
+trial; the measured placement was still local Docker, not AWS.

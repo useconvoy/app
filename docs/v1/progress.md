@@ -167,3 +167,13 @@ Nineteen focused tests and workflow-equivalent Ruff passed. Three earlier
 proxy/network startup failures remain recorded; none admitted a plan or action.
 GitHub jobs still could not start because of account billing. Actual cloud/WAN
 and Jetson execution remain unqualified; this run was local CPU offline lockstep.
+
+The [remote planner packaging prerequisite](remote-planner-packaging.md) adds a
+provider-neutral remote CPU declaration and bounded, digest-pinned release JSON
+delivery. Clean `a7e8bd2` rebuilt the image and passed the complete local HTTPS
+pipeline using that delivery path: one real 23.95-second Qwen proposal and 54
+successful learned actions equal to the direct baseline, with full cleanup.
+Its measured placement was explicitly local Docker. Fifty-two Python tests,
+TypeScript validation and five platform tests passed. This prepares the software
+for a hosted trial; actual account/DNS access, cost approval, WAN acceptance and
+Jetson authentication remain outstanding.
