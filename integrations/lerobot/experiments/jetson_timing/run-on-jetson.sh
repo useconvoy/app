@@ -2,8 +2,10 @@
 # Local experiment launcher on the Jetson. No production agent mounts or changes.
 set -euo pipefail
 ROOT=${CONVOY_TIMING_ROOT:?set CONVOY_TIMING_ROOT to the experiment directory}
-IMAGE=${CONVOY_TIMING_IMAGE:-convoy-jetson-timing:local}
+IMAGE=${CONVOY_TIMING_IMAGE:-convoy-jetson-timing:jp6}
 RUN=${1:?unique run name}; shift
+MODULE=jetson_timing.run
+if [[ "${1:-}" == --sweep ]]; then MODULE=jetson_timing.sweep; shift; fi
 [[ "$RUN" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$ ]] || { echo 'invalid run name' >&2; exit 2; }
 test -d "$ROOT/repo/integrations/lerobot/experiments/jetson_timing"
 test -f "$ROOT/assets/checkpoint/model.safetensors"
@@ -17,8 +19,9 @@ docker run --rm --init --name "convoy-timing-$RUN" --runtime nvidia --network no
   -e HOME=/tmp -e CUDA_CACHE_PATH=/tmp/cuda-cache -e CONVOY_EXPERIMENT_IMAGE="$IMAGE_ID" \
   -e NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics \
   -e MUJOCO_GL="${CONVOY_TIMING_GL:-egl}" \
+  -e LP_NUM_THREADS=1 \
   -v "$ROOT/repo:/repo:ro" -v "$ROOT/assets:/assets:ro" -v "$ROOT/results:/results" \
-  "$IMAGE" --output "/results/$RUN" "$@"
+  --entrypoint python "$IMAGE" -m "$MODULE" --output "/results/$RUN" "$@"
 RESULT=$?
 set -e
 if [ "$RESULT" -ne 0 ]; then
