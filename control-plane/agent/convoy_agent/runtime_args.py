@@ -3,7 +3,8 @@
 
 Source-verified against llama.cpp v0.4.0 (5266f24d): --fit [on|off], --gpu-layers N|all|auto,
 --cache-ram N, --context-shift/--no-context-shift, --flash-attn [on|off|auto], --offline,
---api-key-file, --cors-origins, --no-cors-credentials, --metrics, --props, --slots, --no-webui.
+--api-key-file, --cors-origins, --no-cors-credentials, --metrics, --props, --slots, --no-webui,
+--threads N and --threads-batch N (positive counts; zero/negative invoke native auto-detection).
 
 Configuration is strict: known keys only, exact types (no string/bool coercion), documented bounds, and
 fixed-family invariants that cannot be overridden (fit off, context shift off, prompt cache cap 0,
@@ -45,6 +46,12 @@ BOUNDS: dict[str, tuple[type, Any, Any]] = {
     "request_deadline_s": (int, 1, 300),
     "queue_depth": (int, 1, 16),
 }
+# Omission preserves historical canonical bytes and native defaults. CPU planner
+# profiles explicitly supply both values; never derive identity from host CPU count.
+OPTIONAL_BOUNDS: dict[str, tuple[type, Any, Any]] = {
+    "threads": (int, 1, 256),
+    "threads_batch": (int, 1, 256),
+}
 FIXED_FAMILY = {"fit": "off", "context_shift": False, "cache_ram_mib": 0, "parallel": 1}
 SCRUB_ENV_PREFIXES = ("LLAMA_ARG_", "LLAMA_", "HF_", "GGML_", "CUDA_LAUNCH_BLOCKING")
 KEEP_ENV = ("PATH", "HOME", "LANG", "LC_ALL", "LD_LIBRARY_PATH", "CUDA_VISIBLE_DEVICES", "TMPDIR")
@@ -56,7 +63,7 @@ class ConfigError(ValueError):
 
 def canonical_config(config: dict[str, Any] | None) -> dict[str, Any]:
     cfg = dict(config or {})
-    unknown = sorted(k for k in cfg if k not in DEFAULT_CONFIG and k != "sim")
+    unknown = sorted(k for k in cfg if k not in DEFAULT_CONFIG and k not in OPTIONAL_BOUNDS and k != "sim")
     if unknown:
         raise ConfigError(f"unknown runtime config keys: {unknown}")
     c = dict(DEFAULT_CONFIG)
@@ -64,7 +71,9 @@ def canonical_config(config: dict[str, Any] | None) -> dict[str, Any]:
         if k == "sim":
             continue
         c[k] = v
-    for k, (typ, lo, hi) in BOUNDS.items():
+    for k, (typ, lo, hi) in {**BOUNDS, **OPTIONAL_BOUNDS}.items():
+        if k not in c:
+            continue
         v = c[k]
         if typ is float:
             if isinstance(v, bool) or not isinstance(v, (int, float)):
@@ -140,6 +149,9 @@ def argv_for(
         "--cors-origins", "",
         "--no-cors-credentials",
     ]  # fmt: skip
+    for key, flag in (("threads", "--threads"), ("threads_batch", "--threads-batch")):
+        if key in c:
+            argv += [flag, str(c[key])]
     if template_path:
         argv += ["--chat-template-file", template_path]
     if api_key_file:

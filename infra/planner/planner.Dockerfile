@@ -29,4 +29,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=5s --start-period=130s --retries=2 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready', timeout=4)"]
 ENTRYPOINT ["python", "/app/runtime/entrypoint.py"]
-CMD ["serve", "--assets", "/opt/convoy/assets/assets.json", "--output", "/run/convoy/state", "--manifest", "/run/convoy/release.json", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["serve", "--assets", "/opt/convoy/assets/assets.json", "--output", "/run/convoy/state", "--manifest", "/run/convoy/release.json", "--threads", "2", "--threads-batch", "2", "--host", "0.0.0.0", "--port", "8080"]

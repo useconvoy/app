@@ -21,6 +21,7 @@ from pathlib import Path
 from convoy_agent.gateway import Gateway
 from convoy_agent.owned_process import OwnedProcess
 from convoy_agent.runtime import RuntimeSupervisor
+from convoy_agent.runtime_args import canonical_config
 from convoy_contracts.execution import canonical_digest
 from convoy_contracts.grants import GrantVerifier
 from convoy_contracts.pairing import (
@@ -93,9 +94,12 @@ def preflight(args) -> tuple[dict, dict | None, dict]:
 
 
 class OwnedPlanner:
-    def __init__(self, receipt: dict, output: Path, owner: OwnedProcess, *, ctx_size: int, stop_timeout_s: float):
+    def __init__(self, receipt: dict, output: Path, owner: OwnedProcess, *, ctx_size: int, stop_timeout_s: float,
+                 threads: int = 2, threads_batch: int = 2):
         self.receipt, self.output = receipt, output
         self.ctx_size, self.stop_timeout_s = ctx_size, stop_timeout_s
+        self.native_config = canonical_config({"ctx_size": ctx_size, "n_predict": 128, "gpu_layers": 0,
+                                               "threads": threads, "threads_batch": threads_batch})
         self.supervisor = RuntimeSupervisor(output / "native", simulate=False, process_owner=owner)
         self.gateway = Gateway(self.supervisor, host="127.0.0.1", queue_depth=1, deadline_s=30)
         self.stop_requested = threading.Event()
@@ -130,7 +134,7 @@ class OwnedPlanner:
             release_id="linux-cpu-" + self.receipt["archive"]["sha256"][:16],
             spec={"model": {"file": {"sha256": self.receipt["model"]["sha256"]}},
                   "runtime": {"artifact_sha256": self.receipt["archive"]["sha256"]},
-                  "config": {"ctx_size": self.ctx_size, "n_predict": 128, "gpu_layers": 0}},
+                  "config": self.native_config},
             model_path=model, template_path=None, binary=binary,
             lib_dir=self.output / "runtime/lib", health_timeout_s=startup_timeout_s,
         )
@@ -344,7 +348,8 @@ def run(args) -> int:
     output = args.output.resolve()
     output.mkdir(parents=True, mode=0o700, exist_ok=False)
     with OwnedProcess(output / "native" / "owner") as owner:
-        lifetime = OwnedPlanner(receipt, output, owner, ctx_size=args.ctx_size, stop_timeout_s=args.stop_timeout_s)
+        lifetime = OwnedPlanner(receipt, output, owner, ctx_size=args.ctx_size, stop_timeout_s=args.stop_timeout_s,
+                                threads=args.threads, threads_batch=args.threads_batch)
         previous = {number: signal.getsignal(number) for number in (signal.SIGINT, signal.SIGTERM, signal.SIGALRM)}
         def timeout(*_):
             raise StartupTimeout()
@@ -390,6 +395,10 @@ def main() -> int:
     parser.add_argument("--assets", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True, help="new private runtime directory")
     parser.add_argument("--ctx-size", type=int, choices=(2048, 4096), default=2048)
+    parser.add_argument("--threads", type=int, choices=range(1, 257), default=2,
+                        help="explicit generation CPU threads, fingerprinted in the planner artifact (default: 2)")
+    parser.add_argument("--threads-batch", type=int, choices=range(1, 257), default=2,
+                        help="explicit prompt/batch CPU threads, fingerprinted in the planner artifact (default: 2)")
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--host", choices=("127.0.0.1", "0.0.0.0"), default="127.0.0.1")
     parser.add_argument("--port", type=int, default=9101)

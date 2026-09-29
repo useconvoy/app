@@ -155,3 +155,9 @@ declaration. Clean `a7e8bd2` passed another real network mission with
 `--inject-release`: one accepted plan and 54 successful learned actions matching
 the direct reference. Its new image/artifact identity must be used for a cloud
 trial; the measured placement was still local Docker, not AWS.
+
+## CPU thread profile
+
+The owned Linux CPU planner explicitly passes `--threads 2 --threads-batch 2`, matching the current two-vCPU trial allocation. Both inspect and serve accept bounded `--threads` / `--threads-batch` options; generation and prompt/batch counts are included in canonical runtime configuration and therefore the planner artifact. The 30-second plan budget and 128-token limit are unchanged. Two threads are a declared profile, not a latency guarantee or a claim that every CPU allocation is equivalent.
+
+The shared runtime supports optional explicit thread fields; legacy configurations that omit them keep their original canonical bytes, digest and argv defaults. Generic catalog inputs accept the same bounded exact integers. Existing local activation recipes are unchanged. Rebuilding this source changes the owned gateway implementation fingerprint, and supplying explicit counts also changes its configuration digest: qualify the new image, inspect its new planner artifact and create a new immutable paired release. Keep the old failed/successful evidence with its original image/profile. Qualification must separately retain native logs confirming the effective counts and the actual CPU allocation; configuration alone is not a measured performance result. Model weights and the native runtime archive do not need changing.

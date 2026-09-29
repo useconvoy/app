@@ -14,10 +14,12 @@ import httpx
 import psutil
 import pytest
 from convoy_agent.owned_process import OwnedProcess
+from convoy_contracts.execution import canonical_digest
 
 # Imported pytest fixture; test parameters intentionally use its registration name.
 # ruff: noqa: F811
 from convoy_planner import owned
+from convoy_planner.artifact import artifact_digest
 from fastapi.testclient import TestClient
 from test_planner import PROBE, Backend, manifest
 from test_signed_planner import keys as signing_keys  # noqa: F401
@@ -94,6 +96,33 @@ def lifetime(monkeypatch, tmp_path):
     value.starting = False
     yield value
     value.close()
+
+
+@pytest.mark.parametrize("options,expected", [({}, (2, 2)), ({"threads": 1, "threads_batch": 3}, (1, 3))])
+def test_owned_cpu_counts_reach_native_config_and_artifact(monkeypatch, tmp_path, options, expected):
+    class CapturedLaunch(Exception):
+        pass
+
+    configs = []
+    class CapturingSupervisor(Supervisor):
+        def start(self, **launch):
+            configs.append(launch["spec"]["config"])
+            raise CapturedLaunch()
+
+    monkeypatch.setattr(owned, "RuntimeSupervisor", CapturingSupervisor)
+    monkeypatch.setattr(owned, "Gateway", Gateway)
+    monkeypatch.setattr(owned, "prepare_text_assets", lambda *_: (tmp_path / "model", tmp_path / "binary"))
+    value = owned.OwnedPlanner(receipt(), tmp_path, None, ctx_size=2048, stop_timeout_s=3, **options)
+    with pytest.raises(CapturedLaunch):
+        value.start(120)
+    config, = configs
+    assert (config["threads"], config["threads_batch"]) == expected
+    assert config["request_deadline_s"] == 30 and config["n_predict"] == 128 and config["gpu_layers"] == 0
+    identity = Backend().identity
+    identity["config_sha256"] = canonical_digest(config)
+    pinned_artifact = artifact_digest(identity)
+    identity["config_sha256"] = canonical_digest({**config, "threads_batch": expected[1] + 1})
+    assert artifact_digest(identity) != pinned_artifact
 
 
 def test_readiness_and_admission_reject_changed_identity(lifetime, signing_keys):
@@ -176,7 +205,7 @@ def warming(self, timeout):
     while True:
         time.sleep(.05)
 runtime.RuntimeSupervisor.wait_healthy = warming
-args = SimpleNamespace(mode="inspect", output=root/"output", ctx_size=2048,
+args = SimpleNamespace(mode="inspect", output=root/"output", ctx_size=2048, threads=2, threads_batch=2,
                        startup_timeout_s=float(sys.argv[2]), stop_timeout_s=3)
 raise SystemExit(owned.run(args))
 '''

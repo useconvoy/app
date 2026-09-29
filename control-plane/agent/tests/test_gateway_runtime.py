@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 import urllib.error
@@ -197,6 +198,7 @@ def test_runtime_config_strictness_and_argv():
         {"temperature": "0.5"},
         {"seed": True},
         {"n_predict": 2048},
+        *({field: value} for field in ("threads", "threads_batch") for value in (None, True, "2", 2.0, 0, -1, 257)),
     ):
         with pytest.raises(ConfigError):
             canonical_config(bad)
@@ -238,6 +240,26 @@ def test_runtime_config_strictness_and_argv():
         }
     )
     assert env == {"PATH": "/bin", "HOME": "/h"}
+
+
+def test_explicit_threads_preserve_legacy_config_and_bind_argv():
+    def digest(config):
+        return hashlib.sha256(json.dumps(config, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+
+    # Known pre-change bytes: do not insert null/default thread keys into old releases.
+    legacy = canonical_config({"gpu_layers": 0})
+    assert digest(legacy) == "2a460a80f836f7d9995ce303fa91a4d7508b8989d5626c9c63c3593edb2f64fb"
+    options = dict(model_path="/model", template_path=None, host="127.0.0.1", port=1, api_key_file=None)
+    original_argv = argv_for(legacy, **options)
+    assert "--threads" not in original_argv and "--threads-batch" not in original_argv
+    pinned = canonical_config({"gpu_layers": 0, "threads": 2, "threads_batch": 2})
+    assert {key: value for key, value in pinned.items() if key not in {"threads", "threads_batch"}} == legacy
+    assert argv_for(pinned, **options) == original_argv + ["--threads", "2", "--threads-batch", "2"]
+    assert digest(pinned) != digest(legacy)
+    for field, flag in (("threads", "--threads"), ("threads_batch", "--threads-batch")):
+        one = canonical_config({**legacy, field: 256})
+        assert argv_for(one, **options) == original_argv + [flag, "256"]
+        assert digest(one) != digest(pinned)
 
 
 @pytest.mark.parametrize("buffer,backend,intended_cuda", [
