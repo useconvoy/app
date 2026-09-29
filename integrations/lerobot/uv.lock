@@ -353,10 +353,12 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "convoy-agent", extras = ["local-host"], marker = "extra == 'owned'", editable = "../../control-plane/agent" },
     { name = "convoy-contracts", extras = ["signing"], editable = "../../control-plane/contracts" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
+provides-extras = ["owned"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -496,37 +498,37 @@ wheels = [
 
 [package.optional-dependencies]
 cublas = [
-    { name = "nvidia-cublas" },
+    { name = "nvidia-cublas", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 cudart = [
-    { name = "nvidia-cuda-runtime" },
+    { name = "nvidia-cuda-runtime", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 cufft = [
-    { name = "nvidia-cufft" },
+    { name = "nvidia-cufft", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 cufile = [
-    { name = "nvidia-cufile" },
+    { name = "nvidia-cufile", marker = "sys_platform == 'linux'" },
 ]
 cupti = [
-    { name = "nvidia-cuda-cupti" },
+    { name = "nvidia-cuda-cupti", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 curand = [
-    { name = "nvidia-curand" },
+    { name = "nvidia-curand", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 cusolver = [
-    { name = "nvidia-cusolver" },
+    { name = "nvidia-cusolver", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 cusparse = [
-    { name = "nvidia-cusparse" },
+    { name = "nvidia-cusparse", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 nvjitlink = [
-    { name = "nvidia-nvjitlink" },
+    { name = "nvidia-nvjitlink", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 nvrtc = [
-    { name = "nvidia-cuda-nvrtc" },
+    { name = "nvidia-cuda-nvrtc", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 nvtx = [
-    { name = "nvidia-nvtx" },
+    { name = "nvidia-nvtx", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 
 [[package]]

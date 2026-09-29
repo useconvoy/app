@@ -6,9 +6,9 @@ name: website-checks
 on:
   push:
     branches: ["v1"]
-    paths: ["control-plane/**", "integrations/lerobot/**", "integrations/planner/**", "examples/manipulation/**", "website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/**"]
+    paths: ["control-plane/**", "integrations/lerobot/**", "integrations/planner/**", "infra/planner/**", "examples/manipulation/**", "website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/**"]
   pull_request:
-    paths: ["control-plane/**", "integrations/lerobot/**", "integrations/planner/**", "examples/manipulation/**", "website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/**"]
+    paths: ["control-plane/**", "integrations/lerobot/**", "integrations/planner/**", "infra/planner/**", "examples/manipulation/**", "website/**", "!website/design/**", "!website/**/*.md", ".github/workflows/**"]
 
 permissions:
   contents: read
@@ -79,9 +79,9 @@ jobs:
         with:
           version: "0.8.22"
           python-version: "3.10"
-      - run: uv sync --frozen
-      - run: uv run --frozen ruff check .
-      - run: uv run --frozen pytest -q
+      - run: uv sync --frozen --extra owned
+      - run: uv run --frozen --extra owned ruff check . ../../infra/planner
+      - run: uv run --frozen --extra owned pytest -q tests ../../infra/planner/tests
 
   agent-python310:
     runs-on: ubuntu-latest

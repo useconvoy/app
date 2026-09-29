@@ -277,7 +277,10 @@ class OwnedProcess:
                 if self._created(process) != record["created"]:
                     self._blocked("creation_identity_mismatch")
                 if process.status() == psutil.STATUS_ZOMBIE:
-                    return None  # this exact incarnation can no longer execute
+                    # Linux can expose a zombie leader while other threads still
+                    # execute. Keep that process unresolved until the whole group
+                    # is gone; its dead leader cannot justify another signal.
+                    return None if self._exited(record) else process
                 self._verify(process, record, recorded=True)
                 return process
             except psutil.NoSuchProcess:
@@ -317,7 +320,29 @@ class OwnedProcess:
             process = psutil.Process(record["pid"])
             if self._created(process) != record["created"]:
                 self._blocked("creation_identity_mismatch")
-            return process.status() == psutil.STATUS_ZOMBIE
+            if process.status() != psutil.STATUS_ZOMBIE:
+                return False
+            if self._child is not None and self._child.pid == record["pid"]:
+                # waitpid observes the whole direct child, including threads.
+                return self._child.poll() is not None
+            if sys.platform == "linux":
+                try:
+                    tasks = list((Path("/proc") / str(record["pid"]) / "task").iterdir())
+                except FileNotFoundError:
+                    return not psutil.pid_exists(record["pid"])
+                except OSError:
+                    self._blocked("identity_access_denied")
+                # A recovered zombie leader alone is non-executing. Any other
+                # remaining task is conservatively live, even if also dying.
+                if len(tasks) != 1 or tasks[0].name != str(record["pid"]):
+                    return False
+                # The task listing is another observation: fence PID reuse
+                # across it with a fresh kernel identity before accepting exit.
+                latest = psutil.Process(record["pid"])
+                if self._created(latest) != record["created"]:
+                    self._blocked("creation_identity_mismatch")
+                return latest.status() == psutil.STATUS_ZOMBIE
+            return True
         except psutil.NoSuchProcess:
             return not psutil.pid_exists(record["pid"])
         except psutil.AccessDenied:
@@ -329,6 +354,7 @@ class OwnedProcess:
         self._held()
         if any(not math.isfinite(t) or not 0 <= t <= 30 for t in (terminate_timeout, kill_timeout)):
             raise ValueError("timeouts must be between 0 and 30 seconds")
+        overall_deadline = time.monotonic() + terminate_timeout + kill_timeout
         record = self._read()
         if record is None or record["state"] == "stopped":
             return {"action": "none"}
@@ -338,9 +364,12 @@ class OwnedProcess:
             if process is None:
                 break
             try:
-                self._verify(process, record, recorded=True)
-                getattr(process, action)()  # psutil rechecks PID creation identity before os.kill
-                deadline = time.monotonic() + timeout
+                if process.status() != psutil.STATUS_ZOMBIE:
+                    self._verify(process, record, recorded=True)
+                    getattr(process, action)()  # psutil rechecks PID creation identity before os.kill
+                # A dead leader can hide live threads and has no verifiable exe
+                # or cmdline. Wait boundedly; never signal an unprovable identity.
+                deadline = min(overall_deadline, time.monotonic() + timeout)
                 while time.monotonic() < deadline:
                     if self._exited(record):
                         process = None
@@ -355,7 +384,10 @@ class OwnedProcess:
         if process is not None and not self._exited(record):
             self._blocked("exit_not_verified")
         if self._child is not None and self._child.pid == record.get("pid"):
-            self._child.poll()  # reap our direct child; recovered orphans are reaped by init
+            try:
+                self._child.wait(timeout=max(0.0, overall_deadline - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                self._blocked("child_exit_unverified")
             self._close_undelivered_output()
         record.update(state="stopped", result="verified_exit")
         _write(self.record_path, record)
