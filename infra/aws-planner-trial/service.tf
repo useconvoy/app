@@ -55,7 +55,7 @@ resource "aws_ecs_task_definition" "planner" {
     # Retain the image entrypoint. It consumes public key/release JSON before exec.
     # No --manifest: that would conflict with the injected immutable release.
     command = ["serve", "--assets", "/opt/convoy/assets/assets.json", "--output", "/run/convoy/state",
-      "--ctx-size", "2048", "--host", "0.0.0.0", "--port", "8080",
+      "--ctx-size", "2048", "--threads", "2", "--threads-batch", "2", "--host", "0.0.0.0", "--port", "8080",
     "--startup-timeout-s", "120", "--stop-timeout-s", "15"],
     linuxParameters = { initProcessEnabled = true }, stopTimeout = 60,
     portMappings    = [{ containerPort = 8080, protocol = "tcp" }],

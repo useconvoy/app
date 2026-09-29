@@ -58,7 +58,7 @@ run "stopped_trial_preserves_authority_and_network_boundaries" {
   assert {
     condition = !contains(jsondecode(aws_ecs_task_definition.planner.container_definitions)[0].command, "--manifest") && [
       for item in jsondecode(aws_ecs_task_definition.planner.container_definitions)[0].environment : item.value if item.name == "CONVOY_PLANNER_RELEASE_SHA256"
-    ] == [var.release_sha256] && jsondecode(aws_ecs_task_definition.planner.container_definitions)[0].image == var.image
+    ] == [var.release_sha256] && jsondecode(aws_ecs_task_definition.planner.container_definitions)[0].image == var.image && strcontains(join(" ", jsondecode(aws_ecs_task_definition.planner.container_definitions)[0].command), "--threads 2 --threads-batch 2")
     error_message = "Retain the image entrypoint's one-source release materialization contract and supplied image/release pins."
   }
   assert {

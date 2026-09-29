@@ -31,6 +31,7 @@ def test_release_identity_is_canonical_and_immutable(app, admin):
         and spec["config"]["cache_ram_mib"] == 0
     )
     assert "name" not in spec and "notes" not in spec  # descriptive fields outside the identity
+    assert "threads" not in spec["config"] and "threads_batch" not in spec["config"]
     # identical content -> 409; same name/version -> 409; no update endpoint exists
     body = {
         "name": "dup",
@@ -52,6 +53,17 @@ def test_release_identity_is_canonical_and_immutable(app, admin):
         and argv[argv.index("--cache-ram") + 1] == "0"
         and "--no-context-shift" in argv
     )
+    body.update(name="explicit-cpu-threads", config={"threads": 2, "threads_batch": 2})
+    created = admin.post("/api/v1/releases", json=body, headers=WEB)
+    assert created.status_code in (200, 201), created.text
+    threaded = created.json()
+    assert threaded["digest"] != rel["digest"]
+    assert threaded["spec"]["config"]["threads"] == threaded["spec"]["config"]["threads_batch"] == 2
+    assert {key: value for key, value in threaded["spec"]["config"].items()
+            if key not in {"threads", "threads_batch"}} == spec["config"]
+    threaded_argv = threaded["provenance"]["argv_preview"]
+    assert threaded_argv[threaded_argv.index("--threads") + 1] == "2"
+    assert threaded_argv[threaded_argv.index("--threads-batch") + 1] == "2"
 
 
 def test_invalid_config_rejected(app, admin):
@@ -73,6 +85,10 @@ def test_invalid_config_rejected(app, admin):
     assert admin.post("/api/v1/releases", json=body, headers=WEB).status_code == 422
     body["config"] = {"temperature": "0.5"}
     assert admin.post("/api/v1/releases", json=body, headers=WEB).status_code == 422
+    for field in ("threads", "threads_batch"):
+        for value in (None, True, "2", 2.0, 0, 257):
+            body["config"] = {field: value}
+            assert admin.post("/api/v1/releases", json=body, headers=WEB).status_code == 422
 
 
 def test_supplied_provenance_and_url_policy(app, admin):

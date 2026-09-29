@@ -193,7 +193,8 @@ class Case:
             command += ["--env-file", str(env_file), "--publish", "127.0.0.1::8080",
                         "--mount", f"type=bind,src={manifest},dst=/run/convoy/release.json,readonly"]
         command += [self.image, "inspect" if env_file is None else "serve", "--assets", "/opt/convoy/assets/assets.json",
-                    "--output", STATE, "--ctx-size", "2048", "--startup-timeout-s", "120", "--stop-timeout-s", "20"]
+                    "--output", STATE, "--ctx-size", "2048", "--threads", "2", "--threads-batch", "2",
+                    "--startup-timeout-s", "120", "--stop-timeout-s", "20"]
         if env_file is not None:
             command += ["--manifest", "/run/convoy/release.json", "--host", "0.0.0.0", "--port", "8080"]
         self.container = text(*command)
@@ -294,6 +295,7 @@ def verify_identity(value: dict, assets: dict):
     assert value["model"] == {key: assets["model"][key] for key in ("sha256", "bytes")}
     assert value["runtime_archive_sha256"] == assets["archive"]["sha256"]
     assert value["native"]["backend"] == "CPU" and value["effective_configuration"]["gpu_layers"] == 0
+    assert value["effective_configuration"]["threads"] == value["effective_configuration"]["threads_batch"] == 2
     # This CPU-only build emits no GPU offload line. Keep an absent measurement
     # absent instead of pretending the parser observed a numeric zero.
     assert value["native"]["gpu_offloaded_layers"] in (None, 0)
