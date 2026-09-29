@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "status": "passed",
+  "scope": "Actual Qwen fixed-task admission and pretrained SmolVLA/MuJoCo, seed0 CPU offline lockstep; verified host-to-Caddy TLS and private Docker network to Linux ARM64 planner. No WAN, AWS, Jetson, physical robot, general planning or timing-SLA qualification.",
+  "source_commit": "59f27548d46a30c6df2cd6f9dba248b3f1994ec2",
+  "source_dirty": false,
+  "driver_sha256": "f6a19c24c019a7f02df71303cd77fe149e4e97f02aa0f01f380edc5f80120f09",
+  "planner_image_id": "sha256:21b6b05064cf8a44f02439e64ba34f1368fe379eac4c0e70ecb36afb3e0f3a11",
+  "ingress_image": "caddy@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b",
+  "release_digest": "12e276e1bfc653f650916fa124e07db8af5c5a2d1cd33d2c70e7c9a1e341b5f7",
+  "tls": {
+    "hostname": "localhost",
+    "ca_sha256": "fb62ad1acbbcd79290ac8f80dfd4405348425fc6484fc6c2afd8e300c210bded",
+    "certificate_sha256": "3b5e38df3648b64face04d02e6306293dd643c600ab888e1d9d7154a2bebd10f",
+    "proxy_retries": 0,
+    "upstream": "private HTTP within the internal Docker network",
+    "wrong_ca_handshake_rejected": true
+  },
+  "wrong_ca_pipeline": {
+    "rejected": true,
+    "local_processes_started": 0,
+    "actions": 0
+  },
+  "pipeline_wall_seconds": 83.67948433302809,
+  "direct_comparison": {
+    "report_sha256": "6308a9d3643c24440e7c60d8a74650cde0080711e60968982de0fa4ea048d3b3",
+    "trace_sha256": "0223cba3f7822d13dafe58266086b051d89b3496aab2bd05e254d3196d79e072",
+    "direct_steps": 54,
+    "managed_steps": 54,
+    "direct_success": true,
+    "exact_actions_equal": true,
+    "note": "Same checkpoint, seed0, upstream camera and one-action replanning. Different processes/timing."
+  },
+  "actions_sha256": "8099bf2466c81db88713f56851d61a494cdcdd2cc1fbd3a16b4ff2664d14e7b8",
+  "cleanup": {
+    "credentials_removed": true,
+    "original_services_unchanged": true,
+    "ingress_removed": true,
+    "network_removed": true,
+    "ingress_network_removed": true,
+    "planner_removed": true,
+    "tls_listener_closed": true,
+    "errors": []
+  },
+  "pr": "https://github.com/useconvoy/app/pull/93",
+  "planner_artifact_sha256": "6c5539d8592293fd658422422c8c527a36afff91a18f75c267b421e0aa512ee3",
+  "planner_duration_ms": 19530.026258998987,
+  "accepted_plans": 1,
+  "steps": 54,
+  "final_success": true,
+  "seed": 0,
+  "execution_mode": "lockstep_offline",
+  "simulated_duration_s": 0.675,
+  "mission_wall_seconds": 68.32870033301879,
+  "planner_shutdown": {
+    "native_stopped": true,
+    "gateway_closed": true,
+    "gateway_drained": true,
+    "planner_closed": true,
+    "native_marker_removed": true,
+    "listeners_closed": true
+  },
+  "planner_exit_code": 0,
+  "network": {
+    "planner_private_only": true,
+    "planner_published_ports": [],
+    "ingress_loopback_only": true,
+    "owned_networks": 2
+  },
+  "tests": {
+    "focused_passed": 19,
+    "simulation_workflow_ruff": "passed",
+    "hosted_ci": "Account billing prevents jobs from starting; no hosted CI success claimed"
+  },
+  "prior_attempts": [
+    {
+      "source_commit": "adf179da9c5b2d4cbca49e8f4b44db707b8a8c4d",
+      "status": "failed",
+      "cause": "Proxy executable file capability excluded from bounding set",
+      "model_proposals": 0,
+      "actions": 0,
+      "cleanup": {
+        "credentials_removed": true,
+        "original_services_unchanged": true,
+        "ingress_removed": true,
+        "network_removed": true,
+        "planner_removed": true,
+        "tls_listener_closed": true,
+        "errors": []
+      }
+    },
+    {
+      "source_commit": "77111d1ec40791a52646063541b2aa0078fa0ccd",
+      "status": "failed",
+      "cause": "Private proxy files retained host UID/GID",
+      "model_proposals": 0,
+      "actions": 0,
+      "cleanup": {
+        "credentials_removed": true,
+        "original_services_unchanged": true,
+        "ingress_removed": true,
+        "network_removed": true,
+        "planner_removed": true,
+        "tls_listener_closed": true,
+        "errors": []
+      }
+    },
+    {
+      "source_commit": "50a68f0835c4ecd670c514eae09330ab15fd6196",
+      "status": "failed",
+      "cause": "No published ingress port on internal-only Docker Desktop bridge",
+      "model_proposals": 0,
+      "actions": 0,
+      "cleanup": {
+        "credentials_removed": true,
+        "original_services_unchanged": true,
+        "ingress_removed": true,
+        "network_removed": true,
+        "planner_removed": true,
+        "tls_listener_closed": true,
+        "errors": []
+      }
+    }
+  ]
+}

@@ -4,6 +4,9 @@
 installation for console use. The output directory is private and must be new.
 """
 
+# Import this checkout after source-path setup, rather than stale editable installs.
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import argparse
@@ -53,6 +56,7 @@ from convoy_planner.artifact import (
     validate_gateway_identity,
 )
 from convoy_planner.local_assets import validate_text_receipt
+from development_signing import development_grants
 
 
 def require(condition, message: str) -> None:
@@ -122,40 +126,6 @@ def child_environment() -> dict[str, str]:
                HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", HF_HUB_DISABLE_TELEMETRY="1",
                TOKENIZERS_PARALLELISM="false")
     return env
-
-
-def development_grants(output: Path) -> tuple[dict[str, str], dict[str, str]]:
-    """Generate disposable local keys; distribute only public documents to models.
-
-    This same-user harness verifies credential distribution, not OS isolation.
-    A hosted API must mount private material under its own service identity.
-    """
-    from convoy_contracts.grants import SigningKeys
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
-    private = output / "api-keys"
-    public = output / "verification"
-    private.mkdir(mode=0o700)
-    public.mkdir(mode=0o700)
-    active, keys = {}, []
-    for purpose in ("action", "planner"):
-        kid = purpose + "-" + uuid.uuid4().hex
-        active[purpose] = kid
-        pem = Ed25519PrivateKey.generate().private_bytes(
-            serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption(),
-        ).decode("ascii")
-        keys.append({"kid": kid, "purpose": purpose, "audience": "convoy-development-" + purpose,
-                     "private_key_pem": pem})
-    signing_path = private / "execution.json"
-    write_json(signing_path, {"schema_version": 1, "issuer": "convoy-development-api", "active": active, "keys": keys})
-    signer = SigningKeys(signing_path)
-    verifier_env = {}
-    for purpose in ("action", "planner"):
-        path = public / (purpose + ".json")
-        write_json(path, signer.verification_document(purpose))
-        verifier_env[f"CONVOY_{purpose.upper()}_VERIFICATION_KEYS_FILE"] = str(path)
-    return {"CONVOY_EXECUTION_SIGNING_KEYS_FILE": str(signing_path)}, verifier_env
 
 
 def journal_read(output: Path, query: str, parameters=()):
@@ -392,7 +362,7 @@ def run(args) -> dict:
             releases = [post(f"/api/v1/applications/{application['id']}/releases", {"manifest": recipe["manifest"]})
                         for recipe in registry["recipes"]]
             evidence.update(robot_id=robot["id"], application_id=application["id"],
-                            releases={name: release for name, release in zip(("A", "B"), releases)})
+                            releases={name: release for name, release in zip(("A", "B"), releases, strict=True)})
             coordinator = start("coordinator", coordinator_env, "convoy_agent.coordinator.paired",
                                 "--data-dir", output / "robot", "--robot-id", robot["id"], "--local-registry", registry_path)
             evidence["installation_processes"] = {"api_pid": api_child.pid, "coordinator_pid": coordinator.pid}

@@ -119,3 +119,11 @@ fix proved with direct and recovered Linux thread-group regressions. The final
 request took 12.58 seconds within its 30-second budget; this is not a low-latency
 benchmark. Failed attempts remain preserved. No cloud, Jetson or physical
 action-policy claim follows from this local planner response.
+
+The [separate HTTPS planner qualification](../../docs/v1/network-planner.md)
+now connects this image to the actual local SmolVLA/MuJoCo pipeline. Clean
+`59f2754` passed one accepted Qwen plan and 54 successful learned actions, each
+matching the direct seed-0 reference. The harness checks certificate trust,
+private planner networking, exact live identity and complete cleanup. This is
+local Docker networking, with TLS terminating at the proxy; cloud/WAN and Jetson
+qualification remain separate.

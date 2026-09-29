@@ -156,3 +156,14 @@ threads. The final local checks were 85 passed with two Linux-only skips, plus
 all 15 ownership tests on Linux. Hosted CI could not start due to account billing.
 This is planner packaging qualification within a 30-second contract; remote
 HTTPS pairing, cloud/WAN and Jetson qualification remain outstanding.
+
+The [separate HTTPS planner slice](network-planner.md) closes the local network
+pairing step. Clean `59f2754` accepted one real Linux Qwen proposal over verified
+HTTPS in 19.53 seconds, then completed the SmolVLA/MuJoCo task with 54 actions
+exactly equal to the direct baseline. An untrusted CA was rejected before local
+process/action admission; both owned networks, containers and temporary
+credentials were removed and all eight existing services were unchanged.
+Nineteen focused tests and workflow-equivalent Ruff passed. Three earlier
+proxy/network startup failures remain recorded; none admitted a plan or action.
+GitHub jobs still could not start because of account billing. Actual cloud/WAN
+and Jetson execution remain unqualified; this run was local CPU offline lockstep.
