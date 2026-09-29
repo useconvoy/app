@@ -7,8 +7,11 @@ Torch, LeRobot, MuJoCo or management server. The action policy, simulator and
 device coordinator remain separate services.
 
 The initial scope is **local Linux ARM64 qualification**. This does not provision
-an AWS task, qualify a Jetson or establish WAN timing. The existing
-`development-local` placement remains explicit in paired manifests.
+an AWS task, qualify a Jetson or establish WAN timing. Paired releases may declare
+`development-local` or `development-remote-cpu` for this real CPU planner; the
+action policy remains `development-local-cpu`. The remote declaration changes the
+release and evaluation identity, but it is not evidence of hosted execution.
+Controlled planner fixtures cannot use this declaration.
 
 ## Reproduce the artifact
 
@@ -73,6 +76,24 @@ Use secret/file injection, not command-line credential literals. The wrapper
 consumes JSON into a private file; the standalone Python launcher accepts only
 `CONVOY_PLANNER_VERIFICATION_KEYS_FILE` and the probe credential.
 
+Deployments without a mounted release file can instead inject
+`CONVOY_PLANNER_RELEASE_JSON` and `CONVOY_PLANNER_RELEASE_SHA256`. The digest must
+be the SHA-256 of the canonical validated release JSON (`canonical_digest` from
+`convoy_contracts.execution`), not the bytes of a pretty-printed file. Override
+the container command with `serve --assets /opt/convoy/assets/assets.json
+--output /run/convoy/state --host 0.0.0.0 --port 8080`, omitting `--manifest`.
+The unchanged image default command remains the mounted-file workflow.
+
+The wrapper consumes and removes both release variables, rejects JSON over
+16 KiB, duplicate keys, non-finite values, digest mismatches and unsupported
+releases, then writes a mode-0600 `/run/convoy/release.json` in the private runtime
+directory. It accepts only the real paired CPU planner profile. Any `--manifest`
+argument conflicts with injection, even if it names the default path. Existing
+files and symlinks are never replaced. Incomplete injection or invalid inputs
+fail before native startup with a bounded error. Inspection rejects release
+injection, a manifest argument or execution credentials. The injected release
+contains model identities and configuration; it never grants execution authority.
+
 Only the planner endpoint listens on port 8080. Native inference and the internal
 gateway remain on loopback with a private, per-launch native credential. Exposing
 the planner outside local development requires verified HTTPS ingress and
@@ -127,3 +148,10 @@ matching the direct seed-0 reference. The harness checks certificate trust,
 private planner networking, exact live identity and complete cleanup. This is
 local Docker networking, with TLS terminating at the proxy; cloud/WAN and Jetson
 qualification remain separate.
+
+The [release-injection qualification](../../docs/v1/remote-planner-packaging.md)
+rebuilt this image after adding bounded release delivery and the remote CPU
+declaration. Clean `a7e8bd2` passed another real network mission with
+`--inject-release`: one accepted plan and 54 successful learned actions matching
+the direct reference. Its new image/artifact identity must be used for a cloud
+trial; the measured placement was still local Docker, not AWS.

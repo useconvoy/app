@@ -77,10 +77,10 @@ def test_planner_grants_do_not_cross_purpose_or_key_and_keep_original_expiry():
 
 
 @pytest.mark.parametrize("runtime,allowed,rejected", [
-    (PLANNER_RUNTIME, ("development-local", "development-jetson-lan"),
+    (PLANNER_RUNTIME, ("development-local", "development-jetson-lan", "development-remote-cpu"),
      ("development-local-controlled", "cloud")),
     (CONTROLLED_PLANNER_RUNTIME, ("development-local-controlled",),
-     ("development-local", "development-jetson-lan", "cloud")),
+     ("development-local", "development-jetson-lan", "development-remote-cpu", "cloud")),
 ])
 def test_planner_placement_preserves_real_and_controlled_boundaries(runtime, allowed, rejected):
     value = manifest()
@@ -94,12 +94,16 @@ def test_planner_placement_preserves_real_and_controlled_boundaries(runtime, all
             validate_release_manifest(value)
 
 
-def test_local_and_jetson_placement_require_distinct_release_and_evaluation_identity():
+@pytest.mark.parametrize("placement", ["development-local", "development-remote-cpu"])
+def test_placements_require_distinct_release_and_evaluation_identity(placement):
     jetson = manifest()
     local = copy.deepcopy(jetson)
-    local["placement"]["planner"] = "development-local"
+    local["placement"]["planner"] = placement
     assert canonical_digest(local) != canonical_digest(jetson)
     assert evaluation_contract(local) != evaluation_contract(jetson)
+    local["placement"]["policy"] = "development-remote-cpu"
+    with pytest.raises(ValueError, match="unsupported qualification placement"):
+        validate_release_manifest(local)
 
 
 def test_plan_envelope_cannot_expand_task_or_hide_unqualified_parameters():

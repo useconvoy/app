@@ -20,7 +20,7 @@ export interface PairedManifest {
   task: { instruction: string; skill_id: string };
   catalog_sha256: string;
   planning: { timeout_ms: number };
-  placement: { policy: "development-local-cpu"; planner: "development-local" | "development-jetson-lan" | "development-local-controlled" };
+  placement: { policy: "development-local-cpu"; planner: "development-local" | "development-jetson-lan" | "development-remote-cpu" | "development-local-controlled" };
 }
 
 export type ReleaseManifest = ActionManifest | PairedManifest;

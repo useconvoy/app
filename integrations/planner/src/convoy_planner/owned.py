@@ -42,6 +42,7 @@ FORBIDDEN_ENV = (
     "CONVOY_ACTION_VERIFICATION_KEYS_FILE", "CONVOY_ACTION_VERIFICATION_JSON",
     "CONVOY_PLANNER_VERIFICATION_JSON", "CONVOY_EXECUTION_SECRET",
     "CONVOY_PLANNER_EXECUTION_SECRET", "CONVOY_WORKER_PROBE_TOKEN",
+    "CONVOY_PLANNER_RELEASE_JSON", "CONVOY_PLANNER_RELEASE_SHA256",
 )
 
 
@@ -81,8 +82,8 @@ def preflight(args) -> tuple[dict, dict | None, dict]:
         manifest = validate_release_manifest(read_json(args.manifest))
         if manifest["profile"] != PAIRED_PROFILE or manifest["planner"]["runtime"] != PLANNER_RUNTIME:
             raise ValueError("owned planner requires the real paired planner runtime")
-        if manifest["placement"]["planner"] != "development-local":
-            raise ValueError("this launcher qualifies development-local placement only")
+        if manifest["placement"]["planner"] not in {"development-local", "development-remote-cpu"}:
+            raise ValueError("owned CPU planner requires a local or remote CPU placement declaration")
     receipt = validate_text_receipt(read_json(args.assets))
     expected = {"system": "Linux", "machine": "aarch64"}
     if ({"system": platform.system(), "machine": platform.machine()} != expected
@@ -177,6 +178,8 @@ class OwnedPlanner:
     def application(self, manifest: dict, authorization: dict):
         if manifest["planner"] != self.evidence["planner"]:
             raise ValueError("loaded planner artifact differs from immutable manifest")
+        # A release declares placement; it cannot establish the observed network topology.
+        self.evidence["declared_placement"] = dict(manifest["placement"])
         app = create_app(manifest, self.backend, **authorization)
 
         @app.middleware("http")
@@ -382,7 +385,7 @@ def run(args) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("mode", choices=("inspect", "serve"))
     parser.add_argument("--assets", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True, help="new private runtime directory")
