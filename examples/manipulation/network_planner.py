@@ -204,8 +204,8 @@ def run(args) -> dict:
     evidence = {"schema_version": 1, "status": "failed", "scope": SCOPE, "planner_backend_kind": "llamacpp-text-model",
                 "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
     before = tools.existing_services()
-    network = ingress_id = served = None
-    ingress_removed = network_removed = True
+    network = ingress_network = ingress_id = served = None
+    ingress_removed = network_removed = ingress_network_removed = True
     port = None
     credentials = None
     cleanup_errors = []
@@ -255,6 +255,10 @@ def run(args) -> dict:
             private_bytes(release, json.dumps(manifest).encode(), mode=0o444)
             network = tools.text("docker", "network", "create", "--internal", "convoy-network-check-" + uuid.uuid4().hex[:12])
             network_removed = False
+            # Keep the planner on its internal bridge; use a separate ingress
+            # bridge for the host port. Only Caddy joins this second bridge.
+            ingress_network = tools.text("docker", "network", "create", "convoy-ingress-check-" + uuid.uuid4().hex[:12])
+            ingress_network_removed = False
             served = tools.Case("planner", image, output)
             served.container = tools.text("docker", "create", "--pull=never", "--name", served.name,
                 "--init", "--network", network, "--network-alias", "planner", "--cpus=2", "--memory=4g",
@@ -271,12 +275,13 @@ def run(args) -> dict:
             # The pinned upstream binary's file capability needs this bounding-set
             # entry to execute, even though our listener uses the high port 8443.
             ingress_id = tools.text("docker", "create", "--pull=never", "--name", "convoy-tls-check-" + uuid.uuid4().hex[:12],
-                "--network", network, "--publish", "127.0.0.1::8443", "--cpus=0.5", "--memory=128m",
+                "--network", ingress_network, "--publish", "127.0.0.1::8443", "--cpus=0.5", "--memory=128m",
                 "--pids-limit=64", "--cap-drop=ALL", "--cap-add=NET_BIND_SERVICE", "--security-opt=no-new-privileges",
                 "--tmpfs", "/data:rw,nosuid,nodev,size=4m", "--tmpfs", "/config:rw,nosuid,nodev,size=4m",
                 "--user=0:0", "--entrypoint=caddy", caddy,
                 "run", "--config", "/tmp/convoy-ingress/Caddyfile", "--adapter", "caddyfile")
             ingress_removed = False
+            tools.run("docker", "network", "connect", network, ingress_id, capture_output=True)
             copy_ingress(ingress_files, ingress_id)
             tools.run("docker", "start", ingress_id, capture_output=True)
             binding = tools.text("docker", "port", ingress_id, "8443/tcp")
@@ -284,11 +289,21 @@ def run(args) -> dict:
                 raise RuntimeError("TLS ingress must publish only one host-loopback port")
             port = int(binding.rsplit(":", 1)[1])
             network_info = json.loads(tools.text("docker", "network", "inspect", network))[0]
+            ingress_info = json.loads(tools.text("docker", "network", "inspect", ingress_network))[0]
+            def network_ids(container):
+                connections = json.loads(tools.text("docker", "inspect", "--format",
+                                                   "{{json .NetworkSettings.Networks}}", container))
+                return {item["NetworkID"] for item in connections.values()}
+            planner_networks, ingress_networks = network_ids(served.container), network_ids(ingress_id)
             if (network_info["Internal"] is not True
-                    or set(network_info["Containers"]) != {ingress_id, served.container}):
-                raise RuntimeError("network does not contain exactly the two owned private services")
+                    or set(network_info["Containers"]) != {ingress_id, served.container}
+                    or ingress_info["Internal"] is not False or set(ingress_info["Containers"]) != {ingress_id}
+                    or planner_networks != {network} or ingress_networks != {network, ingress_network}):
+                raise RuntimeError("network topology differs from isolated planner and dedicated TLS ingress")
             evidence["network"] = {"internal": True, "network_id": network, "planner_container_id": served.container,
-                "ingress_container_id": ingress_id, "planner_published_ports": [], "ingress_binding": binding}
+                "ingress_container_id": ingress_id, "planner_published_ports": [], "ingress_binding": binding,
+                "ingress_network_id": ingress_network, "ingress_internal": False,
+                "planner_network_ids": sorted(planner_networks), "ingress_network_ids": sorted(ingress_networks)}
             url = f"https://localhost:{port}"
             client = PlannerHTTP(url, probe_token, ca_file=str(ca))
             deadline = time.monotonic() + 20
@@ -368,6 +383,12 @@ def run(args) -> dict:
                 network_removed = True
             except Exception as error:  # noqa: BLE001 - retain explicit cleanup uncertainty
                 cleanup_errors.append({"operation": "network_remove", "type": type(error).__name__})
+        if ingress_network:
+            try:
+                tools.run("docker", "network", "rm", ingress_network, capture_output=True)
+                ingress_network_removed = True
+            except Exception as error:  # noqa: BLE001 - remove each owned network independently
+                cleanup_errors.append({"operation": "ingress_network_remove", "type": type(error).__name__})
         unchanged = False
         try:
             unchanged = tools.existing_services() == before
@@ -375,6 +396,7 @@ def run(args) -> dict:
             cleanup_errors.append({"operation": "verify_existing_services", "type": type(error).__name__})
         evidence["cleanup"] = {"credentials_removed": credentials is None or not credentials.exists(),
             "original_services_unchanged": unchanged, "ingress_removed": ingress_removed, "network_removed": network_removed,
+            "ingress_network_removed": ingress_network_removed,
             "planner_removed": served is None or served.container is None or served.evidence.get("container_removed") is True,
             "tls_listener_closed": port is None or tools.closed(port), "errors": cleanup_errors}
         if cleanup_errors or not all(value for key, value in evidence["cleanup"].items() if key != "errors"):
