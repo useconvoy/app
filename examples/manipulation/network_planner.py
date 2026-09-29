@@ -41,7 +41,7 @@ sys.path[:0] = [str(path) for path in SOURCES]
 
 import pipeline
 from convoy_agent.coordinator.transport import PlannerHTTP, TransportError
-from convoy_contracts.execution import canonical_digest
+from convoy_contracts.execution import canonical_digest, canonical_json
 from convoy_contracts.pairing import (
     CATALOG_SHA256,
     FIXED_TASK,
@@ -202,6 +202,7 @@ def run(args) -> dict:
     shutil.copyfile(__file__, output / "network-planner-source.py")
     tools = image_tools()
     evidence = {"schema_version": 1, "status": "failed", "scope": SCOPE, "planner_backend_kind": "llamacpp-text-model",
+                "release_delivery": "injected-json" if args.inject_release else "copied-file",
                 "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
     before = tools.existing_services()
     network = ingress_network = ingress_id = served = None
@@ -242,8 +243,15 @@ def run(args) -> dict:
             ca, wrong_ca, ingress_files = certificates(credentials)
             env_file = credentials / "planner.env"
             planner_public = json.loads(Path(public["CONVOY_PLANNER_VERIFICATION_KEYS_FILE"]).read_text())
-            private_bytes(env_file, ("CONVOY_PLANNER_VERIFICATION_JSON=" + json.dumps(planner_public)
-                + "\nCONVOY_PLANNER_PROBE_TOKEN=" + probe_token + "\n").encode())
+            environment = ("CONVOY_PLANNER_VERIFICATION_JSON=" + json.dumps(planner_public)
+                + "\nCONVOY_PLANNER_PROBE_TOKEN=" + probe_token + "\n")
+            command = []
+            if args.inject_release:
+                environment += ("CONVOY_PLANNER_RELEASE_JSON=" + canonical_json(manifest).decode("utf-8")
+                    + "\nCONVOY_PLANNER_RELEASE_SHA256=" + canonical_digest(manifest) + "\n")
+                command = ["serve", "--assets", "/opt/convoy/assets/assets.json", "--output", "/run/convoy/state",
+                           "--host", "0.0.0.0", "--port", "8080"]
+            private_bytes(env_file, environment.encode())
             evidence["public_verification"] = {purpose: json.loads(Path(path).read_text()) for purpose, path in (
                 ("action", public["CONVOY_ACTION_VERIFICATION_KEYS_FILE"]),
                 ("planner", public["CONVOY_PLANNER_VERIFICATION_KEYS_FILE"]))}
@@ -252,7 +260,8 @@ def run(args) -> dict:
                                "proxy_retries": 0, "upstream": "private HTTP within the internal Docker network"}
             private_bytes(output / "Caddyfile", CADDYFILE.encode())
             release = credentials / "release.json"
-            private_bytes(release, json.dumps(manifest).encode(), mode=0o444)
+            if not args.inject_release:
+                private_bytes(release, json.dumps(manifest).encode(), mode=0o444)
             network = tools.text("docker", "network", "create", "--internal", "convoy-network-check-" + uuid.uuid4().hex[:12])
             network_removed = False
             # Keep the planner on its internal bridge; use a separate ingress
@@ -262,8 +271,10 @@ def run(args) -> dict:
             served = tools.Case("planner", image, output)
             served.container = tools.text("docker", "create", "--pull=never", "--name", served.name,
                 "--init", "--network", network, "--network-alias", "planner", "--cpus=2", "--memory=4g",
-                "--pids-limit=256", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--env-file", str(env_file), image)
-            tools.run("docker", "cp", str(release), served.container + ":/run/convoy/release.json", capture_output=True)
+                "--pids-limit=256", "--cap-drop=ALL", "--security-opt=no-new-privileges", "--env-file", str(env_file), image,
+                *command)
+            if not args.inject_release:
+                tools.run("docker", "cp", str(release), served.container + ":/run/convoy/release.json", capture_output=True)
             planner_info = json.loads(tools.text("docker", "inspect", served.container))[0]
             if planner_info["Image"] != image or planner_info["HostConfig"]["PortBindings"]:
                 raise RuntimeError("planner image identity or private endpoint changed")
@@ -414,6 +425,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--direct-report", type=Path)
     parser.add_argument("--direct-trace", type=Path)
+    parser.add_argument("--inject-release", action="store_true", help="qualify digest-pinned release JSON injection instead of file delivery")
     args = parser.parse_args()
     os.environ.update(PYTHONPATH=os.pathsep.join(map(str, SOURCES)),
         CONVOY_SMOLVLA_ASSETS=str(args.action_assets.resolve()), HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1",
