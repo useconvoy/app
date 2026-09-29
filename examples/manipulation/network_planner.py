@@ -14,6 +14,7 @@ import argparse
 import datetime as dt
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import re
@@ -25,6 +26,7 @@ import sqlite3
 import ssl
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import uuid
@@ -96,6 +98,22 @@ def private_bytes(path: Path, content: bytes, mode=0o600):
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
     with os.fdopen(fd, "wb") as stream:
         stream.write(content)
+
+
+def copy_ingress(directory: Path, container: str):
+    """Keep keys private without inheriting host UIDs across Docker Desktop."""
+    payload = io.BytesIO()
+    with tarfile.open(fileobj=payload, mode="w") as archive:
+        root = tarfile.TarInfo("convoy-ingress")
+        root.type, root.mode = tarfile.DIRTYPE, 0o700
+        archive.addfile(root)  # TarInfo defaults to container root uid/gid 0.
+        for name in ("Caddyfile", "service.crt", "service.key"):
+            data = (directory / name).read_bytes()
+            member = tarfile.TarInfo("convoy-ingress/" + name)
+            member.mode, member.size = 0o600, len(data)
+            archive.addfile(member, io.BytesIO(data))
+    subprocess.run(["docker", "cp", "-", container + ":/tmp/"],
+                   input=payload.getvalue(), capture_output=True, check=True)
 
 
 def certificates(directory: Path) -> tuple[Path, Path, Path]:
@@ -259,7 +277,7 @@ def run(args) -> dict:
                 "--user=0:0", "--entrypoint=caddy", caddy,
                 "run", "--config", "/tmp/convoy-ingress/Caddyfile", "--adapter", "caddyfile")
             ingress_removed = False
-            tools.run("docker", "cp", str(ingress_files), ingress_id + ":/tmp/convoy-ingress", capture_output=True)
+            copy_ingress(ingress_files, ingress_id)
             tools.run("docker", "start", ingress_id, capture_output=True)
             binding = tools.text("docker", "port", ingress_id, "8443/tcp")
             if not re.fullmatch(r"127\.0\.0\.1:[0-9]+", binding):
