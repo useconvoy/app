@@ -250,9 +250,11 @@ def run(args) -> dict:
             tools.verify_identity(live, assets)
             if live["planner"] != manifest["planner"]:
                 raise RuntimeError("serving planner differs from the inspected immutable artifact")
+            # The pinned upstream binary's file capability needs this bounding-set
+            # entry to execute, even though our listener uses the high port 8443.
             ingress_id = tools.text("docker", "create", "--pull=never", "--name", "convoy-tls-check-" + uuid.uuid4().hex[:12],
                 "--network", network, "--publish", "127.0.0.1::8443", "--cpus=0.5", "--memory=128m",
-                "--pids-limit=64", "--cap-drop=ALL", "--security-opt=no-new-privileges",
+                "--pids-limit=64", "--cap-drop=ALL", "--cap-add=NET_BIND_SERVICE", "--security-opt=no-new-privileges",
                 "--tmpfs", "/data:rw,nosuid,nodev,size=4m", "--tmpfs", "/config:rw,nosuid,nodev,size=4m",
                 "--user=0:0", "--entrypoint=caddy", caddy,
                 "run", "--config", "/tmp/convoy-ingress/Caddyfile", "--adapter", "caddyfile")

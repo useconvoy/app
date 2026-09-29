@@ -4,6 +4,9 @@
 installation for console use. The output directory is private and must be new.
 """
 
+# Import this checkout after source-path setup, rather than stale editable installs.
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import argparse
@@ -359,7 +362,7 @@ def run(args) -> dict:
             releases = [post(f"/api/v1/applications/{application['id']}/releases", {"manifest": recipe["manifest"]})
                         for recipe in registry["recipes"]]
             evidence.update(robot_id=robot["id"], application_id=application["id"],
-                            releases={name: release for name, release in zip(("A", "B"), releases)})
+                            releases={name: release for name, release in zip(("A", "B"), releases, strict=True)})
             coordinator = start("coordinator", coordinator_env, "convoy_agent.coordinator.paired",
                                 "--data-dir", output / "robot", "--robot-id", robot["id"], "--local-registry", registry_path)
             evidence["installation_processes"] = {"api_pid": api_child.pid, "coordinator_pid": coordinator.pid}
