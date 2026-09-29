@@ -149,7 +149,10 @@ jobs:
           check "portal" 200 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/portal/")"
           check "portal session" 200 "$(curl -sS -o /tmp/portal-session.json -w '%{http_code}' --max-time 20 "$SITE/api/portal/session")"
           check "anonymous snapshot protected" 401 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/api/portal/snapshot")"
-          check "old console" 404 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/app")"
+          check "workspace entry" "307 /app/applications" "$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "$SITE/app" | sed "s#${SITE}##")"
+          check "robot applications" 200 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/app/applications")"
+          check "device tools" 200 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/app/device")"
+          check "anonymous management protected" 401 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/api/platform/auth/me")"
           check "sitemap"     200 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/sitemap.xml")"
           echo "certificate: $(echo | openssl s_client -connect deployconvoy.com:443 -servername deployconvoy.com 2>/dev/null | openssl x509 -noout -issuer -enddate | tr '\n' ' ')"
           {
