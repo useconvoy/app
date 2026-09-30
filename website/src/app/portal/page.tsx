@@ -1,14 +1,7 @@
-import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
-import "@/styles/workspace.css";
-import type { Metadata } from "next";
-import { Portal } from "@/components/portal/Portal";
-import "@/styles/portal.css";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: { absolute: "Convoy | Jetson demo" },
-  description: "Chat with a model on a physical Jetson and inspect its measured telemetry, usage, and traces.",
-  alternates: { canonical: "/portal" },
-  robots: { index: false, follow: false, googleBot: { index: false, follow: false } },
-};
-
-export default function PortalPage() { return <WorkspaceShell><Portal /></WorkspaceShell>; }
+export default async function LegacyDevicePage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+  const { view } = await searchParams;
+  const selected = ["device", "chat", "usage", "traces"].includes(view ?? "") ? view : "device";
+  redirect(`/app/applications?section=device&view=${selected}`);
+}

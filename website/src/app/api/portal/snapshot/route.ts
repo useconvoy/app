@@ -9,6 +9,6 @@ export async function GET(request: Request) {
     const session = requireSession(request);
     limit("snapshot-global", 120, 60);
     limit(`snapshot:${session.nonce}`, 30, 60);
-    return json(await snapshot());
+    return json(await snapshot(session));
   });
 }

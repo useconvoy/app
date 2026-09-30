@@ -1,4 +1,4 @@
-import { PortalFailure, UUID } from "./auth";
+import { PortalFailure, UUID, type Session } from "./auth";
 import { assertDevice, list, num, record, str, upstream, upstreamConfig } from "./upstream";
 import type { PortalChatInput, PortalChatRequest, PortalSnapshot, PortalTelemetry } from "./types";
 
@@ -16,19 +16,19 @@ export function curateUsage(value: unknown, deviceId: string) {
   const selected = list(record(value).devices).map(record).find(d => d.device_id === deviceId && d.simulated === false);
   return selected ? Object.fromEntries(metricKeys.map(k => [k, num(record(selected.metrics)[k])])) : null;
 }
-export async function snapshot(): Promise<PortalSnapshot> {
+export async function snapshot(session: Session): Promise<PortalSnapshot> {
   const { deviceId } = upstreamConfig();
-  const d = assertDevice(await upstream(`/api/v1/devices/${deviceId}`), deviceId);
+  const d = assertDevice(await upstream(session, `/api/v1/devices/${deviceId}`), deviceId);
   const releaseId = str(d.observed_active_release_id);
   const to = new Date().toISOString().slice(0, 10);
   const from = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
   const [availability, samples, spans, usage, releaseValue, settingsValue] = await Promise.all([
-    upstream("/api/v1/chat/devices"),
-    upstream(`/api/v1/devices/${deviceId}/telemetry?limit=120`),
-    upstream(`/api/v1/devices/${deviceId}/spans?limit=100`),
-    upstream(`/api/v1/usage?from=${from}&to=${to}`),
-    releaseId ? upstream(`/api/v1/releases/${encodeURIComponent(releaseId)}`) : Promise.resolve(null),
-    upstream("/api/v1/settings"),
+    upstream(session, "/api/v1/chat/devices"),
+    upstream(session, `/api/v1/devices/${deviceId}/telemetry?limit=120`),
+    upstream(session, `/api/v1/devices/${deviceId}/spans?limit=100`),
+    upstream(session, `/api/v1/usage?from=${from}&to=${to}`),
+    releaseId ? upstream(session, `/api/v1/releases/${encodeURIComponent(releaseId)}`) : Promise.resolve(null),
+    upstream(session, "/api/v1/settings"),
   ]);
   const settings = record(settingsValue);
   const chat = list(record(availability).devices).map(record).find(v => v.id === deviceId);

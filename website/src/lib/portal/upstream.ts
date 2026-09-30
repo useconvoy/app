@@ -1,4 +1,5 @@
-import { PortalFailure } from "./auth";
+import { PortalFailure, type Session } from "./auth";
+import { platformOrigin } from "../platform/proxy";
 
 if (typeof window !== "undefined") throw new Error("Portal upstream access is server-only");
 export const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -6,17 +7,11 @@ export const list = (value: unknown): unknown[] => Array.isArray(value) ? value 
 export const str = (value: unknown): string | null => typeof value === "string" ? value : null;
 export const num = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value) ? value : null;
 export function upstreamConfig() {
-  const base = process.env.CONVOY_UPSTREAM_URL;
-  const token = process.env.CONVOY_UPSTREAM_TOKEN;
   const deviceId = process.env.CONVOY_DEVICE_ID;
-  if (!base || !token?.startsWith("cva_") || !deviceId || !/^dev_[a-z0-9]+$/.test(deviceId)) {
-    throw new PortalFailure(503, "unavailable", "The device connection is unavailable.");
+  if (!deviceId || !/^dev_[a-z0-9]+$/.test(deviceId)) {
+    throw new PortalFailure(503, "unavailable", "No device connection is configured for this workspace.");
   }
-  const url = new URL(base);
-  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash || url.pathname !== "/") {
-    throw new PortalFailure(503, "unavailable", "The device connection is unavailable.");
-  }
-  return { origin: url.origin, token, deviceId };
+  return { origin: platformOrigin(), deviceId };
 }
 // Keep credentials confined to this exact route set, even if a caller passes an unexpected path.
 export function allowedPath(path: string, method: string, deviceId: string): boolean {
@@ -29,18 +24,20 @@ export function allowedPath(path: string, method: string, deviceId: string): boo
     || /^\/api\/v1\/releases\/[a-zA-Z0-9_-]{1,64}$/.test(path)
     || new RegExp(`^${d}/chat/[a-f0-9-]{36}$`).test(path);
 }
-export async function upstream(path: string, method = "GET", body?: unknown): Promise<unknown> {
+export async function upstream(session: Session, path: string, method = "GET", body?: unknown): Promise<unknown> {
   const c = upstreamConfig();
   if (!allowedPath(path, method, c.deviceId)) throw new PortalFailure(400, "invalid_request", "This action is unavailable.");
   try {
     const response = await fetch(`${c.origin}${path}`, {
       method, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(8000),
-      headers: { Authorization: `Bearer ${c.token}`, Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+      headers: { Cookie: session.cookie, "X-Convoy-Client": "web", Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     if (!response.ok) {
       await response.body?.cancel();
       const errors: Record<number, [string, string]> = {
+        401: ["authentication_required", "Your session ended. Sign in to your Convoy workspace."],
+        403: ["forbidden", "Your account does not have permission for this device action."],
         404: ["not_found", "This request is not available. The device may not have received it yet."],
         409: ["device_busy", "The device or active release changed, or another request is running. Refresh before sending again."],
         413: ["request_too_large", "The conversation is too large."],

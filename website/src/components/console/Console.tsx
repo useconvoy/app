@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, errorText, MutationAttempts, terminal, timestamp } from "@/lib/platform/client";
 import type { Account, Application, Deployment, Device, Episode, EvaluationRun, Mission, Project, Qualification, Release, Robot } from "@/lib/platform/client";
+import { Portal } from "@/components/portal/Portal";
 import { Evaluations } from "./Evaluations";
 import { ReleaseDetails } from "./ReleaseDetails";
 import { EpisodeSummary } from "./EpisodeSummary";
@@ -16,7 +17,7 @@ const PROFILES = [
 ];
 const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 
-function Brand() { return <Link className="console-brand" href="/app">Convoy <span>/ applications</span></Link>; }
+function Brand() { return <Link className="console-brand" href="/app">Robot applications</Link>; }
 function Status({ state }: { state: string }) {
   return <span className={`console-status console-status-${["ready", "completed"].includes(state) ? "success" : ["failed", "unknown", "blocked"].includes(state) ? "warning" : "neutral"}`}>{state.replaceAll("_", " ")}</span>;
 }
@@ -53,18 +54,37 @@ function Login({ initialError, onLogin }: { initialError: string | null; onLogin
     finally { lock.current = false; setBusy(false); }
   }
   return <main className="console-auth"><Brand /><section className="console-card">
-    <p className="console-eyebrow">Application console</p><h1>Your next robot release.</h1>
-    <p>Sign in with your Convoy management account.</p>
+    <p className="console-eyebrow">Your Convoy workspace</p><h1>One workspace for your robots.</h1>
+    <p>Sign in to connect a device, test its model, and manage robot applications.</p>
     <form onSubmit={event => void submit(event)}>
       <label>Email<input name="email" type="email" autoComplete="username" required /></label>
       <label>Password<input name="password" type="password" autoComplete="current-password" required /></label>
       {error && <Alert>{error}</Alert>}
       <button className="btn btn-primary" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
-    </form><p className="console-note">Your management account controls projects and deployments. <Link href="/app/device">Device & inference</Link> uses the configured device demo access.</p>
+    </form><p className="console-note">Use your Convoy account for devices, applications, and simulation results.</p>
   </section></main>;
 }
 
 function Workspace({ account, onSessionEnd }: { account: Account; onSessionEnd: () => void }) {
+  const [section, setSection] = useState<"applications" | "device">("applications");
+  const [deviceVisited, setDeviceVisited] = useState(false);
+  useEffect(() => {
+    const sync = () => {
+      const selected = new URLSearchParams(window.location.search).get("section") === "device" ? "device" : "applications";
+      setSection(selected);
+      if (selected === "device") setDeviceVisited(true);
+    };
+    const initial = window.setTimeout(sync, 0);
+    window.addEventListener("popstate", sync);
+    return () => { window.clearTimeout(initial); window.removeEventListener("popstate", sync); };
+  }, []);
+  function navigateSection(next: "applications" | "device") {
+    setSection(next);
+    if (next === "device") setDeviceVisited(true);
+    const params = new URLSearchParams(window.location.search);
+    params.set("section", next);
+    window.history.pushState(null, "", `/app/applications?${params}`);
+  }
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -93,15 +113,19 @@ function Workspace({ account, onSessionEnd }: { account: Account; onSessionEnd: 
     <a className="console-skip" href="#console-main">Skip to workspace</a>
     <header className="console-header"><Brand /><div><span>{account.user.email}</span><button onClick={() => void logout()}>Sign out</button></div></header>
     <main id="console-main" className="console-main" tabIndex={-1}>
-      <div className="console-heading"><div><p className="console-eyebrow">Robot applications</p><h1>Build. Deploy. Observe.</h1><p>Manage releases, run tasks, and inspect the results.</p></div><span className="console-status">Simulation only</span></div>
+      <div className="console-heading"><div><p className="console-eyebrow">Robot applications</p><h1>Build. Deploy. Observe.</h1><p>Connect your device, test its model, and bring your application together.</p></div></div>
+      <nav className="application-nav" aria-label="Robot applications">{(["applications", "device"] as const).map(item => <a key={item} href={`/app/applications?section=${item}`} aria-current={section === item ? "page" : undefined} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); navigateSection(item); } }}>{item === "device" ? "Device connection" : "Applications"}</a>)}</nav>
+      {error && <Alert>{error}</Alert>}
+      <div hidden={section !== "device"}>{deviceVisited && <Portal active={section === "device"} onSessionEnd={onSessionEnd} canChat={writable} />}</div>
+      <div hidden={section !== "applications"}>
       <p className="console-scope">Sawyer pick-and-place simulation. Policy and environment identity are pinned in each release.</p>
       {paused && <Alert>Dispatch is paused or the installation is in recovery. Existing observations remain available.</Alert>}
-      {error && <Alert>{error}</Alert>}
       <section className="console-projects" aria-label="Project selection">
         <label>Project<select value={project?.id ?? ""} onChange={event => setProjectId(event.target.value)}><option value="" disabled>{projects.length ? "Choose a project" : "No projects yet"}</option>{projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         {writable && <form onSubmit={event => void create(event)}><label>New project name<input name="name" maxLength={120} required /></label><button className="btn btn-secondary" disabled={busy}>Create project</button></form>}
       </section>
       {project ? <ProjectWorkspace key={project.id} project={project} writable={writable} canDispatch={!paused && account.installation.simulator} executionProfiles={account.installation.execution_profiles ?? []} onSessionEnd={onSessionEnd} /> : <p>Create a project to connect a simulator and register an application release.</p>}
+      </div>
     </main>
   </>;
 }

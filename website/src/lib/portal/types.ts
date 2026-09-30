@@ -71,5 +71,4 @@ export interface PortalChatRequest {
   trace_id: string | null;
   error: null | { code: string; message: string };
 }
-export interface PortalSession { authenticated: boolean; expires_at?: string }
 export interface PortalError { error: { code: string; message: string } }

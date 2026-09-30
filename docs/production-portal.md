@@ -1,5 +1,12 @@
 # Production Jetson portal
 
+> Historical deployment record. The unified workspace now opens at `/app` and
+> places these device tools inside Robot applications → Device connection. It uses
+> the caller's management session instead of the separate demo credentials/token
+> described below. See [the current workspace guide](v1/unified-workspace.md) for
+> authentication, migration and current routes. The hardware acceptance figures
+> below remain historical observations, not verification of the new UI release.
+
 The entry point is [deployconvoy.com/portal](https://deployconvoy.com/portal),
 reachable through **Open demo** on the landing page. The operator supplies demo
 credentials privately. This document contains no reusable credentials.

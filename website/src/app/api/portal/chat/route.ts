@@ -13,9 +13,9 @@ export async function POST(request: Request) {
     limit(`chat:${session.nonce}`, 6, 60);
     const input = chatInput(await boundedJson(request, 65536));
     const { deviceId } = upstreamConfig();
-    assertDevice(await upstream(`/api/v1/devices/${deviceId}`), deviceId);
+    assertDevice(await upstream(session, `/api/v1/devices/${deviceId}`), deviceId);
     const upstreamId = upstreamRequestId(session, input.request_id);
-    const result = await upstream(`/api/v1/devices/${deviceId}/chat`, "POST", { ...input, request_id: upstreamId });
+    const result = await upstream(session, `/api/v1/devices/${deviceId}/chat`, "POST", { ...input, request_id: upstreamId });
     return json(curateChat(result, input.request_id, upstreamId, deviceId), 202);
   });
 }

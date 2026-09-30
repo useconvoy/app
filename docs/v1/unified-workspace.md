@@ -1,25 +1,39 @@
 # One workspace for device inference and robot applications
 
-`/app` opens `/app/applications`. The shared navigation reaches `/app/device`
-without leaving the application. `/console`, `/portal`, and portal `?view=` links
-remain working entry points.
+`/app` opens `/app/applications`. One account, sign-in and sign-out cover the
+workspace. Applications contains release/deployment/simulation workflows; Device
+connection contains physical-device status, model chat, measured usage and traces.
+The old device sidebar and separate demo login are removed.
+
+`/console` redirects to the application. `/portal?view=chat` and
+`/app/device?view=chat` redirect to `/app/applications?section=device&view=chat`;
+connection, usage and traces links are preserved too. Landing-page links begin at
+`/app`. Back/forward navigation switches sections, application drafts and chat
+history remain mounted across section changes, and device snapshot polling pauses
+when its section is hidden.
 
 ## Feature map
 
-| Workspace area | Existing functionality |
+| Workspace area | Functionality |
 | --- | --- |
-| Robot applications | Projects; simulator enrollment and robot registration; immutable release manifests and component identities; deployment readiness; mission start/cancellation and history |
-| Release qualification | Fixed-seed suites, candidate/baseline comparisons, promotion, application deployment gates and evaluation cancellation |
-| Episode playback | Actual recorded camera frames, previous/next/seek/play, selected planner skill, four policy commands, reward/success and separate wall/simulated timings |
-| Device & inference | Physical-device status and telemetry, model chat, measured usage and request traces |
+| Applications | Projects; simulator enrollment and robot registration; immutable releases and component identities; deployment readiness; mission start/cancellation and history |
+| Release qualification | Fixed-seed suites, comparisons, promotion, deployment gates and evaluation cancellation |
+| Episode playback | Recorded frames, selected skill, policy commands, reward/success and separate wall/simulated timings |
+| Device connection | Test connection; physical-device telemetry; model chat; measured usage; request traces |
 
-The shared shell does not combine authentication authorities. Management uses the
-caller's Convoy session and existing project ownership checks. The device demo
-uses its existing restricted demo session for one configured physical device.
-Device credentials cannot enroll robots or start deployments. Local simulator
-credentials do not claim that the physical Jetson is connected. A single-account
-physical-device management experience requires an explicit device permission model;
-this change does not replace that with a privileged token bridge.
+The signed-in user's session is forwarded to the control plane for both sections;
+no operator-token bridge elevates a viewer's role. Viewers can inspect evidence,
+while operators/admins can submit model requests. Revocation and sign-out apply to
+both sections. The API's existing device permissions are installation-wide;
+application resources retain project ownership. The one configured physical
+device is explicitly workspace-wide, not implicitly attached to a selected robot.
+
+A connection test reads recent live-contact evidence; a Chat request tests the
+actual model path. Neither qualifies physical robot actuation or a policy's timing.
+The separate Jetson timing experiment and its qualification criteria are unchanged.
+The [device API guide](../../website/src/lib/portal/README.md) covers cookie
+migration, retired demo configuration and permission behavior. Existing management
+sessions migrate automatically; demo-only users need a Convoy management account.
 
 ## Recordings
 
@@ -53,7 +67,7 @@ MetaWorld benchmark success is not proof of stable physical placement.
 
 The existing Lightsail deployment still consists of the same Next.js service and
 Python API. Its Compose configuration now supplies the management API connection
-as well as the existing portal connection. HTTP is explicitly allowed only to the
+for both application and device requests. HTTP is explicitly allowed only to the
 named `control-plane:8080` service on that private single-host network; other
 remote origins still require HTTPS. The public mutation origin defaults to the
 existing `PORTAL_PUBLIC_ORIGIN` unless `CONVOY_CONSOLE_ORIGIN` is provided.

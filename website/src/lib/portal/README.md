@@ -1,54 +1,67 @@
-# Portal BFF
+# Device connection API
 
-The public browser uses only `/api/portal/session`, `/api/portal/snapshot`, and
-`/api/portal/chat[/<client UUID>]`. The BFF connects to the control plane with a
-server-held operator token and returns selected fields for one configured device.
-It has no general proxy, fleet aggregates, raw logs, arbitrary attrs or deployment
-actions. Every device data path validates the configured physical device.
+Device connection is a section of `/app/applications`. It contains the existing
+physical-device telemetry, model chat, usage and trace views. `/portal?view=...`
+and `/app/device?view=...` redirect there. The application provides the only login
+and logout through `/api/platform/auth/login` and `/api/platform/auth/logout`.
+The legacy `GET /api/portal/session` remains a read-only session/health adapter;
+its independent POST/DELETE login flow has been removed.
 
-Runtime configuration (never `NEXT_PUBLIC_`):
+The device BFF forwards only the caller's `convoy_session` to the same configured
+control plane as the application. It never uses a shared operator token. The API
+validates session expiry/revocation and permissions on every request: viewers can
+inspect device evidence; operators/admins can send chat. Chat ownership is recorded
+against the actual user. Device APIs are installation-wide today, while robot
+application APIs enforce project ownership. Do not present the configured Jetson
+as automatically bound to the selected application's robot.
+
+Runtime configuration (server-only):
 
 | Variable | Value |
 | --- | --- |
-| `CONVOY_UPSTREAM_URL` | Exact internal control-plane HTTP(S) origin, no path or credentials |
-| `CONVOY_UPSTREAM_TOKEN` | Dedicated operator `cva_...` API token |
-| `CONVOY_DEVICE_ID` | Allowlisted `dev_...` ID |
-| `PORTAL_DEMO_EMAIL` | Dedicated demo sign-in email |
-| `PORTAL_DEMO_PASSWORD_HASH` | `scrypt$<salt hex>$<derived key hex>` |
-| `PORTAL_SESSION_SECRET` | Cryptographically random secret, at least 32 characters |
-| `PORTAL_PUBLIC_ORIGIN` | Exact external HTTPS origin, e.g. `https://deployconvoy.com`, no trailing slash |
+| `CONVOY_API_URL` | Same API origin as application management; localhost default |
+| `CONVOY_API_INTERNAL_HTTP` | Optional `1` for the exact private `http://control-plane:8080` Compose origin |
+| `CONVOY_DEVICE_ID` | Allowlisted physical `dev_...` ID |
+| `CONVOY_CONSOLE_ORIGIN` | Exact external origin; falls back to `PORTAL_PUBLIC_ORIGIN` |
 
-Password hashes use a random 16–32 byte salt and Node's scrypt with `N=16384`,
-`r=8`, `p=1`, output length 64 bytes. Store the salt and derived key as lowercase
-hex (salt 32–64 characters, key 128 characters). Only the hash enters deployment
-configuration; never commit plaintext passwords or hashes used in production.
+The old `CONVOY_UPSTREAM_URL`, `CONVOY_UPSTREAM_TOKEN`, `PORTAL_DEMO_EMAIL`,
+`PORTAL_DEMO_PASSWORD_HASH` and `PORTAL_SESSION_SECRET` are no longer used.
+Deployment does not automatically delete these runtime values, so an older release
+can still be restored. Demo-only credentials do not become management accounts;
+users need an existing Convoy account with the intended role.
 
-Sessions are eight-hour HMAC-signed random nonces in a Secure, HttpOnly,
-SameSite=Strict, `__Host-` cookie. Changing email, password hash or signing secret
-invalidates existing sessions. Sign-out removes the browser cookie; there is no
-server-side session database/revocation list. Deployment must provide HTTPS.
-POST and DELETE require an Origin header equal to `PORTAL_PUBLIC_ORIGIN`.
+The shared HttpOnly cookie is scoped to `/api`, SameSite=Strict, and Secure on
+HTTPS. Successful login or a validated existing management session migrates the
+old `/api/platform` cookie to the shared scope and clears the old demo cookie.
+Migration does not renew the session's control-plane expiry. Sign-out revokes the
+same session for application and device requests. Duplicate session cookies are
+rejected; signing in clears the old scope. Device POST requests require both an
+exact Origin and `X-Convoy-Client: web`.
 
-The BFF derives each upstream Chat UUID from the signed session nonce plus the
-browser's UUID. Another session using the same browser UUID gets a different
-upstream UUID. This works across process restarts and multiple processes sharing
-configuration. Responses expose only the browser UUID. Do not regenerate after
-an uncertain POST: query that same browser UUID to reconcile its result.
+Device data paths validate the configured physical device and use a fixed path
+allowlist. There is no arbitrary URL/device proxy, deployment endpoint, raw log
+or arbitrary-attribute access. Fleet usage totals are discarded. Missing metrics
+stay null. Inference samples may contain other gateway requests on this device;
+`latency_ms` is gateway/model time, separate from browser roundtrip time.
 
-Limits are per process: 20 logins/minute globally, 6/email/minute, two simultaneous
-password checks; 20 Chat submissions/minute globally and 6/session/minute;
-30 snapshots/session/minute; 180 Chat polls/session/minute. Limit state is capped
-at 4096 entries. Global limits also bound callers who change identifiers. Scale-out
-deployments need a shared limiter or reverse-proxy limits for a fleet-wide cap.
-Login JSON is capped at 2 KiB; Chat JSON at 64 KiB with 8 KiB decoded message text.
-Body reads and each upstream fetch have eight-second deadlines; upstream payloads
-are capped at 2 MiB. Mutations have no automatic retry. All responses are private,
-no-store and errors are curated rather than forwarding upstream response bodies.
+The BFF derives a request UUID using the opaque session credential as an HMAC key
+and the browser's UUID as input. Another session gets a different upstream UUID.
+Only the browser UUID is returned. An uncertain POST is reconciled by polling that
+same UUID, never automatically resubmitted.
 
-Usage selects only the configured device's `devices[].metrics`. Fleet totals and
-daily sums are discarded. Missing metrics stay null. Inference history is bounded
-and includes all gateway inference on that device, potentially evaluations as well
-as Chat. `latency_ms` is model/gateway time, not browser end-to-end elapsed time.
+Limits remain per process: 20 chat submissions/minute globally, 6/session/minute;
+30 snapshots/session/minute; 180 chat polls/session/minute. The map is capped at
+4096 entries. Authentication throttling is owned by the control plane. Scale-out
+requires a shared limiter for fleet-wide caps. Request bodies and upstream
+responses are bounded, each upstream fetch has an eight-second deadline, redirects
+are rejected, and mutations are not retried. Errors are curated and all responses
+are private/no-store. Backend 401/403 stay authentication/permission failures.
 
-Run backend verification with `bash scripts/test-portal.sh`. It uses TypeScript and
-Node's test runner with an isolated temporary output directory, no new dependencies.
+`Test connection` refreshes control-plane evidence and shows whether the latest
+nonce-bound live report indicates recent device contact. It does not send robot
+commands or prove an inference roundtrip. Use Chat for a bounded model test;
+its measured response and trace are available in the same section.
+
+Run `bash scripts/test-portal.sh` for focused authentication, permissions,
+request-isolation, curation and recovery checks. Existing browser regressions
+exercise all four device views inside the shared workspace.
