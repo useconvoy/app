@@ -1,52 +1,55 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { scryptSync } from "node:crypto";
-import { checkOrigin, COOKIE, issueSession, limit, readSession, sessionCookie, upstreamRequestId, verifyLogin } from "../../src/lib/portal/auth";
+import { checkOrigin, limit, requireSession, upstreamRequestId, PortalFailure } from "../../src/lib/portal/auth";
 import { boundedJson, handled, json } from "../../src/lib/portal/http";
 import { chatInput, curateChat, curateTelemetry, curateUsage, snapshot } from "../../src/lib/portal/server";
 import { allowedPath, assertDevice, upstream } from "../../src/lib/portal/upstream";
 
-process.env.PORTAL_SESSION_SECRET = "test-secret-".repeat(5);
-process.env.PORTAL_PUBLIC_ORIGIN = "https://portal.example.test";
-process.env.PORTAL_DEMO_EMAIL = "demo@example.test";
-const salt = "ab".repeat(16);
-process.env.PORTAL_DEMO_PASSWORD_HASH = `scrypt$${salt}$${scryptSync("correct-password", Buffer.from(salt, "hex"), 64).toString("hex")}`;
-process.env.CONVOY_UPSTREAM_URL = "http://127.0.0.1:18083";
-process.env.CONVOY_UPSTREAM_TOKEN = "cva_test-only";
+process.env.CONVOY_CONSOLE_ORIGIN = "https://portal.example.test";
+process.env.CONVOY_API_URL = "http://127.0.0.1:18083";
 process.env.CONVOY_DEVICE_ID = "dev_board1";
 const clientId = "fe630a10-82b0-47f2-8b90-9c829bd71556";
-const cookieRequest = (cookie: string) => new Request("https://portal.example.test/api/portal/snapshot", { headers: { cookie: `${COOKIE}=${cookie}` } });
+const cookie = "convoy_session=cvs_abcdefghijklmnopqrstuvwx";
+const session = requireSession(new Request("https://portal.example.test/api/portal/snapshot", { headers: { cookie } }));
 
-test("signed sessions reject tampering, expiry and credential rotation; cookie is hardened", () => {
-  const now = Date.now();
-  const { cookie, session } = issueSession(now);
-  assert.deepEqual(readSession(cookieRequest(cookie), now), session);
-  assert.equal(readSession(cookieRequest(cookie.slice(0, -1) + (cookie.endsWith("A") ? "B" : "A")), now), null);
-  assert.equal(readSession(cookieRequest(cookie), now + 8 * 3600000), null);
-  const before = process.env.PORTAL_DEMO_EMAIL;
-  process.env.PORTAL_DEMO_EMAIL = "changed@example.test";
-  assert.equal(readSession(cookieRequest(cookie), now), null);
-  process.env.PORTAL_DEMO_EMAIL = before;
-  assert.match(sessionCookie(cookie), /HttpOnly; Secure; SameSite=Strict; Max-Age=28800/);
-  assert.match(sessionCookie("", 0), /Max-Age=0/);
-});
-test("login checks password and account; origins require exact HTTPS origin", async () => {
-  assert.equal(await verifyLogin("DEMO@example.test", "correct-password"), true);
-  assert.equal(await verifyLogin("demo@example.test", "wrong"), false);
-  assert.equal(await verifyLogin("other@example.test", "correct-password"), false);
-  checkOrigin(new Request("https://portal.example.test", { headers: { origin: "https://portal.example.test" } }));
-  for (const origin of ["https://evil.test", "null", "https://portal.example.test.evil.test", "http://portal.example.test"]) {
-    assert.throws(() => checkOrigin(new Request("https://portal.example.test", { headers: { origin } })), /verified/);
+test("device access uses only an unambiguous workspace credential and exact mutation origin", () => {
+  for (const value of ["", "__Host-convoy_portal=old-demo-session", "convoy_session=invalid", `${cookie}; ${cookie}`]) {
+    assert.throws(() => requireSession(new Request("https://portal.example.test", { headers: { cookie: value } })), /Sign in/);
   }
+  const request = (origin: string, client = "web") => new Request("https://portal.example.test", { headers: { origin, "X-Convoy-Client": client } });
+  checkOrigin(request("https://portal.example.test"));
+  for (const origin of ["https://evil.test", "null", "https://portal.example.test.evil.test", "http://portal.example.test"]) {
+    assert.throws(() => checkOrigin(request(origin)), /verified/);
+  }
+  assert.throws(() => checkOrigin(request("https://portal.example.test", "")), /verified/);
   assert.throws(() => checkOrigin(new Request("https://portal.example.test")), /verified/);
 });
-test("upstream UUID is stable for one session and isolates other sessions", () => {
-  const a = issueSession().session, b = issueSession().session;
-  const id = upstreamRequestId(a, clientId);
-  assert.equal(upstreamRequestId({ ...a }, clientId.toUpperCase()), id);
-  assert.notEqual(upstreamRequestId(b, clientId), id);
+test("upstream UUID is stable for one workspace session and isolates other sessions", () => {
+  const other = requireSession(new Request("https://portal.example.test", { headers: { cookie: cookie + "other" } }));
+  const id = upstreamRequestId(session, clientId);
+  assert.equal(upstreamRequestId({ ...session }, clientId.toUpperCase()), id);
+  assert.notEqual(upstreamRequestId(other, clientId), id);
   assert.notEqual(id, clientId);
-  assert.throws(() => upstreamRequestId(a, "../admin"));
+  assert.throws(() => upstreamRequestId(session, "../admin"));
+});
+test("revoked sessions and insufficient roles stay 401/403 without operator-token fallback", async () => {
+  const originalFetch = globalThis.fetch;
+  process.env.CONVOY_UPSTREAM_TOKEN = "cva_must-never-be-used";
+  try {
+    for (const status of [401, 403]) {
+      let calls = 0;
+      globalThis.fetch = async (_input, init) => {
+        calls++;
+        const headers = new Headers(init?.headers);
+        assert.equal(headers.get("Cookie"), cookie);
+        assert.equal(headers.get("Authorization"), null);
+        assert.equal(headers.get("X-Convoy-Client"), "web");
+        return new Response("private details", { status });
+      };
+      await assert.rejects(upstream(session, "/api/v1/devices/dev_board1/chat", "POST", {}), error => error instanceof PortalFailure && error.status === status && !error.message.includes("private"));
+      assert.equal(calls, 1);
+    }
+  } finally { globalThis.fetch = originalFetch; delete process.env.CONVOY_UPSTREAM_TOKEN; }
 });
 test("path allowlist excludes unrelated devices, writes, credentials and redirects", () => {
   assert.equal(allowedPath("/api/v1/devices/dev_board1/chat", "POST", "dev_board1"), true);
@@ -107,7 +110,7 @@ test("snapshot uses only selected physical data and upstream fetch never retries
     return Response.json(data);
   };
   try {
-    const result = await snapshot();
+    const result = await snapshot(session);
     assert.equal(result.usage.metrics?.tokens_out, 3);
     assert.equal(result.telemetry_stale_after_s, 90);
     assert.equal(result.chat.eligible, true);
@@ -115,7 +118,7 @@ test("snapshot uses only selected physical data and upstream fetch never retries
     assert.equal(calls, 7);
     calls = 0;
     globalThis.fetch = async () => { calls++; return new Response("sensitive raw error", { status: 500 }); };
-    await assert.rejects(upstream("/api/v1/devices/dev_board1/chat", "POST", {}), /temporarily unavailable/);
+    await assert.rejects(upstream(session, "/api/v1/devices/dev_board1/chat", "POST", {}), /temporarily unavailable/);
     assert.equal(calls, 1);
   } finally { globalThis.fetch = originalFetch; }
 });

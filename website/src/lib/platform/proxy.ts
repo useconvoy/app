@@ -65,7 +65,7 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
   return `/api/v1/${path}${search.size ? `?${search.toString()}` : ""}`;
 }
 
-function consoleOrigin(request: Request): string {
+export function consoleOrigin(request: Request): string {
   const configured = process.env.CONVOY_CONSOLE_ORIGIN ?? process.env.PORTAL_PUBLIC_ORIGIN;
   const actual = new URL(request.url).origin;
   if (!configured) return actual;
@@ -74,9 +74,10 @@ function consoleOrigin(request: Request): string {
   return parsed.origin;
 }
 
-function ownCookie(request: Request): string | null {
-  const entry = request.headers.get("cookie")?.split(";").map(value => value.trim()).find(value => value.startsWith(`${COOKIE}=`));
-  if (!entry) return null;
+export function ownCookie(request: Request): string | null {
+  const entries = request.headers.get("cookie")?.split(";").map(value => value.trim()).filter(value => value.startsWith(`${COOKIE}=`));
+  if (entries?.length !== 1) return null;
+  const entry = entries[0];
   return /^convoy_session=cvs_[A-Za-z0-9_-]{16,128}$/.test(entry) ? entry : null;
 }
 
@@ -112,7 +113,7 @@ function responseCookie(value: string, secure: boolean): string | null {
   const duration = segments.find(part => /^max-age=\d+$/i.test(part));
   const expires = segments.find(part => /^expires=/i.test(part));
   // Scope to the BFF. Provider Domain/Path attributes and unrelated cookies never reach the browser.
-  return [pair, "Path=/api/platform", "HttpOnly", "SameSite=Strict", secure ? "Secure" : "",
+  return [pair, "Path=/api", "HttpOnly", "SameSite=Strict", secure ? "Secure" : "",
     duration ?? "", expires ?? ""].filter(Boolean).join("; ");
 }
 
@@ -159,11 +160,16 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
     }
     const data: unknown = JSON.parse(await boundedBody(upstream.body, RESPONSE_LIMIT));
     const response = json(data, upstream.status);
-    if (login || logout) {
-      const cookies = upstream.headers.getSetCookie();
+    if (login || logout || (parts.join("/") === "auth/me" && cookie)) {
+      // A validated legacy session can move to the shared BFF scope without a
+      // second login. This does not renew its control-plane expiry.
+      const cookies = login || logout ? upstream.headers.getSetCookie() : [cookie!];
       const ours = cookies.map(value => responseCookie(value, origin.startsWith("https:"))).find(Boolean);
       if (!ours) throw new ProxyFailure(503, "The session response could not be verified.");
-      response.headers.set("Set-Cookie", ours);
+      response.headers.append("Set-Cookie", ours);
+      // Retire both old paths so browsers cannot send ambiguous sessions.
+      response.headers.append("Set-Cookie", `convoy_session=; Path=/api/platform; HttpOnly; SameSite=Strict; Max-Age=0${origin.startsWith("https:") ? "; Secure" : ""}`);
+      response.headers.append("Set-Cookie", "__Host-convoy_portal=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0");
     }
     return response;
   } catch (error) {

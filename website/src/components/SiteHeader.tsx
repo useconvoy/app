@@ -121,7 +121,7 @@ export function SiteHeader() {
               {link.label}
             </a>
           ))}
-          <a href="/app/device" className="type-label inline-flex min-h-12 items-center px-3 text-accent">Open demo ↗</a>
+          <a href="/app" className="type-label inline-flex min-h-12 items-center px-3 text-accent">Open demo ↗</a>
           <a href={NAV.cta.href} className="btn btn-primary ml-2">
             {NAV.cta.label}
           </a>
@@ -170,7 +170,7 @@ export function SiteHeader() {
               </a>
             </li>
           ))}
-          <li className="pt-4"><a href="/app/device" onClick={() => setOpen(false)} className="btn btn-secondary w-full">Open demo ↗</a></li>
+          <li className="pt-4"><a href="/app" onClick={() => setOpen(false)} className="btn btn-secondary w-full">Open demo ↗</a></li>
           <li className="pt-4">
             <a href={NAV.cta.href} onClick={() => setOpen(false)} className="btn btn-primary w-full">
               {NAV.cta.label}

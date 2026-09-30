@@ -14,8 +14,8 @@ export async function GET(request: Request, context: { params: Promise<{ request
     const upstreamId = upstreamRequestId(session, requestId);
     const { deviceId } = upstreamConfig();
     const [device, result] = await Promise.all([
-      upstream(`/api/v1/devices/${deviceId}`),
-      upstream(`/api/v1/devices/${deviceId}/chat/${upstreamId}`),
+      upstream(session, `/api/v1/devices/${deviceId}`),
+      upstream(session, `/api/v1/devices/${deviceId}/chat/${upstreamId}`),
     ]);
     assertDevice(device, deviceId);
     return json(curateChat(result, requestId, upstreamId, deviceId));

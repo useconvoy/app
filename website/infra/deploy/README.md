@@ -23,22 +23,21 @@ The workspace also uses the existing API: Compose supplies
 `CONVOY_API_URL=http://control-plane:8080` and `CONVOY_API_INTERNAL_HTTP=1`.
 This opt-in permits HTTP only to that exact private service origin. Management
 mutations use `CONVOY_CONSOLE_ORIGIN`, falling back to `PORTAL_PUBLIC_ORIGIN`.
-Management sign-in remains separate from restricted device-demo access.
+One management account now covers application and device access.
 
-`web.env` supplies the configuration documented in `src/lib/portal/README.md`.
-Compose interpolation applies to unquoted and double-quoted dotenv values. Put
-the complete scrypt hash in **single quotes** to preserve its dollar delimiters:
+`web.env` supplies the configuration documented in `src/lib/portal/README.md`:
 
 ```dotenv
-CONVOY_UPSTREAM_URL=http://control-plane:8080
 PORTAL_PUBLIC_ORIGIN=https://deployconvoy.com
-PORTAL_DEMO_PASSWORD_HASH='scrypt$<salt in lowercase hex>$<derived key in lowercase hex>'
+CONVOY_DEVICE_ID=dev_configuredphysicaldevice
 ```
 
-Replace placeholders with the actual deployment values through the private
-provisioning process. The application receives the literal hash without quote
-characters. Never print the resolved Compose environment in CI or commit runtime
-environment files. The release script uses `docker compose config --quiet`.
+Replace the device placeholder privately. No independent demo password, session
+secret or shared upstream token is used by the unified workspace. Existing demo
+configuration can remain for rollback compatibility; it must not be mistaken for
+a management account. Sign in with an existing control-plane user. Never print
+resolved runtime secrets or commit environment files. Release validation still
+checks the read-only legacy session endpoint, backed by the shared account.
 
 The API has a 768 MiB container memory cap, `no-new-privileges`, and Docker log
 rotation at 10 MiB × 3 files for the shared 2 GiB host. Both services are restarted

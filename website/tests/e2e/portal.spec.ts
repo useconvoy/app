@@ -18,36 +18,37 @@ function snapshot(): PortalSnapshot {
   };
 }
 async function mockSession(page: Page, data = snapshot(), authenticated = true) {
-  await page.route("**/api/portal/session", async (route) => {
-    const method = route.request().method();
-    if (method === "POST") authenticated = true;
-    if (method === "DELETE") authenticated = false;
-    await route.fulfill({ json: { authenticated } });
-  });
+  const account = { user: { email: "fixture@example.test", role: "operator" }, installation: { simulator: true, dispatch_paused_at: null, quarantined_at: null } };
+  await page.route("**/api/platform/auth/me", route => route.fulfill({ status: authenticated ? 200 : 401, json: authenticated ? account : { error: "Sign in" } }));
+  await page.route("**/api/platform/auth/login", async route => { authenticated = true; await route.fulfill({ json: { user: account.user } }); });
+  await page.route("**/api/platform/auth/logout", async route => { authenticated = false; await route.fulfill({ json: { ok: true } }); });
+  await page.route("**/api/platform/projects", route => route.fulfill({ json: [] }));
   await page.route("**/api/portal/snapshot", (route) => route.fulfill({ json: data }));
 }
-async function navigate(page: Page, name: string) { await page.getByRole("navigation", { name: "Portal", exact: true }).getByRole("link", { name: new RegExp(name) }).click(); }
+async function navigate(page: Page, name: string) { await page.getByRole("navigation", { name: "Device tools", exact: true }).getByRole("link", { name: new RegExp(name === "Device" ? "Connection" : name) }).click(); }
 async function noOverflow(page: Page) { expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true); }
 
 test("portal metadata stays out of search indexing", async ({ request }) => {
   const html = await (await request.get("/portal")).text();
   expect(html).toContain('name="robots" content="noindex, nofollow"');
   expect(html).toContain('name="googlebot" content="noindex, nofollow"');
-  expect(html).toContain('<title>Convoy | Jetson demo</title>');
+  expect(html).toContain('<title>Convoy | Workspace</title>');
 });
 
-test("landing opens portal, credentials sign in and sign out", async ({ page }) => {
+test("landing opens one workspace; one login covers applications and device tools", async ({ page }) => {
   await mockSession(page, snapshot(), false);
   await page.goto("/");
   await page.locator(".hero-actions").getByRole("link", { name: "Open demo" }).click();
-  await expect(page.getByRole("heading", { name: "Open device tools" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "One workspace for your robots." })).toBeVisible();
   await page.getByLabel("Email", { exact: true }).fill("fixture@example.test");
   await page.getByLabel("Password", { exact: true }).fill("fixture-only");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Your Jetson, observed." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Build. Deploy. Observe." })).toBeVisible();
+  await page.getByRole("navigation", { name: "Robot applications", exact: true }).getByRole("link", { name: "Device connection" }).click();
+  await expect(page.getByRole("heading", { name: "Your device, observed." })).toBeVisible();
   await expect(page.getByText("Contract Jetson", { exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page.getByRole("heading", { name: "Open device tools" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "One workspace for your robots." })).toBeVisible();
 });
 
 test("device, usage and traces retain measurement provenance and exact data", async ({ page }) => {
@@ -121,7 +122,7 @@ test("missing request recovery and offline states never fabricate an answer", as
   await expect(page.getByLabel("Message", { exact: true })).toBeEnabled();
   const offline = snapshot(); offline.chat.eligible = false; offline.chat.online = false; offline.chat.reason = "Device is offline.";
   await page.route("**/api/portal/snapshot", (route) => route.fulfill({ json: offline }));
-  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await page.getByRole("button", { name: "Test connection", exact: true }).click();
   await page.getByLabel("Message", { exact: true }).fill("Hello again");
   await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeDisabled();
   await expect(page.getByText("Device is offline.", { exact: true }).last()).toBeVisible();
@@ -186,7 +187,7 @@ test("portal text enlargement preserves access to navigation and controls", asyn
   await page.setViewportSize({ width: 390, height: 844 });
   await mockSession(page);
   await page.goto("/portal");
-  await expect(page.getByRole("heading", { name: "Your Jetson, observed." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your device, observed." })).toBeVisible();
   await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
   for (const view of ["Device", "Chat", "Usage", "Traces"]) { await navigate(page, view); await noOverflow(page); }
 });
@@ -195,7 +196,7 @@ for (const width of [1440, 768, 390, 320]) test(`portal is accessible and fits a
   await page.setViewportSize({ width, height: 900 });
   await mockSession(page);
   await page.goto("/portal");
-  await expect(page.getByRole("heading", { name: "Your Jetson, observed." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your device, observed." })).toBeVisible();
   for (const view of ["Device", "Chat", "Usage", "Traces"]) {
     await navigate(page, view);
     await noOverflow(page);
@@ -205,16 +206,35 @@ for (const width of [1440, 768, 390, 320]) test(`portal is accessible and fits a
   }
 });
 
-test("workspace navigation keeps device tools and management access distinct", async ({ page }) => {
+test("legacy links share the workspace session, preserve view and sign out everywhere", async ({ page }) => {
   await mockSession(page);
-  await page.route("**/api/platform/auth/me", route => route.fulfill({ status: 401, json: { error: "Sign in" } }));
-  await page.goto("/app/device");
-  await expect(page.getByRole("heading", { name: "Your Jetson, observed." })).toBeVisible();
-  await page.getByRole("navigation", { name: "Workspace", exact: true }).getByRole("link", { name: "Robot applications" }).click();
-  await expect(page.getByRole("heading", { name: "Your next robot release." })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Start mission" })).toHaveCount(0);
-  await page.getByRole("navigation", { name: "Workspace", exact: true }).getByRole("link", { name: "Device & inference" }).click();
-  await expect(page.getByRole("heading", { name: "Your Jetson, observed." })).toBeVisible();
-  await navigate(page, "Chat");
+  await page.goto("/app/device?view=chat");
+  await expect(page).toHaveURL(/\/app\/applications\?section=device&view=chat$/);
   await expect(page.getByRole("heading", { name: "Talk to your model." })).toBeVisible();
+  const navigation = page.getByRole("navigation", { name: "Robot applications", exact: true });
+  await navigation.getByRole("link", { name: "Applications", exact: true }).click();
+  await expect(page.getByLabel("New project name")).toBeVisible();
+  await page.getByLabel("New project name").fill("Keep my draft");
+  await navigation.getByRole("link", { name: "Device connection" }).click();
+  await expect(page.getByRole("heading", { name: "Talk to your model." })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByLabel("New project name")).toHaveValue("Keep my draft");
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("heading", { name: "One workspace for your robots." })).toBeVisible();
+  await page.goto("/portal?view=usage");
+  await expect(page.getByRole("heading", { name: "One workspace for your robots." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Measured on the device." })).toHaveCount(0);
+});
+
+test("session expiry closes both sections and viewers cannot send a test message", async ({ page }) => {
+  await mockSession(page);
+  await page.route("**/api/platform/auth/me", route => route.fulfill({ json: { user: { email: "viewer@example.test", role: "viewer" }, installation: { simulator: true } } }));
+  await page.goto("/portal?view=chat");
+  await page.getByLabel("Message", { exact: true }).fill("Hello");
+  await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeDisabled();
+  await expect(page.getByText("An operator account is required to send a test message.")).toBeVisible();
+  await page.route("**/api/portal/snapshot", route => route.fulfill({ status: 401, json: { error: { code: "authentication_required", message: "Sign in" } } }));
+  await page.getByRole("button", { name: "Test connection", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "One workspace for your robots." })).toBeVisible();
+  await expect(page.getByLabel("Message", { exact: true })).toHaveCount(0);
 });

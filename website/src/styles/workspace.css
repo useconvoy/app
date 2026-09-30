@@ -1,17 +1,20 @@
-.workspace-bar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-6); padding: var(--space-4) var(--space-8); border-bottom: 1px solid var(--border-strong); background: var(--surface); }
+.workspace-bar { display: flex; align-items: center; gap: var(--space-6); padding: var(--space-4) var(--space-8); border-bottom: 1px solid var(--border-strong); background: var(--surface); }
 .workspace-brand { font-size: 1.25rem; font-weight: 600; letter-spacing: -.025em; }
 .workspace-brand span { margin-left: var(--space-3); font-size: .75rem; font-weight: 400; letter-spacing: .02em; color: var(--text-secondary); }
-.workspace-bar nav { display: flex; gap: var(--space-2); }
-.workspace-bar nav a { padding: var(--space-3) var(--space-4); min-height: 44px; font-size: .875rem; border-radius: var(--radius); color: var(--text-secondary); }
-.workspace-bar nav a[aria-current] { background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 -2px var(--accent); }
 .workspace-website { margin-left: auto; font-size: .8125rem; color: var(--text-secondary); }
 .workspace-shell .console-header .console-brand { font-size: 1rem; }
-.workspace-shell .portal-shell { min-height: calc(100dvh - 80px); }
-.workspace-shell .portal-sidebar { height: calc(100dvh - 80px); }
-.workspace-shell .portal-auth { min-height: calc(100dvh - 80px); }
+.application-nav, .device-nav { display: flex; flex-wrap: wrap; gap: var(--space-2); border-bottom: 1px solid var(--border-subtle); margin-bottom: var(--space-6); }
+.application-nav a, .device-nav a { display: inline-flex; align-items: center; min-height: 44px; padding: var(--space-3) var(--space-4); color: var(--text-secondary); font-size: .875rem; }
+.application-nav a[aria-current], .device-nav a[aria-current] { color: var(--accent); background: var(--accent-tint); box-shadow: inset 0 -2px var(--accent); }
+.workspace-shell .portal-embedded { display: block; min-height: 0; }
+.portal-embedded .portal-main { padding: var(--space-4) 0 var(--space-8); }
+.portal-embedded .portal-topbar { padding: var(--space-4); flex-wrap: wrap; }
+.portal-embedded .portal-page-heading h2 { font-size: clamp(1.5rem, 3vw, 2rem); margin-top: var(--space-3); }
+.portal-embedded .portal-context-note { margin: var(--space-4) 0; }
+.console-shell .portal-embedded h2 { margin-bottom: 0; }
 @media (max-width: 700px) {
   .workspace-bar { padding: var(--space-3) var(--space-4); gap: var(--space-2); }
-  .workspace-bar nav { order: 3; width: 100%; }
-  .workspace-bar nav a { flex: 1; text-align: center; }
-  .workspace-shell .portal-sidebar { height: auto; }
+  .workspace-brand span { display: none; }
+  .application-nav a, .device-nav a { padding-inline: var(--space-3); }
+  .portal-embedded .portal-topbar-label { display: inline; }
 }

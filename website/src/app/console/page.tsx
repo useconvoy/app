@@ -1,14 +1,2 @@
-import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
-import "@/styles/workspace.css";
-import type { Metadata } from "next";
-import { Console } from "@/components/console/Console";
-import "@/styles/console.css";
-
-export const metadata: Metadata = {
-  title: { absolute: "Convoy | Application console" },
-  description: "Connect simulated robots, deploy application releases, and inspect acknowledged mission outcomes.",
-  alternates: { canonical: "/console" },
-  robots: { index: false, follow: false, googleBot: { index: false, follow: false } },
-};
-
-export default function ConsolePage() { return <WorkspaceShell><Console /></WorkspaceShell>; }
+import { redirect } from "next/navigation";
+export default function LegacyConsolePage() { redirect("/app/applications"); }

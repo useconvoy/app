@@ -10,7 +10,7 @@ type Turn = { id: string; prompt: string; started: number; request: PortalChatRe
 const pending = (turn: Turn) => !turn.rejected && (!turn.request || turn.request.status === "queued" || turn.request.status === "running");
 const duration = (ms: number | null | undefined) => ms == null ? "Not reported" : ms < 1000 ? `${number(ms)} ms` : `${number(ms / 1000, 2)} s`;
 
-export function Chat({ snapshot: s, stale, onRefresh, onSessionEnd, onTrace }: { snapshot: PortalSnapshot; stale: boolean; onRefresh: () => Promise<void>; onSessionEnd: () => void; onTrace: (id: string) => void }) {
+export function Chat({ snapshot: s, stale, canChat = true, onRefresh, onSessionEnd, onTrace }: { snapshot: PortalSnapshot; stale: boolean; canChat?: boolean; onRefresh: () => Promise<void>; onSessionEnd: () => void; onTrace: (id: string) => void }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -26,7 +26,8 @@ export function Chat({ snapshot: s, stale, onRefresh, onSessionEnd, onTrace }: {
   const messages: PortalChatInput["messages"] = [...turns.flatMap((turn): PortalChatInput["messages"] => turn.request?.status === "succeeded" && turn.request.content ? [{ role: "user", content: turn.prompt }, { role: "assistant", content: turn.request.content }] : []), { role: "user", content: draft.trim() }];
   const bytes = messages.reduce((total, message) => total + new TextEncoder().encode(message.content).length, 0);
   const firstRelease = turns.find((t) => t.request)?.request?.release_id;
-  const reason = stale ? "Refresh device availability before sending a message."
+  const reason = !canChat ? "An operator account is required to send a test message."
+    : stale ? "Refresh device availability before sending a message."
     : !s.chat.eligible || !s.chat.release_id ? s.chat.reason ?? "The device is not ready to receive messages."
     : firstRelease && firstRelease !== s.chat.release_id ? "The running release changed. Start a new chat to use the current model."
     : messages.length > 16 ? "This conversation reached its message limit. Start a new chat to continue."

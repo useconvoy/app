@@ -80,8 +80,13 @@ test("session forwarding hardens cookies, strips unrelated cookies, and redacts 
     const logged = await proxyPlatform(request("auth/login", { method: "POST", body: "{}" }), ["auth", "login"]);
     assert.equal(logged.status, 200);
     const cookie = logged.headers.get("set-cookie") ?? "";
-    assert.match(cookie, /Path=\/api\/platform; HttpOnly; SameSite=Strict; Secure; Max-Age=600/);
+    assert.match(cookie, /Path=\/api; HttpOnly; SameSite=Strict; Secure; Max-Age=600/);
     assert.doesNotMatch(cookie, /Domain=|internal/);
+    assert.ok(logged.headers.getSetCookie().some(value => value.includes("Path=/api/platform;") && value.includes("Max-Age=0")));
+    assert.ok(logged.headers.getSetCookie().some(value => value.startsWith("__Host-convoy_portal=;") && value.includes("Max-Age=0")));
+    const migrated = await proxyPlatform(request("auth/me"), ["auth", "me"]);
+    assert.equal(migrated.status, 200);
+    assert.ok(migrated.headers.getSetCookie().some(value => value.startsWith(session + "; Path=/api;")));
     failure = true;
     const failed = await proxyPlatform(request("projects"), ["projects"]);
     assert.equal(failed.status, 503);
