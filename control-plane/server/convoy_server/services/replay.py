@@ -16,6 +16,8 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
+from ..config import get_settings
+
 MAX_STEPS = 2048
 MAX_ROW_BYTES = 2 * 1024 * 1024
 MAX_IMAGE_BYTES = 768 * 1024
@@ -36,14 +38,17 @@ def finite(value):
 
 
 @contextmanager
-def recording(episode):
+def recording(episode, location=None):
     connection = None
     try:
         identity = episode.identity
         if not isinstance(identity, dict) or identity.get("mission_id") != episode.mission_id or identity.get("release_digest") != episode.release_digest:
             raise ValueError("missing episode identity")
         journals = json.loads(os.environ.get("CONVOY_REPLAY_JOURNALS", "{}"))
-        location = journals.get(identity.get("robot_id")) or os.environ.get("CONVOY_REPLAY_JOURNAL")
+        if location is None:
+            uploaded = get_settings().data_dir / "recordings" / (episode.id + ".sqlite3")
+            location = str(uploaded) if uploaded.is_file() else (
+                journals.get(identity.get("robot_id")) or os.environ.get("CONVOY_REPLAY_JOURNAL"))
         if not isinstance(location, str) or not Path(location).is_absolute():
             raise unavailable()
         connection = sqlite3.connect(Path(location).as_uri() + "?mode=ro", uri=True, timeout=1)
@@ -101,8 +106,8 @@ def image(observation):
     return value
 
 
-def manifest(episode):
-    with recording(episode) as (connection, steps):
+def manifest(episode, location=None):
+    with recording(episode, location) as (connection, steps):
         previous = None
         for sequence in range(steps):
             request, _, outcome = command(connection, episode, sequence)

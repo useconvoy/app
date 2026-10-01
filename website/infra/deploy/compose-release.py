@@ -36,6 +36,8 @@ def deploy(document, sha, with_api):
         "volumes": [f"./releases/{sha}:/app:ro"], "expose": ["3000"],
     })
     if with_api:
+        signing_mount = "./portal/execution-signing:/run/execution-signing:ro"
+        signing = signing_mount in services.get("control-plane", {}).get("volumes", [])
         services["control-plane"] = {
             "image": f"convoy-control-plane:{sha}", "restart": "unless-stopped",
             "env_file": ["./portal/control-plane.env"], "volumes": ["./portal/data:/data"],
@@ -43,6 +45,10 @@ def deploy(document, sha, with_api):
             "mem_limit": "768m", "security_opt": ["no-new-privileges:true"],
             "logging": {"driver": "json-file", "options": {"max-size": "10m", "max-file": "3"}},
         }
+        if signing:
+            services["control-plane"]["volumes"].append(signing_mount)
+        if "evaluations" in services:
+            services["evaluations"]["image"] = f"convoy-control-plane:{sha}"
     return result
 
 
@@ -57,6 +63,10 @@ def restore(current, saved):
         services["control-plane"] = copy.deepcopy(previous["control-plane"])
     else:
         services.pop("control-plane", None)
+    if "evaluations" in previous:
+        services["evaluations"] = copy.deepcopy(previous["evaluations"])
+    else:
+        services.pop("evaluations", None)
     return result
 
 

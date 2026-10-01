@@ -323,3 +323,44 @@ def mission_report(
     return _device_write(
         db, device, robot_id, lambda robot: service.report_mission(db, robot, mission_id, body.model_dump())
     )
+
+
+def _recording_episode(db, robot, mission_id):
+    mission = db.get(Mission, mission_id)
+    if not mission or mission.robot_id != robot.id or not mission.episode_id:
+        raise HTTPException(404, "Terminal episode not found for this robot")
+    episode = db.get(Episode, mission.episode_id)
+    if not episode or not episode.identity or episode.identity.get("device_id") != robot.device_id:
+        raise HTTPException(409, "Episode belongs to a different device binding")
+    return episode
+
+
+@router.post("/api/agent/v1/robots/{robot_id}/missions/{mission_id}/recording/commands/{sequence}")
+async def upload_recording_command(robot_id: str, mission_id: str, sequence: int,
+                                   request: Request, device: DeviceIdentity, db: Database):
+    import json
+
+    from starlette.concurrency import run_in_threadpool
+
+    from ..services.recording_upload import upload
+
+    chunks, size = [], 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > 2 * replay.MAX_ROW_BYTES:
+            raise HTTPException(413, "Recording command exceeds upload limit")
+        chunks.append(chunk)
+    try:
+        payload = json.loads(b"".join(chunks))
+    except (ValueError, UnicodeError):
+        raise HTTPException(422, "Invalid recording JSON") from None
+    return await run_in_threadpool(_device_write, db, device, robot_id,
+        lambda robot: upload(_recording_episode(db, robot, mission_id), sequence, payload))
+
+
+@router.post("/api/agent/v1/robots/{robot_id}/missions/{mission_id}/recording/publish")
+def publish_recording(robot_id: str, mission_id: str, device: DeviceIdentity, db: Database):
+    from ..services.recording_upload import publish
+
+    return _device_write(db, device, robot_id,
+        lambda robot: publish(_recording_episode(db, robot, mission_id)))

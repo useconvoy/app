@@ -18,6 +18,7 @@ exec 9>"$APP_DIR/.release.lock"
 flock -n 9 || { echo 'another deployment is running' >&2; exit 1; }
 
 has_api() { [ -n "$(python3 "$COMPOSE_TOOL" image compose.yaml control-plane)" ]; }
+has_evaluations() { [ -n "$(python3 "$COMPOSE_TOOL" image compose.yaml evaluations)" ]; }
 has_portal() { [ "$(python3 "$COMPOSE_TOOL" portal compose.yaml)" = yes ]; }
 health() {
   local body api_body portal_body
@@ -60,9 +61,10 @@ ensure_web_image() {
   docker compose pull web </dev/null
 }
 restore_from() {
-  local dir="$1" current_api_id image
+  local dir="$1" current_api_id current_evaluations_id image
   test -f "$dir/compose.yaml" || { echo 'backup compose file missing' >&2; return 1; }
   current_api_id=$(docker compose ps -q control-plane 2>/dev/null || true)
+  current_evaluations_id=$(docker compose ps -q evaluations 2>/dev/null || true)
   # Restore only application definitions; keep host routing and runtime files.
   python3 "$COMPOSE_TOOL" restore compose.yaml "$dir/compose.yaml" || return 1
   docker compose config --quiet </dev/null || return 1
@@ -72,6 +74,11 @@ restore_from() {
     docker compose up -d --force-recreate --no-deps control-plane </dev/null || return 1
   elif [ -n "$current_api_id" ]; then
     docker rm -f "$current_api_id" >/dev/null || return 1
+  fi
+  if has_evaluations; then
+    docker compose up -d --force-recreate --no-deps evaluations </dev/null || return 1
+  elif [ -n "$current_evaluations_id" ]; then
+    docker rm -f "$current_evaluations_id" >/dev/null || return 1
   fi
   ensure_web_image || return 1
   docker compose up -d --force-recreate --no-deps web </dev/null
@@ -117,6 +124,7 @@ case "$MODE" in
     docker compose config --quiet </dev/null
     ensure_web_image
     if [ "$WITH_API" = yes ]; then docker compose up -d --force-recreate --no-deps control-plane </dev/null; fi
+    if [ "$WITH_API" = yes ] && has_evaluations; then docker compose up -d --force-recreate --no-deps evaluations </dev/null; fi
     docker compose up -d --force-recreate --no-deps web </dev/null
     health
     trap - ERR

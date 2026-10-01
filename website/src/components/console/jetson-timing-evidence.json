@@ -1,0 +1,150 @@
+{
+  "recorded": "2026-09-29",
+  "source_sha256": "21e8afd5d6f064f11980fda4c496bd359cbb7a1c62c91d1ac72c368972bb237c",
+  "runs": [
+    {
+      "run": "scripted-camera-v2",
+      "status": "passed_observed_contract",
+      "overall_qualified": true,
+      "completed_episodes": 3,
+      "task_success_rate": 1.0,
+      "policy_results": 0,
+      "stale_results": 0,
+      "worst_episode_p99_s": {
+        "camera_s": 0.6760453390015755,
+        "inference_s": null,
+        "observation_to_result_s": 0.6960439789982047,
+        "observation_to_action_s": null,
+        "tick_dispatch_lag_s": 0.001846245999331586,
+        "tick_completion_lag_s": 0,
+        "remaining_chunk_budget_s": null
+      },
+      "overall_fallback_fraction": 0.0,
+      "episode_outcomes": [
+        {
+          "seed": 0,
+          "status": "success",
+          "steps": 500,
+          "wall_s": 6.241852609004127,
+          "simulated_s": 6.25
+        },
+        {
+          "seed": 1,
+          "status": "success",
+          "steps": 500,
+          "wall_s": 6.241830660001142,
+          "simulated_s": 6.25
+        },
+        {
+          "seed": 2,
+          "status": "success",
+          "steps": 500,
+          "wall_s": 6.2418749860080425,
+          "simulated_s": 6.25
+        }
+      ],
+      "image": "sha256:bdb585c9de4902b08904ccaa24a81cf3ca9fb3bec67d97d2da5446f3a24b039c"
+    },
+    {
+      "run": "learned-reference-bf16-osmesa-v2",
+      "status": "offline_reference",
+      "overall_qualified": false,
+      "completed_episodes": 1,
+      "task_success_rate": 1.0,
+      "policy_results": 56,
+      "stale_results": 0,
+      "worst_episode_p99_s": {
+        "camera_s": 0.6303101669909665,
+        "inference_s": 0.9863937540067127,
+        "observation_to_result_s": 1.6257106580014806,
+        "observation_to_action_s": null,
+        "tick_dispatch_lag_s": null,
+        "tick_completion_lag_s": null,
+        "remaining_chunk_budget_s": null
+      },
+      "overall_fallback_fraction": null,
+      "episode_outcomes": [
+        {
+          "seed": 0,
+          "status": "success",
+          "steps": 56,
+          "wall_s": 88.62061836499197,
+          "simulated_s": 0.7000000000000001
+        }
+      ],
+      "image": "sha256:bdb585c9de4902b08904ccaa24a81cf3ca9fb3bec67d97d2da5446f3a24b039c"
+    },
+    {
+      "run": "delay-0",
+      "status": "failed",
+      "overall_qualified": false,
+      "completed_episodes": 3,
+      "task_success_rate": 0.0,
+      "policy_results": 9,
+      "stale_results": 9,
+      "worst_episode_p99_s": {
+        "camera_s": 0.6541755590005778,
+        "inference_s": 0.9990627939987462,
+        "observation_to_result_s": 1.6468386100023054,
+        "observation_to_action_s": null,
+        "tick_dispatch_lag_s": 0.0005736940074712038,
+        "tick_completion_lag_s": 0,
+        "remaining_chunk_budget_s": -0.9732977439998649
+      },
+      "overall_fallback_fraction": 1.0,
+      "episode_outcomes": [
+        {
+          "seed": 0,
+          "status": "truncated",
+          "steps": 500,
+          "wall_s": 6.240433507002308,
+          "simulated_s": 6.25
+        },
+        {
+          "seed": 1,
+          "status": "truncated",
+          "steps": 500,
+          "wall_s": 6.239409516987507,
+          "simulated_s": 6.25
+        },
+        {
+          "seed": 2,
+          "status": "truncated",
+          "steps": 500,
+          "wall_s": 6.239438743999926,
+          "simulated_s": 6.25
+        }
+      ],
+      "image": "sha256:bdb585c9de4902b08904ccaa24a81cf3ca9fb3bec67d97d2da5446f3a24b039c"
+    },
+    {
+      "run": "learned-fast-reference-v2",
+      "status": "offline_reference",
+      "overall_qualified": false,
+      "completed_episodes": 1,
+      "task_success_rate": 0.0,
+      "policy_results": 131,
+      "stale_results": 0,
+      "worst_episode_p99_s": {
+        "camera_s": 0.17696464199980255,
+        "inference_s": 0.543491215998074,
+        "observation_to_result_s": 0.7209726050059544,
+        "observation_to_action_s": null,
+        "tick_dispatch_lag_s": null,
+        "tick_completion_lag_s": null,
+        "remaining_chunk_budget_s": null
+      },
+      "overall_fallback_fraction": null,
+      "episode_outcomes": [
+        {
+          "seed": 0,
+          "status": "wall_budget_exhausted",
+          "steps": 131,
+          "wall_s": 90.63463274599053,
+          "simulated_s": 1.6375000000000002
+        }
+      ],
+      "image": "sha256:bdb585c9de4902b08904ccaa24a81cf3ca9fb3bec67d97d2da5446f3a24b039c"
+    }
+  ]
+}

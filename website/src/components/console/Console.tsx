@@ -7,6 +7,7 @@ import type { Account, Application, Deployment, Device, Episode, EvaluationRun, 
 import { Portal } from "@/components/portal/Portal";
 import { Evaluations } from "./Evaluations";
 import { ReleaseDetails } from "./ReleaseDetails";
+import { TimingEvidence } from "./TimingEvidence";
 import { EpisodeSummary } from "./EpisodeSummary";
 import { PAIRED_PROFILE, releaseComponents } from "@/lib/platform/manifest";
 
@@ -119,6 +120,7 @@ function Workspace({ account, onSessionEnd }: { account: Account; onSessionEnd: 
       <div hidden={section !== "device"}>{deviceVisited && <Portal active={section === "device"} onSessionEnd={onSessionEnd} canChat={writable} />}</div>
       <div hidden={section !== "applications"}>
       <p className="console-scope">Sawyer pick-and-place simulation. Policy and environment identity are pinned in each release.</p>
+      <TimingEvidence />
       {paused && <Alert>Dispatch is paused or the installation is in recovery. Existing observations remain available.</Alert>}
       <section className="console-projects" aria-label="Project selection">
         <label>Project<select value={project?.id ?? ""} onChange={event => setProjectId(event.target.value)}><option value="" disabled>{projects.length ? "Choose a project" : "No projects yet"}</option>{projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
