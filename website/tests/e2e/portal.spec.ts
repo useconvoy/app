@@ -47,7 +47,9 @@ test("landing opens one workspace; one login covers configurations, applications
   await page.getByLabel("Password", { exact: true }).fill("fixture-only");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Configurations" })).toBeVisible();
-  await page.getByRole("navigation", { name: "Workspace", exact: true }).getByRole("link", { name: "Applications" }).click();
+  // Applications stays reachable by its URL on the same session; Configurations never links to it.
+  await expect(page.locator('a[href*="/app/applications"], a[href*="/portal"]')).toHaveCount(0);
+  await page.goto("/app/applications");
   await expect(page.getByRole("heading", { name: "Build. Deploy. Observe." })).toBeVisible();
   await page.getByRole("navigation", { name: "Robot applications", exact: true }).getByRole("link", { name: "Device connection" }).click();
   await expect(page.getByRole("heading", { name: "Your device, observed." })).toBeVisible();

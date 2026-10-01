@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
-import { bindingFor, LiveDevicePoller, UNBOUND } from "@/lib/configurations/live";
+import { bindingFor, LiveDevicePoller } from "@/lib/configurations/live";
 import type { LiveBinding, LiveState } from "@/lib/configurations/live";
 import type { Robot } from "@/lib/configurations/types";
 
@@ -38,16 +38,4 @@ function useLiveState(keys: readonly string[]): LiveState {
 export function useLiveRobots(robots: ReadonlyArray<Pick<Robot, "id" | "deviceId">>): Record<string, LiveBinding> {
   const state = useLiveState(robots.map(robot => robot.deviceId ?? "").filter(Boolean));
   return useMemo(() => Object.fromEntries(robots.map(robot => [robot.id, bindingFor(robot, state)])), [robots, state]);
-}
-
-/** Live binding for one robot (`UNBOUND` without a device id or robot). */
-export function useLiveRobot(robot: Pick<Robot, "deviceId"> | null | undefined): LiveBinding {
-  const state = useLiveState(robot?.deviceId ? [robot.deviceId] : []);
-  return robot?.deviceId ? bindingFor(robot, state) : UNBOUND;
-}
-
-/** Polls now, e.g. for a "Check again" button; resolves when the poll finishes. */
-export function useLiveRefresh(): () => Promise<void> {
-  const poller = useContext(LiveContext);
-  return poller ? poller.refresh : async () => undefined;
 }

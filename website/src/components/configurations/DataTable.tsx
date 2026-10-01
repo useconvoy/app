@@ -1,84 +1,42 @@
-"use client";
-
 import Link from "next/link";
-import { useState } from "react";
 import type { ReactNode } from "react";
-import { sortRows } from "@/lib/configurations/table";
-import type { SortDirection, SortValue } from "@/lib/configurations/table";
-import { Icon } from "./Icons";
 
 export interface Column<T> {
   key: string;
   header: ReactNode;
-  /** Header text for screen readers only (e.g. a trailing action column). */
+  /** Header for screen readers only (e.g. a trailing action column). */
   srOnly?: boolean;
-  /** Right-aligned tabular numbers (`cfg-num` on the header and every cell). */
+  /** Right-aligned tabular numbers. */
   numeric?: boolean;
-  /** Let long text wrap (`cfg-wrap`). */
-  wrap?: boolean;
-  /** Providing a sort value makes the column sortable; a missing value (null) sorts last in both directions. */
-  sort?: (row: T) => SortValue;
-  /** Direction on the first click (numbers usually "desc"). */
-  firstDir?: SortDirection;
+  /** Hidden on phones, where the table keeps its essential columns. */
+  wide?: boolean;
   cell: (row: T) => ReactNode;
-  /** Secondary line under the value (`<small>`). */
-  detail?: (row: T) => ReactNode;
 }
-export interface SortState { key: string; dir: SortDirection }
 
 /**
- * `portal-table cfg-table` in its focusable scroll wrapper. The first column is the
- * row header; with `rowHref` its content becomes the row link (`cfg-row-link`), which
- * makes the whole row clickable while other links and buttons stay on top.
- * Sorting is internal (from `defaultSort`) unless `sort` + `onSortChange` control it;
- * it is stable and keeps missing values last whichever the direction (`sortRows`).
- * `pinFirst` keeps rows (e.g. the measured robot) above the sorted rest.
- * `rowCells` can replace every cell after the first for a row (e.g. one colspan cell).
+ * A table of single-line cells. The first column is the row header; with
+ * `rowHref` it becomes the row's link and the whole row is clickable, while
+ * other links and buttons in the row stay on top.
  */
-export function DataTable<T>({ caption, label, columns, rows, rowKey, rowHref, rowClass, sort, onSortChange, defaultSort = null, pinFirst, rowCells, empty, className = "" }: {
-  caption?: ReactNode; label: string; columns: ReadonlyArray<Column<T>>; rows: readonly T[]; rowKey: (row: T) => string;
-  rowHref?: (row: T) => string | null; rowClass?: (row: T) => string | undefined; sort?: SortState | null; onSortChange?: (sort: SortState) => void;
-  defaultSort?: SortState | null; pinFirst?: (row: T) => boolean; rowCells?: (row: T) => ReactNode | null; empty?: ReactNode; className?: string;
+export function DataTable<T>({ label, columns, rows, rowKey, rowHref, rowClass, empty }: {
+  label: string; columns: ReadonlyArray<Column<T>>; rows: readonly T[]; rowKey: (row: T) => string;
+  rowHref?: (row: T) => string | null; rowClass?: (row: T) => string | undefined; empty?: ReactNode;
 }) {
-  const [internal, setInternal] = useState<SortState | null>(defaultSort);
-  const active = sort !== undefined ? sort : internal;
-  const column = active ? columns.find(item => item.key === active.key && item.sort) : undefined;
-  const ordered = column?.sort && active ? sortRows(rows, column.sort, active.dir, pinFirst)
-    : pinFirst ? rows.toSorted((a, b) => Number(pinFirst(b)) - Number(pinFirst(a))) : rows;
-  function choose(item: Column<T>) {
-    const next: SortState = active?.key === item.key ? { key: item.key, dir: active.dir === "asc" ? "desc" : "asc" } : { key: item.key, dir: item.firstDir ?? "asc" };
-    if (onSortChange) onSortChange(next); else setInternal(next);
-  }
-  return <div className="portal-table-scroll" tabIndex={0} aria-label={`${label}, scroll horizontally`}>
-    <table className={`portal-table cfg-table${className ? ` ${className}` : ""}`}>
-      {caption && <caption>{caption}</caption>}
-      <thead><tr>{columns.map(item => {
-        const sorted = active?.key === item.key && !!item.sort;
-        return <th key={item.key} scope="col" className={item.numeric ? "cfg-num" : undefined} aria-sort={sorted ? (active!.dir === "asc" ? "ascending" : "descending") : undefined}>
-          {item.sort ? <button className="cfg-sort" type="button" onClick={() => choose(item)}>{item.header} <Icon name={sorted ? (active!.dir === "asc" ? "sort-up" : "sort-down") : "sort"} /></button>
-            : item.srOnly ? <span className="cfg-sr">{item.header}</span> : item.header}
-        </th>;
-      })}</tr></thead>
+  const cls = (column: Column<T>) => [column.numeric ? "cv-num" : "", column.wide ? "cv-wide" : ""].filter(Boolean).join(" ") || undefined;
+  const [first, ...rest] = columns;
+  return <div className="cv-table-wrap">
+    <table className="cv-table" aria-label={label}>
+      <thead><tr>{columns.map(column => <th key={column.key} scope="col" className={cls(column)}>{column.srOnly ? <span className="cv-sr">{column.header}</span> : column.header}</th>)}</tr></thead>
       <tbody>
-        {ordered.map(row => {
+        {rows.map(row => {
           const href = rowHref?.(row) ?? null;
-          const override = rowCells?.(row) ?? null;
-          const [first, ...rest] = columns;
-          return <tr key={rowKey(row)} className={rowClass?.(row) || undefined}>
-            <th scope="row" className={first.numeric ? "cfg-num" : first.wrap ? "cfg-wrap" : undefined}>
-              {href ? <Link className="portal-table-link cfg-row-link" href={href}>{first.cell(row)}</Link> : first.cell(row)}
-              {first.detail && <Detail>{first.detail(row)}</Detail>}
-            </th>
-            {override ?? rest.map(item => <td key={item.key} className={[item.numeric ? "cfg-num" : "", item.wrap ? "cfg-wrap" : ""].filter(Boolean).join(" ") || undefined}>
-              {item.cell(row)}{item.detail && <Detail>{item.detail(row)}</Detail>}
-            </td>)}
+          return <tr key={rowKey(row)} className={[href ? "cv-tr-link" : "", rowClass?.(row) ?? ""].filter(Boolean).join(" ") || undefined}>
+            <th scope="row" className={cls(first)}>{href ? <Link className="cv-row-link" href={href}>{first.cell(row)}</Link> : first.cell(row)}</th>
+            {rest.map(column => <td key={column.key} className={cls(column)}>{column.cell(row)}</td>)}
           </tr>;
         })}
-        {!ordered.length && <tr><td colSpan={columns.length} className="cfg-wrap"><p className="portal-empty">{empty ?? "Nothing to show."}</p></td></tr>}
+        {!rows.length && <tr><td colSpan={columns.length} className="cv-table__empty">{empty ?? "Nothing yet."}</td></tr>}
       </tbody>
     </table>
   </div>;
-}
-function Detail({ children }: { children: ReactNode }) {
-  return children === null || children === undefined || children === "" || children === false ? null : <small>{children}</small>;
 }

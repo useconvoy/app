@@ -8,56 +8,48 @@ import { ConvoyMark } from "./Icons";
 import { useSession } from "./Session";
 
 export interface Crumb { label: string; href?: string | null }
-export type NavKey = "configurations" | "suites" | "devices" | "applications";
 
-const NAV: ReadonlyArray<{ key: NavKey; number: string; label: string; href: string }> = [
-  { key: "configurations", number: "01", label: "Configurations", href: routes.index() },
-  { key: "suites", number: "02", label: "Eval suites", href: routes.suites() },
-  { key: "devices", number: "03", label: "Devices & inference", href: routes.devices() },
-  { key: "applications", number: "04", label: "Applications", href: routes.applications() },
-];
-
-/** Mono breadcrumbs; the last crumb is the current page. */
+/** Breadcrumbs; the last crumb is the current page. */
 export function Breadcrumbs({ crumbs }: { crumbs: readonly Crumb[] }) {
-  return <nav className="cfg-crumbs" aria-label="Breadcrumb"><ol>
-    {crumbs.map((crumb, i) => <li key={`${i}-${crumb.label}`}>{i < crumbs.length - 1 && crumb.href ? <Link href={crumb.href}>{crumb.label}</Link> : <span aria-current={i === crumbs.length - 1 ? "page" : undefined}>{crumb.label}</span>}</li>)}
+  return <nav className="cv-crumbs" aria-label="Breadcrumb"><ol>
+    {crumbs.map((crumb, i) => <li key={`${i}-${crumb.label}`}>{i < crumbs.length - 1 && crumb.href
+      ? <Link href={crumb.href}>{crumb.label}</Link>
+      : <span aria-current={i === crumbs.length - 1 ? "page" : undefined}>{crumb.label}</span>}</li>)}
   </ol></nav>;
 }
 
 /**
- * The Configurations page frame: sidebar (workspace label, numbered nav, footer
- * note), top bar (breadcrumbs, optional context badge, account and sign-out) and
- * `main#main`. Render the page header, notices and sections as children.
- * Overlays (Modal, Drawer) render inside `children` as well.
+ * The page frame: a slim top bar (wordmark, breadcrumbs, account, sign out) and
+ * `main#main`. Configurations is the only area, so there is no other navigation.
  */
-export function AppShell({ crumbs, context, nav = "configurations", children }: { crumbs: readonly Crumb[]; context?: ReactNode; nav?: NavKey; children: ReactNode }) {
+export function AppShell({ crumbs, children }: { crumbs: readonly Crumb[]; children: ReactNode }) {
   const session = useSession();
   const ws = useWorkspace();
-  const meta = ws.workspace?.meta;
-  return <div className="portal-shell cfg-shell">
-    <a className="portal-skip" href="#main">Skip to content</a>
-    <aside className="portal-sidebar">
-      <Link className="convoy-wordmark portal-wordmark" href={routes.index()}><ConvoyMark />Convoy</Link>
-      <div className="portal-workspace-label">{meta?.label ?? "Workspace"}</div>
-      <nav aria-label="Workspace">
-        {NAV.map(item => <Link key={item.key} href={item.href} aria-current={item.key === nav ? "page" : undefined}>
-          <span className="portal-nav-number" aria-hidden="true">{item.number}</span>{item.label}<span className="portal-nav-arrow" aria-hidden="true">↗</span>
-        </Link>)}
-      </nav>
-      <div className="portal-sidebar-bottom"><p>{meta?.description ?? "Configurations, robots and evidence."}</p><Link className="text-link" href={routes.website()}>Convoy website ↗</Link></div>
-    </aside>
-    <div className="portal-workarea">
-      <header className="portal-topbar cfg-topbar">
-        <div><Breadcrumbs crumbs={crumbs} />{context}</div>
-        <div className="cfg-account">
-          <span>{session.email}</span>
-          <button className="portal-text-button" type="button" disabled={session.signingOut} onClick={() => void session.signOut()}>{session.signingOut ? "Signing out…" : "Sign out"}</button>
+  const sample = ws.status === "ready" && ws.source === "sample";
+  return <div className="cv-app">
+    <a className="cv-skip" href="#main">Skip to content</a>
+    <header className="cv-bar">
+      <div className="cv-bar__in">
+        <Link className="cv-brand" href={routes.index()}><ConvoyMark />Convoy</Link>
+        <Breadcrumbs crumbs={crumbs} />
+        {sample && <span className="cv-sample" title="Sample data: no workspace is saved for this account yet">Sample</span>}
+        <div className="cv-account">
+          <span className="cv-account__email">{session.email}</span>
+          <button className="cv-link" type="button" disabled={session.signingOut} onClick={() => void session.signOut()}>{session.signingOut ? "Signing out…" : "Sign out"}</button>
         </div>
-      </header>
-      <main id="main" className="portal-main" tabIndex={-1}>
-        {session.signOutError && <div className="portal-notice portal-notice-error cfg-notice" role="alert"><p>{session.signOutError}</p></div>}
-        {children}
-      </main>
-    </div>
+      </div>
+    </header>
+    <main id="main" className="cv-main" tabIndex={-1}>
+      {session.signOutError && <p className="cv-notice cv-notice--error" role="alert">{session.signOutError}</p>}
+      {children}
+    </main>
+  </div>;
+}
+
+/** Page title with its badges, and the page's actions on the right (one primary at most). */
+export function PageHeader({ title, badges, actions }: { title: ReactNode; badges?: ReactNode; actions?: ReactNode }) {
+  return <div className="cv-head">
+    <div className="cv-head__title"><h1>{title}</h1>{badges}</div>
+    {actions && <div className="cv-head__actions">{actions}</div>}
   </div>;
 }
