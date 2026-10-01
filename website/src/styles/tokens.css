@@ -44,6 +44,14 @@
   --code-string: #b7d8b8;
   --code-value: #abcded;
 
+  /* Configurations: inference path series (edge / cloud / fallback marks).
+   * Always paired with a text label, never colour alone. Validated as a set
+   * (light, on surface and background): worst CVD dE 11.5, normal-vision
+   * dE 19.0 between edge and cloud, every mark at least 3:1. */
+  --cfg-edge: #04775a; /* signal's teal hue at higher chroma; 5.5:1 on surface */
+  --cfg-cloud: #5089cd; /* information blue lifted so edge and cloud differ in lightness; 3.6:1 */
+  --cfg-fallback: #b97f12; /* warning amber for marks (3.4:1); warning text stays --warning */
+
   /* Spacing scale, px: 0 4 8 12 16 24 32 48 64 80 112 144 */
   --space-1: 4px;
   --space-2: 8px;

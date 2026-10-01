@@ -1,8 +1,10 @@
 # One workspace for device inference and robot applications
 
-`/app` opens `/app/applications`. One account, sign-in and sign-out cover the
-workspace. Applications contains release/deployment/simulation workflows; Device
-connection contains physical-device status, model chat, measured usage and traces.
+`/app` opens Configurations at `/app/configurations`; robot applications and the
+device connection live at `/app/applications`. One account, sign-in and sign-out
+cover the workspace. Applications contains release/deployment/simulation
+workflows; Device connection contains physical-device status, model chat,
+measured usage and traces.
 The old device sidebar and separate demo login are removed.
 
 `/console` redirects to the application. `/portal?view=chat` and

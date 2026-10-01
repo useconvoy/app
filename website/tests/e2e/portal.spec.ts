@@ -24,6 +24,8 @@ async function mockSession(page: Page, data = snapshot(), authenticated = true) 
   await page.route("**/api/platform/auth/logout", async route => { authenticated = false; await route.fulfill({ json: { ok: true } }); });
   await page.route("**/api/platform/projects", route => route.fulfill({ json: [] }));
   await page.route("**/api/portal/snapshot", (route) => route.fulfill({ json: data }));
+  await page.route("**/api/platform/workspace-documents/configurations", route => route.fulfill({ status: 404, json: { error: "This resource is unavailable in your project." } }));
+  await page.route("**/api/platform/devices/*", route => route.fulfill({ json: { id: data.device.id, name: data.device.name, status: data.device.status, hardware: {}, last_telemetry: {} } }));
 }
 async function navigate(page: Page, name: string) { await page.getByRole("navigation", { name: "Device tools", exact: true }).getByRole("link", { name: new RegExp(name === "Device" ? "Connection" : name) }).click(); }
 async function noOverflow(page: Page) { expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true); }
@@ -35,14 +37,17 @@ test("portal metadata stays out of search indexing", async ({ request }) => {
   expect(html).toContain('<title>Convoy | Workspace</title>');
 });
 
-test("landing opens one workspace; one login covers applications and device tools", async ({ page }) => {
+test("landing opens one workspace; one login covers configurations, applications and device tools", async ({ page }) => {
   await mockSession(page, snapshot(), false);
   await page.goto("/");
   await page.locator(".hero-actions").getByRole("link", { name: "Open demo" }).click();
+  await expect(page).toHaveURL(/\/app\/configurations\/?$/);
   await expect(page.getByRole("heading", { name: "One workspace for your robots." })).toBeVisible();
   await page.getByLabel("Email", { exact: true }).fill("fixture@example.test");
   await page.getByLabel("Password", { exact: true }).fill("fixture-only");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Configurations" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Workspace", exact: true }).getByRole("link", { name: "Applications" }).click();
   await expect(page.getByRole("heading", { name: "Build. Deploy. Observe." })).toBeVisible();
   await page.getByRole("navigation", { name: "Robot applications", exact: true }).getByRole("link", { name: "Device connection" }).click();
   await expect(page.getByRole("heading", { name: "Your device, observed." })).toBeVisible();

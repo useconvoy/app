@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "incremental": false,
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "rootDir": ".",
+    "plugins": []
+  },
+  "include": ["src/lib/configurations/**/*.ts", "tests/configurations/**/*.ts"],
+  "exclude": ["node_modules", ".next"]
+}
