@@ -33,8 +33,10 @@ result are published.
 `CONVOY_EVALUATION_PYTHON=/absolute/path/to/integrations/simulation/.venv/bin/python
 node scripts/test-live-evaluations.mjs CONNECTION_JSON NEW_OUTPUT_DIRECTORY`
 adds the evaluation browser flow against the same private SQLite `--serve`
-harness. It starts its own job only after demonstrating persistent reservation
-and requested cancellation, runs two real two-seed evaluations, compares and
+harness, started with `--no-evaluation-job`: a running job would acknowledge the
+cancellation before it is observed, so the check refuses a stack that has one. It
+starts its own job only after demonstrating persistent reservation and requested
+cancellation, runs two real two-seed evaluations, compares and
 promotes one, then deploys and starts an ordinary successful mission. It registers
 an unpromoted second release and delays a real qualification response while
 switching selections to check stale-read gating. Only the response delivery is

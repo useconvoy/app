@@ -85,7 +85,8 @@ session cleanup happens after the local terminal record is durable, so a stalled
 service cannot delay cancellation reporting.
 
 The development harness runs API, action worker, planner and simulator/coordinator
-as separate local processes; `--serve` also starts the evaluation job process.
+as separate local processes; `--serve` also starts the evaluation job process
+unless `--no-evaluation-job` leaves it to a caller that owns the job.
 The explicit controlled planner has its own runtime identifier and local placement.
 It makes a deterministic skill selection and does not stand in as evidence of LLM
 inference. The real gateway adapter requires independently captured loaded-model,
