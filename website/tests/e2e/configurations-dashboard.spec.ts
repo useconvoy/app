@@ -116,6 +116,8 @@ test("tabs follow the URL, the keyboard and the browser history", async ({ page 
   await page.keyboard.press("End");
   await expect(tab(page, "Specification")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("heading", { name: "Safety checks" })).toBeVisible();
+  // The envelope's note already states the scope: the caption says it once.
+  await expect(page.getByRole("table", { name: /safety PLC/ }).locator("caption")).toHaveText("Checked in every evaluation episode and enforced by the robot's safety PLC");
   await page.keyboard.press("Home");
   await expect(tab(page, "Overview")).toHaveAttribute("aria-selected", "true");
   await expect(page).toHaveURL(/\/hybrid\/?$/);

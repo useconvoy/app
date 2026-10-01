@@ -80,7 +80,8 @@
 }
 @media (max-width: 639px) {
   .ci-feed .cfg-log__row { grid-template-columns: auto auto minmax(0, 1fr); }
-  .ci-feed__prov { justify-self: start; }
+  /* On its own line, so a wide badge ("Recorded · Oct 1") never widens the time column and pushes the event badge right. */
+  .ci-feed__prov { grid-column: 1 / -1; justify-self: start; }
   .ci-fields, .ci-fields--4, .cfg-choices.ci-choices--3 { grid-template-columns: minmax(0, 1fr); }
   .ci-fields--4 > .ci-span-2 { grid-column: auto; }
   .ci-foot .btn { flex: 1 1 auto; }

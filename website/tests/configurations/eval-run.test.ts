@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   clockLabel, clockName, comparisonRun, countNoun, failedEpisodes, failureShares, familyOf, familyResults, fmtDuration, gateRows, gateThreshold, hilRunFor,
   keySteps, largestSliceGap, lastAtOrBefore, otherConfigurationRun, outcomeCounts, paginate, pathAt, pathSegments, pathTotals, pointsDelta, replayClock,
-  rolloutNote, rowInterval, rowShare, safetyRows, scrubMarkers, secondsBetween, seriesWithin, signed, sortRollouts, successInterval, valueDelta, windowAround,
+  rolloutNote, rowInterval, rowShare, runningElapsed, safetyRows, scrubMarkers, secondsBetween, seriesWithin, signed, sortRollouts, successInterval, valueDelta, windowAround,
 } from "../../src/lib/configurations/eval-run";
 import { wilson } from "../../src/lib/configurations/format";
 import { createSampleWorkspace } from "../../src/lib/configurations/sample";
@@ -35,11 +35,25 @@ test("success interval: the stored interval, else Wilson from the counts, else n
 test("deltas are in points or plain units, missing values stay missing, signs are typographic", () => {
   assert.equal(pointsDelta(281 / 360, 271 / 360), 2.8);
   assert.equal(pointsDelta(0.5, null), null);
+  // Between the shares as displayed: 74 / 120 → 73 / 120 reads "61.7 % → 60.8 %", so the change is −0.9, not −0.8.
+  assert.equal(pointsDelta(73 / 120, 74 / 120), -0.9);
+  assert.equal(pointsDelta(89 / 120, 88 / 120), 0.9);
+  assert.equal(pointsDelta(104 / 120, 97 / 120), 5.9);
+  assert.equal(pointsDelta(815 / 1080, 802 / 1080), 1.2);
   assert.equal(valueDelta(0.8, 1.1), -0.3);
   assert.equal(valueDelta(null, 1.1), null);
   assert.equal(signed(2.8), "+2.8");
   assert.equal(signed(-0.9), "−0.9");
   assert.equal(signed(0), "0.0");
+});
+
+test("a running run's duration is measured to when its progress was reported, never to the browser's clock", () => {
+  const started = "2026-10-01T13:05:00Z";
+  assert.deepEqual(runningElapsed({ status: "running", startedAt: started, provenance: { kind: "recorded", at: "2026-10-01T14:07:00Z" } }), { seconds: 3720, asOf: "2026-10-01T14:07:00Z" });
+  assert.equal(runningElapsed({ status: "running", startedAt: started, provenance: { kind: "sample" } }), null, "no report time: no duration");
+  assert.equal(runningElapsed({ status: "running", startedAt: null, provenance: { kind: "sample", at: "2026-10-01T14:07:00Z" } }), null);
+  assert.equal(runningElapsed({ status: "running", startedAt: started, provenance: { kind: "sample", at: "2026-10-01T12:00:00Z" } }), null, "reported before it started");
+  assert.equal(runningElapsed({ status: "passed-gate", startedAt: started, provenance: { kind: "sample", at: "2026-10-01T14:07:00Z" } }), null);
 });
 
 test("durations and clocks read as labelled text", () => {

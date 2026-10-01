@@ -243,6 +243,14 @@ class OwnedProcess:
         self._child_delivered = False
         try:
             process = _psutil().Process(child.pid)
+            # CPython's vfork-based Popen can return once the exec'ing child drops its
+            # close-on-exec error pipe, before Linux publishes the new argv: until the
+            # ELF loader finishes, /proc/<pid>/cmdline reads empty (whole scheduler
+            # ticks on a busy host). Wait boundedly for that launch transient only;
+            # _verify still requires exactly one marker in the published argv.
+            deadline = time.monotonic() + 3
+            while not process.cmdline() and time.monotonic() < deadline:
+                time.sleep(0.001)
             self._verify(process, record, recorded=False)
             record.update(state="running", pid=child.pid, created=self._created(process))
             _write(self.record_path, record)

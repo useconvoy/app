@@ -312,6 +312,29 @@ def test_definite_early_child_exit_allows_replacement(tmp_path, monkeypatch, chi
         assert child.poll() is not None
 
 
+def test_start_waits_for_exec_to_publish_argv(tmp_path, monkeypatch):
+    # Popen (vfork) can return before Linux publishes the exec'd argv; on a busy host
+    # /proc/<pid>/cmdline then reads empty for scheduler ticks. That is not a mismatch.
+    directory = tmp_path / "owner"
+    real_cmdline = psutil.Process.cmdline
+    unpublished = []
+
+    def first_reads_empty(process):
+        if len(unpublished) < 3:
+            unpublished.append(process.pid)
+            return []
+        return real_cmdline(process)
+
+    with OwnedProcess(directory) as owner:
+        with monkeypatch.context() as patch:
+            patch.setattr(psutil.Process, "cmdline", first_reads_empty)
+            child = owner.start(argv)
+        assert unpublished == [child.pid] * 3
+        assert read(directory)["state"] == "running" and read(directory)["pid"] == child.pid
+        owner.stop()
+        assert child.poll() is not None
+
+
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux leader/task-group exit semantics")
 @pytest.mark.parametrize("recovered", [False, True])
 def test_zombie_leader_does_not_publish_stopped_while_thread_owns_listener(tmp_path, recovered):

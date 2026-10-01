@@ -175,10 +175,14 @@ test("the replay opens from the URL or a row, closes with Escape or Back to the 
   await mock(page);
   await page.goto(`${RUN}/run-23`);
   const replayLink = page.getByRole("link", { name: "Replay ep-23-007", exact: true });
+  await replayLink.scrollIntoViewIfNeeded();
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
   await replayLink.click();
   await expect(page).toHaveURL(/rollout=ep-23-007/);
   await expect(h1(page)).toHaveText("ep-23-007 · Bin to tray transfer");
   await expect(h1(page)).toBeFocused();
+  // The replay starts at its top at once (no smooth scroll over the whole run page).
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
   await expect(page.getByRole("navigation", { name: "Breadcrumb" }).locator("[aria-current=page]")).toHaveText("ep-23-007");
   await expect(page.getByRole("heading", { name: "Run 23 · Bimanual station suite v1" })).toBeHidden();
   await page.keyboard.press("Escape");
@@ -334,7 +338,10 @@ test("running and queued runs show progress with partial or pending results", as
   await mock(page);
   await page.goto(`${RUN}/run-24`);
   await expect(page.getByRole("progressbar", { name: "Run 24 episodes complete" }).first()).toHaveAttribute("aria-valuenow", "212");
-  await expect(page.locator(".ev-progress")).toContainText("Run 24 is in progress: 212 of 360 episodes (58.9 %)");
+  await expect(page.locator(".ev-progress")).toContainText("Run 24 is in progress: 212 of 360 episodes (58.9 %); started ");
+  // Its stored progress has no report time, so no "running for" grows with the browser's clock.
+  await expect(page.locator(".ev-progress")).not.toContainText("running for");
+  await expect(page.locator(".cfg-page-head + .portal-updated")).not.toContainText("so far");
   await expect(tile(page, "Success rate")).toContainText("167 of 212 episodes so far");
   await expect(tile(page, "Success rate")).toContainText("Partial · 212/360");
   const gate = page.getByRole("region", { name: "Gate decided when the run finishes" });

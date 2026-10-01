@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   ALL_LOGS, attentionSummary, cadenceLabel, DEFAULT_ROBOT_SORT, filterLogs, filterRobotRows, isSilent, latencyTicks, logFacets, needsAttention, nextRobotSort, niceTicks,
   parseRobotFilter, productionKpis, revisionGate, robotFilterCounts, robotRows, robotSortValue, seriesWindowLabel, sortRobotRows, sparkReferences, sparkY,
-  sparkZone, telemetryDomain, triageRank, weakestProvenance,
+  safetyCaption, sparkZone, telemetryDomain, triageRank, weakestProvenance,
 } from "../../src/lib/configurations/dashboard";
 import { flagRobot } from "../../src/lib/configurations/mutations";
 import { mapSnapshot } from "../../src/lib/configurations/live";
@@ -213,6 +213,14 @@ test("attention banner: needs attention first, warnings apart, one leading reaso
   const declared: ConvoyWorkspace = { ...ws, robots: ws.robots.map(robot => robot.id === "unit-02" ? { ...robot, health: "attention", healthReason: "Bin sensor misread" } : robot) };
   const line = attentionSummary(attentionRobots(declared, "hybrid", {}, NOW)).attention.find(item => item.robot.id === "unit-02")!;
   assert.deepEqual([line.label, line.detail, line.more], ["Bin sensor misread", "Bin sensor misread", 0]);
+});
+
+test("safety checks caption: the scope once, then the envelope's own note", () => {
+  assert.equal(safetyCaption(undefined), "Checked in every evaluation episode");
+  assert.equal(safetyCaption("  "), "Checked in every evaluation episode");
+  assert.equal(safetyCaption("Enforced by the robot's safety PLC"), "Checked in every evaluation episode · Enforced by the robot's safety PLC");
+  assert.equal(safetyCaption("Checked in every evaluation episode. S5 is enforced by the safety MCU."), "Checked in every evaluation episode. S5 is enforced by the safety MCU.", "a note that states the scope is not repeated");
+  assert.equal(safetyCaption(hybrid.revisions[0].safety.note), hybrid.revisions[0].safety.note, "the sample's note already states the scope");
 });
 
 test("log filters: level, source and robot combine", () => {

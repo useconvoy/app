@@ -26,7 +26,7 @@ export function LogsPreview({ workspace, config, onOpen }: { workspace: ConvoyWo
   const shown = lines.slice(0, PREVIEW_LINES);
   const provenance = weakestProvenance(shown.map(line => line.provenance));
   return <div className="cfg-section">
-    <Panel eyebrow={`Newest ${plural(shown.length, "line")} · ${CLOCK_NOTE}`} title="Model logs" titleId="cd-logs-preview-title"
+    <Panel eyebrow={shown.length ? `Newest ${plural(shown.length, "line")} · ${CLOCK_NOTE}` : "Stored in the workspace"} title="Model logs" titleId="cd-logs-preview-title"
       action={<div className="cfg-inline">{shown.length > 0 && <ProvenanceBadge provenance={provenance} />}<button className="cfg-btn-text" type="button" onClick={onOpen}>Open logs <Icon name="chevron-right" /></button></div>}>
       <LogPanel lines={shown} label="Model logs, newest first" sourceLabel={sourceLabel(workspace)} empty="No log lines are stored for this configuration." />
       {shown.length > 0 && <p className="portal-context-note">Newest first · {fmtCount(shown.length)} of {plural(lines.length, "line")} for this configuration · stored in the workspace; the connected device’s own logs are not collected here.</p>}

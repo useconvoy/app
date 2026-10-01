@@ -221,9 +221,10 @@ export function RobotOverview({ robot, configuration, revision, readings, now }:
     <Strip facts={[
       { label: "Configuration", value: robot.rev ?? NOT_REPORTED, detail: `${configuration.name} · ${revState}` },
       { label: "Site", value: robot.site, detail: [revision?.robot.name, ROBOT_KIND_LABEL[robot.kind]].filter(Boolean).join(" · ") },
-      // Without telemetry the contact time is a stored fact of the robot, not a reading: no provenance is claimed for it.
-      { label: "Device contact", value: ago(readings.lastSeenAt, now, robot.clock), detail: !readings.lastSeenAt ? undefined
-        : telemetry ? <Evidence provenance={prov} now={now}>{fmtDateTime(readings.lastSeenAt, robot.clock)}</Evidence> : `${fmtDateTime(readings.lastSeenAt, robot.clock)} · stored with the robot` },
+      // A stored contact time is shown as the time itself: an age against this browser's clock would only grow, while the
+      // robot's stored values stay the same. Without telemetry it is a stored fact of the robot: no provenance is claimed for it.
+      { label: "Device contact", value: readings.lastSeenAt ? fmtDateTime(readings.lastSeenAt, robot.clock, false) : NOT_REPORTED, detail: !readings.lastSeenAt ? undefined
+        : telemetry ? <Evidence provenance={prov} now={now}>Last report stored with the robot</Evidence> : "Stored with the robot" },
       ...(telemetry ? [
         { label: "Battery", value: fmtUnit(latest?.batteryPct, "%", 0), detail: <Evidence provenance={latest?.batteryPct != null ? prov : NONE} now={now}>{latest?.at ? `Latest sample ${fmtTime(latest.at, robot.clock)}` : null}</Evidence> },
         { label: "GPU utilization", value: fmtUnit(latest?.gpuPct, "%", 0), detail: <Evidence provenance={latest?.gpuPct != null ? prov : NONE} now={now}>{revision ? `Latest sample · ${revision.edgeHardware.name}` : "Latest sample"}</Evidence> },

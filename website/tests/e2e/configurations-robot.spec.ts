@@ -115,6 +115,23 @@ test("a device-bound test robot shows measured health, edge latency and inferenc
   await expect(page.getByText("No log lines are stored for Lab bench. The device connection does not expose device or runtime logs.")).toBeVisible();
 });
 
+test("inference traces received on different days show each row's day", async ({ page }) => {
+  await mock(page);
+  const old = new Date(Date.now() - 3 * 86_400_000).toISOString();
+  const day = (at: string) => new Date(at).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
+  // Registered after mock(): this route answers first.
+  await page.route("**/api/portal/snapshot", route => {
+    const base = snapshot("online");
+    return route.fulfill({ json: { ...base, recent_inference: [...base.recent_inference, { ...base.recent_inference[0], trace_id: "tr_contract_old", start_ts: old }] } });
+  });
+  await page.goto(`${BENCH}?tab=traces`);
+  const table = page.getByRole("tabpanel", { name: /Traces/ }).getByRole("table", { name: "All 4 received traces, newest first" });
+  await expect(table.getByRole("row", { name: /tr_contract_old/ }).getByRole("rowheader")).toHaveText(`${day(old)}, ${old.slice(11, 19)}`);
+  const newest = table.getByRole("row", { name: /tr_contract_0/ }).getByRole("rowheader");
+  await expect(newest).toHaveText(/^[A-Z][a-z]{2} \d{1,2}, \d{2}:\d{2}:\d{2}$/);
+  await expect(newest).not.toHaveText(new RegExp(`^${day(old)},`));
+});
+
 test("an offline device keeps its last measured values with their age; an unreachable one reads Not reported", async ({ page }) => {
   await mock(page, { device: "offline" });
   await page.goto(BENCH);
@@ -201,7 +218,8 @@ test("queuing an evaluation saves it with PUT and says the runner is not connect
   await expect(dialog.getByLabel("Configuration revision")).toHaveValue("r4");
   await expect(dialog).toContainText("Gate: Overall success ≥ 70 %");
   await expect(dialog).toContainText("No evaluation runner is connected");
-  await expect(dialog).toContainText("Run 24 is running on Lab bench (212 of 360 episodes).");
+  // The document lists Run 24 as running: said with its evidence label, not as work going on next to "no runner".
+  await expect(dialog).toContainText("Run 24 is listed as running on Lab bench (212 of 360 episodes · Sample).");
   // Escape closes without saving and returns focus.
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);

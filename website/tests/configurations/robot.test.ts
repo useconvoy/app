@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { LiveInference } from "../../src/lib/configurations/live";
 import { flagRobot, setRobotRole } from "../../src/lib/configurations/mutations";
 import {
-  activeRunOn, clockText, edgeSpanStats, evaluationChoices, fmtStarted, gateShortfall, gateSummary, latencyBarChart, niceAxis, policyLabel, promotionState,
+  activeRunNote, activeRunOn, clockText, edgeSpanStats, evaluationChoices, fmtStarted, gateShortfall, gateSummary, latencyBarChart, niceAxis, policyLabel, promotionState,
   runRowFacts, sampleStat, timeWindowLabel, traceCounts, traceFactGroups, traceWaterfalls,
 } from "../../src/lib/configurations/robot";
 import { createSampleWorkspace } from "../../src/lib/configurations/sample";
@@ -85,6 +85,14 @@ test("queuing choices: the configuration's suite and the robot's revision come f
   assert.equal(gateSummary(null), null);
   assert.equal(activeRunOn(ws, "lab-bench")?.number, 24);
   assert.equal(activeRunOn(ws, "unit-02"), null);
+});
+
+test("the run already active on a robot is what the document lists, with its evidence, never work happening now", () => {
+  const running = run("run-24");
+  assert.equal(activeRunNote(running, "Lab bench"), `Run 24 is listed as running on Lab bench (${running.progress!.done} of 360 episodes · Sample).`);
+  assert.equal(activeRunNote({ ...running, provenance: { kind: "recorded", at: "2026-09-14T06:00:00Z" } }, "Lab bench"), `Run 24 is listed as running on Lab bench (${running.progress!.done} of 360 episodes · Recorded · Sep 14).`);
+  assert.equal(activeRunNote({ ...running, progress: null, provenance: { kind: "not-reported" } }, "Lab bench"), "Run 24 is listed as running on Lab bench.");
+  assert.equal(activeRunNote({ ...running, status: "queued", progress: null }, "Lab bench"), "Run 24 is already queued on Lab bench.");
 });
 
 test("evaluation rows: running, gated, recorded and queued runs read honestly", () => {

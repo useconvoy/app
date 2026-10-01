@@ -33,9 +33,13 @@ export function rowInterval(row: { successes: number; episodes: number; ci95?: r
 }
 /** Success share of a row, or null without episodes. */
 export const rowShare = (row: { successes: number; episodes: number }): number | null => row.episodes > 0 ? row.successes / row.episodes : null;
-/** Difference of two shares in percentage points, to 0.1 (78.1 % vs 75.3 % → 2.8); null when either is missing. */
+/**
+ * Difference of two shares in percentage points, to 0.1 (78.1 % vs 75.3 % → 2.8); null when either is missing.
+ * Taken between the shares as displayed (to 0.1 %), so a change always matches the two figures shown beside
+ * it: 73 / 120 vs 74 / 120 reads "61.7 % → 60.8 %, −0.9", not −0.8.
+ */
 export function pointsDelta(share: number | null | undefined, baseline: number | null | undefined): number | null {
-  return finite(share) && finite(baseline) ? round1((share - baseline) * 100) : null;
+  return finite(share) && finite(baseline) ? round1(round1(share * 100) - round1(baseline * 100)) : null;
 }
 /** Plain difference to 0.1 (safety per 100, seconds); null when either is missing. */
 export function valueDelta(value: number | null | undefined, baseline: number | null | undefined): number | null {
@@ -63,6 +67,17 @@ export function secondsBetween(from: string | null | undefined, to: string | num
   const a = from ? Date.parse(from) : Number.NaN;
   const b = typeof to === "number" ? to : to ? Date.parse(to) : Number.NaN;
   return Number.isFinite(a) && Number.isFinite(b) && b >= a ? (b - a) / 1000 : null;
+}
+/**
+ * How long a running run had run when its stored progress was reported: from its start to its
+ * provenance time (`asOf`). Null when the run is not running or that time is unknown. A run's
+ * progress lives in the workspace document and no runner updates it, so the browser's clock
+ * is never used: it would only make a stored run look longer and longer at the same progress.
+ */
+export function runningElapsed(run: Pick<EvalRun, "status" | "startedAt" | "provenance">): { seconds: number; asOf: string } | null {
+  if (run.status !== "running" || !run.provenance.at) return null;
+  const seconds = secondsBetween(run.startedAt, run.provenance.at);
+  return seconds === null ? null : { seconds, asOf: run.provenance.at };
 }
 const CLOCK_LABEL: Record<ClockKind, string> = { simulated: "simulated", wall: "wall-clock", device: "device clock", browser: "browser clock", server: "server clock" };
 const CLOCK_NAME: Record<ClockKind, string> = { simulated: "simulated clock", wall: "wall clock", device: "device clock", browser: "browser clock", server: "server clock" };

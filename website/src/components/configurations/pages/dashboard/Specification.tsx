@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { getSuite, latestGateRun, runHref } from "@/lib/configurations/client";
-import { revisionGate } from "@/lib/configurations/dashboard";
+import { revisionGate, safetyCaption } from "@/lib/configurations/dashboard";
 import type { RobotRow } from "@/lib/configurations/dashboard";
 import type { LiveBinding } from "@/lib/configurations/live";
 import { fmtDate, fmtFixed, fmtNumber, runLabel } from "@/lib/configurations/format";
@@ -184,7 +184,7 @@ export function SpecificationFull({ workspace, config, revision, rows, live, onR
     <Panel eyebrow={`${revision.safety.name} · ${revision.rev}`} title="Safety checks" titleId="cd-safety-title">
       <div className="portal-table-scroll" tabIndex={0} aria-label="Safety checks, scroll horizontally">
         <table className="portal-table cfg-table">
-          <caption>Checked in every evaluation episode{revision.safety.note ? ` · ${revision.safety.note}` : ""}</caption>
+          <caption>{safetyCaption(revision.safety.note)}</caption>
           <thead><tr><th scope="col">Check</th><th scope="col">Name</th><th scope="col">Rule</th><th scope="col">Severity</th></tr></thead>
           <tbody>{revision.safety.definitions.map(item => <tr key={item.id}>
             <th scope="row">{item.id}</th><td className="cfg-wrap">{item.name}</td><td className="cfg-wrap">{item.rule}{item.criticalWhen && <small>{item.criticalWhen}</small>}</td>

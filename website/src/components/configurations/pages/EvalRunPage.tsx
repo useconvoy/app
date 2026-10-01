@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { getSuite, resolveRunRoute, runHref, useWorkspace } from "@/lib/configurations/client";
-import { clockName, comparisonRun, fmtDuration, gateThreshold, hilRunFor, otherConfigurationRun, secondsBetween } from "@/lib/configurations/eval-run";
+import { clockName, comparisonRun, fmtDuration, gateThreshold, hilRunFor, otherConfigurationRun, runningElapsed, secondsBetween } from "@/lib/configurations/eval-run";
 import { fmtCount, fmtDateTime, runLabel } from "@/lib/configurations/format";
 import { routes } from "@/lib/configurations/routes";
 import { ID_PATTERN } from "@/lib/configurations/types";
@@ -120,7 +120,9 @@ function RunView({ workspace, configuration, robot, run, runConfiguration }: { w
   const sliceGate = gateThreshold(suite, "slice");
   const other = isSuite && run.gate ? otherConfigurationRun(workspace, run) : null;
   const configName = runConfiguration?.name ?? run.configId;
-  const wall = run.finishedAt ? fmtDuration(secondsBetween(run.startedAt, run.finishedAt)) : run.status === "running" && now !== null ? fmtDuration(secondsBetween(run.startedAt, now)) : null;
+  // A running run's duration is the one its stored progress was reported at, never "now minus start".
+  const running = runningElapsed(run);
+  const wall = run.finishedAt ? fmtDuration(secondsBetween(run.startedAt, run.finishedAt)) : running ? fmtDuration(running.seconds) : null;
   const design = suite ? (() => {
     const slices = suite.sliceFamilies.reduce((sum, family) => sum + family.slices.length, 0);
     const product = suite.tasks.length * Math.max(1, slices) * suite.seedsPerCell;
@@ -130,7 +132,7 @@ function RunView({ workspace, configuration, robot, run, runConfiguration }: { w
     run.purpose ?? null, `${configName} ${run.rev}`, `${run.variant} on ${robot.name}`, design,
     run.episodeTime ? `Episode times on the ${clockName(run.episodeTime.clock)}` : null,
     started ? `Started ${fmtDateTime(run.startedAt)}` : "Not started",
-    wall ? `${wall} wall-clock${run.status === "running" ? " so far" : ""}` : null,
+    wall ? `${wall} wall-clock${running ? ` as of ${fmtDateTime(running.asOf)}` : ""}` : null,
   ].filter(Boolean).join(" · ");
   const queuedHref = queued ? runHref(ws.workspace ?? workspace, queued) : null;
 
@@ -147,7 +149,7 @@ function RunView({ workspace, configuration, robot, run, runConfiguration }: { w
       {queued && <div role="status"><Notice tone="info" icon="clock" action={queuedHref ? <Link className="btn btn-secondary cfg-btn" href={queuedHref}>Open {runLabel(queued)}</Link> : undefined}>
         <strong>{runLabel(queued)} is queued</strong> · {queued.title} on {configName} {queued.rev}. No evaluation runner is connected, so it stays queued with no results until a runner reports them.
       </Notice></div>}
-      <RunProgress run={run} now={now} />
+      <RunProgress run={run} />
       {(hasResults || !active) && <RunMetrics workspace={workspace} run={run} suite={suite} robot={robot} configuration={runConfiguration} baseline={baseline}
         hilRun={run.hilLatency ? run : isSuite ? hilRunFor(workspace, run.robotId) : null} gateShare={gateThreshold(suite, "overall")} now={now} />}
       {comparing && <ComparePanel run={run} baseline={comparing} suite={suite} configuration={runConfiguration} headingRef={setCompareHeading} />}
