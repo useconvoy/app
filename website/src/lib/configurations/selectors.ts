@@ -221,11 +221,55 @@ export interface RobotReadings {
   cloudMs: Percentiles | null;
   fallbackPct: number | null;
   lastSeenAt: string | null;
+  /** The health every page shows: `baseHealth` raised by the flags in effect (`displayHealth`). */
   health: RobotHealth;
+  /** One line for `health`: the flag that set it, else the base reason. */
   healthReason: string | null;
+  /** The flag behind `health`, when a flag set it. */
+  healthFlag: ActiveFlag | null;
+  /** Health before flags: the stored health, or a bound robot's device state (offline, not reported, or the device's own health). */
+  baseHealth: RobotHealth;
+  baseHealthReason: string | null;
   flags: ActiveFlag[];
 }
 const NOT_REPORTED: Provenance = { kind: "not-reported" };
+
+/* ---------- displayed health (one rule for every page) ---------- */
+
+export interface HealthState { health: RobotHealth; reason: string | null }
+export interface DisplayedHealth extends HealthState { /** The flag that set the health, if one did. */ flag: ActiveFlag | null }
+
+/**
+ * The health every page shows for a robot (robot page, dashboard table and
+ * device board, attention banner, index counts): its base health — the stored
+ * health, or a bound robot's device state — raised by the flags in effect.
+ * Precedence, most severe first:
+ * 1. an attention flag, or attention health → Needs attention;
+ * 2. Offline (a warning on an offline robot does not hide that it is offline);
+ * 3. a warning flag, or degraded health → Degraded;
+ * 4. the base health (Healthy, Not reported).
+ * Needs attention outranks Offline, so a robot flagged for not reporting is
+ * triaged with the others. The reason is the flag that set the health, else the
+ * base reason.
+ */
+export function displayHealth(base: HealthState, flags: readonly ActiveFlag[]): DisplayedHealth {
+  const attention = flags.find(flag => flag.severity === "attention");
+  if (attention) return { health: "attention", reason: attention.label, flag: attention };
+  if (base.health === "attention" || base.health === "offline") return { ...base, flag: null };
+  const warning = flags.find(flag => flag.severity === "warning");
+  if (warning) return { health: "degraded", reason: base.health === "degraded" ? base.reason ?? warning.label : warning.label, flag: warning };
+  return { ...base, flag: null };
+}
+
+/** Triage severity of a displayed health: Needs attention → "attention", Degraded → "warning", anything else none. */
+export function healthSeverity(health: RobotHealth): FlagSeverity | null {
+  return health === "attention" ? "attention" : health === "degraded" ? "warning" : null;
+}
+
+function withHealth(base: HealthState, flags: ActiveFlag[]): Pick<RobotReadings, "health" | "healthReason" | "healthFlag" | "baseHealth" | "baseHealthReason" | "flags"> {
+  const shown = displayHealth(base, flags);
+  return { health: shown.health, healthReason: shown.reason, healthFlag: shown.flag, baseHealth: base.health, baseHealthReason: base.reason, flags };
+}
 
 function seriesSet(stored: Partial<Record<TelemetryMetric, Parameters<typeof seriesPoints>[0]>> | undefined): Partial<Record<TelemetryMetric, SeriesPoint[]>> {
   const out: Partial<Record<TelemetryMetric, SeriesPoint[]>> = {};
@@ -257,18 +301,26 @@ export function evaluateFlagRules(reading: TelemetryReading | null, rules: FlagR
   return flags;
 }
 
-function healthFrom(flags: readonly ActiveFlag[], fallback: RobotHealth): { health: RobotHealth; reason: string | null } {
-  const attention = flags.find(flag => flag.severity === "attention"), warning = flags.find(flag => flag.severity === "warning");
-  if (attention) return { health: "attention", reason: attention.label };
-  if (warning) return { health: "degraded", reason: warning.label };
-  return { health: fallback, reason: null };
+/**
+ * A bound robot's device state before flags: offline (or retired, revoked, never
+ * seen), else the device's own health — Healthy for "ok", Not reported when the
+ * agent reports none ("unknown", e.g. no release running), Degraded otherwise
+ * ("failed"). An unknown health is not evidence of a problem, so it raises no warning.
+ */
+function deviceHealth(data: NonNullable<LiveBinding["data"]>): HealthState {
+  if (!data.online) return { health: "offline", reason: data.identityState ?? "No recent live contact" };
+  const observed = data.observedHealth;
+  if (observed === "ok" || observed === "healthy") return { health: "healthy", reason: null };
+  if (!observed || observed === "unknown") return { health: "not-reported", reason: observed ? "Device health: unknown" : "Device health not reported" };
+  return { health: "degraded", reason: `Device health: ${observed}` };
 }
 
 /**
  * The robot's readings for display. A bound robot shows measured values from its
- * live binding (or "Not reported" while none have arrived), with health and
- * flags derived from those values and the revision's flag rules; other robots
- * show their stored sample or recorded values, health and flags.
+ * live binding (or "Not reported" while none have arrived), with flags raised by
+ * the revision's flag rules on those values; other robots show their stored
+ * sample or recorded values and flags. `health` is the displayed health
+ * (`displayHealth`) every page uses; `baseHealth` is the state before flags.
  */
 export function robotReadings(robot: Robot, revision: ConfigRevision | null, live?: LiveBinding | null, now?: number | null): RobotReadings {
   const stored = robot.flags.map(flag => ({ ...flag, origin: "stored" as const }));
@@ -279,25 +331,23 @@ export function robotReadings(robot: Robot, revision: ConfigRevision | null, liv
       return {
         provenance: NOT_REPORTED, live: false, latest: null, recent: {}, day: {},
         edgeMs: recordedLatency?.edgePlannerMs ?? null, edgeProvenance: recordedLatency?.provenance ?? NOT_REPORTED,
-        cloudMs: null, fallbackPct: null, lastSeenAt: null, health: "not-reported",
-        healthReason: live?.status === "loading" ? "Waiting for the first device report" : live?.error ?? "No live device data", flags: stored,
+        cloudMs: null, fallbackPct: null, lastSeenAt: null,
+        ...withHealth({ health: "not-reported", reason: live?.status === "loading" ? "Waiting for the first device report" : live?.error ?? "No live device data" }, stored),
       };
     }
     const mode = revision?.edgeHardware.powerModes.find(item => item.id === revision.edgeHardware.powerModeId);
+    // "No recent report" compares server timestamps on the server's clock: the browser's clock plus the read's offset.
+    const serverNow = now == null ? null : now + (data.clockOffsetMs ?? 0);
     const ruleFlags = evaluateFlagRules(data.latest, revision?.flagRules ?? null, {
-      capW: mode?.capW ?? null, thermalC: revision?.edgeHardware.thermal.swThrottleC ?? null, edgeP95Ms: data.edgeLatency?.p95Ms ?? null, lastSeenAt: data.liveAt, now, provenance: data.provenance, idPrefix: robot.id,
+      capW: mode?.capW ?? null, thermalC: revision?.edgeHardware.thermal.swThrottleC ?? null, edgeP95Ms: data.edgeLatency?.p95Ms ?? null, lastSeenAt: data.liveAt, now: serverNow, provenance: data.provenance, idPrefix: robot.id,
     });
     const flags = [...stored, ...ruleFlags.filter(flag => !stored.some(item => item.rule === flag.rule))];
-    const offline = !data.online;
-    const derived = healthFrom(flags, data.observedHealth && data.observedHealth !== "ok" && data.observedHealth !== "healthy" ? "degraded" : "healthy");
     return {
       provenance: data.provenance, live: true, latest: data.latest, recent: { ...data.series }, day: {},
       edgeMs: data.edgeLatency ? { p50: data.edgeLatency.p50Ms, p95: data.edgeLatency.p95Ms, n: data.edgeLatency.n } : recordedLatency?.edgePlannerMs ?? null,
       edgeProvenance: data.edgeLatency ? { kind: "measured", at: data.edgeLatency.to ?? data.fetchedAt, n: data.edgeLatency.n, source: data.name } : recordedLatency?.provenance ?? NOT_REPORTED,
       cloudMs: null, fallbackPct: null, lastSeenAt: data.liveAt,
-      health: offline ? "offline" : derived.health,
-      healthReason: offline ? data.identityState ?? "No recent live contact" : derived.reason,
-      flags,
+      ...withHealth(deviceHealth(data), flags),
     };
   }
   const telemetry = robot.telemetry;
@@ -307,26 +357,56 @@ export function robotReadings(robot: Robot, revision: ConfigRevision | null, liv
     edgeMs: robot.latency?.edgePlannerMs ?? null, edgeProvenance: robot.latency?.provenance ?? NOT_REPORTED,
     cloudMs: robot.latency?.cloudChunkMs ?? null, fallbackPct: robot.latency?.fallbackPct ?? null,
     lastSeenAt: robot.lastSeenAt ?? telemetry?.latest.at ?? null,
-    health: robot.health, healthReason: robot.healthReason ?? null, flags: stored,
+    ...withHealth({ health: robot.health, reason: robot.healthReason ?? null }, stored),
   };
 }
 
-const severityRank = (flags: readonly ActiveFlag[]) => flags.some(flag => flag.severity === "attention") ? 2 : flags.length ? 1 : 0;
-export interface FlaggedRobot { robot: Robot; flags: ActiveFlag[]; severity: FlagSeverity }
-/** Robots with a flag in effect (attention first), for a configuration or the whole workspace. */
-export function flaggedRobots(ws: ConvoyWorkspace, configId?: string | null, live: LiveMap = {}, now?: number | null): FlaggedRobot[] {
-  return ws.robots.filter(robot => robot.configId !== null && (!configId || robot.configId === configId)).map(robot => {
-    const config = robot.configId ? getConfiguration(ws, robot.configId) : null;
+/** A robot whose displayed health is Needs attention or Degraded, with what to say about it. */
+export interface AttentionRobot {
+  robot: Robot;
+  /** "attention" for Needs attention, "warning" for Degraded. */
+  severity: FlagSeverity;
+  readings: RobotReadings;
+  /** Every flag in effect on the robot. */
+  flags: ActiveFlag[];
+  /** Short reason: the flag that set the health, else the robot's health reason. */
+  label: string;
+  /** Evidence sentence: the flag's detail, else the health reason. */
+  detail: string;
+  /** Provenance of that evidence. */
+  provenance: Provenance;
+}
+const HEALTH_TEXT: Partial<Record<RobotHealth, string>> = { attention: "Needs attention", degraded: "Degraded" };
+const severityOrder = (entry: AttentionRobot) => entry.severity === "attention" ? 0 : 1;
+
+/**
+ * Robots that need attention (displayed health Needs attention) or carry a
+ * warning (Degraded), attention first, then by name, for one configuration or
+ * every attached robot. The attention banner and the index counts both read
+ * this, so they always agree with the health badges.
+ */
+export function attentionRobots(ws: ConvoyWorkspace, configId?: string | null, live: LiveMap = {}, now?: number | null): AttentionRobot[] {
+  const entries: AttentionRobot[] = [];
+  for (const robot of ws.robots) {
+    if (robot.configId === null || (configId && robot.configId !== configId)) continue;
+    const config = getConfiguration(ws, robot.configId);
     const readings = robotReadings(robot, config ? getRevision(config, robot.rev) : null, live[robot.id], now);
-    return { robot, flags: readings.flags, severity: severityRank(readings.flags) === 2 ? "attention" as const : "warning" as const };
-  }).filter(entry => entry.flags.length).toSorted((a, b) => severityRank(b.flags) - severityRank(a.flags) || collator.compare(a.robot.name, b.robot.name));
+    const severity = healthSeverity(readings.health);
+    if (!severity) continue;
+    const flag = readings.healthFlag;
+    const label = flag?.label ?? readings.healthReason ?? HEALTH_TEXT[readings.health] ?? readings.health;
+    entries.push({ robot, severity, readings, flags: readings.flags, label, detail: flag?.detail ?? label, provenance: flag?.provenance ?? readings.provenance });
+  }
+  return entries.toSorted((a, b) => severityOrder(a) - severityOrder(b) || collator.compare(a.robot.name, b.robot.name));
 }
 
 /* ---------- summaries ---------- */
 
 export interface ConfigurationSummary {
   robots: { test: number; production: number; total: number };
+  /** Robots whose displayed health is Needs attention (the robots `attentionRobots` lists with severity "attention"). */
   attention: number;
+  /** Robots whose displayed health is Degraded. */
   degraded: number;
   /** Newest gated suite run for the revision under test, else for any revision. */
   latestRun: EvalRun | null;

@@ -1,14 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
 
+/** Default page clock: once per live-device poll, so a page re-renders every 15 s, not every second. */
+export const PAGE_CLOCK_MS = 15_000;
+
 /**
- * Wall-clock ms, updated every `intervalMs` for relative times ("9s ago").
- * Null on the server and during the first client render, so markup hydrates
- * identically; show the label without an age until it arrives.
+ * Wall-clock ms for a page, updated every `intervalMs` (coarse by default) for
+ * time-based rules and minute-level times ("Updated 3 min ago"). Null on the
+ * server and during the first client render, so markup hydrates identically.
+ * Labels that count seconds (a measured value's age) tick on their own with
+ * `useSecondClock`, so the page does not re-render every second.
  */
-export function useNow(intervalMs = 1000): number | null {
+export function useNow(intervalMs = PAGE_CLOCK_MS): number | null {
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
     const tick = () => setNow(Date.now());
@@ -17,6 +22,33 @@ export function useNow(intervalMs = 1000): number | null {
     return () => { window.clearTimeout(first); window.clearInterval(timer); };
   }, [intervalMs]);
   return now;
+}
+
+/* One shared one-second ticker; it runs only while a label subscribes. */
+const secondListeners = new Set<() => void>();
+let secondTimer: ReturnType<typeof setInterval> | null = null;
+let secondNow: number | null = null;
+function subscribeSeconds(listener: () => void): () => void {
+  secondListeners.add(listener);
+  if (secondTimer === null) {
+    secondNow = Date.now();
+    secondTimer = setInterval(() => { secondNow = Date.now(); for (const item of [...secondListeners]) item(); }, 1000);
+  }
+  return () => {
+    secondListeners.delete(listener);
+    if (!secondListeners.size && secondTimer !== null) { clearInterval(secondTimer); secondTimer = null; secondNow = null; }
+  };
+}
+const noSubscribe = () => () => undefined;
+const noTime = () => null;
+
+/**
+ * Wall-clock ms updated every second for one small component (a relative-time
+ * label), so only that label re-renders; null while `enabled` is false, on the
+ * server and during hydration.
+ */
+export function useSecondClock(enabled = true): number | null {
+  return useSyncExternalStore(enabled ? subscribeSeconds : noSubscribe, enabled ? () => secondNow : noTime, noTime);
 }
 
 /**

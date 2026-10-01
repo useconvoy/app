@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bindingFor, LiveDevicePoller, LiveRequestError, mapPlatformDevice, mapSnapshot, summarizeLatency } from "../../src/lib/configurations/live";
+import { bindingFor, clockOffset, deviceSentence, deviceState, LiveDevicePoller, LiveRequestError, mapPlatformDevice, mapSnapshot, summarizeLatency } from "../../src/lib/configurations/live";
 import type { LiveTransport } from "../../src/lib/configurations/live";
 import { onSessionExpired } from "../../src/lib/configurations/session-events";
 import { CONFIGURED_DEVICE } from "../../src/lib/configurations/types";
@@ -139,7 +139,7 @@ test("only one poll is in flight", async () => {
   assert.deepEqual(clock.pending(), [15_000]);
 });
 
-test("a device added during a poll is read right after it", async () => {
+test("a device added during a poll is read at the next poll, one interval later, not at once", async () => {
   let resolve: (value: PortalSnapshot) => void = () => undefined;
   const { poller, clock, calls } = setup({ snapshot: () => new Promise(done => { resolve = done; }) });
   poller.retain([CONFIGURED_DEVICE]);
@@ -147,10 +147,44 @@ test("a device added during a poll is read right after it", async () => {
   poller.retain(["dev_other"]);
   resolve(snapshot());
   await flush();
-  assert.deepEqual(clock.pending(), [0]);
-  resolve = () => undefined;
-  await clock.advance(0);
+  assert.deepEqual(clock.pending(), [15_000]);
+  assert.equal(poller.getSnapshot().devices.dev_other.status, "loading");
+  await clock.advance(15_000);
+  resolve(snapshot());
+  await flush();
   assert.ok(calls.device.includes("dev_other"));
+});
+
+test("moving between pages (release, then retain the same device) adds no reads: at most 4 snapshot reads a minute", async () => {
+  const { poller, clock, calls } = setup();
+  let release = poller.retain([CONFIGURED_DEVICE]);
+  await clock.advance(0);
+  assert.equal(calls.snapshot, 1);
+  // Rapid navigation: a page change every 2 s for a minute.
+  for (let t = 0; t < 30; t++) {
+    release();
+    release = poller.retain([CONFIGURED_DEVICE]);
+    await clock.advance(2_000);
+  }
+  assert.equal(calls.snapshot, 5, "first read plus one every 15 s");
+  assert.equal(poller.getSnapshot().devices[CONFIGURED_DEVICE].status, "fresh");
+  // Back after a quiet minute away: the data is old, so the read happens at once.
+  release();
+  await clock.advance(60_000);
+  poller.retain([CONFIGURED_DEVICE]);
+  await clock.advance(0);
+  assert.equal(calls.snapshot, 6);
+});
+
+test("the server clock offset makes 'no recent report' independent of the browser clock", () => {
+  // The browser clock runs 2 minutes ahead of the server.
+  const ahead = 120_000;
+  const data = mapSnapshot(snapshot(), null, T0 + ahead);
+  assert.equal(data.clockOffsetMs, -ahead);
+  assert.equal(mapSnapshot(snapshot()).clockOffsetMs, 0, "unknown receipt time: no offset");
+  assert.equal(clockOffset("not a date", T0), 0);
+  const device = mapPlatformDevice({ id: "dev_x", status: "online", live_at: iso(-3) }, null, iso(0), T0 + ahead);
+  assert.equal(device.clockOffsetMs, -ahead);
 });
 
 test("429, 5xx and network errors back off exponentially to 120 s and keep the last data as stale", async () => {
@@ -221,6 +255,8 @@ test("explicit device ids use the device record unless they are the configured d
   assert.equal(poller.getSnapshot().devices.dev_other.data?.series.socTempC.length, 2);
   poller.retain(["dev_lab"]);
   await clock.advance(0);
+  assert.equal(poller.getSnapshot().devices.dev_lab.status, "loading", "a device retained right after a poll waits for the next one");
+  await clock.advance(15_000);
   assert.equal(poller.getSnapshot().devices.dev_lab.data?.source, "portal-snapshot");
   assert.equal(poller.getSnapshot().devices.dev_lab.data?.hardware?.model, "Orin Nano");
 });
@@ -234,4 +270,23 @@ test("an unconfigured device connection is unavailable, not an error loop", asyn
   assert.equal(entry.error, "No device connection is configured for this workspace.");
   assert.equal(poller.getSnapshot().configuredDeviceId, null);
   assert.deepEqual(clock.pending(), [30_000]);
+});
+
+test("device state and the notice sentence never claim a report that was not received", () => {
+  const fresh = { deviceKey: CONFIGURED_DEVICE, status: "fresh" as const, data: mapSnapshot(snapshot()), error: null, receivedAt: 0 };
+  const offline = { ...fresh, data: mapSnapshot(snapshot({ chat: { eligible: false, online: false, reason: "Device is offline.", release_id: null, max_tokens: 128, context_window: null } })) };
+  const cases: Array<[Parameters<typeof deviceState>[0], string, string]> = [
+    [fresh, "reporting", "reports from a connected Edge board."],
+    [{ ...fresh, status: "stale" }, "stale", "is bound to a Edge board; its latest device read is stale and Convoy keeps retrying."],
+    [offline, "offline", "is bound to a Edge board, which is offline right now."],
+    [{ deviceKey: CONFIGURED_DEVICE, status: "loading", data: null, error: null, receivedAt: null }, "waiting", "is bound to a Edge board; waiting for its first device report."],
+    [{ deviceKey: CONFIGURED_DEVICE, status: "unavailable", data: null, error: "Not configured.", receivedAt: null }, "unavailable", "is bound to a Edge board; no device report is available right now."],
+    [{ ...fresh, status: "unauthorized" }, "signed-out", "is bound to a Edge board; sign in again to read it."],
+    [undefined, "unbound", "is bound to a Edge board; its values are marked Measured only while it reports."],
+  ];
+  for (const [binding, state, sentence] of cases) {
+    assert.equal(deviceState(binding), state);
+    assert.equal(deviceSentence(binding, "Edge board"), sentence, state);
+  }
+  assert.equal(deviceState(bindingFor({ deviceId: undefined }, null)), "unbound");
 });

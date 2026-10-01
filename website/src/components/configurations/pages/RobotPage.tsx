@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { getRevision, getTrace, resolveRobotRoute, robotReadings, runsFor, tracesFor, useWorkspace } from "@/lib/configurations/client";
 import { fmtDateTime, fmtUpdated, runLabel } from "@/lib/configurations/format";
-import { clockText, displayHealth, promotionState } from "@/lib/configurations/robot";
+import { clockText, promotionState } from "@/lib/configurations/robot";
 import { routes } from "@/lib/configurations/routes";
 import type { Configuration, ConvoyWorkspace, EvalRun, Robot, RobotRole } from "@/lib/configurations/types";
 import { AppShell, type Crumb } from "../AppShell";
@@ -12,7 +12,7 @@ import { HealthBadge, ProvenanceBadge, RoleBadge } from "../Badges";
 import { useNow, useQueryState } from "../hooks";
 import { Icon } from "../Icons";
 import { useLiveRefresh, useLiveRobot } from "../LiveDeviceProvider";
-import { Notice, WorkspaceNotice, WorkspaceSourceNotice } from "../Notice";
+import { Notice, WorkspaceNotice } from "../Notice";
 import { PageHeader } from "../PageHeader";
 import { LoadingState, NotFoundState } from "../States";
 import { TabPanel, Tabs, useQueryTab, type TabItem } from "../Tabs";
@@ -57,8 +57,8 @@ function RobotDashboard({ workspace, configuration, robot }: { workspace: Convoy
   const test = robot.role === "test";
   const bound = !!robot.deviceId;
   const revision = getRevision(configuration, robot.rev);
+  // Displayed health: stored or live health raised by the flags in effect (the same rule as every page).
   const readings = robotReadings(robot, revision, live, now);
-  const health = displayHealth(readings);
   const runs = runsFor(workspace, { robotId: robot.id });
   const traces = tracesFor(workspace, robot.id);
   const tabs: TabItem[] = test
@@ -130,9 +130,8 @@ function RobotDashboard({ workspace, configuration, robot }: { workspace: Convoy
 
   return <AppShell crumbs={[{ label: "Configurations", href: routes.index() }, { label: configuration.name, href: routes.configuration(configuration.id) }, { label: robot.name }]} context={<RoleBadge role={robot.role} />}>
     <PageHeader eyebrow={test ? "Test robot" : "Production robot"} title={robot.name} lede={lede} meta={meta} actions={actions}
-      badges={<><RoleBadge role={robot.role} /><HealthBadge health={health.health} />{readings.provenance.kind !== "not-reported" && <ProvenanceBadge provenance={readings.provenance} now={now} />}</>} />
-    <WorkspaceSourceNotice />
-    <WorkspaceNotice workspace={workspace} configId={configuration.id} live={{ [robot.id]: live }} />
+      badges={<><RoleBadge role={robot.role} /><HealthBadge health={readings.health} />{readings.provenance.kind !== "not-reported" && <ProvenanceBadge provenance={readings.provenance} now={now} />}</>} />
+    <WorkspaceNotice workspace={workspace} configId={configuration.id} />
     {change && <div ref={changeRef} tabIndex={-1} className="rb-change">
       <Notice tone="info" icon="check" action={<>{change.action}<button className="cfg-btn-text" type="button" onClick={() => setChange(null)}>Dismiss</button></>}>{change.text}</Notice>
     </div>}

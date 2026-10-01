@@ -2,14 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   ALL_LOGS, attentionSummary, cadenceLabel, DEFAULT_ROBOT_SORT, filterLogs, filterRobotRows, isSilent, latencyTicks, logFacets, needsAttention, nextRobotSort, niceTicks,
-  parseRobotFilter, productionKpis, revisionGate, robotFilterCounts, robotRows, robotSortAccessor, seriesWindowLabel, sortRobotRows, sparkReferences, sparkY,
+  parseRobotFilter, productionKpis, revisionGate, robotFilterCounts, robotRows, robotSortValue, seriesWindowLabel, sortRobotRows, sparkReferences, sparkY,
   sparkZone, telemetryDomain, triageRank, weakestProvenance,
 } from "../../src/lib/configurations/dashboard";
 import { flagRobot } from "../../src/lib/configurations/mutations";
 import { mapSnapshot } from "../../src/lib/configurations/live";
 import type { LiveBinding } from "../../src/lib/configurations/live";
 import { createSampleWorkspace } from "../../src/lib/configurations/sample";
-import { flaggedRobots, getConfiguration, logsFor } from "../../src/lib/configurations/selectors";
+import { attentionRobots, getConfiguration, logsFor } from "../../src/lib/configurations/selectors";
+import { sortRows } from "../../src/lib/configurations/table";
 import type { ConvoyWorkspace } from "../../src/lib/configurations/types";
 import type { PortalSnapshot } from "../../src/lib/portal/types";
 
@@ -56,6 +57,7 @@ test("rows: a bound robot shows measured values only while it reports", () => {
   assert.deepEqual([live.edge.ms?.p50, live.edge.ms?.p95, live.edge.provenance.kind], [210, 650, "measured"]);
   const offline = robotRows(ws, hybrid, { "lab-bench": binding(snapshot({ online: false })) }, NOW)[0];
   assert.equal(offline.readings.health, "offline");
+  assert.equal(offline.readings.baseHealth, "offline");
   assert.equal(offline.reporting, false);
   assert.equal(offline.current, null, "an offline device's last values are not shown as current");
   assert.equal(offline.edge.ms, null);
@@ -85,26 +87,33 @@ test("sort: bound robot pinned first, missing values last in both directions, ti
   const withSilent = robotRows(attached, getConfiguration(attached, "hybrid")!, {}, NOW);
   assert.equal(ids(sortRobotRows(withSilent, { key: "power", dir: "desc" })).at(-1), "unit-18");
   assert.equal(ids(sortRobotRows(withSilent, { key: "power", dir: "asc" })).at(-1), "unit-18");
-  const accessor = robotSortAccessor("fallback", "desc");
-  assert.equal(accessor(withSilent.find(row => row.robot.id === "unit-18")!), Number.NEGATIVE_INFINITY);
-  assert.equal(robotSortAccessor("fallback", "asc")(withSilent.find(row => row.robot.id === "unit-18")!), Number.POSITIVE_INFINITY);
+  // The table re-sorts with the column's plain value (no sentinel): missing stays last both ways, and the order matches.
+  assert.equal(robotSortValue(withSilent.find(row => row.robot.id === "unit-18")!, "fallback"), null);
+  for (const dir of ["asc", "desc"] as const) {
+    const sorted = sortRobotRows(withSilent, { key: "fallback", dir });
+    assert.deepEqual(ids(sortRows(sorted, row => robotSortValue(row, "fallback"), dir, row => row.bound)), ids(sorted), dir);
+    assert.equal(ids(sorted).at(-1), "unit-18", dir);
+  }
   assert.deepEqual(nextRobotSort(DEFAULT_ROBOT_SORT, "health"), { key: "health", dir: "asc" });
   assert.deepEqual(nextRobotSort(DEFAULT_ROBOT_SORT, "name"), { key: "name", dir: "asc" });
   assert.deepEqual(nextRobotSort(DEFAULT_ROBOT_SORT, "temp"), { key: "temp", dir: "desc" });
 });
 
-test("a manual flag triages a robot without changing its stored health", () => {
+test("a manual flag raises the shown health; filter, rank, row and banner follow it, the stored health stays", () => {
   const flagged = flagRobot(fresh(), "unit-07", { label: "Gripper slipping", note: "Slipped twice on bin 4", severity: "attention", by: "operator@example.test" }, NOW);
   const rows = robotRows(flagged, getConfiguration(flagged, "hybrid")!, {}, NOW);
   const unit07 = rows.find(row => row.robot.id === "unit-07")!;
-  assert.equal(unit07.readings.health, "healthy", "stored health is the document's");
+  assert.deepEqual([unit07.readings.health, unit07.readings.baseHealth], ["attention", "healthy"], "shown health follows the flag; the document's health is kept as the base");
+  assert.equal(unit07.reporting, true, "a flag does not stop a robot from reporting");
   assert.equal(needsAttention(unit07), true);
   assert.equal(triageRank(unit07), 3);
   assert.deepEqual(ids(filterRobotRows(rows, "attention")), ["unit-07", "unit-08", "unit-16"]);
   assert.deepEqual(ids(sortRobotRows(rows, DEFAULT_ROBOT_SORT)).slice(0, 4), ["lab-bench", "unit-07", "unit-08", "unit-16"]);
+  const banner = attentionSummary(attentionRobots(flagged, "hybrid", {}, NOW));
+  assert.deepEqual(banner.attention.map(line => line.robot.id), ids(filterRobotRows(rows, "attention")), "the banner lists exactly the Needs attention rows");
   const warned = flagRobot(fresh(), "unit-02", { label: "Camera smudge", note: "Wrist camera needs cleaning" }, NOW);
   const unit02 = robotRows(warned, getConfiguration(warned, "hybrid")!, {}, NOW).find(row => row.robot.id === "unit-02")!;
-  assert.deepEqual([needsAttention(unit02), triageRank(unit02)], [false, 2], "a warning ranks with Degraded");
+  assert.deepEqual([unit02.readings.health, needsAttention(unit02), triageRank(unit02)], ["degraded", false, 2], "a warning shows as Degraded");
 });
 
 test("KPIs: counts from the production robots, pooled figures from the stored summary", () => {
@@ -192,13 +201,18 @@ test("promotion gate: the latest gated suite run of the revision decides", () =>
   assert.equal(revisionGate(ws, getConfiguration(ws, "edge-only")!, "r1").passed, false, "a timing run is not a gate decision");
 });
 
-test("attention banner: needs attention first, warnings apart, one leading flag per robot", () => {
-  const summary = attentionSummary(flaggedRobots(ws, "hybrid", {}, NOW));
-  assert.deepEqual(summary.attention.map(line => [line.robot.id, line.flag.label, line.more]), [["unit-08", "Near thermal throttle", 0], ["unit-16", "Cloud link degraded", 0]]);
-  assert.deepEqual(summary.warning.map(line => [line.robot.id, line.flag.label]), [["unit-13", "Power peaks"]]);
-  const hot = attentionSummary(flaggedRobots(ws, "hybrid", { "lab-bench": binding(snapshot({ temp: 99.4 })) }, NOW));
+test("attention banner: needs attention first, warnings apart, one leading reason per robot", () => {
+  const summary = attentionSummary(attentionRobots(ws, "hybrid", {}, NOW));
+  assert.deepEqual(summary.attention.map(line => [line.robot.id, line.label, line.more]), [["unit-08", "Near thermal throttle", 0], ["unit-16", "Cloud link degraded", 0]]);
+  assert.deepEqual(summary.warning.map(line => [line.robot.id, line.label]), [["unit-13", "Power peaks"]]);
+  assert.equal(summary.attention[0].detail, "Jetson SoC 97.6 °C, at or above the 97 °C attention rule (software throttle at 99 °C)");
+  const hot = attentionSummary(attentionRobots(ws, "hybrid", { "lab-bench": binding(snapshot({ temp: 99.4 })) }, NOW));
   assert.equal(hot.attention[0].robot.id, "lab-bench", "a measured flag joins the banner");
-  assert.equal(hot.attention[0].flag.provenance.kind, "measured");
+  assert.equal(hot.attention[0].provenance.kind, "measured");
+  // A robot whose stored health needs attention without a flag is listed with its health reason.
+  const declared: ConvoyWorkspace = { ...ws, robots: ws.robots.map(robot => robot.id === "unit-02" ? { ...robot, health: "attention", healthReason: "Bin sensor misread" } : robot) };
+  const line = attentionSummary(attentionRobots(declared, "hybrid", {}, NOW)).attention.find(item => item.robot.id === "unit-02")!;
+  assert.deepEqual([line.label, line.detail, line.more], ["Bin sensor misread", "Bin sensor misread", 0]);
 });
 
 test("log filters: level, source and robot combine", () => {

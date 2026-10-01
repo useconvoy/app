@@ -119,7 +119,13 @@ test("tabs follow the URL, the keyboard and the browser history", async ({ page 
   await page.keyboard.press("Home");
   await expect(tab(page, "Overview")).toHaveAttribute("aria-selected", "true");
   await expect(page).toHaveURL(/\/hybrid\/?$/);
+  // The arrow keys replace the history entry the click made: Back leaves the tabs instead of stepping through each one.
+  await page.keyboard.press("End");
+  await expect(page).toHaveURL(/\?tab=spec$/);
   await page.goBack();
+  await expect(page).toHaveURL(/\/hybrid\/?$/);
+  await expect(tab(page, "Overview")).toHaveAttribute("aria-selected", "true");
+  await page.goForward();
   await expect(tab(page, "Specification")).toHaveAttribute("aria-selected", "true");
   await page.goto("/app/configurations/hybrid?tab=logs");
   await expect(tab(page, "Logs")).toHaveAttribute("aria-selected", "true");
@@ -339,10 +345,16 @@ test("the connected device reads Not reported when the device is offline or cann
   await mock(page, { device: "offline" });
   await page.goto("/app/configurations/hybrid");
   const device = page.getByRole("region", { name: "Connected device · Lab bench" });
-  await expect(device.locator(".portal-device-board")).toContainText("Offline");
+  // Ten minutes without a report: the "No recent report" rule makes the shared health Needs attention on every surface.
+  await expect(device.locator(".portal-device-board")).toContainText("Needs attention");
   await expect(device.locator(".cfg-kpi .portal-metric-value")).toHaveText(["Not reported", "Not reported", "Not reported", "Not reported"]);
   await expect(device.getByRole("status").filter({ hasText: "is offline" })).toContainText("Lab bench is offline (No recent live contact). Last contact");
-  await expect(robotsTable(page).getByRole("row").filter({ hasText: "Lab bench" })).toContainText("Not reported");
+  const benchRow = robotsTable(page).getByRole("row").filter({ hasText: "Lab bench" });
+  await expect(benchRow).toContainText("Not reported");
+  await expect(benchRow).toContainText("Needs attention");
+  await expect(page.locator(".cd-banner")).toContainText("3 robots need attention:");
+  await expect(page.locator(".cd-banner").getByRole("link", { name: "Lab bench" })).toBeVisible();
+  await expect(page.getByRole("note").filter({ hasText: "Values marked Sample" })).toContainText("Lab bench is bound to a Jetson Orin Nano Super 8 GB, which is offline right now.");
 
   await page.unrouteAll({ behavior: "ignoreErrors" });
   await mock(page, { device: "unavailable" });

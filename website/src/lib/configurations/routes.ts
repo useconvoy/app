@@ -25,5 +25,16 @@ export const routes = {
   website: () => "/",
 } as const;
 
+/**
+ * A link target inside the workspace app: `/app` or a path below it, with an
+ * optional query and fragment, no scheme, host, backslash, `..` segment or
+ * whitespace. Document-supplied links (compatibility actions) render only when
+ * this holds.
+ */
+export function isInternalHref(value: unknown): value is string {
+  return typeof value === "string" && value.length <= 512 && /^\/app(?:[/?#]|$)/.test(value)
+    && !/[\s\\]|\/\/|(?:^|\/)\.\.(?:[/?#]|$)/.test(value) && !/[\u0000-\u001f\u007f]/.test(value);
+}
+
 /** Query parameters the pages read: tab selection and the trace / rollout drawers. */
 export const QUERY = { tab: "tab", trace: "trace", rollout: "rollout", step: "step", from: "from" } as const;

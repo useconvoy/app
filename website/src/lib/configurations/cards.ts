@@ -2,10 +2,11 @@
  * View helpers for the Configurations index (`/app/configurations`): the URL
  * filters, a card's stack rows, one-line verdict, robot counts and attention
  * summary, and the labels and links of the activity feed. Pure functions over the
- * workspace; live flags come in through `flaggedRobots` results.
+ * workspace; robots that need attention come from `attentionRobots`, the same
+ * selector the dashboard banner and the health badges use.
  */
 import { routes } from "./routes";
-import type { ConfigFilter, ConfigSort, FlaggedRobot } from "./selectors";
+import type { AttentionRobot, ConfigFilter, ConfigSort } from "./selectors";
 import { currentRevision, getConfiguration, getRobot, getRun, getSuite, latestGateRun, robotHref, robotsFor, runHref } from "./selectors";
 import type { ActivityEvent, ActivityKind, Configuration, ConvoyWorkspace, Provenance } from "./types";
 
@@ -74,14 +75,18 @@ export function robotCountsLabel(ws: ConvoyWorkspace, configId: string): string 
   return `${part("test", "Test")} · ${part("production", "Production")}`;
 }
 
-/** Robots that need attention and robots with warnings, plus "Unit 08: Near thermal throttle · …" for a title. */
-export function attentionCounts(flagged: readonly FlaggedRobot[]): { attention: number; warning: number; attentionLabel: string; warningLabel: string; detail: string } {
-  const attention = flagged.filter(entry => entry.severity === "attention").length, warning = flagged.length - attention;
+/**
+ * Robots that need attention (displayed health Needs attention) and robots with
+ * warnings (Degraded), plus "Unit 08: Near thermal throttle · …" for a title.
+ * Pass `attentionRobots(…)`: the counts then match the health badges.
+ */
+export function attentionCounts(entries: readonly AttentionRobot[]): { attention: number; warning: number; attentionLabel: string; warningLabel: string; detail: string } {
+  const attention = entries.filter(entry => entry.severity === "attention").length, warning = entries.length - attention;
   return {
     attention, warning,
     attentionLabel: `${attention} ${attention === 1 ? "needs" : "need"} attention`,
     warningLabel: `${warning} ${warning === 1 ? "warning" : "warnings"}`,
-    detail: flagged.map(entry => `${entry.robot.name}: ${entry.flags[0]?.label ?? "Flagged"}`).join(" · "),
+    detail: entries.map(entry => `${entry.robot.name}: ${entry.label}`).join(" · "),
   };
 }
 

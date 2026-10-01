@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { currentRevision, flaggedRobots, getConfiguration, getRevision, robotsFor, runHref, successShare, useWorkspace } from "@/lib/configurations/client";
+import { attentionRobots, currentRevision, getConfiguration, getRevision, robotsFor, runHref, successShare, useWorkspace } from "@/lib/configurations/client";
 import { ALL_LOGS, attentionSummary, DEFAULT_ROBOT_SORT, parseRobotFilter, revisionGate, robotRows } from "@/lib/configurations/dashboard";
 import type { LogFilter, RobotFilter, RobotSort } from "@/lib/configurations/dashboard";
 import { fmtCount, fmtDateTime, fmtShare, runLabel } from "@/lib/configurations/format";
@@ -14,7 +14,7 @@ import { ConfigStatusBadges, ProvenanceBadge } from "../Badges";
 import { useNow, useQueryState } from "../hooks";
 import { Icon } from "../Icons";
 import { useLiveRefresh, useLiveRobots } from "../LiveDeviceProvider";
-import { Notice, WorkspaceNotice, WorkspaceSourceNotice } from "../Notice";
+import { Notice, WorkspaceNotice } from "../Notice";
 import type { NoticeTone } from "../Notice";
 import { PageHeader } from "../PageHeader";
 import { useSession } from "../Session";
@@ -34,12 +34,15 @@ type Dialog = { kind: "add" } | { kind: "run" } | { kind: "promote"; rev: string
 interface Flash { configId: string; tone: NoticeTone; content: ReactNode }
 const PREFIX = "cd";
 
-/** "2 robots need attention: Unit 08 … / 1 warning: Unit 13 …", each robot linked to its page. */
-function AttentionBanner({ workspace, config, live, now }: { workspace: ConvoyWorkspace; config: Configuration; live: Parameters<typeof flaggedRobots>[2]; now: number | null }) {
-  const { attention, warning } = attentionSummary(flaggedRobots(workspace, config.id, live, now));
+/**
+ * "2 robots need attention: Unit 08 … / 1 warning: Unit 13 …", each robot linked to its page. The
+ * robots are those whose displayed health is Needs attention or Degraded (`attentionRobots`).
+ */
+function AttentionBanner({ workspace, config, live, now }: { workspace: ConvoyWorkspace; config: Configuration; live: Parameters<typeof attentionRobots>[2]; now: number | null }) {
+  const { attention, warning } = attentionSummary(attentionRobots(workspace, config.id, live, now));
   if (!attention.length && !warning.length) return null;
   const lines = (items: typeof attention) => items.map((line, i) => <Fragment key={line.robot.id}>
-    {i > 0 && <br />}<Link href={routes.robot(config.id, line.robot.id)}>{line.robot.name}</Link> {line.flag.detail.replace(/\.$/, "")}{line.more ? ` (and ${line.more} more)` : ""}. <ProvenanceBadge provenance={line.flag.provenance} now={now} />
+    {i > 0 && <br />}<Link href={routes.robot(config.id, line.robot.id)}>{line.robot.name}</Link> {line.detail.replace(/\.$/, "")}{line.more ? ` (and ${line.more} more)` : ""}.{line.provenance.kind !== "not-reported" && <> <ProvenanceBadge provenance={line.provenance} now={now} /></>}
   </Fragment>);
   return <div className="cd-banner"><Notice tone="warning" icon="flag"
     action={attention.length > 0 ? <Link className="btn btn-secondary cfg-btn" href={`${routes.configuration(config.id, "robots")}&robots=attention`}>Show in robots table</Link> : undefined}>
@@ -132,8 +135,7 @@ export function ConfigDashboardPage({ configId }: { configId: string }) {
         <button className="btn btn-primary cfg-btn" type="button" onClick={() => setDialog({ kind: "add" })}>Add robot <Icon name="plus" /></button>
       </>}
       meta={meta} />
-    <WorkspaceSourceNotice />
-    <WorkspaceNotice workspace={workspace} configId={configuration.id} live={live} />
+    <WorkspaceNotice workspace={workspace} configId={configuration.id} />
     {flash?.configId === configuration.id && <div ref={flashRef} tabIndex={-1} className="cd-flash">
       <Notice tone={flash.tone} action={<button className="cfg-btn-text" type="button" onClick={() => setFlash(null)}>Dismiss</button>}>{flash.content}</Notice>
     </div>}

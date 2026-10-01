@@ -1,6 +1,6 @@
 /**
- * Pure document changes for the UI actions (create a configuration, attach a
- * robot, flag or clear a flag, queue an evaluation). Each returns a new
+ * Pure document changes for the UI actions (create a configuration or add a
+ * revision, attach a robot, flag or clear a flag, queue an evaluation). Each returns a new
  * workspace and appends an activity event; pass them to `save()` as updaters:
  *
  *   await save(current => attachRobot(current, "unit-18", { configId, role: "test", site, rev }, Date.now()));
@@ -9,28 +9,42 @@
  * time of the change). They never add measured values.
  */
 import { ID_PATTERN } from "./types";
-import type { ActivityEvent, ConfigRevision, Configuration, ConvoyWorkspace, EvalRun, Flag, FlagSeverity, RobotRole, StoredProvenance } from "./types";
+import type { ActivityEvent, ConfigRevision, Configuration, ConvoyWorkspace, EvalRun, Flag, FlagSeverity, Robot, RobotRole, StoredProvenance } from "./types";
+import { RESERVED_KEYS } from "./validate";
 
 const recorded = (at: string, source: string): StoredProvenance => ({ kind: "recorded", at, source });
 const iso = (now: number | Date) => new Date(now).toISOString();
+/** Longest id (`ID_PATTERN`). */
+const MAX_ID = 64;
+/** The activity feed keeps the newest events only, so the document does not grow with every change. */
+export const ACTIVITY_LIMIT = 200;
 
 /** Route-safe id from a name: "Bimanual station · Edge" → "bimanual-station-edge". */
 export function slugify(text: string): string {
   return text.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "item";
 }
-/** `base` (slugified) made unique among `taken` with -2, -3, … ("new" is reserved for a route). */
+/**
+ * `base` (slugified) made unique among `taken` with -2, -3, …, never longer than
+ * 64 characters ("new" is reserved for a route; `__proto__`, `constructor` and
+ * `prototype` are never ids).
+ */
 export function uniqueId(base: string, taken: Iterable<string>): string {
   const used = new Set(taken);
   const root = ID_PATTERN.test(base) ? base : slugify(base);
-  if (!used.has(root) && root !== "new") return root;
-  for (let i = 2; ; i++) { const candidate = `${root.slice(0, 60)}-${i}`; if (!used.has(candidate)) return candidate; }
+  if (!used.has(root) && root !== "new" && !RESERVED_KEYS.has(root)) return root;
+  for (let i = 2; ; i++) {
+    const suffix = `-${i}`;
+    const candidate = `${root.slice(0, MAX_ID - suffix.length)}${suffix}`;
+    if (!used.has(candidate)) return candidate;
+  }
 }
 export function nextRunNumber(ws: ConvoyWorkspace): number {
   return ws.runs.reduce((max, run) => Math.max(max, run.number), 0) + 1;
 }
 function withActivity(ws: ConvoyWorkspace, event: Omit<ActivityEvent, "id" | "provenance">, now: number | Date): ConvoyWorkspace {
   const id = uniqueId(`act-${event.kind}-${new Date(now).getTime().toString(36)}`, ws.activity.map(item => item.id));
-  return { ...ws, meta: { ...ws.meta, updatedAt: iso(now) }, activity: [{ ...event, id, provenance: recorded(event.at, "Workspace change") }, ...ws.activity] };
+  const activity = [{ ...event, id, provenance: recorded(event.at, "Workspace change") }, ...ws.activity].slice(0, ACTIVITY_LIMIT);
+  return { ...ws, meta: { ...ws.meta, updatedAt: iso(now) }, activity };
 }
 const touch = (config: Configuration, now: number | Date): Configuration => ({ ...config, updatedAt: iso(now) });
 
@@ -45,6 +59,23 @@ export function createConfiguration(ws: ConvoyWorkspace, input: { name: string; 
   const workspace = withActivity({ ...ws, configurations: [...ws.configurations, configuration] },
     { at, kind: "configuration-created", subject: { type: "configuration", id: configuration.id }, configId: configuration.id, message: `${configuration.name} ${configuration.candidateRev} created as a ${configuration.status === "draft" ? "draft" : configuration.status}` }, now);
   return { workspace, configuration };
+}
+
+/**
+ * Adds the next revision to a configuration as the revision under test. The
+ * production revision and every robot keep the revision they run; the name and
+ * purpose change for the whole configuration when given. `from` names the
+ * revision it started from, for the activity line.
+ */
+export function addRevision(ws: ConvoyWorkspace, configId: string, input: { revision: ConfigRevision; name?: string; purpose?: string; from?: string | null }, now: number | Date): ConvoyWorkspace {
+  const config = ws.configurations.find(item => item.id === configId);
+  if (!config) throw new Error(`Unknown configuration "${configId}".`);
+  if (config.revisions.some(revision => revision.rev === input.revision.rev)) throw new Error(`${config.name} already has a revision ${input.revision.rev}.`);
+  const at = iso(now);
+  const name = input.name?.trim() || config.name;
+  const updated: Configuration = { ...touch(config, now), name, purpose: input.purpose ?? config.purpose, revisions: [...config.revisions, input.revision], candidateRev: input.revision.rev };
+  return withActivity({ ...ws, configurations: ws.configurations.map(item => item.id === configId ? updated : item) },
+    { at, kind: "configuration-created", subject: { type: "configuration", id: configId }, configId, message: `${name} ${input.revision.rev} created${input.from ? ` from ${input.from}` : ""}` }, now);
 }
 
 /** Attaches a registered robot to a configuration revision with a role and site. */
@@ -96,13 +127,23 @@ export function flagRobot(ws: ConvoyWorkspace, robotId: string, input: { label: 
     { at, kind: "flagged", subject: { type: "robot", id: robotId }, configId: robot.configId, message: `${robot.name} flagged: ${input.label}` }, now);
 }
 
-/** Removes a stored flag. */
+/**
+ * Removes a stored flag. When the robot's stored health is explained by that
+ * flag (Needs attention or Degraded with the flag's label as its reason), the
+ * health follows: it takes the next remaining flag, or Healthy when none is
+ * left. A declared health with another reason, Offline and Not reported stay.
+ */
 export function clearFlag(ws: ConvoyWorkspace, robotId: string, flagId: string, now: number | Date): ConvoyWorkspace {
   const robot = ws.robots.find(item => item.id === robotId);
   const flag = robot?.flags.find(item => item.id === flagId);
   if (!robot || !flag) throw new Error(`Unknown flag "${flagId}".`);
   const at = iso(now);
-  return withActivity({ ...ws, robots: ws.robots.map(item => item.id === robotId ? { ...item, flags: item.flags.filter(entry => entry.id !== flagId) } : item) },
+  const flags = robot.flags.filter(entry => entry.id !== flagId);
+  const explained = (robot.health === "attention" || robot.health === "degraded") && robot.healthReason === flag.label;
+  const next = flags.find(entry => entry.severity === "attention") ?? flags.find(entry => entry.severity === "warning") ?? null;
+  const health: Pick<Robot, "health" | "healthReason"> = !explained ? { health: robot.health, healthReason: robot.healthReason ?? null }
+    : next ? { health: next.severity === "attention" ? "attention" : "degraded", healthReason: next.label } : { health: "healthy", healthReason: null };
+  return withActivity({ ...ws, robots: ws.robots.map(item => item.id === robotId ? { ...item, ...health, flags } : item) },
     { at, kind: "flag-cleared", subject: { type: "robot", id: robotId }, configId: robot.configId, message: `${robot.name}: cleared “${flag.label}”` }, now);
 }
 

@@ -6,6 +6,7 @@
  * "measured", and a robot with a live device binding stores no telemetry.
  * Unknown keys are reported as warnings and kept.
  */
+import { isInternalHref } from "./routes";
 import { CONFIGURED_DEVICE, ID_PATTERN, WORKSPACE_SCHEMA_VERSION } from "./types";
 import type { ConvoyWorkspace } from "./types";
 
@@ -29,12 +30,24 @@ interface Field { check: Check; optional: boolean }
 
 const isRecord = (value: unknown): value is Data => typeof value === "object" && value !== null && !Array.isArray(value);
 const join = (path: string, key: string | number) => typeof key === "number" ? `${path}[${key}]` : path ? `${path}.${key}` : key;
+/**
+ * Keys and ids that name parts of every JavaScript object. They are refused as
+ * object keys and as ids (ids become map keys in the UI), so no document value can
+ * reach or shadow `Object.prototype`.
+ */
+export const RESERVED_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
+const own = (value: Data, key: string) => Object.hasOwn(value, key);
 
 /* ---------- primitive checks ---------- */
 
 const str: Check = (v, p, ctx) => { if (typeof v !== "string" || !v.trim()) ctx.issue(p, "expected a non-empty string"); };
 const text: Check = (v, p, ctx) => { if (typeof v !== "string") ctx.issue(p, "expected a string"); };
-const id: Check = (v, p, ctx) => { if (typeof v !== "string" || !ID_PATTERN.test(v)) ctx.issue(p, "expected an id of 1–64 letters, digits, '_' or '-'"); };
+const id: Check = (v, p, ctx) => {
+  if (typeof v !== "string" || !ID_PATTERN.test(v)) return ctx.issue(p, "expected an id of 1–64 letters, digits, '_' or '-'");
+  if (RESERVED_KEYS.has(v)) ctx.issue(p, `"${v}" is reserved and cannot be an id`);
+};
+/** A link target inside the workspace app (`/app/…`); anything else is refused, so a document cannot add outside or script links. */
+const internalHref: Check = (v, p, ctx) => { if (!isInternalHref(v)) ctx.issue(p, "expected a link inside this app, starting with /app/"); };
 const bool: Check = (v, p, ctx) => { if (typeof v !== "boolean") ctx.issue(p, "expected true or false"); };
 const time: Check = (v, p, ctx) => { if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(v) || !Number.isFinite(Date.parse(v))) ctx.issue(p, "expected an ISO 8601 date-time"); };
 function num(options: { min?: number; max?: number; integer?: boolean } = {}): Check {
@@ -83,10 +96,14 @@ function obj(shape: Record<string, Field>, extra?: (value: Data, path: string, c
   return (v, p, ctx) => {
     if (!isRecord(v)) return ctx.issue(p, "expected an object");
     for (const [key, field] of Object.entries(shape)) {
-      if (v[key] === undefined) { if (!field.optional) ctx.issue(join(p, key), "is required"); continue; }
-      field.check(v[key], join(p, key), ctx);
+      const value = own(v, key) ? v[key] : undefined;
+      if (value === undefined) { if (!field.optional) ctx.issue(join(p, key), "is required"); continue; }
+      field.check(value, join(p, key), ctx);
     }
-    for (const key of Object.keys(v)) if (!(key in shape)) ctx.warn(join(p, key), "is not part of schema version 1 and is ignored");
+    for (const key of Object.keys(v)) {
+      if (RESERVED_KEYS.has(key)) ctx.issue(join(p, key), "is a reserved key and is not allowed");
+      else if (!Object.hasOwn(shape, key)) ctx.warn(join(p, key), "is not part of schema version 1 and is ignored");
+    }
     extra?.(v, p, ctx);
   };
 }
@@ -94,7 +111,7 @@ function record(keys: readonly string[], item: Check): Check {
   return (v, p, ctx) => {
     if (!isRecord(v)) return ctx.issue(p, "expected an object");
     for (const [key, value] of Object.entries(v)) {
-      if (!keys.includes(key)) ctx.issue(join(p, key), `expected one of ${keys.map(k => `"${k}"`).join(", ")}`);
+      if (!keys.includes(key) || RESERVED_KEYS.has(key)) ctx.issue(join(p, key), `expected one of ${keys.map(k => `"${k}"`).join(", ")}`);
       else item(value, join(p, key), ctx);
     }
   };
@@ -170,7 +187,7 @@ const flagRules = obj({
 });
 const compatibility = obj({
   id: req(id), verdict: req(oneOf(["pass", "warn", "block", "pending"])), title: req(str), detail: req(str), evidence: req(provenance),
-  action: opt(obj({ label: req(str), href: req(nullableString) })),
+  action: opt(obj({ label: req(str), href: req(nullable(internalHref)) })),
 });
 const revision = obj({
   rev: req(id), createdAt: req(time), note: opt(str), robot: req(robotSpec), edgeHardware: req(edgeHardware),

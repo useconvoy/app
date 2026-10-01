@@ -2,11 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { WorkspaceStore } from "../../src/lib/configurations/client";
 import {
-  addRevision, applyDraft, buildCatalog, checkSummary, compatibilityFor, createOutcome, describeAction, describeEscalation, describeThermal, describeTrigger, draftFromConfiguration,
+  applyDraft, buildCatalog, checkSummary, compatibilityFor, createOutcome, describeAction, describeEscalation, describeThermal, describeTrigger, draftFromConfiguration,
   draftIssues, draftRevision, initialDraft, modelKey, namesModel, parseStep, residentMemory, setCloudModel, setPowerMode, setRouteMode, setSaveAs, startFrom, stepValue,
   toggleEdgeModel, updateRouting,
 } from "../../src/lib/configurations/draft";
 import type { ConfigurationDraft } from "../../src/lib/configurations/draft";
+import { addRevision } from "../../src/lib/configurations/mutations";
 import { createSampleWorkspace } from "../../src/lib/configurations/sample";
 import type { CompatibilityCheck, ConvoyWorkspace } from "../../src/lib/configurations/types";
 import { validateWorkspace } from "../../src/lib/configurations/validate";

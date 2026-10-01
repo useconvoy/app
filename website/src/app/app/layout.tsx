@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { LiveDeviceProvider } from "@/components/configurations/LiveDeviceProvider";
 import "@/styles/workspace.css";
 import "@/styles/console.css";
 import "@/styles/portal.css";
@@ -14,7 +13,10 @@ export const metadata: Metadata = {
   description: "Deploy robot applications, run simulations, and observe device inference.",
   robots: { index: false, follow: false, googleBot: { index: false, follow: false } },
 };
-/** One live-device poller for the whole workspace; it polls only while a page shows a device-bound robot. */
+/**
+ * The workspace styles. The Configurations live-device poller is mounted inside its
+ * session gate (src/components/configurations/Session.tsx), so it ends with the session.
+ */
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
-  return <LiveDeviceProvider>{children}</LiveDeviceProvider>;
+  return <>{children}</>;
 }

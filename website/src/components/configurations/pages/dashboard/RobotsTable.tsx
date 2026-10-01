@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { currentRevision } from "@/lib/configurations/client";
-import { filterRobotRows, isSilent, needsAttention, robotFilterCounts, robotSortAccessor, ROBOT_SORT_FIRST, sortRobotRows } from "@/lib/configurations/dashboard";
+import { filterRobotRows, isSilent, needsAttention, robotFilterCounts, robotSortValue, ROBOT_SORT_FIRST, sortRobotRows } from "@/lib/configurations/dashboard";
 import type { RobotFilter, RobotRow, RobotSort, RobotSortKey } from "@/lib/configurations/dashboard";
 import { fmtDateTime, fmtMs, fmtNumber, fmtPct, fmtRelative, fmtUnit } from "@/lib/configurations/format";
 import type { Configuration } from "@/lib/configurations/types";
@@ -27,7 +27,7 @@ function lastReport(row: RobotRow, now: number | null): ReactNode {
   return <time dateTime={seen} title={fmtDateTime(seen)}>{now === null ? fmtDateTime(seen) : fmtRelative(seen, now)}</time>;
 }
 function silentReason(row: RobotRow): string {
-  if (row.bound) return `Not reported · ${row.readings.healthReason ?? "no device report"}`;
+  if (row.bound) return `Not reported · ${row.readings.baseHealthReason ?? "no device report"}`;
   if (row.robot.kind === "simulator") return "Not reported · simulators send no device telemetry";
   return "Not reported · no telemetry or latency reported yet";
 }
@@ -41,13 +41,12 @@ function FlagsCell({ row, onFlag }: { row: RobotRow; onFlag: (robotId: string) =
       : <>Flag<span className="cfg-sr"> {row.robot.name}</span></>}
   </button>;
 }
-/** Under the health badge: the health reason, else the leading flag (a manual flag leaves a stored robot's health as it was). */
+/** Under the health badge: the flag that set the displayed health (with the flag icon), else the health reason. */
 function healthDetail(row: RobotRow): ReactNode {
-  if (row.readings.healthReason) return row.readings.healthReason;
-  const flag = row.readings.flags[0];
-  if (!flag) return null;
-  const more = row.readings.flags.length - 1;
-  return <span className="cfg-flagnote"><Icon name="flag" small />{flag.label}{more > 0 ? ` (and ${more} more)` : ""}</span>;
+  const { healthFlag: flag, healthReason: reason, flags } = row.readings;
+  if (!flag) return reason;
+  const more = flags.length - 1;
+  return <span className="cfg-flagnote"><Icon name="flag" small />{reason ?? flag.label}{more > 0 ? ` (and ${more} more)` : ""}</span>;
 }
 
 /**
@@ -75,7 +74,8 @@ export function RobotsPanel({ config, rows, filter, onFilter, sort, onSort, now,
     { id: "all", label: "All", count: counts.all }, { id: "test", label: "Test", count: counts.test },
     { id: "production", label: "Production", count: counts.production }, { id: "attention", label: "Needs attention", count: counts.attention, icon: "flag" },
   ];
-  const sortable = (key: RobotSortKey) => ({ sort: robotSortAccessor(key, sort.key === key ? sort.dir : ROBOT_SORT_FIRST[key]), firstDir: ROBOT_SORT_FIRST[key] });
+  // DataTable keeps missing values last in both directions; the rows arrive sorted by `sortRobotRows` (ties by name).
+  const sortable = (key: RobotSortKey) => ({ sort: (row: RobotRow) => robotSortValue(row, key), firstDir: ROBOT_SORT_FIRST[key] });
   const evidence = (row: RobotRow) => <ProvenanceBadge provenance={row.readings.provenance} />;
   const columns: Array<Column<RobotRow>> = [
     { key: "name", header: "Robot", ...sortable("name"), cell: row => row.robot.name, detail: row => row.robot.site },

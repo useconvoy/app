@@ -7,7 +7,8 @@ import {
   cadenceLabel, latencyTicks, niceTicks, productionKpis, seriesWindowLabel, sparkReferences, sparkZone, telemetryDomain, weakestProvenance,
 } from "@/lib/configurations/dashboard";
 import type { RobotRow } from "@/lib/configurations/dashboard";
-import type { LiveBinding } from "@/lib/configurations/live";
+import { deviceState } from "@/lib/configurations/live";
+import type { DeviceState as SharedDeviceState, LiveBinding } from "@/lib/configurations/live";
 import { fmtCi, fmtCount, fmtDateTime, fmtFixed, fmtMs, fmtNumber, fmtPct, fmtRange, fmtRelative, provenanceLabel, runLabel } from "@/lib/configurations/format";
 import { routes } from "@/lib/configurations/routes";
 import { CONFIGURED_DEVICE } from "@/lib/configurations/types";
@@ -89,13 +90,11 @@ export function ProductionKpis({ workspace, config, rows, now }: { workspace: Co
 
 /* ---------- connected device ---------- */
 
-type DeviceState = "waiting" | "reporting" | "stale" | "offline" | "unavailable";
-function deviceState(row: RobotRow, binding: LiveBinding | undefined): DeviceState {
-  if (!binding || binding.status === "loading" || binding.status === "unbound") return "waiting";
-  const data = binding.data;
-  if (!data) return "unavailable";
-  if (!data.online) return "offline";
-  return binding.status === "stale" ? "stale" : row.reporting ? "reporting" : "offline";
+type DeviceState = Exclude<SharedDeviceState, "unbound" | "signed-out">;
+/** The shared device state (`deviceState` in live.ts, as in the page notice), with "no binding yet" read as waiting. */
+function deviceStateOf(binding: LiveBinding | undefined): DeviceState {
+  const state = deviceState(binding);
+  return state === "unbound" ? "waiting" : state === "signed-out" ? "unavailable" : state;
 }
 
 /**
@@ -106,7 +105,7 @@ function deviceState(row: RobotRow, binding: LiveBinding | undefined): DeviceSta
 export function ConnectedDevice({ config, row, binding, now, onRefresh }: { config: Configuration; row: RobotRow; binding: LiveBinding | undefined; now: number | null; onRefresh: () => void }) {
   const { robot, readings } = row;
   const data = binding?.data ?? null;
-  const state = deviceState(row, binding);
+  const state = deviceStateOf(binding);
   const shows = state === "reporting" || state === "stale";
   const hardware = (row.revision ?? currentRevision(config)).edgeHardware;
   const mode = hardware.powerModes.find(item => item.id === hardware.powerModeId);
@@ -146,7 +145,7 @@ function DeviceStatus({ state, row, binding, now, onRefresh }: { state: DeviceSt
   if (state === "unavailable") return <Notice tone="warning" action={retry}>{row.robot.name} could not be read{binding?.error ? `: ${binding.error.replace(/\.$/, "")}` : ""}. Its values read Not reported until the device reports.</Notice>;
   if (state === "offline") {
     const seen = row.readings.lastSeenAt;
-    return <Notice tone="warning" action={retry}>{row.robot.name} is offline ({row.readings.healthReason ?? "no recent live contact"}). {seen ? <>Last contact <time dateTime={seen}>{fmtDateTime(seen)}</time>. </> : null}Current values read Not reported.</Notice>;
+    return <Notice tone="warning" action={retry}>{row.robot.name} is offline ({row.readings.baseHealthReason ?? "no recent live contact"}). {seen ? <>Last contact <time dateTime={seen}>{fmtDateTime(seen)}</time>. </> : null}Current values read Not reported.</Notice>;
   }
   if (state === "stale") return <p className="portal-context-note" role="status">The last successful device read was {binding?.data ? fmtRelative(binding.data.fetchedAt, now) : "a while ago"}; the update is stale and Convoy keeps retrying.</p>;
   return null;

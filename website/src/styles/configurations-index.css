@@ -59,6 +59,8 @@
 .ci-issues .cfg-btn-text { min-height: 32px; padding: 0; color: inherit; }
 .ci-review { margin-bottom: 20px; }
 .ci-review .portal-panel { margin-bottom: 0; }
+/* A long "Not measured · …" value wraps inside its fact instead of widening the page. */
+.ci-review .cfg-prov--none { white-space: normal; }
 .ci-review__wide { grid-column: 1 / -1; }
 .portal-facts.ci-facts-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; }
 .ci-dd-prov { display: inline-flex; margin-left: 8px; vertical-align: 1px; }

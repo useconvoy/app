@@ -15,7 +15,7 @@ import { NotReported, OutcomeBadge, PATH_LABEL, PathChip, ProvenanceBadge } from
 import { LegendKey, plotGeometry } from "../../Charts";
 import { Fact } from "../../Facts";
 import { Icon } from "../../Icons";
-import { WorkspaceNotice, WorkspaceSourceNotice } from "../../Notice";
+import { WorkspaceNotice } from "../../Notice";
 import { EmptyState, LoadingState } from "../../States";
 import { usePlatformRead, useReducedMotion, type Remote } from "./hooks";
 import { recordedProvenance } from "./RunSections";
@@ -117,7 +117,6 @@ export function ReplayView({ workspace, run, suite, configuration, pageConfigId,
       </div>
     </div>
     {meta && <p className="portal-updated">{meta}</p>}
-    <WorkspaceSourceNotice />
     <WorkspaceNotice workspace={workspace} configId={pageConfigId} />
     {body}
   </div>;

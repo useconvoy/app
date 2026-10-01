@@ -1,10 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  configurationCounts, configurationSummary, currentRevision, evaluateFlagRules, flaggedRobots, getRevision, latestGateRun, listConfigurations,
+  attentionRobots, configurationCounts, configurationSummary, currentRevision, displayHealth, evaluateFlagRules, getRevision, healthSeverity, latestGateRun, listConfigurations,
   logsFor, nextRevision, recentActivity, resolveRobotRoute, resolveRunRoute, robotHref, robotReadings, robotsFor, rolloutsFor, runHref, runsFor,
   latencyRows, sliceInfo, spansForGroup, timeTicks, tracesFor, unassignedRobots,
 } from "../../src/lib/configurations/selectors";
+import type { ActiveFlag } from "../../src/lib/configurations/selectors";
+import { flagRobot } from "../../src/lib/configurations/mutations";
+import type { ConvoyWorkspace } from "../../src/lib/configurations/types";
 import { fmtCi, fmtDateRange, fmtDateTime, fmtPct, fmtRelative, fmtUnit, fmtUpdated, median, percentile, provenanceLabel, wilson } from "../../src/lib/configurations/format";
 import { mapSnapshot } from "../../src/lib/configurations/live";
 import type { LiveBinding } from "../../src/lib/configurations/live";
@@ -109,18 +112,99 @@ test("readings: stored sample values for unbound robots; measured values only fr
   const warm = robotReadings(bench, getRevision(hybrid, bench.rev), binding(liveSnapshot(97.6)), NOW);
   assert.deepEqual([warm.health, warm.flags[0].label, warm.flags[0].detail], ["attention", "Near thermal throttle", "Jetson SoC 97.6 °C, at or above the 97 °C attention rule (software throttle at 99 °C)"]);
   const offline = robotReadings(bench, getRevision(hybrid, bench.rev), binding(liveSnapshot(46, false)), NOW);
-  assert.equal(offline.health, "offline");
+  assert.deepEqual([offline.health, offline.baseHealth, offline.healthReason], ["offline", "offline", "No recent live contact"]);
+  assert.deepEqual([hot.baseHealth, hot.healthFlag?.label], ["healthy", "Thermal throttling"], "the device is healthy; the flag sets the shown health");
 });
 
-test("flag rules and flagged robots, attention first", () => {
+test("flag rules and the robots that need attention, attention first", () => {
   const rules = currentRevision(ws.configurations[0]).flagRules;
   const reading = { at: new Date(NOW).toISOString(), cpuPct: 50, gpuPct: 50, memAvailableMiB: 500, memTotalMiB: 7620, socTempC: 93, boardPowerW: 24 };
   const flags = evaluateFlagRules(reading, rules, { capW: 25, fallbackPct: 18, lastSeenAt: new Date(NOW - 120_000).toISOString(), now: NOW, provenance: { kind: "measured" }, idPrefix: "x" });
   assert.deepEqual(flags.map(flag => [flag.rule, flag.severity]), [["soc-temp", "warning"], ["board-power", "warning"], ["memory", "warning"], ["fallback", "attention"], ["no-report", "attention"]]);
   assert.deepEqual(evaluateFlagRules(null, null, { provenance: { kind: "measured" }, idPrefix: "x" }), []);
-  assert.deepEqual(flaggedRobots(ws, "hybrid").map(entry => [entry.robot.id, entry.severity]), [["unit-08", "attention"], ["unit-16", "attention"], ["unit-13", "warning"]]);
+  assert.deepEqual(attentionRobots(ws, "hybrid").map(entry => [entry.robot.id, entry.severity, entry.label]), [["unit-08", "attention", "Near thermal throttle"], ["unit-16", "attention", "Cloud link degraded"], ["unit-13", "warning", "Power peaks"]]);
   const bench = ws.robots.find(robot => robot.id === "lab-bench")!;
-  assert.deepEqual(flaggedRobots(ws, "hybrid", { [bench.id]: binding(liveSnapshot(99.6)) }, NOW).map(entry => entry.robot.id), ["lab-bench", "unit-08", "unit-16", "unit-13"]);
+  const hot = attentionRobots(ws, "hybrid", { [bench.id]: binding(liveSnapshot(99.6)) }, NOW);
+  assert.deepEqual(hot.map(entry => entry.robot.id), ["lab-bench", "unit-08", "unit-16", "unit-13"]);
+  assert.deepEqual([hot[0].detail, hot[0].provenance.kind], ["Jetson SoC 99.6 °C, at or above the 99 °C software throttle point", "measured"]);
+  assert.deepEqual(attentionRobots(ws).map(entry => entry.robot.id), ["unit-08", "unit-16", "unit-13"], "every configuration; unattached robots are left out");
+});
+
+const flag = (severity: ActiveFlag["severity"], label: string): ActiveFlag => ({ id: label, rule: "manual", severity, label, detail: `${label}.`, at: new Date(NOW).toISOString(), provenance: { kind: "recorded" }, origin: "stored" });
+
+test("displayed health: one precedence for every page — attention, offline, degraded, then the base health", () => {
+  assert.deepEqual(displayHealth({ health: "healthy", reason: null }, []), { health: "healthy", reason: null, flag: null });
+  assert.deepEqual(displayHealth({ health: "healthy", reason: null }, [flag("warning", "Loose cable")]).health, "degraded");
+  assert.deepEqual(displayHealth({ health: "not-reported", reason: "Waiting" }, [flag("warning", "Loose cable")]).reason, "Loose cable");
+  assert.deepEqual(displayHealth({ health: "degraded", reason: "Power peaks" }, [flag("warning", "Other")]).reason, "Power peaks", "a stored reason stays");
+  const attention = displayHealth({ health: "healthy", reason: null }, [flag("warning", "Loose cable"), flag("attention", "Gripper noise")]);
+  assert.deepEqual([attention.health, attention.reason, attention.flag?.label], ["attention", "Gripper noise", "Gripper noise"]);
+  assert.deepEqual(displayHealth({ health: "offline", reason: "No recent live contact" }, [flag("attention", "No recent report")]).health, "attention", "Needs attention outranks Offline");
+  assert.deepEqual(displayHealth({ health: "offline", reason: "No recent live contact" }, [flag("warning", "Hot SoC")]), { health: "offline", reason: "No recent live contact", flag: null }, "a warning does not hide Offline");
+  assert.deepEqual(displayHealth({ health: "attention", reason: "Declared" }, [flag("warning", "Hot SoC")]), { health: "attention", reason: "Declared", flag: null });
+  assert.deepEqual(["attention", "degraded", "healthy", "offline", "not-reported"].map(health => healthSeverity(health as Parameters<typeof healthSeverity>[0])), ["attention", "warning", null, null, null]);
+});
+
+test("a manual flag changes the shown health, the attention list and the counts together", () => {
+  const hybridOf = (workspace: ConvoyWorkspace) => workspace.configurations.find(config => config.id === "hybrid")!;
+  const shown = (workspace: ConvoyWorkspace, id: string) => { const robot = workspace.robots.find(item => item.id === id)!; return robotReadings(robot, getRevision(hybridOf(workspace), robot.rev), null, NOW); };
+  const flagged = flagRobot(ws, "unit-07", { label: "Gripper slipping", note: "Slipped twice on bin 4", severity: "attention", by: "operator@example.test" }, NOW);
+  const unit07 = shown(flagged, "unit-07");
+  assert.deepEqual([unit07.health, unit07.baseHealth, unit07.healthReason, unit07.healthFlag?.origin], ["attention", "healthy", "Gripper slipping", "stored"]);
+  assert.deepEqual(attentionRobots(flagged, "hybrid").filter(entry => entry.severity === "attention").map(entry => entry.robot.id), ["unit-07", "unit-08", "unit-16"]);
+  assert.equal(configurationSummary(flagged, hybridOf(flagged)).attention, 3);
+  const warned = flagRobot(ws, "unit-02", { label: "Camera smudge", note: "Wrist camera needs cleaning" }, NOW);
+  assert.equal(shown(warned, "unit-02").health, "degraded");
+  assert.deepEqual(attentionRobots(warned, "hybrid").filter(entry => entry.severity === "warning").map(entry => [entry.robot.id, entry.label]), [["unit-02", "Camera smudge"], ["unit-13", "Power peaks"]]);
+  // Every robot: the attention list holds exactly the robots whose shown health is Needs attention or Degraded.
+  for (const workspace of [ws, flagged, warned]) {
+    const listed = new Map(attentionRobots(workspace).map(entry => [entry.robot.id, entry.severity]));
+    for (const robot of workspace.robots.filter(item => item.configId)) {
+      const config = workspace.configurations.find(item => item.id === robot.configId)!;
+      assert.equal(listed.get(robot.id) ?? null, healthSeverity(robotReadings(robot, getRevision(config, robot.rev), null, NOW).health), robot.id);
+    }
+  }
+});
+
+test("'no recent report' is judged on the server's clock, not the browser's", () => {
+  const bench = ws.robots.find(robot => robot.id === "lab-bench")!;
+  const revision = getRevision(ws.configurations[0], bench.rev);
+  const ahead = 10 * 60_000; // this browser's clock runs 10 minutes fast
+  const received = (data: ReturnType<typeof mapSnapshot>): LiveBinding => ({ deviceKey: "configured-device", status: "fresh", data, error: null, receivedAt: 0 });
+  const offset = robotReadings(bench, revision, received(mapSnapshot(liveSnapshot(46), null, NOW + ahead)), NOW + ahead);
+  assert.deepEqual([offset.health, offset.flags.map(flag => flag.rule)], ["healthy", []], "the device reported 5 s ago on the server's clock");
+  const naive = robotReadings(bench, revision, received(mapSnapshot(liveSnapshot(46))), NOW + ahead);
+  assert.deepEqual(naive.flags.map(flag => flag.rule), ["no-report"], "without the offset the fast browser clock would flag it");
+});
+
+test("a bound robot that stops reporting is flagged and needs attention; its base health stays offline", () => {
+  const bench = ws.robots.find(robot => robot.id === "lab-bench")!;
+  const silent = liveSnapshot(46, false);
+  silent.device.live_at = new Date(NOW - 10 * 60_000).toISOString();
+  const readings = robotReadings(bench, getRevision(ws.configurations[0], bench.rev), binding(silent), NOW);
+  assert.deepEqual([readings.health, readings.healthReason, readings.baseHealth, readings.baseHealthReason], ["attention", "No recent report", "offline", "No recent live contact"]);
+  assert.equal(attentionRobots(ws, "hybrid", { "lab-bench": binding(silent) }, NOW)[0].robot.id, "lab-bench");
+});
+
+test("a device's own health: ok is Healthy, unknown or missing is Not reported without a warning, failed is Degraded", () => {
+  const bench = ws.robots.find(robot => robot.id === "lab-bench")!;
+  const revision = getRevision(ws.configurations[0], bench.rev);
+  const live = (health: string | null) => {
+    const snapshot = liveSnapshot(46);
+    (snapshot.device as { observed_health: string | null }).observed_health = health;
+    return { "lab-bench": binding(snapshot) };
+  };
+  const shown = (health: string | null) => {
+    const readings = robotReadings(bench, revision, live(health)["lab-bench"], NOW);
+    return [readings.health, readings.healthReason];
+  };
+  assert.deepEqual(shown("ok"), ["healthy", null]);
+  assert.deepEqual(shown("unknown"), ["not-reported", "Device health: unknown"]);
+  assert.deepEqual(shown(null), ["not-reported", "Device health not reported"]);
+  assert.deepEqual(shown("failed"), ["degraded", "Device health: failed"]);
+  const listed = (health: string | null) => attentionRobots(ws, "hybrid", live(health), NOW).some(entry => entry.robot.id === "lab-bench");
+  assert.equal(listed("unknown"), false, "an unknown device health is not a warning");
+  assert.equal(listed("failed"), true);
 });
 
 test("configuration summary counts roles, attention and the latest gated run", () => {

@@ -118,10 +118,13 @@ test("a device-bound test robot shows measured health, edge latency and inferenc
 test("an offline device keeps its last measured values with their age; an unreachable one reads Not reported", async ({ page }) => {
   await mock(page, { device: "offline" });
   await page.goto(BENCH);
-  await expect(page.locator(".cfg-title").getByText("Offline", { exact: true })).toBeVisible();
+  // Ten minutes without a report raises the "No recent report" flag, so the shared health rule shows Needs attention
+  // (it outranks Offline); the device itself still reads offline below, and the notice says so.
+  await expect(page.locator(".cfg-title").getByText("Needs attention", { exact: true })).toBeVisible();
   const hero = page.getByRole("region", { name: "Contract model" });
   await expect(hero.getByText("No recent live contact")).toBeVisible();
   await expect(page.getByText("Device is offline.")).toBeVisible();
+  await expect(page.getByRole("note").filter({ hasText: "Values marked Sample" })).toContainText("Lab bench is bound to a Jetson Orin Nano Super 8 GB, which is offline right now.");
   await expect(tile(page, "CPU utilization").locator(".portal-metric-value")).toContainText("27");
   await expect(tile(page, "CPU utilization").locator(".cfg-prov--measured")).toContainText(/Measured · 1\d min ago/);
   await expect(page.getByRole("status").filter({ hasText: "flag in effect" })).toContainText("No recent report");
@@ -164,6 +167,21 @@ test("the evaluation table shows status, gate and evidence per run and opens the
   await expect(recorded.locator(".cfg-prov--recorded")).toHaveText("Recorded · Sep 28");
   await expect(recorded).toContainText("Evaluation eva_contract01");
   await expect(recorded.getByRole("link", { name: "Open run 18" })).toHaveAttribute("href", `${BENCH}/evals/run-18`);
+  // Sorting keeps runs without a figure (queued, or safety not measured) last in both directions.
+  const table = page.getByRole("table", { name: "Evaluation runs on Lab bench" });
+  const runNames = table.locator("tbody th[scope=row] .cfg-row-link");
+  const safety = table.getByRole("columnheader", { name: /Safety/ });
+  await safety.getByRole("button").click();
+  await expect(safety).toHaveAttribute("aria-sort", "descending");
+  await expect(runNames).toHaveText(["Run 22", "Run 21", "Run 24", "Run 23", "Run 25", "Run 20", "Run 18", "Run 19"]);
+  await safety.getByRole("button").click();
+  await expect(safety).toHaveAttribute("aria-sort", "ascending");
+  await expect(runNames).toHaveText(["Run 23", "Run 24", "Run 22", "Run 21", "Run 25", "Run 20", "Run 18", "Run 19"]);
+  const success = table.getByRole("columnheader", { name: /Success/ });
+  await success.getByRole("button").click();
+  await expect(success).toHaveAttribute("aria-sort", "descending");
+  await expect(runNames.last()).toHaveText("Run 25");
+  await expect(runNames.first()).toHaveText("Run 18");
   await runRow(page, "Run 23").getByRole("link", { name: "Run 23", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`${BENCH}/evals/run-23/?$`));
   await expect(h1(page)).toHaveText("Run 23 · Bimanual station suite v1");

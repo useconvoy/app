@@ -4,7 +4,7 @@ import { ACTIVITY_LABEL, activitySubject, attentionCounts, cardVerdict, noResult
 import { mapSnapshot } from "../../src/lib/configurations/live";
 import type { LiveBinding } from "../../src/lib/configurations/live";
 import { createSampleWorkspace } from "../../src/lib/configurations/sample";
-import { flaggedRobots } from "../../src/lib/configurations/selectors";
+import { attentionRobots, configurationSummary } from "../../src/lib/configurations/selectors";
 import type { PortalSnapshot } from "../../src/lib/portal/types";
 
 const NOW = Date.parse("2026-10-01T09:41:20Z");
@@ -53,14 +53,16 @@ test("robot counts name a role's only robot", () => {
   assert.equal(robotCountsLabel(ws, "edge-only"), "Test 0 · Production 0");
 });
 
-test("the attention summary counts stored flags and rules raised on live readings", () => {
-  const stored = attentionCounts(flaggedRobots(ws, "hybrid", {}, NOW));
+test("the attention summary counts robots by their shown health: stored flags and rules raised on live readings", () => {
+  const stored = attentionCounts(attentionRobots(ws, "hybrid", {}, NOW));
   assert.deepEqual(stored, { attention: 2, warning: 1, attentionLabel: "2 need attention", warningLabel: "1 warning", detail: "Unit 08: Near thermal throttle · Unit 16: Cloud link degraded · Unit 13: Power peaks" });
   const live: Record<string, LiveBinding> = { "lab-bench": { deviceKey: "configured-device", status: "fresh", data: mapSnapshot(hotSnapshot(98.2)), error: null, receivedAt: 0 } };
-  const measured = attentionCounts(flaggedRobots(ws, "hybrid", live, NOW));
+  const measured = attentionCounts(attentionRobots(ws, "hybrid", live, NOW));
   assert.deepEqual([measured.attention, measured.attentionLabel, measured.warning], [3, "3 need attention", 1]);
   assert.match(measured.detail, /^Lab bench: Near thermal throttle/);
-  assert.deepEqual(attentionCounts(flaggedRobots(ws, "cloud-only", {}, NOW)), { attention: 0, warning: 0, attentionLabel: "0 need attention", warningLabel: "0 warnings", detail: "" });
+  const summary = configurationSummary(ws, config("hybrid"), live, NOW);
+  assert.deepEqual([summary.attention, summary.degraded], [measured.attention, measured.warning], "the card's counts and the configuration summary agree");
+  assert.deepEqual(attentionCounts(attentionRobots(ws, "cloud-only", {}, NOW)), { attention: 0, warning: 0, attentionLabel: "0 need attention", warningLabel: "0 warnings", detail: "" });
 });
 
 test("activity subjects link to the robot, the run under its robot, or the configuration", () => {

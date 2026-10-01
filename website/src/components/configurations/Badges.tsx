@@ -1,5 +1,8 @@
+"use client";
+
 import type { ReactNode } from "react";
 import { provenanceDetail, provenanceLabel } from "@/lib/configurations/format";
+import { useSecondClock } from "./hooks";
 import type { ConfigStatus as ConfigStatusValue, Configuration, EvalRun, Provenance, RobotHealth, RobotRole, RolloutOutcome, RunStatus as RunStatusValue, SpanPath, TraceOutcome } from "@/lib/configurations/types";
 import { Icon, type IconName } from "./Icons";
 import { ProgressBar } from "./ProgressBar";
@@ -19,12 +22,15 @@ export function Version({ children }: { children: ReactNode }) { return <span cl
 const PROVENANCE_CLASS = { measured: "measured", recorded: "recorded", sample: "sample", "not-reported": "none" } as const;
 /**
  * Exactly one per metric: "Measured · 9s ago" | "Recorded · Sep 14" | "Sample" | "Not reported".
- * `now` (wall-clock ms, from `useNow()`) adds the age to measured values; `label` overrides the text
- * (e.g. "Not measured · no cloud endpoint"); the title carries date, n and source.
+ * Passing `now` (wall-clock ms, from `useNow()`) adds the age to measured values; the badge then
+ * keeps that age current every second on its own (`useSecondClock`), so pages can use a coarse
+ * clock. `label` overrides the text (e.g. "Not measured · no cloud endpoint"); the title carries
+ * date, n and source.
  */
 export function ProvenanceBadge({ provenance, now, label }: { provenance: Provenance | null | undefined; now?: number | null; label?: string }) {
   const kind = provenance?.kind ?? "not-reported";
-  return <span className={`cfg-prov cfg-prov--${PROVENANCE_CLASS[kind]}`} title={provenance ? provenanceDetail(provenance) : undefined}>{label ?? provenanceLabel(provenance, now)}</span>;
+  const ticking = useSecondClock(kind === "measured" && !!provenance?.at && now !== null && now !== undefined && label === undefined);
+  return <span className={`cfg-prov cfg-prov--${PROVENANCE_CLASS[kind]}`} title={provenance ? provenanceDetail(provenance) : undefined}>{label ?? provenanceLabel(provenance, ticking ?? now)}</span>;
 }
 /** "Not reported" in place of a missing value (never 0 or a dash). */
 export function NotReported({ children = "Not reported" }: { children?: ReactNode }) { return <span className="cfg-prov cfg-prov--none">{children}</span>; }
