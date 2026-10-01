@@ -334,7 +334,16 @@ def test_pinned_snapshot_completes_under_an_active_writer_without_restarts(app, 
                 _step_hook=record_copy_checkpoint,
             )
         t1 = time.monotonic()
-        time.sleep(0.3)
+        # Wait for the evidence asserted below, not a fixed pause: the API writer's first request starts
+        # with the backup, so the hold pauses it, and on a loaded runner that one argon2-hashed request
+        # can outlast any sleep (CI: 0.88 s). stop is only checked between requests, so exiting early
+        # left no request outside the hold. Bounded; a real stall still fails the assertions below.
+        hold = (r["snapshot_pinned_mono"], r["snapshot_released_mono"])
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and not (
+            wl.commits_after(t1) and any(s >= hold[1] or e <= hold[0] for s, e in api.windows)
+        ):
+            time.sleep(0.01)
         resumed = wl.commits_after(t1)
         final = len(wl.commits)
     assert r["restarts"] == 0, r  # a writer committed throughout, the pinned copy never went back to page 0
