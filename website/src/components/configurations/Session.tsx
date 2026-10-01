@@ -48,8 +48,8 @@ export function WorkspaceSession({ children }: { children: ReactNode }) {
   const value = useMemo<WorkspaceSessionValue | null>(() => account ? {
     account, email: account.user.email, role: account.user.role, operator: account.user.role !== "viewer", signOut, signingOut, signOutError,
   } : null, [account, signOut, signingOut, signOutError]);
-  if (account === undefined) return <div className="console-shell"><main className="console-auth"><Brand /><p role="status">Checking your session…</p></main></div>;
-  if (!value) return <div className="console-shell"><Login initialError={error} onLogin={load} /></div>;
+  if (account === undefined) return <div className="console-shell"><main className="console-auth"><Brand label="Convoy" /><p role="status">Checking your session…</p></main></div>;
+  if (!value) return <div className="console-shell"><Login initialError={error} onLogin={load} brand="Convoy" /></div>;
   // Keyed by account: everything below (workspace document, live device data) starts afresh for another account.
   return <SessionContext.Provider value={value}><Fragment key={value.email}>{children}</Fragment></SessionContext.Provider>;
 }
