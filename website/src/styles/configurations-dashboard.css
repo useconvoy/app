@@ -1,3 +1,99 @@
-/* Configuration dashboard and Add robot dialog (classes prefixed cd-).
+/* Configuration dashboard and its dialogs (classes prefixed cd-).
  * Page-specific additions only; shared cfg-* components live in configurations.css.
  * Custom properties only: hex values belong in tokens.css. */
+
+/* ---------- layout helpers ---------- */
+.cd-after { margin-top: 12px; }
+.cd-after + .cfg-notice { margin-top: 12px; }
+.cd-group { margin-top: 32px; }
+.cd-push { margin-left: auto; }
+.cd-flash { outline-offset: 2px; }
+.cd-flash:focus:not(:focus-visible) { outline: none; }
+
+/* Attention banner: several lines, so the flag sits on the first line and the action stays centred. */
+.cd-banner .cfg-notice--action { align-items: flex-start; }
+.cd-banner .cfg-notice--action > .cfg-icon { margin-top: 3px; }
+.cd-banner .cfg-notice__action { align-self: center; }
+.cd-banner .cfg-prov { vertical-align: 1px; }
+
+/* Fact rows with a fixed label column (spec panels, dialog summaries). */
+.cd-facts .portal-fact { grid-template-columns: 120px minmax(0, 1fr); }
+.cd-facts .cfg-inline { gap: 6px 10px; }
+.cd-columns { align-items: start; }
+
+/* Production KPIs without production robots: one explanation beside the latest eval tile. */
+.cd-kpi-empty { display: grid; align-content: center; gap: 6px; grid-column: span 2; }
+.cd-kpi-empty__title { font-size: .9375rem; font-weight: 500; letter-spacing: -.01em; }
+.cd-kpi-empty__text { max-width: 60ch; font-size: .8125rem; line-height: 1.55; color: var(--text-secondary); }
+.cd-empty-note { padding: 20px 24px; border: 1px dashed var(--cfg-sample-line); background: var(--surface); font-size: .8125rem; }
+
+/* Recorded evidence line under the connected device. */
+.cd-evidence .cfg-prov { margin-right: 6px; vertical-align: 1px; }
+
+/* Small multiples: the band between the thermal guard and the throttle point. */
+.cd-spark__zone { fill: color-mix(in srgb, var(--cfg-ref) 14%, transparent); stroke: none; }
+
+/* A plot slot without a series keeps the pair aligned. */
+.cd-plot-empty { display: grid; align-content: center; min-height: 220px; padding: 0 20px; border: 1px dashed var(--cfg-sample-line); }
+.cd-plot-empty .portal-empty { padding: 0; font-size: .8125rem; }
+
+/* Robots table: a long "Not reported" reason wraps in its spanning cell; the flags action (Robots tab) stays compact. */
+.cd-robots th, .cd-robots td { padding-right: 10px; }
+.cd-robots td.cfg-wrap > .cfg-prov { white-space: normal; }
+.cd-robots .cfg-flagnote { font-family: var(--font-sans); }
+.cd-flag-btn { min-height: 32px; font: 500 .8125rem/1.3 var(--font-sans); white-space: nowrap; }
+.cd-none { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; font-size: .875rem; color: var(--text-secondary); }
+.cd-unattached { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: -4px; }
+
+/* Specification tab: title row with the revision switch. */
+.cd-spec__head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 16px; }
+.cd-spec__head .portal-section-label { margin-bottom: 0; }
+.cd-spec .portal-two-column + .portal-panel, .cd-spec .portal-panel + .portal-panel { margin-top: 0; }
+
+/* ---------- dialogs ---------- */
+.cd-form { display: grid; gap: 20px; }
+.cfg-dialog__body .cfg-notice { margin: 0; }
+.cd-note { margin-top: 0; }
+.cd-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.cd-choices--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cd-choices--3 .cfg-choice { gap: 10px; padding: 14px 12px; }
+.cd-choice--off { border-style: dashed; background: var(--surface-subtle); cursor: not-allowed; }
+.cd-choice--off .cfg-choice__title { color: var(--text-secondary); }
+.cd-choice__reason { display: block; margin-top: 6px; font-size: .75rem; line-height: 1.5; color: var(--warning); }
+.cd-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 8px; font-size: .6875rem; font-weight: 400; color: var(--text-secondary); }
+.cd-foot-note { align-self: center; margin-right: auto; max-width: 46ch; font-size: .75rem; line-height: 1.5; color: var(--text-secondary); }
+.cd-error { padding: 12px 14px; border-left: 2px solid var(--error); background: var(--error-tint); color: var(--error); font-size: .8125rem; line-height: 1.5; overflow-wrap: anywhere; }
+.cd-status { font-size: .8125rem; color: var(--success); }
+.cd-status:empty { display: none; }
+.cd-textarea { min-height: 88px; font-family: var(--font-sans); resize: vertical; }
+.cd-dialog-sub { font-size: .875rem; font-weight: 500; line-height: 1.4; }
+.cd-runs { display: grid; gap: 6px; }
+
+/* Pair a new device: the enrollment steps and command. */
+.cd-pair { display: grid; gap: 10px; }
+.cd-pair__lead { font-size: .8125rem; line-height: 1.55; color: var(--text-secondary); }
+.cd-pair__lead code { font: .75rem var(--font-mono); color: var(--text-primary); }
+.cd-pair .console-code { margin: 0; }
+.cd-pair__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font-size: .75rem; color: var(--text-secondary); }
+
+/* Flags dialog: flags in effect. */
+.cd-flagset { display: grid; gap: 8px; }
+.cd-flaglist { display: grid; }
+.cd-flaglist li { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--border-subtle); }
+.cd-flaglist__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: .875rem; }
+.cd-flaglist__head strong { font-weight: 500; }
+.cd-flaglist__detail { font-size: .8125rem; line-height: 1.55; color: var(--text-secondary); }
+.cd-flaglist__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font: .6875rem/1.5 var(--font-mono); color: var(--text-secondary); }
+.cd-flaglist__meta .cfg-btn-text { min-height: 32px; margin-left: auto; font-family: var(--font-sans); font-size: .8125rem; }
+.cd-empty { padding: 8px 0; }
+
+@media (max-width: 899px) {
+  .cd-choices--3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 639px) {
+  .cd-facts .portal-fact { grid-template-columns: minmax(88px, .7fr) minmax(0, 1.5fr); gap: 12px; }
+  .cd-row, .cd-choices--3 { grid-template-columns: minmax(0, 1fr); }
+  .cd-foot-note { flex-basis: 100%; max-width: none; }
+  .cd-plot-empty { min-height: 160px; }
+  .cd-flaglist__meta .cfg-btn-text { margin-left: 0; }
+}
