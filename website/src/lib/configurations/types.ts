@@ -55,11 +55,10 @@ export interface Percentiles { p50: number | null; p95: number | null; n?: numbe
 
 export interface WorkspaceMeta {
   id: string;
-  /** Full name, e.g. "Sample workspace · Bimanual station". */
+  /** Full name, e.g. "Sample workspace". */
   name: string;
-  /** Short label for the sidebar eyebrow and the provenance notice, e.g. "Sample workspace". */
+  /** Short label, e.g. "Sample". */
   label: string;
-  /** Sidebar footer note. */
   description: string;
   updatedAt: string;
   /** True only for the built-in generic sample. */
@@ -331,6 +330,14 @@ export interface Robot {
   rev: string | null;
   /** Live binding: a control-plane device id, or `CONFIGURED_DEVICE`. Bound robots store no telemetry. */
   deviceId?: string;
+  /**
+   * Control-plane project (`prj_…`) whose evaluations, and missions run outside an
+   * evaluation, are this robot's evals: metrics, rollouts and replays come from the
+   * platform, not the document.
+   */
+  projectId?: string | null;
+  /** Control-plane robot (`rob_…`) in `projectId`; when set, only its evaluations and missions count. */
+  platformRobotId?: string | null;
   kind: RobotKind;
   description?: string;
   /** Declared or sample health; a bound robot's health is derived from live data. */

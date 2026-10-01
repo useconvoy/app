@@ -5,6 +5,9 @@
  * falls back to the generic sample (404: no document yet; invalid or unreadable:
  * with a notice).
  *
+ * The sample is never saved: while it stands in for a missing document, the first
+ * change starts the account's own document from an empty workspace.
+ *
  * Writes follow the documents contract: every PUT names what it replaces —
  * `If-Match: "<revision>"` for the stored document, `If-None-Match: *` while there
  * is none — so a save never overwrites a newer document and the sample is never
@@ -21,6 +24,7 @@
  */
 import { createContext, createElement, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
+import { emptyWorkspace } from "./mutations";
 import { createSampleWorkspace } from "./sample";
 import { notifySessionExpired } from "./session-events";
 import { WORKSPACE_DOCUMENT_NAME, WORKSPACE_SCHEMA_VERSION } from "./types";
@@ -292,7 +296,7 @@ export class WorkspaceStore {
     if (mode === "create" && this.exists === true) return done({ ok: false, error: "A workspace document is already stored for this account. Confirm to replace it." });
     for (let attempt = 0; attempt < 2; attempt++) {
       let next: ConvoyWorkspace;
-      try { next = apply(this.confirmed); }
+      try { next = apply(this.writeBase()); }
       catch (cause) { return done({ ok: false, error: cause instanceof Error ? cause.message : "The change could not be applied." }); }
       const validation = validateWorkspace(next);
       if (!validation.ok) return done({ ok: false, error: `The change was not saved: ${summarizeIssues(validation.issues)}`, issues: validation.issues });
@@ -330,15 +334,20 @@ export class WorkspaceStore {
     return done({ ok: false, conflict: true, error: "The workspace changed again while saving, so this change was not saved. Reload, then make it again." });
   }
 
+  /** What a change applies to: the stored document, or an empty workspace while the sample stands in for none. */
+  private writeBase(): ConvoyWorkspace {
+    return this.base.source === "sample" || !this.confirmed ? emptyWorkspace(this.now()) : this.confirmed;
+  }
+
   private emit() {
     const { status, source, reason, issues, warnings, error, documentUpdatedAt } = this.base;
     const saving = this.pending.length > 0;
     const known = { documentRevision: this.revision, documentExists: this.exists };
     if (status === "ready" && source && this.confirmed) {
       // Pending updates show immediately; a failing updater is skipped here and reported by its save.
-      const workspace = this.pending.reduce((current, item) => {
+      const workspace = this.pending.length ? this.pending.reduce((current, item) => {
         try { return item.apply(current); } catch { return current; }
-      }, this.confirmed);
+      }, this.writeBase()) : this.confirmed;
       this.snapshot = { status, workspace, source, reason, issues, warnings, error, documentUpdatedAt, ...known, saving, canSave: source === "document" || reason === "missing" };
     } else {
       this.snapshot = { ...LOADING, ...known, saving };

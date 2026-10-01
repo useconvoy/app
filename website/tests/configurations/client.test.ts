@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { REFRESH_MIN_GAP_MS, saveErrorMessage, WorkspaceStore } from "../../src/lib/configurations/client";
-import { attachRobot } from "../../src/lib/configurations/mutations";
+import { buildRevision, EMPTY_INPUT } from "../../src/lib/configurations/create";
+import { addRobot, createConfiguration } from "../../src/lib/configurations/mutations";
 import { createSampleWorkspace } from "../../src/lib/configurations/sample";
 import { onSessionExpired } from "../../src/lib/configurations/session-events";
 import type { ConvoyWorkspace } from "../../src/lib/configurations/types";
@@ -33,9 +34,11 @@ const envelope = (body: unknown, revision = 3, updated = "2026-10-01T09:40:00Z")
 const stored = (revision: number, updated = "2026-10-01T09:42:00Z") => ({ status: 200, body: { name: "configurations", schema_version: 1, revision, size_bytes: 100, updated_at: updated } });
 const sent = (call: Call) => (call.body as { body: ConvoyWorkspace }).body;
 const document = (label = "Lab workspace"): ConvoyWorkspace => { const ws = createSampleWorkspace(NOW); ws.meta = { ...ws.meta, label, sample: false }; return ws; };
-const attach = (current: ConvoyWorkspace) => attachRobot(current, "unit-18", { configId: "hybrid", role: "test", site: "Lab · Staging", rev: "r4" }, NOW);
+const attach = (current: ConvoyWorkspace) => addRobot(current, { configId: "edge-planner", name: "Bench 09" }, NOW).workspace;
+const create = (current: ConvoyWorkspace) => createConfiguration(current, { name: "Arm A", revision: buildRevision({ ...EMPTY_INPUT, name: "Arm A", robot: "Arm", edgeModel: "Qwen2.5-1.5B-Instruct Q4_K_M" }, NOW) }, NOW).workspace;
+const added = (workspace: ConvoyWorkspace | null | undefined) => !!workspace?.robots.some(robot => robot.id === "bench-09");
 
-test("a missing document shows the sample and allows the first save, which may only create", async () => {
+test("a missing document shows the sample; the first save creates the account's own document, never saving the sample", async () => {
   const { store, calls } = server([{ status: 404, body: { error: "missing" } }, stored(1)]);
   assert.equal(store.getSnapshot().status, "loading");
   await store.load();
@@ -46,11 +49,18 @@ test("a missing document shows the sample and allows the first save, which may o
   assert.equal(calls[0].headers["X-Convoy-Client"], "web");
   assert.deepEqual([snapshot.status, snapshot.source, snapshot.reason, snapshot.canSave, snapshot.documentExists, snapshot.documentRevision], ["ready", "sample", "missing", true, false, null]);
   assert.equal(snapshot.workspace?.meta.sample, true);
-  const result = await store.save(attach);
+  const onSample = await store.save(attach);
+  assert.equal(onSample.ok, false, "a change to a sample configuration has nothing to apply to");
+  assert.equal(calls.length, 1);
+  const result = await store.save(create);
   assert.equal(result.ok, true);
   assert.equal(calls[1].headers["If-None-Match"], "*", "creating never writes over a document stored meanwhile");
   assert.equal(calls[1].headers["If-Match"], undefined);
+  const body = sent(calls[1]);
+  assert.deepEqual(body.configurations.map(config => config.name), ["Arm A"], "only the account's own configuration is saved");
+  assert.deepEqual([body.robots.length, body.runs.length, body.suites.length, body.meta.sample], [0, 0, 0, undefined]);
   assert.deepEqual([store.getSnapshot().source, store.getSnapshot().documentRevision, store.getSnapshot().documentExists], ["document", 1, true]);
+  assert.deepEqual(store.getSnapshot().workspace?.configurations.map(config => config.name), ["Arm A"]);
 });
 
 test("a valid document is used with its revision; an invalid one falls back with its problems and blocks saves", async () => {
@@ -87,7 +97,7 @@ test("save replaces exactly the revision read: If-Match, Idempotency-Key, optimi
   const pending = store.save(attach);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(store.getSnapshot().saving, true);
-  assert.equal(store.getSnapshot().workspace?.robots.find(robot => robot.id === "unit-18")?.configId, "hybrid", "optimistic");
+  assert.equal(added(store.getSnapshot().workspace), true, "optimistic");
   const put = calls[1];
   assert.equal(put.method, "PUT");
   assert.equal(put.headers["If-Match"], "\"3\"");
@@ -100,7 +110,7 @@ test("save replaces exactly the revision read: If-Match, Idempotency-Key, optimi
   assert.equal(result.ok, true);
   const snapshot = store.getSnapshot();
   assert.deepEqual([snapshot.saving, snapshot.source, snapshot.documentRevision, snapshot.documentUpdatedAt], [false, "document", 4, "2026-10-01T09:42:00Z"]);
-  assert.equal(snapshot.workspace?.robots.find(robot => robot.id === "unit-18")?.configId, "hybrid", "the document sent is the confirmed one (no body echo)");
+  assert.equal(added(snapshot.workspace), true, "the document sent is the confirmed one (no body echo)");
 });
 
 test("a failed save rolls back; retrying the identical change reuses its key", async () => {
@@ -108,7 +118,7 @@ test("a failed save rolls back; retrying the identical change reuses its key", a
   await store.load();
   const first = await store.save(attach);
   assert.equal(first.ok, false);
-  assert.equal(store.getSnapshot().workspace?.robots.find(robot => robot.id === "unit-18")?.configId, null, "rolled back");
+  assert.equal(added(store.getSnapshot().workspace), false, "rolled back");
   const second = await store.save(attach);
   assert.equal(second.ok, false);
   assert.equal(calls[1].headers["Idempotency-Key"], calls[2].headers["Idempotency-Key"]);
@@ -126,7 +136,7 @@ test("a 412 re-reads the document and re-applies an updater once, on the newer r
   assert.deepEqual([calls[1].headers["If-Match"], calls[3].headers["If-Match"]], ["\"3\"", "\"5\""]);
   assert.notEqual(calls[1].headers["Idempotency-Key"], calls[3].headers["Idempotency-Key"]);
   assert.equal(sent(calls[3]).meta.label, "Changed elsewhere", "the change applies on top of the newer document");
-  assert.equal(sent(calls[3]).robots.find(robot => robot.id === "unit-18")?.configId, "hybrid");
+  assert.equal(added(sent(calls[3])), true);
   assert.equal(store.getSnapshot().documentRevision, 6);
 });
 
@@ -139,7 +149,7 @@ test("a second 412, or a full replacement, is reported as a conflict and shows t
   assert.equal(!conflict.ok && conflict.conflict, true);
   assert.match(!conflict.ok ? conflict.error : "", /changed in another tab or session/);
   assert.deepEqual([twice.store.getSnapshot().workspace?.meta.label, twice.store.getSnapshot().documentRevision], ["Changed again", 8]);
-  assert.equal(twice.store.getSnapshot().workspace?.robots.find(robot => robot.id === "unit-18")?.configId, null, "nothing of the refused change remains");
+  assert.equal(added(twice.store.getSnapshot().workspace), false, "nothing of the refused change remains");
 
   const replacement = server([envelope(document(), 3), { status: 412, body: {} }, envelope(theirs, 5)]);
   await replacement.store.load();
@@ -152,10 +162,11 @@ test("the sample is never written over a document that appeared meanwhile: the c
   const theirs = document("Created in another tab");
   const { store, calls } = server([{ status: 404, body: { error: "missing" } }, { status: 412, body: {} }, envelope(theirs, 1), stored(2)]);
   await store.load();
-  const result = await store.save(attach);
+  const result = await store.save(create);
   assert.equal(result.ok, true);
   assert.deepEqual([calls[1].headers["If-None-Match"], calls[3].headers["If-Match"]], ["*", "\"1\""]);
   assert.equal(sent(calls[3]).meta.label, "Created in another tab", "re-applied to the stored document, not the sample");
+  assert.deepEqual(sent(calls[3]).configurations.map(config => config.name), [...theirs.configurations.map(config => config.name), "Arm A"]);
   assert.deepEqual([store.getSnapshot().source, store.getSnapshot().documentRevision], ["document", 2]);
 });
 
@@ -180,7 +191,7 @@ test("a 429 on save keeps the document, says when to retry and rolls the change 
   await store.load();
   const result = await store.save(attach);
   assert.equal(!result.ok && result.error, "Too many saves in a short time. Wait 12 s, then try again.");
-  assert.equal(store.getSnapshot().workspace?.robots.find(robot => robot.id === "unit-18")?.configId, null);
+  assert.equal(added(store.getSnapshot().workspace), false);
   assert.equal(store.getSnapshot().documentRevision, 3);
 });
 

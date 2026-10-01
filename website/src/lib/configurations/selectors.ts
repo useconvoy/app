@@ -5,10 +5,9 @@
  */
 import { fmtFixed, fmtMs, fmtPct, seriesPoints } from "./format";
 import type { LiveBinding } from "./live";
-import { routes } from "./routes";
 import type {
-  ActionTrace, ActivityEvent, ConfigRevision, ConfigStatus, Configuration, ConvoyWorkspace, EvalRun, EvalSuite, Flag, FlagRules,
-  FlagSeverity, LatencySeries, LogLine, Percentiles, Provenance, Robot, RobotHealth, RobotRole, Rollout, SeriesPoint, TelemetryMetric, TelemetryReading, TraceSpan,
+  ActionTrace, ConfigRevision, Configuration, ConvoyWorkspace, EvalSuite, Flag, FlagRules,
+  FlagSeverity, Percentiles, Provenance, Robot, RobotHealth, SeriesPoint, TelemetryMetric, TelemetryReading,
 } from "./types";
 
 export type LiveMap = Readonly<Record<string, LiveBinding | undefined>>;
@@ -17,33 +16,9 @@ const collator = new Intl.Collator("en-US", { numeric: true, sensitivity: "base"
 
 /* ---------- configurations ---------- */
 
-export type ConfigFilter = "all" | ConfigStatus;
-export type ConfigSort = "activity" | "name" | "eval";
-
-/** Text used by search: names, purpose, robot, hardware, models, robot names and sites. */
-export function configurationSearchText(ws: ConvoyWorkspace, config: Configuration): string {
-  const rev = currentRevision(config);
-  return [config.name, config.purpose, rev.robot.name, rev.robot.summary, rev.edgeHardware.name, ...rev.edgeModels.map(m => m.name), ...rev.cloudModels.map(m => m.name),
-    ...robotsFor(ws, config.id).flatMap(robot => [robot.name, robot.site, robot.deviceId ?? ""])].join(" \n").toLowerCase();
-}
-
-/** Configurations matching a search query (all words) and a status filter, sorted. */
-export function listConfigurations(ws: ConvoyWorkspace, options: { query?: string; status?: ConfigFilter; sort?: ConfigSort } = {}): Configuration[] {
-  const words = (options.query ?? "").toLowerCase().split(/\s+/).filter(Boolean);
-  const status = options.status ?? "all";
-  const matches = ws.configurations.filter(config =>
-    (status === "all" || config.status === status || (status === "testing" && config.candidateRev !== null && config.status !== "draft"))
-    && (!words.length || words.every(word => configurationSearchText(ws, config).includes(word))));
-  const sort = options.sort ?? "activity";
-  const evalRate = (config: Configuration) => { const run = latestGateRun(ws, config.id); return run ? successShare(run) ?? -1 : -1; };
-  return matches.toSorted((a, b) => sort === "name" ? collator.compare(a.name, b.name)
-    : sort === "eval" ? evalRate(b) - evalRate(a)
-    : Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
-}
-/** Count per status chip, using the same matching as `listConfigurations`. */
-export function configurationCounts(ws: ConvoyWorkspace, query = ""): Record<ConfigFilter, number> {
-  const count = (status: ConfigFilter) => listConfigurations(ws, { query, status }).length;
-  return { all: count("all"), testing: count("testing"), production: count("production"), draft: count("draft") };
+/** Configurations in the order they were created (oldest first). */
+export function listConfigurations(ws: ConvoyWorkspace): Configuration[] {
+  return ws.configurations.toSorted((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
 }
 export function getConfiguration(ws: ConvoyWorkspace, configId: string): Configuration | null {
   return ws.configurations.find(config => config.id === configId) ?? null;
@@ -55,149 +30,33 @@ export function getRevision(config: Configuration, rev: string | null | undefine
 export function currentRevision(config: Configuration): ConfigRevision {
   return getRevision(config, config.candidateRev) ?? getRevision(config, config.productionRev) ?? config.revisions[config.revisions.length - 1];
 }
-export function productionRevision(config: Configuration): ConfigRevision | null {
-  return getRevision(config, config.productionRev);
-}
-/** The next revision label: one past the highest "rN" (r3, r4 → "r5"). */
-export function nextRevision(config: Pick<Configuration, "revisions">): string {
-  return `r${config.revisions.reduce((max, revision) => Math.max(max, Number(/(\d+)$/.exec(revision.rev)?.[1] ?? 0)), 0) + 1}`;
-}
 
 /* ---------- robots ---------- */
 
-const roleOrder: Record<RobotRole, number> = { test: 0, production: 1 };
-/** Robots attached to a configuration: live-bound first, then test before production, then by name. */
-export function robotsFor(ws: ConvoyWorkspace, configId: string, options: { role?: RobotRole } = {}): Robot[] {
-  return ws.robots.filter(robot => robot.configId === configId && (!options.role || robot.role === options.role))
-    .toSorted((a, b) => Number(!!b.deviceId) - Number(!!a.deviceId) || roleOrder[a.role] - roleOrder[b.role] || collator.compare(a.name, b.name));
+/** Robots attached to a configuration: live-bound first, then by name. */
+export function robotsFor(ws: ConvoyWorkspace, configId: string): Robot[] {
+  return ws.robots.filter(robot => robot.configId === configId)
+    .toSorted((a, b) => Number(!!b.deviceId) - Number(!!a.deviceId) || collator.compare(a.name, b.name));
 }
 export function getRobot(ws: ConvoyWorkspace, robotId: string): Robot | null {
   return ws.robots.find(robot => robot.id === robotId) ?? null;
 }
-/** Registered robots not attached to any configuration (the Add robot choices). */
-export function unassignedRobots(ws: ConvoyWorkspace): Robot[] {
-  return ws.robots.filter(robot => robot.configId === null).toSorted((a, b) => collator.compare(a.name, b.name));
-}
-/** Robots with a live device binding. */
-export function boundRobots(ws: ConvoyWorkspace, configId?: string): Robot[] {
-  return ws.robots.filter(robot => !!robot.deviceId && (!configId || robot.configId === configId));
-}
-
-/* ---------- route resolution ---------- */
-
 export function resolveRobotRoute(ws: ConvoyWorkspace, configId: string, robotId: string): { configuration: Configuration; robot: Robot } | null {
   const configuration = getConfiguration(ws, configId), robot = getRobot(ws, robotId);
   return configuration && robot && robot.configId === configId ? { configuration, robot } : null;
 }
-export function resolveRunRoute(ws: ConvoyWorkspace, configId: string, robotId: string, runId: string): { configuration: Configuration; robot: Robot; run: EvalRun; runConfiguration: Configuration | null } | null {
-  const route = resolveRobotRoute(ws, configId, robotId), run = getRun(ws, runId);
-  return route && run && run.robotId === robotId ? { ...route, run, runConfiguration: getConfiguration(ws, run.configId) } : null;
-}
-export function robotHref(robot: Robot, params?: Parameters<typeof routes.robot>[2]): string | null {
-  return robot.configId ? routes.robot(robot.configId, robot.id, params) : null;
-}
-/** A run lives under the robot it ran on (which may belong to another configuration than the run). */
-export function runHref(ws: ConvoyWorkspace, run: EvalRun, params?: Parameters<typeof routes.run>[3]): string | null {
-  const robot = getRobot(ws, run.robotId);
-  return robot?.configId ? routes.run(robot.configId, robot.id, run.id, params) : null;
-}
 
 /* ---------- evaluations ---------- */
 
-const runOrder = (run: EvalRun) => run.status === "running" ? 0 : run.status === "queued" ? 1 : 2;
-const runTime = (run: EvalRun) => Date.parse(run.finishedAt ?? run.startedAt ?? "") || 0;
-/** Runs, running and queued first, then newest first. Filter by robot, configuration and/or revision. */
-export function runsFor(ws: ConvoyWorkspace, filter: { robotId?: string; configId?: string; rev?: string } = {}): EvalRun[] {
-  return ws.runs.filter(run => (!filter.robotId || run.robotId === filter.robotId) && (!filter.configId || run.configId === filter.configId) && (!filter.rev || run.rev === filter.rev))
-    .toSorted((a, b) => runOrder(a) - runOrder(b) || runTime(b) - runTime(a) || b.number - a.number);
-}
-export function getRun(ws: ConvoyWorkspace, runId: string): EvalRun | null {
-  return ws.runs.find(run => run.id === runId) ?? null;
-}
 export function getSuite(ws: ConvoyWorkspace, suiteId: string | null | undefined): EvalSuite | null {
   return suiteId ? ws.suites.find(suite => suite.id === suiteId) ?? null : null;
 }
-/** Newest finished suite run with a gate decision for a configuration (optionally one revision). */
-export function latestGateRun(ws: ConvoyWorkspace, configId: string, rev?: string | null): EvalRun | null {
-  return runsFor(ws, { configId, ...(rev ? { rev } : {}) }).find(run => run.kind === "suite" && run.gate !== null) ?? null;
-}
-/** Success share 0–1, or null when not scored. */
-export function successShare(run: Pick<EvalRun, "counts">): number | null {
-  return run.counts.successes === null || !run.counts.episodes ? null : run.counts.successes / run.counts.episodes;
-}
-export type RolloutFilter = "all" | "failed" | "safety";
-export function rolloutsFor(ws: ConvoyWorkspace, runId: string, filter: { outcome?: RolloutFilter; sliceId?: string | null; taskId?: string | null } = {}): Rollout[] {
-  return ws.rollouts.filter(rollout => rollout.runId === runId
-    && (!filter.outcome || filter.outcome === "all" || (filter.outcome === "failed" ? rollout.outcome !== "succeeded" : rollout.violations.length > 0 || rollout.outcome === "safety-stop"))
-    && (!filter.sliceId || rollout.sliceIds.includes(filter.sliceId))
-    && (!filter.taskId || rollout.taskId === filter.taskId));
-}
-export function getRollout(ws: ConvoyWorkspace, rolloutId: string): Rollout | null {
-  return ws.rollouts.find(rollout => rollout.id === rolloutId) ?? null;
-}
-/** Slice name and family for a slice id within a suite. */
-export function sliceInfo(suite: EvalSuite | null, sliceId: string): { name: string; family: string } {
-  for (const family of suite?.sliceFamilies ?? []) {
-    const slice = family.slices.find(item => item.id === sliceId);
-    if (slice) return { name: slice.name, family: family.name };
-  }
-  return { name: sliceId, family: "" };
-}
-export function taskName(suite: EvalSuite | null, taskId: string): string {
-  return suite?.tasks.find(task => task.id === taskId)?.name ?? taskId;
-}
 
-/* ---------- traces, logs, activity ---------- */
+/* ---------- traces ---------- */
 
-export type TraceFilter = "all" | "fallback" | "escalated" | "failed";
-export function traceCategory(trace: ActionTrace): Exclude<TraceFilter, "all"> | null {
-  return trace.outcome === "failed" ? "failed" : trace.escalated ? "escalated" : trace.path === "fallback" ? "fallback" : null;
-}
-/** Action traces for a robot, newest first. */
-export function tracesFor(ws: ConvoyWorkspace, robotId: string, filter: TraceFilter = "all"): ActionTrace[] {
-  return ws.traces.filter(trace => trace.robotId === robotId && (filter === "all" || (filter === "failed" ? trace.outcome === "failed" : filter === "escalated" ? trace.escalated : trace.path === "fallback")))
-    .toSorted(byTimeDesc);
-}
-export function getTrace(ws: ConvoyWorkspace, traceId: string): ActionTrace | null {
-  return ws.traces.find(trace => trace.id === traceId) ?? null;
-}
-/** Spans for one waterfall of a trace: its group's spans (spans without a group belong to the first group). */
-export function spansForGroup(trace: ActionTrace, groupId?: string | null): TraceSpan[] {
-  const first = trace.spanGroups?.[0]?.id;
-  const group = groupId ?? first;
-  if (!group) return trace.spans;
-  return trace.spans.filter(span => (span.group ?? first) === group);
-}
-
-/* ---------- chart helpers ---------- */
-
-/** Rows for a latency band plot; `event` marks steps where more than `fallbackEventPct` of chunks fell back. */
-export function latencyRows(series: LatencySeries | null | undefined, fallbackEventPct = 10): Array<{ p50: number | null; p95: number | null; event: boolean }> {
-  if (!series) return [];
-  return series.p50.map((p50, i) => ({ p50, p95: series.p95[i] ?? null, event: (series.fallbackPct?.[i] ?? 0) > fallbackEventPct }));
-}
-/**
- * `count` evenly spaced short time labels ("10:00" … "Now") across a series of `length`
- * steps from `start`, on UTC or a device clock; the last label reads `lastLabel`.
- */
-export function timeTicks(start: string, stepS: number, length: number, count = 5, lastLabel: string | null = "Now", utcOffsetMinutes = 0): string[] {
-  const t0 = Date.parse(start);
-  if (!Number.isFinite(t0) || length < 1 || count < 2) return [];
-  return Array.from({ length: count }, (_, i) => {
-    if (i === count - 1 && lastLabel) return lastLabel;
-    const at = new Date(t0 + (i / (count - 1)) * (length - 1) * stepS * 1000 + utcOffsetMinutes * 60000);
-    return at.toISOString().slice(11, 16);
-  });
-}
-/** Log lines, newest first, for a robot and/or a configuration (a robot's lines count for its configuration). */
-export function logsFor(ws: ConvoyWorkspace, filter: { robotId?: string; configId?: string } = {}, limit?: number): LogLine[] {
-  const robotConfig = (line: LogLine) => line.configId ?? (line.robotId ? getRobot(ws, line.robotId)?.configId ?? null : null);
-  const lines = ws.logs.filter(line => (!filter.robotId || line.robotId === filter.robotId) && (!filter.configId || robotConfig(line) === filter.configId)).toSorted(byTimeDesc);
-  return limit === undefined ? lines : lines.slice(0, limit);
-}
-export function recentActivity(ws: ConvoyWorkspace, filter: { configId?: string } = {}, limit?: number): ActivityEvent[] {
-  const events = ws.activity.filter(event => !filter.configId || event.configId === filter.configId).toSorted(byTimeDesc);
-  return limit === undefined ? events : events.slice(0, limit);
+/** Stored action traces for a robot, newest first. */
+export function tracesFor(ws: ConvoyWorkspace, robotId: string): ActionTrace[] {
+  return ws.traces.filter(trace => trace.robotId === robotId).toSorted(byTimeDesc);
 }
 
 /* ---------- readings, flags and health ---------- */
@@ -398,31 +257,4 @@ export function attentionRobots(ws: ConvoyWorkspace, configId?: string | null, l
     entries.push({ robot, severity, readings, flags: readings.flags, label, detail: flag?.detail ?? label, provenance: flag?.provenance ?? readings.provenance });
   }
   return entries.toSorted((a, b) => severityOrder(a) - severityOrder(b) || collator.compare(a.robot.name, b.robot.name));
-}
-
-/* ---------- summaries ---------- */
-
-export interface ConfigurationSummary {
-  robots: { test: number; production: number; total: number };
-  /** Robots whose displayed health is Needs attention (the robots `attentionRobots` lists with severity "attention"). */
-  attention: number;
-  /** Robots whose displayed health is Degraded. */
-  degraded: number;
-  /** Newest gated suite run for the revision under test, else for any revision. */
-  latestRun: EvalRun | null;
-  /** Newest run of any kind still running or queued. */
-  activeRun: EvalRun | null;
-  revision: ConfigRevision;
-}
-export function configurationSummary(ws: ConvoyWorkspace, config: Configuration, live: LiveMap = {}, now?: number | null): ConfigurationSummary {
-  const robots = robotsFor(ws, config.id);
-  const health = robots.map(robot => robotReadings(robot, getRevision(config, robot.rev), live[robot.id], now).health);
-  return {
-    robots: { test: robots.filter(robot => robot.role === "test").length, production: robots.filter(robot => robot.role === "production").length, total: robots.length },
-    attention: health.filter(item => item === "attention").length,
-    degraded: health.filter(item => item === "degraded").length,
-    latestRun: latestGateRun(ws, config.id, config.candidateRev) ?? latestGateRun(ws, config.id),
-    activeRun: runsFor(ws, { configId: config.id }).find(run => run.status === "running" || run.status === "queued") ?? null,
-    revision: currentRevision(config),
-  };
 }

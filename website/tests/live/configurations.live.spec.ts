@@ -1,17 +1,17 @@
-import { expect, test as base, type APIRequestContext, type Locator, type Page, type TestInfo } from "@playwright/test";
+import { expect, test as base, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
 
 /*
  * Live journeys through Configurations on a deployed website (`pnpm run test:live`,
  * playwright.live.config.ts). They assume nothing about the workspace: names,
- * robots and runs are discovered on the page, so they work with any account's
+ * robots and evals are discovered on the page, so they work with any account's
  * document or with the sample. Steps that need something the workspace does not
- * have (a device-bound robot, a gate run, a production robot with actions) are
- * noted as annotations and skipped, never failed.
+ * have (a live device, a robot linked to a platform project, an episode with a
+ * recording) are noted as annotations and skipped, never failed.
  *
  * Environment (never files, never printed):
  *   CONVOY_LIVE_BASE_URL, CONVOY_LIVE_EMAIL, CONVOY_LIVE_PASSWORD — required, else every test is skipped;
- *   CONVOY_LIVE_ALLOW_WRITES=1 — also run the write journeys (J3, J5, J6). Each reads the
- *     workspace document first and puts it back (or removes the one it created) in `finally`;
+ *   CONVOY_LIVE_ALLOW_WRITES=1 — also run the write journey (W1). It reads the workspace
+ *     document first and puts it back (or removes the one it created) in `finally`;
  *   CONVOY_LIVE_OUTPUT_DIR — where videos and milestone screenshots go.
  */
 const BASE_URL = process.env.CONVOY_LIVE_BASE_URL ?? "";
@@ -19,7 +19,7 @@ const EMAIL = process.env.CONVOY_LIVE_EMAIL ?? "";
 const PASSWORD = process.env.CONVOY_LIVE_PASSWORD ?? "";
 const WRITES = process.env.CONVOY_LIVE_ALLOW_WRITES === "1";
 const DOCUMENT = "/api/platform/workspace-documents/configurations";
-/** A measured value counts as fresh when its sample is at most this old (heartbeats are about 15 s apart). */
+/** A live device counts as fresh when its latest report is at most this old (heartbeats are about 15 s apart). */
 const FRESH_S = 180;
 
 type StorageState = Awaited<ReturnType<APIRequestContext["storageState"]>>;
@@ -47,8 +47,8 @@ test.skip(!(BASE_URL && EMAIL && PASSWORD), "Set CONVOY_LIVE_BASE_URL, CONVOY_LI
 /* ---------- page helpers ---------- */
 
 const h1 = (page: Page) => page.locator("h1:visible");
-const cards = (page: Page) => page.locator(".cfg-card:not(.cfg-card--add)");
-const robotsTable = (page: Page) => page.getByRole("table").filter({ has: page.getByRole("columnheader", { name: /Planner p50/ }) });
+const cards = (page: Page) => page.locator(".cv-config");
+const rows = (page: Page, name: string) => page.getByRole("table", { name }).locator("tbody tr");
 const note = (testInfo: TestInfo, description: string) => testInfo.annotations.push({ type: "skipped step", description });
 
 /** Replaces the account email in rendered text before it is painted, so videos and screenshots never show it. */
@@ -76,51 +76,37 @@ async function maskAccount(page: Page) {
   }, { email: EMAIL });
 }
 
-/** A screenshot of a milestone (full page, or the viewport under a dialog), with the account area masked. */
+/** A screenshot of a milestone (full page, or the viewport under a dialog or the replay), with the account area masked. */
 async function milestone(page: Page, testInfo: TestInfo, name: string, options: { overlay?: boolean } = {}) {
   const path = testInfo.outputPath(`${name}.png`);
   if (!options.overlay) await page.evaluate(() => window.scrollTo(0, 0));
-  await page.screenshot({ path, fullPage: !options.overlay, animations: "disabled", mask: [page.locator(".cfg-account")] });
+  await page.screenshot({ path, fullPage: !options.overlay, animations: "disabled", mask: [page.locator(".cv-account")] });
   await testInfo.attach(name, { path, contentType: "image/png" });
-}
-
-/** Age in seconds from "Measured · just now / 9s ago / 2 min ago / 1 h ago / 3 d ago", or null. */
-function measuredAge(label: string | null): number | null {
-  const match = /Measured · (?:(just now)|(\d+)s ago|(\d+) min ago|(\d+) h ago|(\d+) d ago)/.exec(label ?? "");
-  if (!match) return null;
-  if (match[1]) return 0;
-  const [seconds, minutes, hours, days] = match.slice(2).map(value => (value ? Number(value) : 0));
-  return seconds + minutes * 60 + hours * 3600 + days * 86400;
 }
 
 /** Opens the index and returns how many configurations it lists (0 for an empty workspace). */
 async function openIndex(page: Page): Promise<number> {
   await page.goto("/app/configurations");
   await expect(h1(page)).toHaveText("Configurations");
-  await expect(cards(page).first().or(page.getByText("No configurations in this workspace yet."))).toBeVisible();
+  await expect(cards(page).first().or(page.getByText("No configurations yet."))).toBeVisible();
   return cards(page).count();
 }
 
-/** Opens configuration `index` from the index and returns its name and path. */
-async function openConfiguration(page: Page, index: number): Promise<{ name: string; path: string }> {
-  const card = cards(page).nth(index);
-  const name = (await card.locator("h2").textContent())?.trim() ?? "";
-  const path = (await card.getAttribute("href")) ?? "";
-  await card.click();
-  await expect(h1(page)).toHaveText(name);
-  await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible();
-  return { name, path };
+/** The dashboards in index order, as { name, path }. */
+async function configurations(page: Page): Promise<Array<{ name: string; path: string }>> {
+  await openIndex(page);
+  return cards(page).evaluateAll(nodes => nodes.map(node => ({ name: node.querySelector("h2")?.textContent?.trim() ?? "", path: node.getAttribute("href") ?? "" })));
 }
 
-/** The first configuration whose dashboard shows `probe`, trying them in index order; null when none does. */
-async function findConfiguration(page: Page, probe: (page: Page) => Promise<boolean>): Promise<{ name: string; path: string } | null> {
-  const count = await openIndex(page);
-  for (let i = 0; i < count; i++) {
-    if (i > 0) await openIndex(page);
-    const found = await openConfiguration(page, i);
-    if (await probe(page)) return found;
-  }
-  return null;
+/** The robots of a dashboard, as { name, path, type }. */
+async function robotsOf(page: Page, path: string): Promise<Array<{ name: string; path: string; type: string }>> {
+  await page.goto(path);
+  await expect(page.getByRole("tab", { name: /^Robots/ })).toBeVisible();
+  await expect(page.getByRole("table", { name: "Robots" })).toBeVisible();
+  return rows(page, "Robots").evaluateAll(nodes => nodes.flatMap(node => {
+    const link = node.querySelector("a.cv-row-link");
+    return link ? [{ name: link.textContent?.trim() ?? "", path: link.getAttribute("href") ?? "", type: node.querySelectorAll("td")[0]?.textContent?.trim() ?? "" }] : [];
+  }));
 }
 
 /* ---------- workspace document: read before a write journey, restore after ---------- */
@@ -167,229 +153,119 @@ async function withRestore(page: Page, journey: () => Promise<void>) {
 
 /* ---------- read-only journeys ---------- */
 
-test("J1 · live, read-only: a configuration, its device-bound robot, the latest gate run, its slices and a replay", async ({ page }, testInfo) => {
+test("L1 · live, read-only: configurations, a robot's evals, an eval's rollouts and a real replay", async ({ page }, testInfo) => {
   await maskAccount(page);
+  const list = await configurations(page);
+  await milestone(page, testInfo, "L1-01-configurations");
+  if (!list.length) return note(testInfo, "The workspace has no configurations.");
 
-  let configurations = 0;
-  await test.step("The configurations index", async () => {
-    configurations = await openIndex(page);
-    await expect(page.locator(".cfg-notice").first()).toContainText("Values marked Sample are illustrative");
-    await milestone(page, testInfo, "J1-01-configurations");
-  });
-  if (!configurations) return note(testInfo, "The workspace has no configurations.");
-
-  await test.step("The first configuration's overview", async () => {
-    await openConfiguration(page, 0);
-    await expect(page.getByRole("region", { name: "Production KPIs" })).toBeVisible();
-    await milestone(page, testInfo, "J1-02-configuration-overview");
-  });
-
-  await test.step("A device-bound robot: Measured, with a fresh sample while it is online", async () => {
-    const devices = (p: Page) => p.getByRole("region", { name: /^Connected device · / });
-    const found = await findConfiguration(page, async p => (await devices(p).count()) > 0);
-    if (!found) return note(testInfo, "No configuration has a device-bound robot.");
-    const device = devices(page).first();
-    const robot = ((await device.getByRole("heading", { level: 2, name: /^Connected device · / }).textContent()) ?? "").replace(/^Connected device · /, "").trim();
-    await milestone(page, testInfo, "J1-03-connected-device");
-    await device.getByRole("link", { name: `Open ${robot}`, exact: true }).click();
-    await expect(h1(page)).toHaveText(robot);
-    const hero = page.locator("section.rb-board");
-    await expect(hero).toBeVisible();
-    await expect(hero.getByRole("heading", { name: "Waiting for the first device report" })).toHaveCount(0, { timeout: 45_000 });
-    if (await hero.getByText("Online", { exact: true }).count()) {
-      const measured = page.locator(".cfg-title .cfg-prov--measured");
-      await expect(measured).toBeVisible();
-      await expect(measured).toHaveText(/Measured · /);
-      const age = measuredAge(await measured.textContent());
-      expect(age, `latest measured sample age (${await measured.textContent()})`).not.toBeNull();
-      expect(age!, "the latest measured sample is fresh").toBeLessThanOrEqual(FRESH_S);
-      await expect(page.locator(".cfg-page-head + .portal-updated")).toContainText("Refreshes every 15 seconds");
-    } else {
-      note(testInfo, `${robot}'s device is not online right now; freshness was not asserted.`);
-    }
-    await milestone(page, testInfo, "J1-04-device-bound-robot");
-    await page.goto(found.path);
-    await expect(h1(page)).toHaveText(found.name);
-  });
-
-  const runLink = (p: Page) => p.getByRole("region", { name: "Production KPIs" }).getByRole("link", { name: /^Open Run \d+/ });
-  let gated = false;
-  await test.step("The latest gate run", async () => {
-    if (!(await runLink(page).count()) && !(await findConfiguration(page, async p => (await runLink(p).count()) > 0))) return note(testInfo, "No configuration has a gated evaluation run.");
-    await runLink(page).first().click();
-    await expect(h1(page)).toHaveText(/^Run \d+ · /);
-    await expect(page.locator(".cfg-title").getByText(/^(Passed gate|Below gate)$/)).toBeVisible();
-    gated = true;
-    await milestone(page, testInfo, "J1-05-gate-run");
-  });
-
-  await test.step("Scenario slices: filter the rollouts from the weakest slice", async () => {
-    if (!gated) return note(testInfo, "No gate run to read slices from.");
-    const slices = page.getByRole("table", { name: /success per slice/ });
-    if (!(await slices.count())) return note(testInfo, "This run stores no scenario slices.");
-    await expect(slices).toBeVisible();
-    const filter = slices.getByRole("link", { name: "Filter rollouts" });
-    if (!(await filter.count())) return note(testInfo, "No stored rollouts to filter by slice.");
-    await filter.first().click();
-    await expect(page).toHaveURL(/[?&]slice=/);
-    await expect(page.getByRole("table", { name: /rollouts stored for Run/ })).toBeVisible();
-    await milestone(page, testInfo, "J1-06-slice-rollouts");
-  });
-
-  await test.step("A replay, recorded when the run has one", async () => {
-    if (!gated) return note(testInfo, "No gate run to replay.");
-    await page.goto(page.url().replace(/\?.*$/, ""));
-    await expect(h1(page)).toHaveText(/^Run \d+ · /);
-    const runTitle = (await h1(page).textContent()) ?? "";
-    const recordedRows = page.getByRole("table", { name: /rollouts stored for Run/ }).locator("tbody tr").filter({ has: page.locator(".cfg-prov--recorded") });
-    const candidates: Locator[] = [
-      page.getByRole("region", { name: "Recorded episode" }).getByRole("link", { name: /^Replay / }),
-      page.getByRole("region", { name: "Recorded evaluation" }).getByRole("link", { name: /^Replay / }),
-      recordedRows.getByRole("link", { name: /^Replay / }),
-      page.getByRole("table", { name: /rollouts stored for Run/ }).getByRole("link", { name: /^Replay / }),
-    ];
-    let link: Locator | null = null, recorded = false;
-    for (const [i, candidate] of candidates.entries()) if (!link && await candidate.count()) { link = candidate.first(); recorded = i < 3; }
-    if (!link) return note(testInfo, "This run has no replays.");
-    await link.click();
-    await expect(page).toHaveURL(/[?&]rollout=/);
-    await expect(page.locator(".ev-replay").getByText("Rollout replay", { exact: true })).toBeVisible();
-    if (recorded) {
-      const camera = page.getByRole("img", { name: /^Recorded robot camera at action \d+ of \d+$/ });
-      const missing = page.getByText("No camera recording is available for this episode.", { exact: false });
-      await expect(camera.or(missing).first()).toBeVisible({ timeout: 45_000 });
-      if (await missing.count()) note(testInfo, "The recorded episode has no published camera recording.");
-    } else {
-      note(testInfo, "No recorded replay in this run; a sample replay was opened.");
-      await expect(page.locator(".cfg-transport__pos")).toBeVisible();
-    }
-    await milestone(page, testInfo, "J1-07-replay");
-    await page.keyboard.press("Escape");
-    await expect(h1(page)).toHaveText(runTitle);
-    await expect(page).not.toHaveURL(/[?&]rollout=/);
-  });
-});
-
-test("J2 · live, read-only: a production robot's actions and a trace's span waterfall", async ({ page }, testInfo) => {
-  await maskAccount(page);
-  const production = (p: Page) => p.getByRole("group", { name: "Filter robots" }).getByRole("button", { name: /^Production\s*[1-9]/ });
-  const found = await findConfiguration(page, async p => (await production(p).count()) > 0);
-  if (!found) { note(testInfo, "No configuration has a production robot."); return; }
-
-  const view = page.getByRole("button", { name: /^View trace · / });
-  await test.step("A production robot from the dashboard, preferring one with stored actions", async () => {
-    await production(page).first().click();
-    const links = robotsTable(page).locator("tbody th[scope=row] .cfg-row-link");
-    await expect(links.first()).toBeVisible();
-    const robots = (await links.evaluateAll(nodes => nodes.map(node => ({ name: node.textContent?.trim() ?? "", href: node.getAttribute("href") ?? "" })))).slice(0, 8);
-    for (const robot of robots) {
-      await page.goto(robot.href);
+  // Prefer a robot with evals, and among those one whose eval has a replayable episode.
+  let opened = false, replayed = false;
+  for (const config of list) {
+    for (const robot of await robotsOf(page, config.path)) {
+      if (!opened) await milestone(page, testInfo, "L1-02-configuration");
+      await page.goto(robot.path);
       await expect(h1(page)).toHaveText(robot.name);
-      await expect(page.locator(".cfg-page-head .portal-eyebrow")).toHaveText("Production robot");
-      await expect(page.getByRole("tab", { name: /Actions & traces/ })).toHaveAttribute("aria-selected", "true");
-      if (await view.count()) break;
+      await page.getByRole("tab", { name: /^Evals/ }).click();
+      const evals = rows(page, "Evals");
+      await expect(evals.first().or(page.getByText("No evals yet."))).toBeVisible({ timeout: 30_000 });
+      const links = await evals.locator("a.cv-row-link").evaluateAll(nodes => nodes.slice(0, 6).map(node => ({ label: node.textContent?.trim() ?? "", path: node.getAttribute("href") ?? "" })));
+      if (!links.length) continue;
+      if (!opened) await milestone(page, testInfo, "L1-03-robot-evals");
+      for (const run of links) {
+        await page.goto(run.path);
+        await expect(h1(page)).toHaveText(run.label);
+        await expect(page.getByRole("group", { name: "Success rate", exact: true })).toBeVisible();
+        if (!opened) { await milestone(page, testInfo, "L1-04-eval"); opened = true; }
+        const replay = page.getByRole("button", { name: /^Replay / });
+        if (!(await replay.count())) continue;
+        await replay.first().click();
+        await expect(page).toHaveURL(/[?&]rollout=/);
+        const sheet = page.getByRole("dialog");
+        const camera = sheet.getByRole("img", { name: /^Recorded robot camera at action \d+ of \d+$/ });
+        const missing = sheet.getByText("No recording for this episode.");
+        await expect(camera.or(missing).first()).toBeVisible({ timeout: 45_000 });
+        if (await missing.count()) { note(testInfo, "An episode had no published recording."); await page.keyboard.press("Escape"); continue; }
+        await sheet.getByRole("button", { name: "Play", exact: true }).click();
+        await expect(sheet.locator(".cv-player__step")).not.toHaveText(/^0 \//, { timeout: 30_000 });
+        await sheet.getByRole("button", { name: "Pause" }).click();
+        await milestone(page, testInfo, "L1-05-replay", { overlay: true });
+        await page.keyboard.press("Escape");
+        await expect(sheet).toHaveCount(0);
+        replayed = true;
+        break;
+      }
+      if (replayed) break;
     }
-    await milestone(page, testInfo, "J2-01-production-robot");
-  });
-
-  await test.step("Actions & traces, and a trace drawer with its waterfall", async () => {
-    if (!(await view.count())) return note(testInfo, "No production robot here has stored actions.");
-    const button = view.first();
-    await button.click();
-    const drawer = page.getByRole("dialog");
-    await expect(drawer).toBeVisible();
-    await expect(page).toHaveURL(/[?&]trace=/);
-    await expect(drawer.locator(".cfg-wf").first()).toBeVisible();
-    await milestone(page, testInfo, "J2-02-trace-drawer", { overlay: true });
-    await page.keyboard.press("Escape");
-    await expect(drawer).toHaveCount(0);
-    await expect(button).toBeFocused();
-  });
+    if (replayed) break;
+  }
+  if (!opened) note(testInfo, "No robot has evals.");
+  else if (!replayed) note(testInfo, "No eval has a replayable episode.");
 });
 
-/* ---------- write journeys (opt-in), each restoring the document ---------- */
+test("L2 · live, read-only: a live device's telemetry is fresh while it is online, and its traces", async ({ page }, testInfo) => {
+  await maskAccount(page);
+  for (const config of await configurations(page)) {
+    await page.goto(config.path);
+    await expect(h1(page)).toHaveText(config.name);
+    const row = page.getByRole("region", { name: / telemetry$/ });
+    if (!(await row.count())) continue;
+    const status = (await row.locator(".cv-badge").first().textContent())?.trim() ?? "";
+    await milestone(page, testInfo, "L2-01-telemetry");
+    if (status === "Online") {
+      const at = await row.locator("time").getAttribute("datetime");
+      const age = at ? (Date.now() - Date.parse(at)) / 1000 : Number.NaN;
+      expect(age, `latest device report (${at})`).toBeLessThanOrEqual(FRESH_S);
+    } else {
+      note(testInfo, `The device is ${status || "not reporting"} right now; freshness was not asserted.`);
+    }
+    const robot = (await row.locator("h2").textContent())?.trim() ?? "";
+    await rows(page, "Robots").getByRole("link", { name: robot, exact: true }).click();
+    await expect(h1(page)).toHaveText(robot);
+    await page.getByRole("tab", { name: /^Traces/ }).click();
+    await expect(page.getByRole("table", { name: "Traces" }).or(page.getByText("Connecting to the device…"))).toBeVisible();
+    await milestone(page, testInfo, "L2-02-traces");
+    return;
+  }
+  note(testInfo, "No configuration has a robot on a live device.");
+});
+
+/* ---------- write journey (opt-in), restoring the document ---------- */
 
 test.describe("writes", () => {
-  test.skip(!WRITES, "Set CONVOY_LIVE_ALLOW_WRITES=1 to run the write journeys (they restore the workspace document).");
+  test.skip(!WRITES, "Set CONVOY_LIVE_ALLOW_WRITES=1 to run the write journey (it restores the workspace document).");
 
-  test("J3 · live write: add a test robot after checking the production gate", async ({ page }, testInfo) => {
+  test("W1 · live write: create a configuration, add a robot, then delete the configuration", async ({ page }, testInfo) => {
     await maskAccount(page);
+    const name = `Live check ${Date.now().toString(36)}`;
     await withRestore(page, async () => {
-      if (!(await openIndex(page))) { note(testInfo, "The workspace has no configurations."); return; }
-      await openConfiguration(page, 0);
-      await page.locator(".cfg-actions").getByRole("button", { name: "Add robot", exact: true }).click();
-      const dialog = page.getByRole("dialog", { name: /^Add robot to / });
-      await expect(dialog).toBeVisible();
-      const choices = dialog.getByRole("group", { name: "Robot" }).locator("label.cfg-choice");
-      const first = choices.first();
-      const robot = ((await first.locator(".cfg-choice__title").textContent()) ?? "").trim();
-      if (robot === "Pair a new device") { note(testInfo, "No registered robot is free to add."); return; }
-      await first.getByRole("radio").check();
-      const production = dialog.getByRole("radio", { name: /^Production/ });
-      if (await production.isDisabled()) await expect(dialog).toContainText("Not available:");
-      else { await production.check(); await expect(dialog.getByRole("status").filter({ hasText: /passed gate on Run \d+/ })).toBeVisible(); }
-      await milestone(page, testInfo, "J3-01-add-robot", { overlay: true });
-      await dialog.getByRole("radio", { name: /^Test/ }).check();
-      await dialog.getByRole("button", { name: "Add robot", exact: true }).click();
-      await expect(dialog).toBeHidden();
-      await expect(page.locator(".cd-flash")).toContainText(`${robot} added to`);
-      await page.getByRole("tab", { name: /^Robots/ }).click();
-      await expect(robotsTable(page).getByRole("row").filter({ hasText: robot })).toContainText("Test");
-      await milestone(page, testInfo, "J3-02-robot-added");
-    });
-  });
+      await openIndex(page);
+      await page.getByRole("link", { name: "New configuration" }).first().click();
+      await page.getByLabel("Name").fill(name);
+      await page.getByLabel("Robot").fill("Live check arm");
+      await page.getByLabel("Edge model").fill("Qwen2.5-1.5B-Instruct Q4_K_M");
+      await page.getByRole("button", { name: "Create" }).click();
+      await expect(h1(page)).toHaveText(name);
+      await milestone(page, testInfo, "W1-01-created");
 
-  test("J5 · live write: flag a robot with a note, see it in the attention banner, clear it", async ({ page }, testInfo) => {
-    await maskAccount(page);
-    const reason = `Live journey check ${Date.now().toString(36)}`;
-    await withRestore(page, async () => {
-      if (!(await openIndex(page))) { note(testInfo, "The workspace has no configurations."); return; }
-      await openConfiguration(page, 0);
-      await page.getByRole("tab", { name: /^Robots/ }).click();
-      const flagButton = page.getByRole("button", { name: /^Flag / });
-      if (!(await flagButton.count())) { note(testInfo, "No unflagged robot in this configuration."); return; }
-      const robot = ((await flagButton.first().textContent()) ?? "").replace(/^Flag\s*/, "").trim();
-      await flagButton.first().click();
-      const dialog = page.getByRole("dialog", { name: `Flags · ${robot}` });
-      await dialog.getByLabel("Reason").fill(reason);
-      await dialog.getByLabel("Note").fill("Added and cleared by the live journey test.");
-      await dialog.getByRole("radio", { name: /^Needs attention/ }).check();
-      await dialog.getByRole("button", { name: "Flag robot" }).click();
+      await page.getByRole("button", { name: "Add robot" }).click();
+      const dialog = page.getByRole("dialog", { name: "Add robot" });
+      await dialog.getByLabel("Name").fill("Live check robot");
+      await dialog.getByText("Simulator", { exact: true }).click();
+      const projects = dialog.getByLabel("Evals from").locator("option");
+      if (await projects.count() > 1) await dialog.getByLabel("Evals from").selectOption({ index: 1 });
+      else note(testInfo, "The account lists no platform project; the robot has no platform evals.");
+      await milestone(page, testInfo, "W1-02-add-robot", { overlay: true });
+      await dialog.getByRole("button", { name: "Add robot" }).click();
       await expect(dialog).toBeHidden();
-      const banner = page.locator(".cd-banner");
-      await expect(banner.getByRole("link", { name: robot, exact: true })).toBeVisible();
-      await expect(robotsTable(page).getByRole("row").filter({ hasText: robot })).toContainText("Needs attention");
-      await milestone(page, testInfo, "J5-01-flagged");
-      await page.getByRole("button", { name: new RegExp(`^Review \\d+ flags? on ${robot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) }).click();
-      await dialog.getByRole("button", { name: `Clear flag “${reason}”` }).click();
-      await expect(dialog.getByRole("status").filter({ hasText: "Cleared" })).toContainText(reason);
-      await dialog.getByRole("button", { name: "Close", exact: true }).click();
-      await milestone(page, testInfo, "J5-02-cleared");
-    });
-  });
+      await expect(rows(page, "Robots").filter({ hasText: "Live check robot" })).toBeVisible();
+      await milestone(page, testInfo, "W1-03-robot-added");
 
-  test("J6 · live write: queue an evaluation on a test robot; it says no runner is connected", async ({ page }, testInfo) => {
-    await maskAccount(page);
-    await withRestore(page, async () => {
-      const test = (p: Page) => p.getByRole("group", { name: "Filter robots" }).getByRole("button", { name: /^Test\s*[1-9]/ });
-      const found = await findConfiguration(page, async p => (await test(p).count()) > 0);
-      if (!found) { note(testInfo, "No configuration has a test robot."); return; }
-      await test(page).first().click();
-      const first = robotsTable(page).locator("tbody th[scope=row] .cfg-row-link").first();
-      const robot = ((await first.textContent()) ?? "").trim();
-      await first.click();
-      await expect(h1(page)).toHaveText(robot);
-      const run = page.getByRole("button", { name: "Run evaluation" });
-      if (await run.getAttribute("aria-disabled") === "true") { note(testInfo, "Run evaluation is unavailable here."); return; }
-      await run.click();
-      const dialog = page.getByRole("dialog", { name: `Run evaluation on ${robot}` });
-      await expect(dialog).toContainText("No evaluation runner is connected");
-      const queue = dialog.getByRole("button", { name: "Queue run" });
-      if (await queue.isDisabled()) { note(testInfo, "No evaluation suite to queue."); return; }
-      await queue.click();
-      await expect(dialog).toBeHidden();
-      await expect(page.getByRole("note").filter({ hasText: `is queued on ${robot}` })).toContainText("No evaluation runner is connected, so it has not started.");
-      await milestone(page, testInfo, "J6-01-queued");
+      await page.getByRole("tab", { name: "Details" }).click();
+      await page.getByRole("button", { name: "Delete configuration" }).click();
+      await page.getByRole("dialog", { name: `Delete ${name}?` }).getByRole("button", { name: "Delete" }).click();
+      await expect(h1(page)).toHaveText("Configurations");
+      await expect(cards(page).filter({ hasText: name })).toHaveCount(0);
     });
   });
 });

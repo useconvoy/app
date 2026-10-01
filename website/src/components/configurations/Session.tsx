@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { Brand, Login } from "@/components/console/Console";
 import { WorkspaceProvider } from "@/lib/configurations/client";
 import { LiveDeviceProvider } from "./LiveDeviceProvider";
+import { PlatformProvider } from "./platform";
 import { onSessionExpired } from "@/lib/configurations/session-events";
 import { api, ApiError, errorText } from "@/lib/platform/client";
 import type { Account } from "@/lib/platform/client";
@@ -62,10 +63,10 @@ export function useSession(): WorkspaceSessionValue {
 
 /**
  * Everything a Configurations route needs above its page: the session gate, the
- * workspace document and the shared live-device poller. Both live inside the gate,
- * so signing out (or a session ending) unmounts them: no device data or document
- * from one session is shown in the next.
+ * workspace document, the shared live-device poller and the platform reads
+ * (evaluations, missions, episodes). All live inside the gate, so signing out (or
+ * a session ending) unmounts them: nothing read in one session is shown in the next.
  */
 export function ConfigurationsRoot({ children }: { children: ReactNode }) {
-  return <WorkspaceSession><WorkspaceProvider><LiveDeviceProvider>{children}</LiveDeviceProvider></WorkspaceProvider></WorkspaceSession>;
+  return <WorkspaceSession><WorkspaceProvider><LiveDeviceProvider><PlatformProvider>{children}</PlatformProvider></LiveDeviceProvider></WorkspaceProvider></WorkspaceSession>;
 }

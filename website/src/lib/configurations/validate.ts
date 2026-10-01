@@ -147,8 +147,8 @@ const pathKind = oneOf(["edge", "cloud", "fallback"]);
 /* ---------- configurations ---------- */
 
 const robotSpec = obj({
-  name: req(str), summary: req(str), details: opt(str), cameras: req(arr(str)), controlRateHz: req(nullable(nonNegative)),
-  actionSpace: req(str), safetyController: opt(str),
+  name: req(str), summary: req(text), details: opt(str), cameras: req(arr(str)), controlRateHz: req(nullable(nonNegative)),
+  actionSpace: req(text), safetyController: opt(str),
   simTwin: req(nullable(obj({ name: req(str), engine: req(str), note: opt(str) }))),
   provenance: req(provenance),
 });
@@ -164,7 +164,7 @@ const edgeHardware = obj({
 const modelRole = oneOf(["planner", "policy", "fallback-policy", "skill-pack", "verifier"]);
 const modelState = oneOf(["active", "fallback-only", "proposed", "blocked", "not-deployed"]);
 const edgeModel = obj({
-  id: req(id), role: req(modelRole), name: req(str), shortName: req(str), runtime: req(str), detail: opt(str),
+  id: req(id), role: req(modelRole), name: req(str), shortName: req(str), runtime: req(text), detail: opt(str),
   contextTokens: opt(nullable(count)), residentGiB: req(nullableNonNegative), state: req(modelState), evidence: opt(provenance),
 });
 const cloudModel = obj({
@@ -239,8 +239,9 @@ const flag = obj({
   severity: req(oneOf(["warning", "attention"])), label: req(str), detail: req(str), at: req(time), note: opt(str), by: opt(str), provenance: req(provenance),
 });
 const robot = obj({
-  id: req(id), name: req(str), configId: req(nullableId), role: req(oneOf(["test", "production"])), site: req(str), rev: req(nullableId),
+  id: req(id), name: req(str), configId: req(nullableId), role: req(oneOf(["test", "production"])), site: req(text), rev: req(nullableId),
   deviceId: opt((v, p, ctx) => { if (v !== CONFIGURED_DEVICE) id(v, p, ctx); }),
+  projectId: opt(nullableId), platformRobotId: opt(nullableId),
   kind: req(oneOf(["robot", "bench", "simulator"])), description: opt(str),
   health: req(oneOf(["healthy", "degraded", "attention", "offline", "not-reported"])), healthReason: opt(nullable(text)),
   flags: req(arr(flag)),
@@ -256,6 +257,7 @@ const robot = obj({
   clock: opt(clockLabel), lastSeenAt: opt(nullableTime), registeredAt: req(time), agentVersion: opt(nullableString),
 }, (v, p, ctx) => {
   if (v.deviceId !== undefined && v.telemetry !== undefined) ctx.issue(join(p, "telemetry"), "a robot with a live device binding gets telemetry from the device and must not store it");
+  if (typeof v.platformRobotId === "string" && typeof v.projectId !== "string") ctx.issue(join(p, "platformRobotId"), "needs the projectId it belongs to");
   if (v.configId === null && v.rev !== null) ctx.issue(join(p, "rev"), "an unattached robot has no revision");
   if (typeof v.configId === "string" && v.rev === null) ctx.issue(join(p, "rev"), "an attached robot needs the revision it runs");
 });
