@@ -42,5 +42,8 @@ def reference_manifest() -> dict:
         "profile": PROFILE,
         "policy": {"runtime": ScriptedRuntime.runtime, "artifact_sha256": SCRIPTED_DIGEST},
         "environment": {"name": "pick-place-v3", "metaworld": "3.1.1", "mujoco": "3.3.0"},
-        "execution": {"max_steps": 500, "decision_timeout_ms": 1000, "mission_timeout_s": 120},
+        # This offline reference exercises lifecycle and fault recovery on shared
+        # hosts, including durable journal writes. It is not a latency target;
+        # real-time qualification uses its own explicit timing contract.
+        "execution": {"max_steps": 500, "decision_timeout_ms": 5000, "mission_timeout_s": 120},
     }
