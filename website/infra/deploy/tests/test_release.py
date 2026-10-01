@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import os
@@ -44,6 +45,18 @@ class ComposeContract(unittest.TestCase):
         self.assertEqual(api["logging"]["options"], {"max-size": "10m", "max-file": "3"})
         self.assertNotIn("ports", api)
         self.assertIn("no-new-privileges:true", api["security_opt"])
+
+    def test_enabled_evaluations_and_private_signer_survive_release_and_rollback(self):
+        before = copy.deepcopy(OLD)
+        signing_mount = "./portal/execution-signing:/run/execution-signing:ro"
+        before["services"]["control-plane"]["volumes"].append(signing_mount)
+        before["services"]["evaluations"] = {"image": "convoy-control-plane:old", "volumes": ["./portal/data:/data"]}
+        released = module.deploy(before, SHA, True)
+        self.assertIn(signing_mount, released["services"]["control-plane"]["volumes"])
+        self.assertEqual(released["services"]["evaluations"]["image"], f"convoy-control-plane:{SHA}")
+        self.assertNotIn(signing_mount, released["services"]["evaluations"]["volumes"])
+        self.assertEqual(module.restore(released, before)["services"]["evaluations"], before["services"]["evaluations"])
+        self.assertNotIn("evaluations", module.restore(released, OLD)["services"])
 
     def test_web_only_release_keeps_api_and_restore_keeps_unrelated_current_services(self):
         result = module.deploy(OLD, SHA, False)
@@ -91,7 +104,7 @@ with (root / "docker-calls").open("a") as log:
     log.write(json.dumps({"args": a, "services": doc["services"]}) + "\n")
 fail = os.environ.get("FAIL_AT")
 if a[:3] == ["compose", "ps", "-q"]:
-    if "control-plane" in doc["services"]: print("known-api-container")
+    if a[-1] in doc["services"]: print("known-" + a[-1] + "-container")
 elif a[:2] == ["compose", "up"]:
     if fail == "web-start" and a[-1] == "web" and "abcdef123456" in str(doc["services"]["web"]): sys.exit(42)
 elif a[:2] == ["compose", "exec"]:
