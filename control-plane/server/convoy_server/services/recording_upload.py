@@ -50,6 +50,8 @@ def upload(episode, sequence, payload):
         partial, final = paths(root, episode)
         path = final if final.exists() else partial
         quota = int(os.environ.get("CONVOY_RECORDING_QUOTA_BYTES", str(512 * 1024**2)))
+        if not path.exists() and sum(p.stat().st_size for p in root.iterdir() if p.is_file()) + 65536 > quota:
+            raise HTTPException(507, "Recording storage limit reached")
         with sqlite3.connect(path) as db:
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS missions(id TEXT PRIMARY KEY,identity_json TEXT,state TEXT,report_json TEXT);

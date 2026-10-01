@@ -4,6 +4,7 @@ import sqlite3
 from types import SimpleNamespace
 
 import pytest
+from conftest import FakeAgent, enrollment_token
 from convoy_server.services import replay
 from fastapi.testclient import TestClient
 from test_episode_replay import journal
@@ -32,6 +33,9 @@ def test_upload_publish_retry_and_authorization(pipeline, app, tmp_path, monkeyp
     read = f'/api/v1/episodes/{episode.id}/replay'
     assert TestClient(app).post(upload + '/commands/0', json=payload).status_code == 401
     assert p['admin'].post(upload + '/commands/0', json=payload).status_code == 401
+    other_device = FakeAgent(app)
+    assert other_device.enroll(enrollment_token(p['admin'])).status_code == 200
+    assert other_device.client.post(upload + '/commands/0', json=payload).status_code == 404
     agent = p['agent'].client
     assert agent.post(upload + '/publish').status_code == 409
     assert agent.post(upload + '/commands/0', json=payload).status_code == 200
