@@ -53,7 +53,7 @@ def test_previous_revision_upgrade_adds_owner_scoped_documents(postgres_database
         assert "workspace_documents" not in inspect(engine).get_table_names()
         result = migrate_database(settings)
         assert result["from_revision"] == "0002_evaluations"
-        assert result["target_revision"] == "0003_workspace_documents"
+        assert result["target_revision"] == "0004_offline_evaluations"
         # Bound values: a colon inside a literal of text() would be taken for a parameter.
         insert = text(
             "INSERT INTO workspace_documents "
@@ -74,6 +74,6 @@ def test_previous_revision_upgrade_adds_owner_scoped_documents(postgres_database
             stored = connection.execute(text("SELECT body, octet_length(body), size_bytes FROM workspace_documents"))
             assert stored.one() == (body, len(body.encode()), len(body.encode()))
             assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
-        assert migrate_database(settings)["from_revision"] == "0003_workspace_documents"
+        assert migrate_database(settings)["from_revision"] == "0004_offline_evaluations"
     finally:
         engine.dispose()

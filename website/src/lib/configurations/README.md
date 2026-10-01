@@ -37,7 +37,8 @@ stays reachable on the same session, but Configurations never links to it.
   short notice, and saving is disabled.
 - **Changes** (`mutations.ts`, `create.ts`): create a configuration (name, robot,
   hardware preset, edge and cloud models; the route follows from the models), delete
-  one, add a robot (a live device, or a simulator), remove one.
+  one, add a robot (a live device, a simulator, or a simulator with offline evals),
+  link a robot's offline evals, remove one.
 - **Live devices.** A robot with `deviceId` (a device id, or `CONFIGURED_DEVICE` for
   the workspace's configured device) gets measured telemetry, series and inference
   traces from the existing device endpoints. `live.ts` maps them and runs one shared
@@ -51,6 +52,12 @@ stays reachable on the same session, but Configurations never links to it.
     outside an evaluation (one episode each), are the robot's evals, newest first,
     labelled "Eval N" after any stored runs. `Robot.platformRobotId` (`rob_…`, optional)
     keeps only that platform robot's.
+  - `Robot.offlineEvaluationIds` (`oev_…`): offline evaluations the robot shows as evals,
+    numbered with the platform's and tagged "Offline sim": episodes recorded outside the
+    hosted runner and imported unsigned (`docs/v1/offline-evaluations.md`). The eval page
+    shows their metrics and rollouts; the replay plays the uploaded frames (PNG or JPEG)
+    with one label per action value. Add robot → "Simulator · offline" links them; a
+    simulator's Details → Offline evals changes the links.
   - `EvalRun.recordedEvaluationId` (`eva_…`): a stored run whose metrics and rollouts
     come from that evaluation. `EvalRun.recordedEpisodeId` (`epi_…`): a one-episode run.
   - `Rollout.episodeId` (`epi_…`): a stored rollout backed by a real episode.

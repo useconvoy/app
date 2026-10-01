@@ -18,6 +18,18 @@ RECORDING_COMMAND = re.compile(r"/api/agent/v1/robots/[^/]+/missions/[^/]+/recor
 DOCUMENT_BODY = 2 * 1024 * 1024 + 64 * 1024
 DOCUMENT = re.compile(r"/api/v1/workspace-documents/[^/]+")
 BODY_TIMEOUT_S = 15
+# Offline evaluations read their bodies after authenticating the caller too. An episode upload carries
+# its frames (at most 16 MiB in one request), so it may take longer to arrive than a management write.
+OFFLINE_EVALUATIONS = re.compile(r"/api/v1/offline-evaluations")
+OFFLINE_EPISODES = re.compile(r"/api/v1/offline-evaluations/[^/]+/episodes")
+OFFLINE_EPISODE_BODY = 16 * 1024 * 1024
+OFFLINE_EPISODE_TIMEOUT_S = 120
+# Routes that consume their own body: (path, method, maximum, deadline in seconds or None for the default).
+LAZY = (
+    (DOCUMENT, "PUT", DOCUMENT_BODY, None),
+    (OFFLINE_EVALUATIONS, "POST", MAX_BODY, None),
+    (OFFLINE_EPISODES, "POST", OFFLINE_EPISODE_BODY, OFFLINE_EPISODE_TIMEOUT_S),
+)
 
 
 class ChatBodyLimit:
@@ -26,24 +38,30 @@ class ChatBodyLimit:
 
     async def __call__(self, scope, receive, send):
         path = scope.get("path", "")
-        document = DOCUMENT.fullmatch(path) is not None
-        application = document or path.startswith((
+        lazy = next((route for route in LAZY if route[0].fullmatch(path) and scope.get("method") == route[1]), None)
+        if scope["type"] == "http" and lazy is not None:
+            # Refuse a declared oversize up front; otherwise bound the body while the route reads it.
+            _, _, maximum, deadline = lazy
+            if not _declared_within(scope, maximum):
+                await JSONResponse({"error": "application request body too large or invalid"}, status_code=413)(
+                    scope, receive, send
+                )
+                return
+            await self.app(scope, _bounded(receive, maximum, "application", deadline), send)
+            return
+        application = path.startswith((
             "/api/agent/v1/robots/", "/api/v1/projects", "/api/v1/robots", "/api/v1/applications",
             "/api/v1/deployments", "/api/v1/missions/", "/api/v1/evaluations", "/api/v1/evaluation-suites",
+            "/api/v1/offline-evaluations",
         ))
         limited = (
             path.startswith("/api/agent/v1/chat/") or path.startswith("/api/v1/devices/") and "/chat" in path
         ) or application
         label = "application" if application else "chat"
-        # Camera observations and workspace documents exceed the ordinary management-body limit. Keep
-        # these exceptions exact and bounded, including requests without a length.
-        maximum = MAX_BODY
-        if RECORDING_COMMAND.fullmatch(path):
-            maximum = RECORDING_BODY
-        elif document:
-            maximum = DOCUMENT_BODY
-        method = "PUT" if document else "POST"
-        if scope["type"] != "http" or scope.get("method") != method or not limited:
+        # Camera observations exceed the ordinary management-body limit. Keep this exception exact and
+        # bounded, including requests without a length.
+        maximum = RECORDING_BODY if RECORDING_COMMAND.fullmatch(path) else MAX_BODY
+        if scope["type"] != "http" or scope.get("method") != "POST" or not limited:
             await self.app(scope, receive, send)
             return
         headers = dict(scope.get("headers", []))
@@ -55,9 +73,6 @@ class ChatBodyLimit:
             await JSONResponse({"error": f"{label} request body too large or invalid"}, status_code=413)(
                 scope, receive, send
             )
-            return
-        if document:
-            await self.app(scope, _bounded(receive, maximum, label), send)
             return
         body = bytearray()
         try:
@@ -89,7 +104,16 @@ class ChatBodyLimit:
         await self.app(scope, replay, send)
 
 
-def _bounded(receive, maximum: int, label: str):
+def _declared_within(scope, maximum: int) -> bool:
+    headers = dict(scope.get("headers", []))
+    try:
+        length = int(headers.get(b"content-length", b"0"))
+    except ValueError:
+        return False
+    return 0 <= length <= maximum
+
+
+def _bounded(receive, maximum: int, label: str, timeout_s: float | None = None):
     """`receive` for a route that reads its body only after authenticating: the same size bound and
     deadline as buffering, raised as HTTP errors while the route consumes the body. Nothing is read
     when the route refuses the request first."""
@@ -102,7 +126,7 @@ def _bounded(receive, maximum: int, label: str):
         if complete:
             return await receive()
         if deadline is None:
-            deadline = asyncio.get_running_loop().time() + BODY_TIMEOUT_S
+            deadline = asyncio.get_running_loop().time() + (BODY_TIMEOUT_S if timeout_s is None else timeout_s)
         try:
             async with asyncio.timeout_at(deadline):
                 message = await receive()

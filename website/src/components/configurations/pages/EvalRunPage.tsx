@@ -4,17 +4,18 @@ import { useEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import { EpisodeReplay } from "@/components/console/EpisodeReplay";
 import { getSuite, resolveRobotRoute, useWorkspace } from "@/lib/configurations/client";
-import { fmtCount, fmtFixed, fmtSeconds, fmtWhen } from "@/lib/configurations/format";
+import { fmtCount, fmtFixed, fmtNumber, fmtSeconds, fmtWhen } from "@/lib/configurations/format";
 import { emptyWorkspace } from "@/lib/configurations/mutations";
 import { routes } from "@/lib/configurations/routes";
 import {
-  belongsTo, evaluationRollouts, evaluationView, medianSteps, missionRollouts, missionView, platformPaths, runShare, seedSlices, sliceViews, storedRunRollouts, storedRunView,
+  belongsTo, evaluationRollouts, evaluationView, medianSteps, missionRollouts, missionView, OFFLINE_TAG, offlineMetrics, offlineRollouts, offlineView, platformPaths,
+  runShare, seedSlices, sliceViews, storedRunRollouts, storedRunView,
 } from "@/lib/configurations/runs";
-import type { PlatformEvaluation, PlatformMission, RolloutView, RunView, SliceView } from "@/lib/configurations/runs";
+import type { MetricView, PlatformEvaluation, PlatformMission, RolloutView, RunView, SliceView } from "@/lib/configurations/runs";
 import type { Robot } from "@/lib/configurations/types";
-import type { Episode } from "@/lib/platform/client";
+import type { Episode, OfflineEvaluationDetail } from "@/lib/platform/client";
 import { AppShell, PageHeader, type Crumb } from "../AppShell";
-import { Missing, ResultBadge, RolloutBadge } from "../Badges";
+import { Missing, ResultBadge, RolloutBadge, Tag } from "../Badges";
 import { DataTable, type Column } from "../DataTable";
 import { useNow, useQueryState } from "../hooks";
 import { Icon } from "../Icons";
@@ -43,13 +44,16 @@ interface RunModel {
   /** What the episodes cover: the suite, or the seeds. */
   scope: string | null;
   details: Array<{ label: string; value: ReactNode | null }>;
+  /** Offline evaluations: the mean of each numeric metric the episodes report. */
+  metrics?: MetricView[];
 }
 
 /**
  * Eval page (`…/evals/[runId]`): result, metric tiles, slices and rollouts; the ids
  * under Details. `runId` is a stored run, or a platform evaluation (`eva_…`) or
- * mission (`mis_…`) of the robot's project, read through the proxy. A rollout with
- * a real episode opens the replay in a bottom panel (`?rollout=`).
+ * mission (`mis_…`) of the robot's project, or an offline evaluation (`oev_…`) the
+ * robot links, read through the proxy. A rollout with a real episode opens the
+ * replay in a bottom panel (`?rollout=`); an offline one plays its uploaded frames.
  */
 export function EvalRunPage({ configId, robotId, runId }: { configId: string; robotId: string; runId: string }) {
   const ws = useWorkspace();
@@ -60,10 +64,12 @@ export function EvalRunPage({ configId, robotId, runId }: { configId: string; ro
   const robot = route?.robot ?? null;
   const { views } = useRobotViews(workspace, robots, now);
   const stored = robot ? workspace.runs.find(run => run.id === runId && run.robotId === robot.id) ?? null : null;
-  const kind = stored ? "document" : robot?.projectId && /^eva_/.test(runId) ? "evaluation" : robot?.projectId && /^mis_/.test(runId) ? "mission" : null;
+  const kind = stored ? "document" : robot?.projectId && /^eva_/.test(runId) ? "evaluation" : robot?.projectId && /^mis_/.test(runId) ? "mission"
+    : /^oev_/.test(runId) && robot?.offlineEvaluationIds?.includes(runId) ? "offline" : null;
   const evaluationId = stored?.recordedEvaluationId ?? (kind === "evaluation" ? runId : null);
   const evaluation = usePlatform<PlatformEvaluation>(evaluationId ? platformPaths.evaluation(evaluationId) : null);
   const mission = usePlatform<PlatformMission>(kind === "mission" ? platformPaths.mission(runId) : null);
+  const offline = usePlatform<OfflineEvaluationDetail>(kind === "offline" ? platformPaths.offlineEvaluation(runId) : null);
   const missionEpisode = mission.state.status === "ready" ? mission.state.data.episode_id : null;
   const episode = usePlatform<Episode>(missionEpisode ? platformPaths.episode(missionEpisode) : null);
   // A standalone episode's wall time comes with its recording's metadata.
@@ -134,6 +140,27 @@ export function EvalRunPage({ configId, robotId, runId }: { configId: string; ro
         ],
       };
     }
+  } else if (kind === "offline") {
+    if (offline.state.status === "error") return offline.state.missing ? notFound : <AppShell crumbs={crumbs("Eval")}><Notice tone="error" action={<button className="cv-link" type="button" onClick={offline.retry}>Retry</button>}>{offline.state.message}</Notice></AppShell>;
+    if (offline.state.status === "ready") {
+      const data = offline.state.data;
+      const rollouts = offlineRollouts(data);
+      const summary = data.summary;
+      model = {
+        view: offlineView(data, number ?? 0), rollouts, slices: seedSlices(rollouts), scope: seeds(rollouts), metrics: offlineMetrics(data.episodes),
+        clock: summary.median_wall_seconds !== null ? "Wall clock" : summary.median_sim_seconds !== null ? "Simulated" : null,
+        details: [
+          { label: "Name", value: data.name },
+          { label: "Task", value: data.task },
+          { label: "Configuration", value: data.config_label },
+          { label: "Policy", value: data.policy_label },
+          { label: "Source", value: <span title={data.scope}>Offline import · unsigned</span> },
+          { label: "Offline evaluation", value: <span className="cv-mono">{data.id}</span> },
+          { label: "Imported", value: `${fmtWhen(data.created_at)} UTC` },
+          { label: "Updated", value: `${fmtWhen(data.updated_at)} UTC` },
+        ],
+      };
+    }
   } else {
     return notFound;
   }
@@ -144,9 +171,10 @@ export function EvalRunPage({ configId, robotId, runId }: { configId: string; ro
 
 function EvalRun({ crumbs, model, robot }: { crumbs: Crumb[]; model: RunModel; robot: Robot }) {
   const [tab, setTab] = useQueryTab(TABS);
-  const { view, rollouts, slices } = model;
+  const { view, rollouts, slices, metrics } = model;
   const share = runShare(view);
   const steps = medianSteps(rollouts);
+  const tag = view.source === "offline" ? <Tag title={view.offline?.scope}>{OFFLINE_TAG}</Tag> : null;
 
   /* Replay in `?rollout=`: opening pushes (Back closes it); closing goes back when this page pushed, else replaces. */
   const [rolloutId, setRolloutId] = useQueryState("rollout");
@@ -180,7 +208,7 @@ function EvalRun({ crumbs, model, robot }: { crumbs: Crumb[]; model: RunModel; r
   ];
 
   return <AppShell crumbs={crumbs}>
-    <PageHeader title={view.label} badges={<ResultBadge result={view.result} progress={view.progress} />} />
+    <PageHeader title={view.label} badges={<><ResultBadge result={view.result} progress={view.progress} />{tag}</>} />
     <WorkspaceNotice />
     <Tiles label="Results">
       <Tile label="Success rate" value={share === null ? null : fmtFixed(share * 100, 0)} unit="%" sub={view.successes !== null && view.episodes ? `${view.successes} of ${view.episodes}` : undefined} />
@@ -191,6 +219,7 @@ function EvalRun({ crumbs, model, robot }: { crumbs: Crumb[]; model: RunModel; r
     <Tabs tabs={TABS} value={tab} onChange={setTab} label="Eval views" idPrefix="ev" />
     <TabPanel idPrefix="ev" tabId="overview" selected={tab === "overview"}>
       {slices.length > 0 && <Card title="Slices" flush><SliceTable rows={slices} /></Card>}
+      {!!metrics?.length && <Card title="Metrics" flush><MetricTable rows={metrics} /></Card>}
       <Card title="Rollouts" flush>
         {rollouts.length ? <DataTable label="Rollouts" columns={columns} rows={rollouts} rowKey={row => row.id} rowClass={row => row.id === rolloutId ? "cv-tr-current" : undefined} />
           : <EmptyState title={view.result === "queued" ? "Not started." : "No rollouts yet."} />}
@@ -201,11 +230,21 @@ function EvalRun({ crumbs, model, robot }: { crumbs: Crumb[]; model: RunModel; r
     </TabPanel>
     <Sheet open={replay?.episodeId != null} onClose={close} closeLabel="Close replay"
       title={replay ? replay.task ?? (replay.seed !== null ? `Seed ${replay.seed}` : "Episode") : "Episode"}
-      meta={replay && <span className="cv-sheet__meta"><RolloutBadge result={replay.result} /><span className="cv-mono">{replay.episodeId}</span></span>}>
-      {replay?.episodeId && <EpisodeReplay key={replay.episodeId} episodeId={replay.episodeId} />}
+      meta={replay && <span className="cv-sheet__meta"><RolloutBadge result={replay.result} />{tag}<span className="cv-mono">{replay.episodeId}</span></span>}>
+      {replay?.episodeId && <EpisodeReplay key={replay.episodeId} episodeId={replay.episodeId} path={replay.recording} />}
     </Sheet>
     {rolloutId && !replay?.episodeId && <Notice tone="warning" action={<button className="cv-link" type="button" onClick={close}>Dismiss</button>}>No replay for this rollout.</Notice>}
   </AppShell>;
+}
+
+/** Mean per episode of each reported metric, with how many episodes reported it. */
+function MetricTable({ rows }: { rows: readonly MetricView[] }) {
+  const columns: Array<Column<MetricView>> = [
+    { key: "metric", header: "Metric", cell: row => <span className="cv-mono">{row.name}</span> },
+    { key: "mean", header: "Mean", numeric: true, cell: row => fmtNumber(row.mean, Math.abs(row.mean) >= 100 ? 0 : 2) },
+    { key: "n", header: "Episodes", numeric: true, cell: row => fmtCount(row.episodes) },
+  ];
+  return <DataTable label="Metrics" columns={columns} rows={rows} rowKey={row => row.name} />;
 }
 
 /** Success per slice: a bar and the rate, one line each. */

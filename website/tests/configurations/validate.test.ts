@@ -46,6 +46,20 @@ test("error paths point at the exact field", () => {
   assert.deepEqual(issues(ws => { delete (ws.suites[0] as unknown as Record<string, unknown>).gate; }), [{ path: "suites[0].gate", message: "is required" }]);
 });
 
+test("a robot's offline evaluations are control-plane ids, each listed once", () => {
+  const linked = sample();
+  linked.robots[2].offlineEvaluationIds = ["oev_contract0001", "oev_contract0002"];
+  assert.equal(validateWorkspace(linked).ok, true);
+  assert.deepEqual(issues(ws => { ws.robots[2].offlineEvaluationIds = ["oev_contract0001", "oev_contract0001"]; }),
+    [{ path: "robots[2].offlineEvaluationIds", message: "lists an offline evaluation twice" }]);
+  assert.deepEqual(issues(ws => { ws.robots[2].offlineEvaluationIds = ["eva_contract0001", "oev_CONTRACT0001", "../x"]; }).map(issue => issue.path),
+    ["robots[2].offlineEvaluationIds[0]", "robots[2].offlineEvaluationIds[1]", "robots[2].offlineEvaluationIds[2]"]);
+  assert.deepEqual(issues(ws => { (ws.robots[2] as unknown as Record<string, unknown>).offlineEvaluationIds = "oev_contract0001"; }),
+    [{ path: "robots[2].offlineEvaluationIds", message: "expected an array" }]);
+  assert.deepEqual(issues(ws => { ws.robots[2].offlineEvaluationIds = Array.from({ length: 101 }, (_, i) => `oev_${String(i).padStart(12, "0")}`); }),
+    [{ path: "robots[2].offlineEvaluationIds", message: "expected at most 100 items" }]);
+});
+
 test("measured values are never stored", () => {
   const found = issues(ws => { ws.robots[1].telemetry = telemetry(); (ws.robots[1].telemetry.provenance as { kind: string }).kind = "measured"; });
   assert.equal(found[0].path, "robots[1].telemetry.provenance.kind");

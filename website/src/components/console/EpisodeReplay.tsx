@@ -3,17 +3,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { api, ApiError, errorText } from "@/lib/platform/client";
+import { actionLabels, frameMediaType, HOSTED_AXES } from "@/lib/platform/replay";
 
-/** `GET episodes/{id}/replay`: the recording's metadata. */
+/** `GET episodes/{id}/replay`: the recording's metadata. Offline episodes add the action width and its labels. */
 interface Recording {
-  episode_id: string; mission_id: string; release_digest: string; steps: number;
+  episode_id: string; mission_id: string | null; release_digest: string | null; steps: number;
   skill: string | null; planner_ms: number | null; wall_seconds: number | null;
-  sim_seconds: number | null; source: string;
+  sim_seconds: number | null; source: string; action_dim?: number | null; action_labels?: string[] | null;
 }
-/** `GET episodes/{id}/replay/frames/{index}`: the camera frame before action `index` and that action. */
+/**
+ * `GET episodes/{id}/replay/frames/{index}`: the camera frame before action `index` and that action.
+ * Offline frames may be JPEG (`image_media_type`) and may repeat an earlier step's image (`image_index`).
+ */
 interface Frame {
   index: number; image_png_base64: string; action: number[] | null;
   reward: number | null; success: boolean | null; policy_ms: number | null;
+  image_media_type?: string; image_index?: number;
 }
 
 /** Viewing speeds in steps per second. Playback speed is for viewing only; it is not a timing claim. */
@@ -22,7 +27,6 @@ const SPEEDS = [2, 5, 10] as const;
 const AHEAD = 4;
 /** Frames kept in memory; the ones farthest from the playhead go first. */
 const KEEP = 80;
-const AXES = ["X", "Y", "Z", "Grip"];
 
 const finite = (value: number | null | undefined): value is number => typeof value === "number" && Number.isFinite(value);
 const ms = (value: number | null | undefined) => finite(value) ? `${Math.round(value).toLocaleString("en-US")} ms` : "–";
@@ -33,9 +37,11 @@ const seconds = (value: number | null | undefined) => finite(value) ? `${value.t
  * episode, played back with the planner's skill and each step's applied action,
  * policy time, reward and success. Frames are read through the platform proxy a
  * few steps ahead of the playhead; the last frame stays on screen while the next
- * one loads. Space plays or pauses; the arrow keys step.
+ * one loads. Space plays or pauses; the arrow keys step. `path` reads another
+ * recording in the same shape, e.g. an offline episode's.
  */
-export function EpisodeReplay({ episodeId }: { episodeId: string }) {
+export function EpisodeReplay({ episodeId, path }: { episodeId: string; path?: string }) {
+  const base = path ?? `episodes/${encodeURIComponent(episodeId)}`;
   const [recording, setRecording] = useState<Recording | null>(null);
   const [problem, setProblem] = useState<{ text: string; retry: boolean } | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -48,7 +54,7 @@ export function EpisodeReplay({ episodeId }: { episodeId: string }) {
 
   useEffect(() => {
     let current = true;
-    void api<Recording>(`episodes/${encodeURIComponent(episodeId)}/replay`).then(value => {
+    void api<Recording>(`${base}/replay`).then(value => {
       if (current) { setRecording(value); setProblem(null); }
     }).catch(cause => {
       if (!current) return;
@@ -56,7 +62,7 @@ export function EpisodeReplay({ episodeId }: { episodeId: string }) {
       setProblem({ text: missing ? "No recording for this episode." : errorText(cause), retry: !missing });
     });
     return () => { current = false; };
-  }, [episodeId, attempt]);
+  }, [base, attempt]);
 
   // Read the frame at the playhead and the next few; keep at most KEEP frames.
   useEffect(() => {
@@ -65,7 +71,7 @@ export function EpisodeReplay({ episodeId }: { episodeId: string }) {
     for (let i = index; i <= Math.min(recording.steps, index + AHEAD); i++) {
       if (frames.has(i) || requested.current.has(i)) continue;
       requested.current.add(i);
-      void api<Frame>(`episodes/${encodeURIComponent(episodeId)}/replay/frames/${i}`).then(frame => {
+      void api<Frame>(`${base}/replay/frames/${i}`).then(frame => {
         setFrames(previous => {
           const next = new Map(previous).set(i, frame);
           if (next.size > KEEP) {
@@ -80,7 +86,7 @@ export function EpisodeReplay({ episodeId }: { episodeId: string }) {
       });
     }
     return () => { current = false; };
-  }, [recording, episodeId, index, frames]);
+  }, [recording, base, index, frames]);
 
   // Advance once the next frame is in; stop at the last step.
   useEffect(() => {
@@ -122,14 +128,19 @@ export function EpisodeReplay({ episodeId }: { episodeId: string }) {
   const ended = index >= recording.steps;
   const label = playing && !ended ? "Pause" : ended ? "Replay" : "Play";
   const progress = recording.steps ? index / recording.steps * 100 : 0;
+  // The width comes from the recording, else from the nearest action read so far.
+  let width = recording.action_labels?.length ?? recording.action_dim ?? exact?.action?.length ?? 0;
+  for (let i = index + 1; !width && i <= Math.min(recording.steps, index + AHEAD); i++) width = frames.get(i)?.action?.length ?? 0;
+  const axes = actionLabels(recording.action_labels, width || HOSTED_AXES.length);
+  const media = frameMediaType(shown?.image_media_type);
 
   return <div className="cv-player" onKeyDown={onKeyDown}>
     <div className="cv-player__stage">
       <div className="cv-player__frame">
         {shown
-          /* The recorded PNG as stored; no image optimizer or external URL. */
+          /* The recorded PNG (or an offline JPEG) as stored; no image optimizer or external URL. */
           // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={`data:image/png;base64,${shown.image_png_base64}`} alt={`Recorded robot camera at action ${shown.index} of ${recording.steps}`} width={480} height={480} />
+          ? <img src={`data:${media};base64,${shown.image_png_base64}`} alt={`Recorded robot camera at action ${shown.image_index ?? shown.index} of ${recording.steps}`} width={480} height={480} />
           : <span className="cv-player__wait"><span className="cv-spinner" aria-hidden="true" />Loading frame…</span>}
         <span className="cv-player__step" aria-hidden="true">{index} / {recording.steps}</span>
         {shown && !exact && <span className="cv-player__buffer" role="status">Loading…</span>}
@@ -154,9 +165,9 @@ export function EpisodeReplay({ episodeId }: { episodeId: string }) {
       <div><dt>Step</dt><dd>{index} / {recording.steps}</dd></div>
       <div><dt>Skill</dt><dd className="cv-mono">{recording.skill ?? "–"}</dd></div>
       <div><dt>Planner</dt><dd>{ms(recording.planner_ms)}</dd></div>
-      <div className="cv-player__action"><dt>Action</dt><dd>{AXES.map((axis, i) => {
+      <div className="cv-player__action"><dt>Action</dt><dd>{axes.map((axis, i) => {
         const value = exact?.action?.[i];
-        return <span key={axis}><small>{axis}</small>{finite(value) ? value.toFixed(2) : "–"}</span>;
+        return <span key={`${i}-${axis}`}><small title={axis}>{axis}</small>{finite(value) ? value.toFixed(2) : "–"}</span>;
       })}</dd></div>
       <div><dt>Policy</dt><dd>{ms(exact?.policy_ms)}</dd></div>
       <div><dt>Reward</dt><dd>{finite(reward) ? reward.toFixed(2) : "–"}</dd></div>

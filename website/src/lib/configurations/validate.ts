@@ -234,6 +234,10 @@ const telemetryReading = obj({
   boardPowerPeakW: opt(nullableNonNegative), batteryPct: opt(nullablePercent), runtimeState: opt(nullableString),
 });
 const metrics = ["cpuPct", "gpuPct", "memAvailableMiB", "socTempC", "boardPowerW"] as const;
+/** At most this many offline evaluations per robot (an account keeps at most 100). */
+export const MAX_OFFLINE_LINKS = 100;
+/** An offline evaluation id as the control plane issues it. */
+const offlineEvaluationId: Check = (v, p, ctx) => { if (typeof v !== "string" || !/^oev_[a-z0-9]{12}$/.test(v)) ctx.issue(p, "expected an offline evaluation id (oev_ and 12 letters or digits)"); };
 const flag = obj({
   id: req(id), rule: req(oneOf(["soc-temp", "board-power", "memory", "edge-p95", "cloud-timeouts", "fallback", "no-report", "safety-stop", "manual"])),
   severity: req(oneOf(["warning", "attention"])), label: req(str), detail: req(str), at: req(time), note: opt(str), by: opt(str), provenance: req(provenance),
@@ -241,7 +245,7 @@ const flag = obj({
 const robot = obj({
   id: req(id), name: req(str), configId: req(nullableId), role: req(oneOf(["test", "production"])), site: req(text), rev: req(nullableId),
   deviceId: opt((v, p, ctx) => { if (v !== CONFIGURED_DEVICE) id(v, p, ctx); }),
-  projectId: opt(nullableId), platformRobotId: opt(nullableId),
+  projectId: opt(nullableId), platformRobotId: opt(nullableId), offlineEvaluationIds: opt(arr(offlineEvaluationId, { max: MAX_OFFLINE_LINKS })),
   kind: req(oneOf(["robot", "bench", "simulator"])), description: opt(str),
   health: req(oneOf(["healthy", "degraded", "attention", "offline", "not-reported"])), healthReason: opt(nullable(text)),
   flags: req(arr(flag)),
@@ -258,6 +262,7 @@ const robot = obj({
 }, (v, p, ctx) => {
   if (v.deviceId !== undefined && v.telemetry !== undefined) ctx.issue(join(p, "telemetry"), "a robot with a live device binding gets telemetry from the device and must not store it");
   if (typeof v.platformRobotId === "string" && typeof v.projectId !== "string") ctx.issue(join(p, "platformRobotId"), "needs the projectId it belongs to");
+  if (Array.isArray(v.offlineEvaluationIds) && new Set(v.offlineEvaluationIds).size !== v.offlineEvaluationIds.length) ctx.issue(join(p, "offlineEvaluationIds"), "lists an offline evaluation twice");
   if (v.configId === null && v.rev !== null) ctx.issue(join(p, "rev"), "an unattached robot has no revision");
   if (typeof v.configId === "string" && v.rev === null) ctx.issue(join(p, "rev"), "an attached robot needs the revision it runs");
 });

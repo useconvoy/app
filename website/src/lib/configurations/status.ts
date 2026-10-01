@@ -29,9 +29,11 @@ export function robotStatus(robot: Pick<Robot, "deviceId">, readings: Pick<Robot
   return health === "healthy" ? "online" : "idle";
 }
 
-/** "Live device" for a robot bound to a device, else "Simulator" or "Robot". */
-export function robotType(robot: Pick<Robot, "deviceId" | "kind">): string {
-  return robot.deviceId ? "Live device" : robot.kind === "simulator" ? "Simulator" : "Robot";
+/** "Live device" for a robot bound to a device, else "Simulator" ("Simulator · offline" when only offline imports feed it) or "Robot". */
+export function robotType(robot: Pick<Robot, "deviceId" | "kind" | "projectId" | "offlineEvaluationIds">): string {
+  if (robot.deviceId) return "Live device";
+  if (robot.kind !== "simulator") return "Robot";
+  return robot.offlineEvaluationIds?.length && !robot.projectId ? "Simulator · offline" : "Simulator";
 }
 
 export const CONFIG_STATUS_LABEL: Record<ConfigStatus, string> = { draft: "Draft", testing: "Testing", production: "Production" };

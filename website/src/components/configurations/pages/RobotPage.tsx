@@ -7,14 +7,14 @@ import { fmtCount, fmtDate, fmtFixed, fmtNumber, fmtSeconds, fmtWhen, median } f
 import type { LiveInference } from "@/lib/configurations/live";
 import { emptyWorkspace, removeRobot } from "@/lib/configurations/mutations";
 import { routes } from "@/lib/configurations/routes";
-import { latestScored, platformPaths, runShare } from "@/lib/configurations/runs";
+import { latestScored, OFFLINE_TAG, platformPaths, runShare } from "@/lib/configurations/runs";
 import type { RunView } from "@/lib/configurations/runs";
 import { robotType } from "@/lib/configurations/status";
 import { CONFIGURED_DEVICE } from "@/lib/configurations/types";
 import type { ActionTrace, Configuration, ConvoyWorkspace } from "@/lib/configurations/types";
 import type { Project, Robot as PlatformRobot } from "@/lib/platform/client";
 import { AppShell, PageHeader } from "../AppShell";
-import { Badge, Missing, ResultBadge, StatusBadge } from "../Badges";
+import { Badge, Missing, ResultBadge, StatusBadge, Tag } from "../Badges";
 import { DataTable, type Column } from "../DataTable";
 import { useNow } from "../hooks";
 import { Notice, WorkspaceNotice } from "../Notice";
@@ -25,6 +25,7 @@ import { Card, Facts, Tile, Tiles } from "../Tiles";
 import { usePlatform } from "../platform";
 import { useRobotViews, type RobotView } from "../useRobots";
 import { CpuTile, InferenceTile, MemoryTile, TemperatureTile } from "./LiveTiles";
+import { LinkOfflineDialog } from "./OfflineEvaluations";
 
 const EMPTY = emptyWorkspace(0);
 const TRACES_SHOWN = 20;
@@ -63,6 +64,8 @@ function RobotDashboard({ workspace, config, view, retry }: { workspace: ConvoyW
   // A live device with no evals opens on its traces.
   const [tab, setTab] = useQueryTab(tabs, { fallback: live && !runs.length && !view.runsLoading ? "traces" : "evals" });
   const [confirm, setConfirm] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const linked = robot.offlineEvaluationIds?.length ?? 0;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const editable = ws.source === "document" && ws.canSave;
@@ -85,7 +88,7 @@ function RobotDashboard({ workspace, config, view, retry }: { workspace: ConvoyW
   const medianTime = median(runs.map(run => run.medianS));
   const release = view.live.data?.release ?? null;
   const runColumns: Array<Column<RunView>> = [
-    { key: "eval", header: "Eval", cell: run => run.label },
+    { key: "eval", header: "Eval", cell: run => run.source === "offline" ? <>{run.label}<Tag title={run.offline?.scope}>{OFFLINE_TAG}</Tag></> : run.label },
     { key: "at", header: "Started", wide: true, cell: run => run.at ? fmtWhen(run.at) : <Missing /> },
     { key: "episodes", header: "Episodes", numeric: true, wide: true, cell: run => run.episodes === null ? <Missing /> : fmtCount(run.episodes) },
     { key: "success", header: "Success", numeric: true, cell: run => { const value = runShare(run); return value === null ? <Missing /> : `${fmtFixed(value * 100, 0)} %`; } },
@@ -125,12 +128,14 @@ function RobotDashboard({ workspace, config, view, retry }: { workspace: ConvoyW
           { label: "Agent", value: view.live.data?.agentVersion ?? null },
           { label: "Evals from", value: robot.projectId ? projectName ?? <span className="cv-mono">{robot.projectId}</span> : null },
           { label: "Platform robot", value: robot.platformRobotId ? platformRobotName ?? <span className="cv-mono">{robot.platformRobotId}</span> : null },
+          ...(robot.kind === "simulator" || linked ? [{ label: "Offline evals", value: <>{linked ? `${linked} linked` : "None"}{editable && <button className="cv-link cv-fact-action" type="button" onClick={() => setLinking(true)}>Edit</button>}</> }] : []),
           { label: "Added", value: fmtDate(robot.registeredAt) },
         ]} />
       </Card>
       {editable && <div className="cv-danger"><button className="cv-btn cv-btn--danger" type="button" onClick={() => { setError(null); setConfirm(true); }}>Remove robot</button></div>}
     </TabPanel>
     {confirm && <ConfirmDialog title={`Remove ${robot.name}?`} action="Remove" busyAction="Removing…" busy={busy} error={error} onConfirm={() => void remove()} onClose={() => setConfirm(false)} />}
+    {linking && <LinkOfflineDialog robot={robot} onClose={() => setLinking(false)} />}
   </AppShell>;
 }
 

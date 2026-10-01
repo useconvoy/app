@@ -7,6 +7,13 @@ const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const DOCUMENT_LIMIT = 2 * 1024 * 1024 + 64 * 1024;
 const ID = "[A-Za-z0-9_-]{1,64}";
 const DOCUMENT = "workspace-documents/[a-z0-9][a-z0-9-]{0,63}";
+// Offline evaluations: an owner's imported simulation episodes. An episode upload carries its frames.
+const OFFLINE = "offline-evaluations";
+const OFFLINE_EVALUATION = `${OFFLINE}/oev_[a-z0-9]{12}`;
+const OFFLINE_EPISODE = `${OFFLINE_EVALUATION}/episodes/oep_[a-z0-9]{12}`;
+const EPISODE_LIMIT = 16 * 1024 * 1024;
+const EPISODE_BODY_MS = 120_000;
+const EPISODE_UPSTREAM_MS = 60_000;
 const MUTATIONS = ["POST", "PUT", "DELETE"];
 const COOKIE = "convoy_session";
 // A conditional document write names the revision it replaces (If-Match) or creates (If-None-Match: *).
@@ -46,6 +53,22 @@ const documentConflicts: [string, string][] = [
   ["Idempotency-Key was already used", "This save was already submitted with different content. Reload before saving again."],
 ];
 
+// Offline evaluations: owner-scoped imports with per-account limits and a storage quota.
+const offlineMessages: Record<number, string> = {
+  ...messages,
+  404: "This offline evaluation does not exist.",
+  409: "This upload conflicts with stored offline evaluations.",
+  413: "The episode is larger than the 16 MiB upload limit.",
+  422: "The offline evaluation or episode is not valid.",
+  429: "Too many offline evaluation writes. Wait a moment before trying again.",
+  507: "Offline evaluation storage is full. Delete offline evaluations to free space.",
+};
+const offlineConflicts: [string, string][] = [
+  ["offline evaluation limit reached", "Your account has reached its offline evaluation limit. Delete one first."],
+  ["offline episode limit reached", "This offline evaluation has reached its episode limit."],
+  ["Idempotency-Key was already used", "This upload was already submitted with different content."],
+];
+
 export function platformOrigin(value = process.env.CONVOY_API_URL ?? "http://127.0.0.1:8080"): string {
   const url = new URL(value);
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
@@ -76,15 +99,20 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
     if (path === "episodes") { allowed = true; keys = ["mission_id"]; required = keys; }
     if (new RegExp(`^evaluations/${ID}$`).test(path)) { allowed = true; keys = ["baseline_id"]; }
     if (new RegExp(`^applications/${ID}/qualification$`).test(path)) { allowed = true; keys = ["release_id"]; required = keys; }
+    if (new RegExp(`^(${OFFLINE}|${OFFLINE_EVALUATION}|${OFFLINE_EPISODE}/replay(?:/frames/[0-9]{1,4})?)$`).test(path)) allowed = true;
   } else if (method === "POST") {
     allowed = /^(auth\/(login|logout)|projects|robots|applications|deployments|enrollments|evaluations)$/.test(path)
       || new RegExp(`^applications/${ID}/(releases|evaluation-suites|evaluation-gate)$`).test(path)
       || new RegExp(`^robots/${ID}/missions$`).test(path)
       || new RegExp(`^missions/${ID}/cancel$`).test(path)
-      || new RegExp(`^evaluations/${ID}/(cancel|promote)$`).test(path);
-  } else if (method === "PUT" || method === "DELETE") {
-    // The caller's own workspace documents are the only replaceable or deletable resources.
+      || new RegExp(`^evaluations/${ID}/(cancel|promote)$`).test(path)
+      || new RegExp(`^(${OFFLINE}|${OFFLINE_EVALUATION}/episodes)$`).test(path);
+  } else if (method === "PUT") {
+    // The caller's own workspace documents are the only replaceable resources.
     allowed = new RegExp(`^${DOCUMENT}$`).test(path);
+  } else if (method === "DELETE") {
+    // Deletable: the caller's own workspace documents and offline evaluations (or one of their episodes).
+    allowed = new RegExp(`^(${DOCUMENT}|${OFFLINE_EVALUATION}|${OFFLINE_EPISODE})$`).test(path);
   }
   if (!allowed) return null;
   for (const [key, value] of search) {
@@ -110,13 +138,13 @@ export function ownCookie(request: Request): string | null {
   return /^convoy_session=cvs_[A-Za-z0-9_-]{16,128}$/.test(entry) ? entry : null;
 }
 
-async function boundedBody(body: ReadableStream<Uint8Array> | null, maximum: number, tooLarge = messages[413]): Promise<Uint8Array<ArrayBuffer>> {
+async function boundedBody(body: ReadableStream<Uint8Array> | null, maximum: number, tooLarge = messages[413], timeoutMs = 10000): Promise<Uint8Array<ArrayBuffer>> {
   if (!body) return new Uint8Array(0);
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let bytes = 0;
   let timeout: ReturnType<typeof setTimeout> | undefined;
-  const expired = new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new ProxyFailure(408, "The request timed out.")), 10000); });
+  const expired = new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new ProxyFailure(408, "The request timed out.")), timeoutMs); });
   try {
     while (true) {
       const { done, value } = await Promise.race([reader.read(), expired]);
@@ -142,16 +170,20 @@ function utf8(bytes: Uint8Array<ArrayBuffer>): string {
   return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("utf8");
 }
 
-/** The curated message for a document write's 409, from the API's short error text. */
-async function conflictMessage(upstream: Response): Promise<string | undefined> {
+/** A message chosen from the API's short error text, which is otherwise never forwarded. */
+async function apiMessage(upstream: Response, choose: (error: string) => string | undefined, limit = ERROR_LIMIT): Promise<string | undefined> {
   try {
-    const data: unknown = JSON.parse(utf8(await boundedBody(upstream.body, ERROR_LIMIT)));
+    const data: unknown = JSON.parse(utf8(await boundedBody(upstream.body, limit)));
     const error = data !== null && typeof data === "object" ? (data as { error?: unknown }).error : undefined;
-    return typeof error === "string" ? documentConflicts.find(([start]) => error.startsWith(start))?.[1] : undefined;
+    return typeof error === "string" ? choose(error) : undefined;
   } catch {
     return undefined;
   }
 }
+/** The curated message for one of a route's known reasons, by the start of the API's text. */
+const reason = (reasons: [string, string][]) => (error: string) => reasons.find(([start]) => error.startsWith(start))?.[1];
+/** An offline write's validation error names the field at fault in the caller's own upload: kept, bounded. */
+const validation = (error: string) => error.replace(/[\u0000-\u001f\u007f]+/g, " ").slice(0, 300);
 
 function responseCookie(value: string, secure: boolean): string | null {
   const segments = value.split(";").map(part => part.trim());
@@ -176,7 +208,10 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
     const path = allowedPlatformPath(parts, request.method, new URL(request.url).searchParams);
     if (!path) throw new ProxyFailure(404, "This console action is unavailable.");
     const document = parts[0] === "workspace-documents";
-    const text = document ? documentMessages : messages;
+    const offline = parts[0] === OFFLINE;
+    // An episode upload: up to 16 MiB of frames, passed through as received.
+    const upload = offline && request.method === "POST" && parts.length === 3;
+    const text = document ? documentMessages : offline ? offlineMessages : messages;
     const mutation = MUTATIONS.includes(request.method);
     if (mutation && (request.headers.get("origin") !== origin || request.headers.get("x-convoy-client") !== "web")) {
       throw new ProxyFailure(403, messages[403]);
@@ -185,7 +220,7 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
     const logout = parts.join("/") === "auth/logout";
     const cookie = ownCookie(request);
     if (!cookie && !login && !logout) throw new ProxyFailure(401, messages[401]);
-    const requestLimit = document ? DOCUMENT_LIMIT : REQUEST_LIMIT;
+    const requestLimit = document ? DOCUMENT_LIMIT : upload ? EPISODE_LIMIT : REQUEST_LIMIT;
     const responseLimit = document ? DOCUMENT_LIMIT : RESPONSE_LIMIT;
     const headers = new Headers({ Accept: "application/json" });
     if (cookie) headers.set("Cookie", cookie);
@@ -213,10 +248,10 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
       if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("content-type") ?? "")) throw new ProxyFailure(422, text[422]);
       const length = request.headers.get("content-length");
       if (length && (!/^\d+$/.test(length) || Number(length) > requestLimit)) throw new ProxyFailure(413, text[413]);
-      const bytes = await boundedBody(request.body, requestLimit, text[413]);
-      if (document) {
-        // Up to 2 MiB pass through as received: the API decodes and validates a document only after
-        // authenticating the caller, so the console does not parse it as well.
+      const bytes = await boundedBody(request.body, requestLimit, text[413], upload ? EPISODE_BODY_MS : undefined);
+      if (document || upload) {
+        // Documents (2 MiB) and episodes (16 MiB) pass through as received: the API decodes and validates
+        // them only after authenticating the caller, so the console does not parse them as well.
         body = bytes;
       } else {
         body = utf8(bytes);
@@ -225,12 +260,14 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
       headers.set("Content-Type", "application/json");
     }
     const upstream = await fetch(`${platformOrigin()}${path}`, {
-      method: request.method, headers, body, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10000),
+      method: request.method, headers, body, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(upload ? EPISODE_UPSTREAM_MS : 10000),
     });
     if (!upstream.ok) {
       const status = text[upstream.status] ? upstream.status : 503;
       let message = login && status === 401 ? "The email or password was not accepted." : text[status] ?? UNAVAILABLE;
-      if (document && status === 409) message = await conflictMessage(upstream) ?? message;
+      if (document && status === 409) message = await apiMessage(upstream, reason(documentConflicts)) ?? message;
+      else if (offline && status === 409) message = await apiMessage(upstream, reason(offlineConflicts)) ?? message;
+      else if (offline && mutation && status === 422) message = await apiMessage(upstream, validation, 8 * ERROR_LIMIT) ?? message;
       else await upstream.body?.cancel();
       const retry = upstream.headers.get("retry-after");
       throw new ProxyFailure(status, message, status === 429 && retry && /^\d{1,6}$/.test(retry) ? { "Retry-After": retry } : {});

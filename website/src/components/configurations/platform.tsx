@@ -6,7 +6,7 @@ import { platformPaths, standaloneMissions } from "@/lib/configurations/runs";
 import type { PlatformEvaluation, PlatformMission, PlatformProject } from "@/lib/configurations/runs";
 import { notifySessionExpired } from "@/lib/configurations/session-events";
 import { api, ApiError, errorText } from "@/lib/platform/client";
-import type { Episode } from "@/lib/platform/client";
+import type { Episode, OfflineEvaluation } from "@/lib/platform/client";
 
 export type Remote<T> =
   | { status: "idle" }
@@ -85,6 +85,15 @@ export function usePlatform<T>(path: string | null): { state: Remote<T>; retry: 
 }
 
 const loading = (remote: Remote<unknown> | undefined) => !remote || remote.status === "idle" || remote.status === "loading";
+
+/** The account's offline evaluations (one read, newest first), when `enabled`: a robot links one. */
+export function useOfflineEvaluations(enabled: boolean): { state: Remote<OfflineEvaluation[]>; retry: () => void } {
+  const { state, retry } = usePlatform<{ items?: unknown }>(enabled ? platformPaths.offlineEvaluations() : null);
+  const mapped = useMemo((): Remote<OfflineEvaluation[]> => state.status === "ready"
+    ? { status: "ready", data: Array.isArray(state.data?.items) ? state.data.items as OfflineEvaluation[] : [] }
+    : state, [state]);
+  return { state: mapped, retry };
+}
 
 /**
  * Each project's evaluations, missions and the episodes of missions run outside an
