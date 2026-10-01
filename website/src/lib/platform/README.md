@@ -1,6 +1,6 @@
 # Application console
 
-`/app` opens `/app/applications`, the shared workspace for robot applications and device connection. `/console` redirects here; `/portal` and `/app/device` redirect to its device section while preserving supported `view` links. All journeys use the same management account and session. Device requests forward the caller's session to the same API, preserving backend roles and request ownership.
+`/app` opens `/app/configurations` (see `src/lib/configurations/README.md`). `/app/applications` is the shared workspace for robot applications and device connection. `/console` redirects there; `/portal` and `/app/device` redirect to its device section while preserving supported `view` links. All journeys use the same management account and session. Device requests forward the caller's session to the same API, preserving backend roles and request ownership.
 
 Set server-side `CONVOY_API_URL` to the API origin (default `http://127.0.0.1:8080`). HTTP is permitted only for literal localhost addresses; remote origins require HTTPS. Set `CONVOY_CONSOLE_ORIGIN` to the exact public console origin when a reverse proxy changes the request origin. Neither setting is exposed as a browser-selected endpoint.
 

@@ -38,6 +38,7 @@ jobs:
       - run: pnpm run check:tokens
       - run: bash scripts/test-portal.sh
       - run: pnpm run test:platform
+      - run: pnpm run test:configurations
       - run: pnpm run build
         env:
           NEXT_PUBLIC_SITE_URL: https://deployconvoy.com

@@ -1,0 +1,3 @@
+/* Robot dashboards, test and production, with the trace drawer (classes prefixed rb-).
+ * Page-specific additions only; shared cfg-* components live in configurations.css.
+ * Custom properties only: hex values belong in tokens.css. */

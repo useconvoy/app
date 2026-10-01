@@ -1,0 +1,456 @@
+/* Configurations components (cfg-*), layered on the /app CSS (workspace.css, console.css, portal.css).
+ * Port of the design mock's convoy-config.css; the component contract (markup and classes) lives in
+ * src/components/configurations. Colours come from tokens only: the three path-series values are in
+ * tokens.css (--cfg-edge, --cfg-cloud, --cfg-fallback); everything below derives from custom properties.
+ * House rules kept: 2px radius (badges 3px), hairline borders, no elevation shadows (inset rules only),
+ * mono for numbers / ids / eyebrows / badges / cells, 44px controls, breakpoints 1199 / 899 / 639. */
+
+:root {
+  --cfg-flag: var(--cfg-fallback);         /* flagged robot's telemetry line: amber ("look here"), never beside path series */
+  --cfg-ref: var(--border-strong);         /* threshold / budget / gate lines: always dashed and labelled */
+  --cfg-sample-line: var(--border-strong); /* dashed hairline marking Sample (illustrative) values and empty slots */
+  --cfg-band: 14%;                         /* p95 band = series colour mixed 14 % over the surface: a wash, never a block */
+  --cfg-hatch: repeating-linear-gradient(135deg, color-mix(in srgb, var(--inverse-muted) 18%, transparent) 0 1px, transparent 1px 10px); /* placeholder camera frame */
+  --cfg-scrim: color-mix(in srgb, var(--inverse-background) 45%, transparent); /* modal + drawer backdrop */
+}
+
+/* Series identity: put one class on any chart block (or its container); marks read var(--cfg-series), default signal. */
+.cfg-series--edge { --cfg-series: var(--cfg-edge); }
+.cfg-series--cloud { --cfg-series: var(--cfg-cloud); }
+.cfg-series--fallback { --cfg-series: var(--cfg-fallback); }
+.cfg-series--flag { --cfg-series: var(--cfg-flag); }
+
+/* Helpers */
+.cfg-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.cfg-mono { font-family: var(--font-mono); }
+.cfg-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.cfg-section { margin-top: 40px; }
+.cfg-split { display: grid; grid-template-columns: 264px minmax(0, 1fr); gap: 32px; align-items: start; }
+.cfg-split--aside { grid-template-columns: minmax(0, 1fr) 340px; }
+.cfg-subhead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; margin-bottom: 12px; }
+.cfg-subhead h3 { font-size: .875rem; font-weight: 500; }
+.cfg-icon { display: inline-block; flex: none; width: 16px; height: 16px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.cfg-icon--sm { width: 12px; height: 12px; vertical-align: -1px; }
+
+/* Artboards set a{color:accent} a:hover{color:accent-hover} globally (dc-format helmet); keep link-built components on their own ink. */
+a.btn-primary, a.btn-primary:hover { color: var(--surface); }
+a.btn-secondary, a.btn-secondary:hover { color: var(--text-primary); }
+
+/* ---------- Shell: the kit's sidebar shell (.portal-shell > .portal-sidebar + .portal-workarea > .portal-topbar + .portal-main) ---------- */
+.cfg-mark { width: 28px; height: 28px; }
+.cfg-mark rect { fill: var(--accent); }
+.cfg-mark path { fill: none; stroke: var(--background); stroke-width: 9; stroke-linecap: square; stroke-linejoin: round; }
+.cfg-shell .portal-nav-number, .cfg-shell .portal-nav-arrow { flex: none; }
+.cfg-shell .portal-wordmark, .cfg-shell .portal-wordmark:hover { color: var(--text-primary); }
+.cfg-topbar { flex-wrap: wrap; row-gap: 4px; }
+.cfg-crumbs ol { display: flex; flex-wrap: wrap; align-items: center; font: .75rem/1.5 var(--font-mono); color: var(--text-secondary); }
+.cfg-crumbs li { display: inline-flex; align-items: center; }
+.cfg-crumbs li + li::before { content: "/"; margin-inline: 8px; color: var(--text-muted); }
+.cfg-crumbs a { display: inline-flex; align-items: center; min-height: 44px; color: var(--text-secondary); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 4px; }
+.cfg-crumbs a:hover { color: var(--accent-hover); text-decoration-color: currentColor; }
+.cfg-crumbs [aria-current] { color: var(--text-primary); font-weight: 500; }
+.portal-topbar > .cfg-account { margin-left: auto; gap: 16px; font-size: .8125rem; color: var(--text-secondary); }
+
+/* ---------- Page header: .portal-page-heading + eyebrow / title row / actions, then .portal-updated as the meta line ---------- */
+.cfg-page-head { flex-wrap: wrap; align-items: flex-end; }
+.cfg-page-head > :first-child { flex: 1 1 420px; }
+.cfg-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; }
+.cfg-title h1 { margin-top: 0; }
+.cfg-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+
+/* ---------- Notices: colour from the kit (.console-notice info, .portal-notice warning, + -error); .cfg-notice adds layout ---------- */
+.cfg-notice { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 16px; padding: 14px 16px; font-size: .875rem; line-height: 1.55; }
+.cfg-notice > .cfg-icon { margin-top: 3px; }
+.cfg-notice p { margin: 0; flex: 1; }
+.cfg-notice strong { font-weight: 600; }
+.cfg-notice a { color: inherit; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
+.cfg-notice a:hover { color: inherit; text-decoration-thickness: 2px; }
+.cfg-notice--success { border-left: 2px solid var(--success); background: var(--success-tint); color: var(--success); }
+
+/* ---------- Tabs: kit .application-nav (links with aria-current); .cfg-tabs adds button tabs, counts, phone scrolling ---------- */
+.cfg-tabs button { display: inline-flex; align-items: center; min-height: 44px; padding: var(--space-3) var(--space-4); color: var(--text-secondary); font-size: .875rem; }
+.cfg-tabs [aria-selected="true"] { color: var(--accent); background: var(--accent-tint); box-shadow: inset 0 -2px var(--accent); }
+.cfg-tabs a:not([aria-current]):hover, .cfg-tabs button:not([aria-selected="true"]):hover { color: var(--text-primary); }
+.cfg-tabs__count { margin-left: 8px; font: .6875rem var(--font-mono); color: var(--text-secondary); }
+
+/* ---------- Toolbar, fields, search, filter chips, radio cards ---------- */
+.cfg-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; margin-bottom: 20px; }
+.cfg-toolbar__end { margin-left: auto; }
+.cfg-field { display: grid; gap: 6px; min-width: 0; font-size: .75rem; font-weight: 500; color: var(--text-secondary); }
+.cfg-field__hint { font-size: .6875rem; font-weight: 400; }
+.cfg-field > legend { margin-bottom: 6px; padding: 0; }
+.field-input.cfg-input { min-height: 44px; padding: 8px 12px; font-size: .875rem; font-weight: 400; line-height: 1.4; }
+.cfg-search { flex: 1 1 280px; max-width: 440px; }
+.cfg-search__box { position: relative; display: block; }
+.cfg-search__box > .cfg-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); pointer-events: none; }
+.cfg-search__box > .cfg-input { padding-left: 36px; }
+.cfg-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.cfg-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text-primary); font-size: .8125rem; }
+.cfg-chip:hover { background: var(--surface-subtle); }
+.cfg-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-tint); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.cfg-chip__count { font: .6875rem var(--font-mono); color: var(--text-secondary); }
+.cfg-chip[aria-pressed="true"] .cfg-chip__count { color: var(--accent); }
+.cfg-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.cfg-choice { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 12px; padding: 16px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); cursor: pointer; }
+.cfg-choice input { width: 16px; height: 16px; margin-top: 2px; accent-color: var(--accent); }
+.cfg-choice:has(input:checked), .cfg-choice--on { border-color: var(--accent); background: var(--accent-tint); box-shadow: inset 0 0 0 1px var(--accent); }
+.cfg-choice__title { display: block; font-size: .875rem; font-weight: 500; color: var(--text-primary); }
+.cfg-choice__text { display: block; margin-top: 4px; font-size: .75rem; line-height: 1.5; color: var(--text-secondary); }
+
+/* ---------- Buttons: kit .btn .btn-primary / .btn-secondary + .cfg-btn (44px dense size); tertiary text; icon-only ---------- */
+.cfg-btn { min-height: 44px; padding-inline: 18px; font-size: .875rem; }
+.cfg-btn:disabled, .cfg-btn[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+.cfg-btn-text { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 4px; color: var(--accent); font-size: .875rem; font-weight: 500; text-decoration: underline; text-underline-offset: 4px; }
+.cfg-btn-text:hover { color: var(--accent-hover); }
+.cfg-icon-btn { display: inline-grid; place-items: center; flex: none; width: 44px; height: 44px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text-primary); }
+.cfg-icon-btn:hover { border-color: var(--text-primary); background: var(--surface-subtle); color: var(--text-primary); }
+.cfg-icon-btn--ghost { border-color: transparent; background: transparent; }
+.cfg-icon-btn--ghost:hover { border-color: transparent; }
+.cfg-icon-btn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-tint); color: var(--accent); }
+
+/* ---------- Badges (sentence case: .portal-badge capitalises every word, so status labels use .cfg-badge) ---------- */
+.cfg-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.cfg-badge { display: inline-flex; flex: none; align-items: center; gap: 6px; padding: 4px 8px; border-radius: var(--radius-badge); background: var(--surface-subtle); color: var(--text-secondary); font: .6875rem/1.4 var(--font-mono); white-space: nowrap; }
+.cfg-badge--success { background: var(--success-tint); color: var(--success); }
+.cfg-badge--warning { background: var(--warning-tint); color: var(--warning); }
+.cfg-badge--error { background: var(--error-tint); color: var(--error); }
+.cfg-badge--info { background: var(--information-tint); color: var(--information); }
+.cfg-badge--forest { background: var(--inverse-background); color: var(--inverse-text); }
+.cfg-badge .cfg-icon { width: 12px; height: 12px; }
+.cfg-run { display: inline-grid; gap: 5px; vertical-align: middle; }
+.cfg-ver { font: 500 .75rem var(--font-mono); color: var(--text-secondary); }
+
+/* Provenance: one per metric. Measured (device now) / Recorded (stored evidence) / Sample (illustrative) / Not reported. */
+.cfg-prov { display: inline-flex; flex: none; align-items: center; gap: 5px; padding: 3px 7px; border: 1px solid transparent; border-radius: var(--radius-badge); font: .6875rem/1.4 var(--font-mono); white-space: nowrap; }
+.cfg-prov--measured { background: var(--success-tint); color: var(--success); }
+.cfg-prov--recorded { background: var(--information-tint); color: var(--information); }
+.cfg-prov--sample { border-style: dashed; border-color: var(--cfg-sample-line); background: var(--surface-subtle); color: var(--text-secondary); }
+.cfg-prov--none { padding-inline: 0; color: var(--text-muted); }
+
+/* Path chips (Edge / Cloud / Fallback): ink label + 8px series square, never colour alone. */
+.cfg-path { display: inline-flex; flex: none; align-items: center; gap: 6px; padding: 3px 7px; border: 1px solid var(--border-subtle); border-radius: var(--radius-badge); background: var(--surface); color: var(--text-primary); font: .6875rem/1.4 var(--font-mono); white-space: nowrap; }
+.cfg-path::before { content: ""; flex: none; width: 8px; height: 8px; background: var(--cfg-series, var(--signal)); }
+.cfg-path--edge { --cfg-series: var(--cfg-edge); }
+.cfg-path--cloud { --cfg-series: var(--cfg-cloud); }
+.cfg-path--fallback { --cfg-series: var(--cfg-fallback); }
+.cfg-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.portal-table .cfg-tags { flex-wrap: nowrap; }
+.cfg-tag { display: inline-flex; align-items: center; padding: 2px 6px; border-radius: var(--radius); background: var(--surface-subtle); color: var(--text-secondary); font: .625rem/1.5 var(--font-mono); white-space: nowrap; }
+
+/* Legend keys: square (fill), line, band (p95 wash), ref (dashed). */
+.cfg-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font: .6875rem/1.5 var(--font-sans); color: var(--text-secondary); }
+.cfg-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.cfg-key { display: inline-block; flex: none; width: 8px; height: 8px; background: var(--cfg-series, var(--signal)); }
+.cfg-key--line { width: 16px; height: 2px; }
+.cfg-key--band { width: 16px; height: 10px; background: color-mix(in srgb, var(--cfg-series, var(--signal)) var(--cfg-band), var(--surface)); box-shadow: inset 0 -2px 0 var(--cfg-series, var(--signal)); }
+.cfg-key--ref { width: 16px; height: 0; border-top: 1px dashed var(--cfg-ref); background: none; }
+
+/* Progress (Running 34/60): information ramp, track one step lighter. */
+.cfg-progress { display: block; width: 100%; max-width: 160px; height: 4px; background: color-mix(in srgb, var(--information) 18%, var(--surface)); }
+.cfg-progress__bar { display: block; height: 100%; background: var(--information); }
+.cfg-progress--wide { max-width: none; height: 6px; }
+
+/* ---------- KPI tile: kit .portal-metric-card (+ .portal-metric-value) with head, sub-line, provenance foot ---------- */
+.portal-metric-grid.cfg-metric-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.portal-metric-grid.cfg-metric-grid--6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.cfg-kpi { display: flex; flex-direction: column; min-width: 0; }
+.cfg-kpi h3 { display: flex; align-items: center; gap: 6px; }
+.cfg-kpi__sub { margin-top: 4px; font: .6875rem/1.5 var(--font-mono); color: var(--text-secondary); }
+.cfg-kpi__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: auto; padding-top: 12px; }
+.cfg-kpi .portal-chart { margin-top: 10px; }
+.portal-metric-value > .cfg-prov { margin-left: 0; }
+.cfg-delta { font: .6875rem/1.5 var(--font-mono); color: var(--text-secondary); }
+.cfg-delta--good { color: var(--success); }
+.cfg-delta--bad { color: var(--warning); }
+
+/* ---------- Sparkline: the kit's TelemetryChart figure (.portal-chart, viewBox 0 0 300 80) + reference line, series colour, path dots ---------- */
+.cfg-spark svg { display: block; }
+.cfg-spark .portal-chart-line { stroke: var(--cfg-series, var(--signal)); vector-effect: non-scaling-stroke; }
+.cfg-spark .portal-chart-axis { vector-effect: non-scaling-stroke; }
+.cfg-spark__dots { fill: none; stroke: var(--cfg-series, var(--signal)); stroke-width: 3.5; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.cfg-spark__ref { fill: none; stroke: var(--cfg-ref); stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.cfg-spark figcaption { align-items: center; }
+.portal-chart figcaption .cfg-prov { display: inline-flex; width: fit-content; }
+
+/* Small multiple: one card per robot, shared y-domain per group, legend once above the grid. */
+.cfg-mini-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(164px, 1fr)); gap: 12px; }
+.cfg-mini-grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.cfg-mini { display: flex; flex-direction: column; min-width: 0; padding: 14px 14px 12px; border: 1px solid var(--border-subtle); background: var(--surface); }
+.cfg-mini--flag { box-shadow: inset 0 2px 0 var(--cfg-flag); }
+.cfg-mini__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 26px; }
+.cfg-mini__name { font-size: .8125rem; font-weight: 500; color: var(--text-primary); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
+.cfg-mini__value { margin-top: 8px; font: 1.25rem/1.3 var(--font-mono); letter-spacing: -.04em; }
+.cfg-mini__value span { margin-left: 5px; font-size: .75rem; letter-spacing: 0; color: var(--text-secondary); }
+.cfg-mini__value .cfg-mini__flag { margin-left: 8px; color: var(--warning); }
+.cfg-mini__value .cfg-prov { margin-left: 0; font-size: .75rem; letter-spacing: 0; }
+.cfg-mini .portal-chart { margin-top: 6px; }
+
+/* ---------- Plot: fixed-height line / band chart that stretches to its column (viewBox 0 0 100 100, preserveAspectRatio none) ---------- */
+.cfg-plot { --cfg-plot-h: 140px; min-width: 0; }
+.cfg-plot--sm { --cfg-plot-h: 88px; }
+.cfg-plot__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 14px; }
+.cfg-plot__title { display: flex; align-items: center; gap: 8px; font-size: .875rem; font-weight: 500; }
+.cfg-plot__body { display: grid; grid-template-columns: 44px minmax(0, 1fr); }
+.cfg-plot__y { position: relative; height: var(--cfg-plot-h); font: .625rem/1 var(--font-mono); color: var(--text-secondary); }
+.cfg-plot__y span { position: absolute; right: 8px; transform: translateY(-50%); white-space: nowrap; }
+.cfg-plot__frame { position: relative; height: var(--cfg-plot-h); }
+.cfg-plot__svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.cfg-plot__svg * { vector-effect: non-scaling-stroke; }
+.cfg-plot__grid { fill: none; stroke: var(--border-subtle); stroke-width: 1; }
+.cfg-plot__band { fill: color-mix(in srgb, var(--cfg-series, var(--signal)) var(--cfg-band), transparent); stroke: none; }
+.cfg-plot__line { fill: none; stroke: var(--cfg-series, var(--signal)); stroke-width: 2; }
+.cfg-plot__line--thin { stroke-width: 1; }
+.cfg-plot__ref { fill: none; stroke: var(--cfg-ref); stroke-width: 1; stroke-dasharray: 5 4; }
+.cfg-plot__events { fill: none; stroke: var(--cfg-fallback); stroke-width: 2; }
+.cfg-plot__ref-label { position: absolute; right: 0; padding-bottom: 3px; transform: translateY(-100%); font: .625rem/1.2 var(--font-mono); color: var(--text-secondary); white-space: nowrap; }
+.cfg-plot__end { position: absolute; width: 12px; height: 12px; border: 2px solid var(--surface); border-radius: 50%; background: var(--cfg-series, var(--signal)); transform: translate(-50%, -50%); }
+.cfg-plot__cursor { position: absolute; top: -4px; bottom: 0; border-left: 1px solid var(--text-primary); }
+.cfg-plot__x { position: relative; height: 15px; margin: 6px 0 0 44px; font: .625rem/1.5 var(--font-mono); color: var(--text-secondary); }
+.cfg-plot__x span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.cfg-plot__x span:first-child { transform: none; }
+.cfg-plot__x span:last-child { transform: translateX(-100%); }
+.cfg-plot__legend { margin: 10px 0 0 44px; }
+.cfg-plot__note { margin: 8px 0 0 44px; font-size: .6875rem; line-height: 1.6; color: var(--text-secondary); }
+.cfg-plot-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 32px; }
+
+/* ---------- Tables: kit .portal-table-scroll > table.portal-table + .cfg-table ---------- */
+.cfg-table { position: relative; } /* anchors .cfg-sr and stretched links inside .portal-table-scroll so nothing escapes its clip */
+.cfg-table th, .cfg-table td { padding-right: 12px; }
+.cfg-table th:first-child, .cfg-table td:first-child { padding-left: 12px; }
+.cfg-table thead th { vertical-align: bottom; white-space: normal; }
+.cfg-table .cfg-wrap { min-width: 14ch; white-space: normal; }
+.cfg-table td small, .cfg-table th small { display: block; max-width: 26ch; margin-top: 4px; font: .6875rem/1.4 var(--font-sans); color: var(--text-secondary); white-space: normal; }
+.cfg-table tbody tr { position: relative; }
+.cfg-table tbody tr:hover { background: color-mix(in srgb, var(--surface-subtle) 55%, var(--surface)); }
+.cfg-table .cfg-num { text-align: right; font-variant-numeric: tabular-nums; }
+.cfg-table a:not(.cfg-row-link), .cfg-table button { position: relative; z-index: 1; }
+.cfg-row-link::after { content: ""; position: absolute; inset: 0; }
+.cfg-sort { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; color: inherit; font: inherit; text-align: inherit; }
+.cfg-sort .cfg-icon { width: 12px; height: 12px; color: var(--text-muted); }
+th[aria-sort] .cfg-sort, th[aria-sort] .cfg-sort .cfg-icon { color: var(--text-primary); }
+th[aria-sort] .cfg-sort { font-weight: 500; }
+.cfg-num .cfg-sort { flex-direction: row-reverse; }
+.cfg-table .cfg-tr--flag, .cfg-table .cfg-tr--flag:hover { background: color-mix(in srgb, var(--warning-tint) 60%, var(--surface)); }
+.cfg-tr--flag > :first-child { box-shadow: inset 2px 0 0 var(--warning); }
+.cfg-table .cfg-tr--current, .cfg-table .cfg-tr--current:hover { background: var(--accent-tint); }
+.cfg-tr--current > :first-child { box-shadow: inset 2px 0 0 var(--accent); }
+.cfg-flagnote { display: inline-flex; align-items: center; gap: 6px; color: var(--warning); }
+.cfg-table .cfg-group th { padding-top: 22px; font: 500 .625rem/1.5 var(--font-mono); letter-spacing: .075em; text-transform: uppercase; color: var(--text-secondary); }
+.cfg-table tbody .cfg-group:hover { background: none; }
+.cfg-group .cfg-meter { display: none; }
+.cfg-scrollbox { max-height: 304px; overflow-y: auto; overscroll-behavior: contain; }
+
+/* ---------- Config card: the whole card is one <a> ---------- */
+.cfg-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.cfg-card { display: flex; flex-direction: column; gap: 16px; min-width: 0; padding: 24px; border: 1px solid var(--border-subtle); border-radius: var(--radius); background: var(--surface); color: var(--text-primary); text-decoration: none; transition: border-color var(--duration-feedback) var(--ease-state); }
+.cfg-card:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.cfg-card__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.cfg-card__title { font-size: 1.0625rem; font-weight: 500; line-height: 1.3; letter-spacing: -.015em; }
+.cfg-card:hover .cfg-card__title { color: var(--accent); text-decoration: underline; text-underline-offset: 4px; }
+.cfg-card__head .cfg-badges { flex-basis: 100%; }
+.cfg-card__purpose { font-size: .8125rem; line-height: 1.55; color: var(--text-secondary); }
+.cfg-card__stack div { display: grid; grid-template-columns: minmax(84px, .7fr) minmax(0, 1.6fr); gap: 12px; padding: 8px 0; border-top: 1px solid var(--border-subtle); }
+.cfg-card__stack dt { font-size: .6875rem; line-height: 1.6; color: var(--text-secondary); }
+.cfg-card__stack dd { font: .75rem/1.5 var(--font-mono); overflow-wrap: anywhere; }
+.cfg-card__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--border-subtle); font: .6875rem/1.5 var(--font-mono); color: var(--text-secondary); }
+.cfg-card__foot > span { display: inline-flex; align-items: center; gap: 6px; }
+.cfg-card__updated { margin-left: auto; }
+.cfg-card--add { align-items: center; justify-content: center; gap: 10px; min-height: 240px; border: 1px dashed var(--cfg-sample-line); background: transparent; color: var(--accent); font-size: .9375rem; font-weight: 500; }
+.cfg-card--add:hover { border-color: var(--accent); background: var(--surface); color: var(--accent-hover); }
+
+/* ---------- Stepper (done / current / upcoming) ---------- */
+.cfg-stepper { display: grid; gap: 4px; }
+.cfg-step { position: relative; }
+.cfg-step + .cfg-step::before { content: ""; position: absolute; left: 26px; top: -6px; height: 8px; border-left: 1px solid var(--border-strong); }
+.cfg-step__btn { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; align-items: start; width: 100%; min-height: 56px; padding: 10px 12px; border: 1px solid transparent; text-align: left; color: var(--text-secondary); }
+.cfg-step__btn:hover { background: var(--surface-subtle); }
+.cfg-step__mark { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); font: .6875rem var(--font-mono); color: var(--text-secondary); }
+.cfg-step__label { display: block; padding-top: 4px; font-size: .875rem; font-weight: 500; line-height: 1.3; color: var(--text-primary); }
+.cfg-step__value { display: block; margin-top: 2px; font: .6875rem/1.5 var(--font-mono); color: var(--text-secondary); overflow-wrap: anywhere; }
+.cfg-step__mark .cfg-icon, .cfg-step--done .cfg-step__n { display: none; }
+.cfg-step--done .cfg-step__mark .cfg-icon { display: inline-block; }
+.cfg-step--done .cfg-step__mark { border-color: var(--signal); background: var(--surface-teal); color: var(--signal); }
+.cfg-step--current .cfg-step__btn { border-color: var(--accent); background: var(--accent-tint); }
+.cfg-step--current .cfg-step__mark { border-color: var(--accent); background: var(--accent); color: var(--surface); }
+.cfg-step--current .cfg-step__label { color: var(--accent); }
+.cfg-step--current .cfg-step__value { color: var(--text-primary); }
+.cfg-step--upcoming .cfg-step__label { font-weight: 400; color: var(--text-secondary); }
+
+/* ---------- Compatibility check rows: pass / warn / block / pending, each with an evidence badge ---------- */
+.cfg-checks { display: grid; }
+.cfg-check { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 4px 14px; align-items: start; padding: 16px 0; border-top: 1px solid var(--border-subtle); }
+.cfg-check__icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--radius); background: var(--surface-subtle); color: var(--text-secondary); }
+.cfg-check--pass .cfg-check__icon { background: var(--success-tint); color: var(--success); }
+.cfg-check--warn .cfg-check__icon, .cfg-check--block .cfg-check__icon { background: var(--warning-tint); color: var(--warning); }
+.cfg-check--pending .cfg-check__icon { background: var(--surface-subtle); color: var(--text-secondary); }
+.cfg-check__title { padding-top: 3px; font-size: .875rem; font-weight: 500; line-height: 1.4; }
+.cfg-check__detail { margin-top: 4px; font-size: .8125rem; line-height: 1.55; color: var(--text-secondary); }
+.cfg-check__detail .cfg-btn-text { min-height: 32px; font-size: .8125rem; }
+.cfg-check__meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding-top: 3px; }
+.cfg-check__verdict { font: 500 .6875rem/1.4 var(--font-mono); color: var(--text-secondary); }
+.cfg-check--pass .cfg-check__verdict { color: var(--success); }
+.cfg-check--warn .cfg-check__verdict, .cfg-check--block .cfg-check__verdict { color: var(--warning); }
+
+/* ---------- Log panel (light, mono; level badges) ---------- */
+.cfg-log { border-top: 1px solid var(--border-subtle); font: .75rem/1.5 var(--font-mono); }
+.cfg-log__row { display: grid; grid-template-columns: 64px 48px minmax(120px, 176px) minmax(0, 1fr); gap: 4px 12px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--border-subtle); }
+.cfg-log__time, .cfg-log__src { color: var(--text-secondary); }
+.cfg-log__level { justify-self: start; padding: 1px 6px; border-radius: var(--radius-badge); background: var(--surface-subtle); color: var(--text-secondary); font-size: .625rem; letter-spacing: .04em; }
+.cfg-log__level--warn { background: var(--warning-tint); color: var(--warning); }
+.cfg-log__level--error { background: var(--error-tint); color: var(--error); }
+.cfg-log__msg { overflow-wrap: anywhere; }
+
+/* ---------- Modal + right drawer: hairline-bordered sheet over a scrim (no elevation) ---------- */
+.cfg-overlay { position: fixed; inset: 0; z-index: 40; display: flex; align-items: flex-start; justify-content: center; padding: 96px 24px 48px; overflow-y: auto; background: var(--cfg-scrim); }
+.cfg-dialog { width: 100%; max-width: 640px; border: 1px solid var(--border-strong); background: var(--surface); }
+.cfg-dialog__head, .cfg-drawer__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--border-subtle); }
+.cfg-dialog__head h2, .cfg-drawer__head h2 { font-size: 1.25rem; font-weight: 500; line-height: 1.3; letter-spacing: -.02em; }
+.cfg-dialog__head .portal-eyebrow, .cfg-drawer__head .portal-eyebrow { margin-bottom: 6px; }
+.cfg-dialog__head .cfg-icon-btn, .cfg-drawer__head .cfg-icon-btn { margin: -8px -12px 0 0; }
+.cfg-dialog__body, .cfg-drawer__body { display: grid; gap: 20px; align-content: start; padding: 24px; }
+.cfg-dialog__foot, .cfg-drawer__foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; padding: 16px 24px; border-top: 1px solid var(--border-subtle); background: var(--background); }
+.cfg-overlay--drawer { align-items: stretch; justify-content: flex-end; padding: 0; }
+.cfg-drawer { display: flex; flex-direction: column; width: 100%; max-width: 600px; min-height: 100%; border-left: 1px solid var(--border-strong); background: var(--surface); }
+.cfg-drawer__body { flex: 1; }
+
+/* ---------- Span waterfall (trace): name | track on a shared ms axis | duration ---------- */
+.cfg-wf { --cfg-wf-cols: minmax(140px, 36%) minmax(0, 1fr) 64px; font-size: .8125rem; }
+.cfg-wf__axis, .cfg-wf__row { display: grid; grid-template-columns: var(--cfg-wf-cols); gap: 12px; align-items: center; }
+.cfg-wf__axis { padding-bottom: 6px; border-bottom: 1px solid var(--border-subtle); font: .625rem/1.5 var(--font-mono); color: var(--text-secondary); }
+.cfg-wf__ticks { position: relative; height: 15px; }
+.cfg-wf__ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.cfg-wf__ticks span:first-child { transform: none; }
+.cfg-wf__ticks span:last-child { transform: translateX(-100%); }
+.cfg-wf__row { min-height: 40px; border-bottom: 1px solid var(--border-subtle); }
+.cfg-wf__name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 0; line-height: 1.35; }
+.cfg-wf__row--child .cfg-wf__name { padding-left: 16px; color: var(--text-secondary); }
+.cfg-wf__track { position: relative; align-self: stretch; border-right: 1px solid var(--border-subtle); background: linear-gradient(to right, var(--border-subtle) 1px, transparent 1px) 0 0 / 25% 100%; }
+.cfg-wf__bar { position: absolute; top: 50%; height: 12px; min-width: 3px; border-radius: 1px; background: var(--cfg-series, var(--signal)); transform: translateY(-50%); }
+.cfg-wf__ms { font: .75rem var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
+/* ---------- Slice matrix meter: success bar + 95 % CI whisker + dashed gate marker (inside a .cfg-table cell) ---------- */
+.cfg-meter { position: relative; display: block; width: 100%; min-width: 160px; height: 20px; }
+.cfg-meter::before { content: ""; position: absolute; inset: 6px 0; background: var(--surface-subtle); }
+.cfg-meter__fill { position: absolute; left: 0; top: 6px; height: 8px; border-radius: 0 2px 2px 0; background: var(--cfg-series, var(--signal)); }
+.cfg-meter__ci { position: absolute; top: 4px; height: 12px; border-inline: 1px solid var(--text-primary); }
+.cfg-meter__ci::before { content: ""; position: absolute; inset: 5px 0 auto; border-top: 1px solid var(--text-primary); }
+.cfg-meter__gate { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--cfg-ref); }
+.cfg-tr--flag .cfg-meter { --cfg-series: var(--cfg-flag); }
+
+/* ---------- Failure-mode bars: label | bar from a shared baseline | count ---------- */
+.cfg-hbars { display: grid; gap: 10px; }
+.cfg-hbar { display: grid; grid-template-columns: minmax(112px, 30%) minmax(0, 1fr) 72px; gap: 12px; align-items: center; font-size: .8125rem; }
+.cfg-hbar__track { height: 16px; display: flex; align-items: center; border-left: 1px solid var(--border-strong); }
+.cfg-hbar__fill { display: block; height: 12px; border-radius: 0 2px 2px 0; background: var(--cfg-series, var(--signal)); }
+.cfg-hbar__value { font: .75rem var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+
+/* ---------- Rollout replay: placeholder frame, scrubber with event markers, transport, side column ---------- */
+.cfg-replay { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, 1fr); gap: 24px; align-items: start; }
+.cfg-replay__side { display: grid; gap: 20px; min-width: 0; }
+.cfg-frame { position: relative; display: grid; place-items: center; aspect-ratio: 4 / 3; padding: 24px; background: var(--cfg-hatch), var(--inverse-background); color: var(--inverse-text); text-align: center; }
+.cfg-frame__label { font: .75rem/1.6 var(--font-mono); }
+.cfg-frame__label > span { display: block; margin-top: 6px; font: .6875rem/1.5 var(--font-sans); color: var(--inverse-muted); }
+.cfg-frame__corner { position: absolute; top: 12px; left: 12px; font: .625rem/1.5 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--inverse-muted); }
+.cfg-scrub { position: relative; height: 64px; margin-top: 12px; }
+.cfg-scrub__rail { position: absolute; left: 0; right: 0; bottom: 24px; height: 4px; background: var(--border-subtle); }
+.cfg-scrub__fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--text-primary); }
+.cfg-scrub__head { position: absolute; top: 50%; width: 16px; height: 16px; border: 2px solid var(--surface); border-radius: 50%; background: var(--text-primary); transform: translate(-50%, -50%); }
+.cfg-scrub__mark { position: absolute; bottom: 20px; display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 24px; transform: translateX(-50%); font: .625rem/1.2 var(--font-mono); color: var(--text-secondary); white-space: nowrap; }
+.cfg-scrub__mark::after { content: ""; width: 2px; height: 12px; background: currentColor; }
+.cfg-scrub__mark--end { align-items: flex-end; transform: translateX(calc(-100% + 1px)); }
+.cfg-scrub__mark--warn { color: var(--warning); }
+.cfg-scrub__mark--good { color: var(--success); }
+.cfg-scrub__scale { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; font: .625rem var(--font-mono); color: var(--text-secondary); }
+.cfg-transport { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 20px; }
+.cfg-transport__pos { margin-left: 8px; font: .75rem var(--font-mono); color: var(--text-secondary); }
+.cfg-transport > .cfg-field { margin-left: auto; grid-auto-flow: column; align-items: center; gap: 8px; }
+
+/* ---------- Empty state ---------- */
+.cfg-empty { display: grid; justify-items: center; gap: 8px; padding: 48px 24px; border: 1px solid var(--border-subtle); background: var(--surface); text-align: center; }
+.cfg-empty > .cfg-icon { width: 24px; height: 24px; color: var(--text-secondary); }
+.cfg-empty__title { font-size: 1.0625rem; font-weight: 500; letter-spacing: -.015em; }
+.cfg-empty__text { max-width: 46ch; font-size: .8125rem; color: var(--text-secondary); }
+.cfg-empty .btn { margin-top: 8px; }
+
+/* ---------- Foundation additions (not in the mock CSS) ---------- */
+/* Operator and neutral spans in trace waterfalls; operator keys and chips are outlined, not filled. */
+.cfg-series--operator { --cfg-series: var(--text-secondary); }
+.cfg-series--neutral { --cfg-series: var(--text-secondary); }
+.cfg-path--operator::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-secondary); }
+.cfg-key--operator { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-secondary); }
+.cfg-series--operator .cfg-wf__bar { background: repeating-linear-gradient(135deg, var(--text-secondary) 0 2px, var(--surface) 2px 5px); box-shadow: inset 0 0 0 1px var(--text-secondary); }
+/* Page states and the page-body placeholder that the page work replaces. */
+.cfg-shell .portal-loading { margin-top: 0; }
+.cfg-placeholder { display: grid; gap: 8px; margin-top: 24px; padding: 32px 24px; border: 1px dashed var(--cfg-sample-line); background: var(--surface); }
+.cfg-placeholder__title { font-size: 1.0625rem; font-weight: 500; letter-spacing: -.015em; }
+.cfg-placeholder__text { max-width: 72ch; font-size: .8125rem; color: var(--text-secondary); }
+.cfg-placeholder ul { display: grid; gap: 4px; margin-top: 4px; font: .75rem/1.6 var(--font-mono); color: var(--text-secondary); overflow-wrap: anywhere; }
+/* Notice with a trailing action (import, promote): the file input sits invisibly over its labelled button. */
+.cfg-notice--action { align-items: center; }
+.cfg-notice--action > .cfg-icon { margin-top: 0; }
+.cfg-notice__action { display: inline-flex; flex: none; align-items: center; gap: 12px; }
+.cfg-notice .btn-secondary, .cfg-notice .btn-secondary:hover { color: var(--text-primary); text-decoration: none; }
+.cfg-file { position: relative; display: inline-flex; flex: none; }
+.cfg-file input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.cfg-file:focus-within { outline: var(--focus-ring); outline-offset: var(--focus-offset); border-radius: var(--radius-badge); }
+.cfg-issues { display: grid; gap: 2px; margin-top: 6px; font: .75rem/1.5 var(--font-mono); overflow-wrap: anywhere; }
+.cfg-import { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.cfg-import__error { max-width: 40ch; font-size: .75rem; line-height: 1.5; color: var(--warning); }
+/* Page lede under the title (robot description, etc.). */
+.cfg-lede { max-width: 78ch; margin-top: 10px; font-size: .875rem; line-height: 1.6; color: var(--text-secondary); }
+/* Placeholder data lists (replaced by the page bodies). */
+.cfg-placeholder-list { display: grid; margin-top: 16px; font-size: .8125rem; }
+.cfg-placeholder-list > li, .cfg-placeholder-list > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 0; border-top: 1px solid var(--border-subtle); }
+.cfg-placeholder-list dt { min-width: 16ch; color: var(--text-secondary); }
+.cfg-placeholder-list dd { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; font-family: var(--font-mono); }
+/* Body scroll lock while a modal or drawer is open. */
+body.cfg-locked { overflow: hidden; }
+
+/* ---------- Responsive (portal.css breakpoints) ---------- */
+@media (max-width: 1199px) {
+  .cfg-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .portal-metric-grid.cfg-metric-grid--3, .portal-metric-grid.cfg-metric-grid--6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cfg-split--aside, .cfg-replay { grid-template-columns: minmax(0, 1fr); }
+  .cfg-mini-grid--4 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 899px) {
+  .cfg-split { grid-template-columns: minmax(0, 1fr); }
+  .cfg-plot-pair { grid-template-columns: minmax(0, 1fr); }
+  .cfg-overlay:not(.cfg-overlay--drawer) { padding: 48px 16px 32px; }
+}
+@media (max-width: 639px) {
+  .cfg-badge, .cfg-prov, .cfg-path { flex: 0 1 auto; white-space: normal; }
+  .cfg-shell .portal-sidebar nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cfg-shell .portal-sidebar nav a { min-height: 44px; }
+  .cfg-topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .portal-topbar > .cfg-account > span { display: none; }
+  .cfg-shell .portal-panel-heading { flex-wrap: wrap; }
+  .cfg-wf__ticks span:not(:first-child):not(:last-child) { display: none; }
+  .cfg-page-head > :first-child { flex-basis: 100%; }
+  .cfg-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .cfg-tabs a, .cfg-tabs button { flex: none; }
+  .cfg-toolbar > * { flex: 1 1 100%; max-width: none; }
+  .cfg-toolbar__end { margin-left: 0; }
+  .cfg-choices, .cfg-cards { grid-template-columns: minmax(0, 1fr); }
+  .portal-metric-grid.cfg-metric-grid--3, .portal-metric-grid.cfg-metric-grid--6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cfg-mini-grid, .cfg-mini-grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .cfg-mini { padding: 12px 10px 10px; }
+  .cfg-card { padding: 20px; }
+  .cfg-card--add { min-height: 120px; }
+  .cfg-plot { --cfg-plot-h: 120px; }
+  .cfg-plot--sm { --cfg-plot-h: 80px; }
+  .cfg-check { grid-template-columns: 28px minmax(0, 1fr); }
+  .cfg-check__meta { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .cfg-log__row { grid-template-columns: auto auto minmax(0, 1fr); }
+  .cfg-log__msg { grid-column: 1 / -1; }
+  .cfg-dialog__head, .cfg-drawer__head, .cfg-dialog__body, .cfg-drawer__body { padding-inline: 16px; }
+  .cfg-dialog__foot, .cfg-drawer__foot { padding-inline: 16px; }
+  .cfg-dialog__foot .btn, .cfg-drawer__foot .btn { flex: 1 1 auto; }
+  .cfg-wf { --cfg-wf-cols: minmax(104px, 38%) minmax(0, 1fr) 60px; }
+  .cfg-wf__axis, .cfg-wf__row { gap: 8px; }
+  .cfg-hbar { grid-template-columns: minmax(92px, 34%) minmax(0, 1fr) 60px; gap: 8px; }
+  .cfg-frame { aspect-ratio: 1; }
+  .cfg-transport > .cfg-field { margin-left: 0; }
+  .cfg-notice--action { flex-wrap: wrap; }
+  .cfg-notice__action { flex-basis: 100%; }
+}

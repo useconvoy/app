@@ -162,5 +162,5 @@ public session, physical snapshot, and an actual Chat request after a change.
 
 Historical marketing paths such as `/platform`, `/demo`, and `/early-access`
 continue to redirect to `/`. `/portal` and `/api/portal/...` are the new demo
-surface; older authenticated console routes such as `/app` and `/sign-in` are
-not recreated.
+surface. `/app` opens the authenticated workspace at `/app/configurations`;
+`/sign-in` is not recreated.

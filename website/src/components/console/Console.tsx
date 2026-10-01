@@ -18,7 +18,7 @@ const PROFILES = [
 ];
 const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 
-function Brand() { return <Link className="console-brand" href="/app">Robot applications</Link>; }
+export function Brand() { return <Link className="console-brand" href="/app">Robot applications</Link>; }
 function Status({ state }: { state: string }) {
   return <span className={`console-status console-status-${["ready", "completed"].includes(state) ? "success" : ["failed", "unknown", "blocked"].includes(state) ? "warning" : "neutral"}`}>{state.replaceAll("_", " ")}</span>;
 }
@@ -40,7 +40,8 @@ export function Console() {
   </div>;
 }
 
-function Login({ initialError, onLogin }: { initialError: string | null; onLogin: () => Promise<void> }) {
+/** The workspace sign-in form; Configurations reuses it behind its own session gate. */
+export function Login({ initialError, onLogin }: { initialError: string | null; onLogin: () => Promise<void> }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError);
   const lock = useRef(false);
