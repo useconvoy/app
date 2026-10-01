@@ -168,7 +168,7 @@ test("L1 · live, read-only: configurations, a robot's evals, an eval's rollouts
       await expect(h1(page)).toHaveText(robot.name);
       await page.getByRole("tab", { name: /^Evals/ }).click();
       const evals = rows(page, "Evals");
-      await expect(evals.first().or(page.getByText("No evals yet."))).toBeVisible({ timeout: 30_000 });
+      await expect(evals.first()).toBeVisible({ timeout: 30_000 });
       const links = await evals.locator("a.cv-row-link").evaluateAll(nodes => nodes.slice(0, 6).map(node => ({ label: node.textContent?.trim() ?? "", path: node.getAttribute("href") ?? "" })));
       if (!links.length) continue;
       if (!opened) await milestone(page, testInfo, "L1-03-robot-evals");

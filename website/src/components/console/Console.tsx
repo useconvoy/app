@@ -18,7 +18,7 @@ const PROFILES = [
 ];
 const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 
-export function Brand() { return <Link className="console-brand" href="/app">Robot applications</Link>; }
+export function Brand({ label = "Robot applications" }: { label?: string }) { return <Link className="console-brand" href="/app">{label}</Link>; }
 function Status({ state }: { state: string }) {
   return <span className={`console-status console-status-${["ready", "completed"].includes(state) ? "success" : ["failed", "unknown", "blocked"].includes(state) ? "warning" : "neutral"}`}>{state.replaceAll("_", " ")}</span>;
 }
@@ -41,7 +41,7 @@ export function Console() {
 }
 
 /** The workspace sign-in form; Configurations reuses it behind its own session gate. */
-export function Login({ initialError, onLogin }: { initialError: string | null; onLogin: () => Promise<void> }) {
+export function Login({ initialError, onLogin, brand }: { initialError: string | null; onLogin: () => Promise<void>; brand?: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(initialError);
   const lock = useRef(false);
@@ -55,7 +55,7 @@ export function Login({ initialError, onLogin }: { initialError: string | null; 
     catch (cause) { setError(errorText(cause)); }
     finally { lock.current = false; setBusy(false); }
   }
-  return <main className="console-auth"><Brand /><section className="console-card">
+  return <main className="console-auth"><Brand label={brand} /><section className="console-card">
     <p className="console-eyebrow">Your Convoy workspace</p><h1>One workspace for your robots.</h1>
     <p>Sign in to connect a device, test its model, and manage robot applications.</p>
     <form onSubmit={event => void submit(event)}>
