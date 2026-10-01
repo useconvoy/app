@@ -1,3 +1,85 @@
 /* Configurations index and New configuration pages (classes prefixed ci-).
  * Page-specific additions only; shared cfg-* components live in configurations.css.
  * Custom properties only: hex values belong in tokens.css. */
+
+/* ---------- Index: verdict note on a card, eval badges, two-line foot, add strip, activity feed ---------- */
+.ci-note { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; border-left: 2px solid currentColor; font-size: .75rem; line-height: 1.5; }
+.ci-note > .cfg-icon { margin-top: 3px; }
+.ci-note--good { background: var(--success-tint); color: var(--success); }
+.ci-note--warn { background: var(--warning-tint); color: var(--warning); }
+.ci-note__body strong { font-weight: 600; }
+.ci-note__body .cfg-prov { margin-left: 6px; vertical-align: 1px; }
+.ci-eval { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ci-foot-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; flex-basis: 100%; }
+/* When the add tile would sit alone on the last row, it becomes a slim strip across the grid. */
+@media (min-width: 1200px) { .ci-grid--fill3 .cfg-card--add { grid-column: 1 / -1; flex-direction: row; min-height: 72px; } }
+@media (min-width: 640px) and (max-width: 1199px) { .ci-grid--fill2 .cfg-card--add { grid-column: 1 / -1; flex-direction: row; min-height: 72px; } }
+.ci-feed .cfg-log__row { grid-template-columns: 96px 112px minmax(72px, 160px) minmax(0, 1fr) auto; }
+.ci-feed__event { min-width: 0; }
+.ci-feed__subject { justify-self: start; min-height: 32px; overflow-wrap: anywhere; }
+.ci-feed__prov { justify-self: end; }
+
+/* ---------- New configuration: step body rhythm, field grids, 3-up cards, connected device, review, aside, footer ---------- */
+/* Stepper and its note on the left, the step on the right; on narrow screens the note follows the step. */
+/* The step's height goes to the flexible second row, so the note stays right under the stepper. */
+.ci-split { grid-template-rows: auto 1fr; row-gap: 24px; }
+.ci-split > .ci-steps { grid-column: 1; grid-row: 1; min-width: 0; }
+.ci-split > .ci-after { grid-column: 1; grid-row: 2; }
+.ci-split > .ci-main { grid-column: 2; grid-row: 1 / span 2; min-width: 0; }
+.ci-step { margin-bottom: 20px; }
+.ci-step h2:focus, .ci-review-head h2:focus { outline: none; }
+.ci-step h2:focus-visible, .ci-review-head h2:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.ci-body { display: grid; gap: 24px; }
+.ci-group { display: grid; gap: 14px; padding-top: 20px; border-top: 1px solid var(--border-subtle); }
+.ci-group__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+.ci-group__head h3 { font-size: .875rem; font-weight: 500; }
+.ci-group__note { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: .75rem; color: var(--text-secondary); }
+.ci-text { font-size: .8125rem; line-height: 1.55; color: var(--text-secondary); }
+.ci-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; align-items: start; }
+.ci-fields--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: stretch; }
+.ci-fields--4 > .cfg-field { align-content: end; }
+.ci-wide { grid-column: 1 / -1; }
+.ci-fields--4 > .ci-span-2 { grid-column: span 2; }
+.ci-textarea { min-height: 72px; resize: vertical; field-sizing: content; }
+.ci-error { font-size: .75rem; font-weight: 400; line-height: 1.5; color: var(--error); }
+.cfg-choices.ci-choices--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ci-choice__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.cfg-choice.ci-choice--off { border-style: dashed; background: var(--surface-subtle); cursor: not-allowed; }
+.ci-choice--off .cfg-choice__title { color: var(--text-secondary); }
+.ci-fixes { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.ci-device { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 12px; padding: 12px 16px; border: 1px solid var(--border-subtle); background: var(--surface-teal); font-size: .8125rem; line-height: 1.55; }
+.ci-device > .cfg-icon { margin-top: 3px; color: var(--signal); }
+.ci-device p { flex: 1 1 360px; margin: 0; }
+.ci-device strong { font-weight: 600; }
+.ci-device a { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
+.ci-device a:hover { color: var(--accent-hover); }
+.ci-review-head { align-items: baseline; }
+.ci-notice__body { flex: 1; min-width: 0; }
+.ci-issues { display: grid; gap: 2px; margin-top: 6px; }
+.ci-issues .cfg-btn-text { min-height: 32px; padding: 0; color: inherit; }
+.ci-review { margin-bottom: 20px; }
+.ci-review .portal-panel { margin-bottom: 0; }
+.ci-review__wide { grid-column: 1 / -1; }
+.portal-facts.ci-facts-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; }
+.ci-dd-prov { display: inline-flex; margin-left: 8px; vertical-align: 1px; }
+.ci-after { align-self: start; padding: 16px; border: 1px solid var(--border-subtle); background: var(--surface); }
+.ci-after ul { display: grid; gap: 10px; margin-top: 10px; }
+.ci-after li { position: relative; padding-left: 14px; font-size: .75rem; line-height: 1.55; color: var(--text-secondary); }
+.ci-after li::before { content: ""; position: absolute; left: 0; top: .6em; width: 5px; height: 5px; background: var(--border-strong); }
+.ci-save:not(:empty) { display: grid; margin-top: 20px; }
+.ci-foot { justify-content: flex-end; margin-top: 4px; }
+.ci-foot__hint { flex: 1 1 240px; font-size: .75rem; line-height: 1.5; color: var(--text-secondary); }
+
+@media (max-width: 899px) {
+  .ci-split { grid-template-rows: none; }
+  .ci-split > .ci-steps, .ci-split > .ci-after, .ci-split > .ci-main { grid-column: 1; grid-row: auto; }
+  .ci-fields--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .portal-facts.ci-facts-2 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 639px) {
+  .ci-feed .cfg-log__row { grid-template-columns: auto auto minmax(0, 1fr); }
+  .ci-feed__prov { justify-self: start; }
+  .ci-fields, .ci-fields--4, .cfg-choices.ci-choices--3 { grid-template-columns: minmax(0, 1fr); }
+  .ci-fields--4 > .ci-span-2 { grid-column: auto; }
+  .ci-foot .btn { flex: 1 1 auto; }
+}
