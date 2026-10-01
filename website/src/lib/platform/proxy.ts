@@ -3,7 +3,11 @@ if (typeof window !== "undefined") throw new Error("Platform proxy is server-onl
 
 const REQUEST_LIMIT = 256 * 1024;
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
+// A workspace document is at most 2 MiB of compact JSON; the margin covers its request/response envelope.
+const DOCUMENT_LIMIT = 2 * 1024 * 1024 + 64 * 1024;
 const ID = "[A-Za-z0-9_-]{1,64}";
+const DOCUMENT = "workspace-documents/[a-z0-9][a-z0-9-]{0,63}";
+const MUTATIONS = ["POST", "PUT", "DELETE"];
 const COOKIE = "convoy_session";
 
 class ProxyFailure extends Error {
@@ -40,11 +44,12 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
   let required: string[] = [];
   let allowed = false;
   if (method === "GET") {
-    allowed = /^(auth\/me|projects|devices)$/.test(path)
+    allowed = /^(auth\/me|projects|devices|workspace-documents)$/.test(path)
       || new RegExp(`^(devices|deployments|missions|episodes)/${ID}$`).test(path)
       || new RegExp(`^applications/${ID}/(releases|evaluation-suites|evaluation-gate)$`).test(path)
       || new RegExp(`^evaluation-suites/${ID}$`).test(path)
-      || new RegExp(`^episodes/${ID}/replay(?:/frames/[0-9]{1,4})?$`).test(path);
+      || new RegExp(`^episodes/${ID}/replay(?:/frames/[0-9]{1,4})?$`).test(path)
+      || new RegExp(`^${DOCUMENT}$`).test(path);
     if (["robots", "applications", "missions", "evaluations"].includes(path)) { allowed = true; keys = ["project_id"]; required = keys; }
     if (path === "deployments") { allowed = true; keys = ["project_id", "robot_id"]; required = ["project_id"]; }
     if (path === "episodes") { allowed = true; keys = ["mission_id"]; required = keys; }
@@ -56,6 +61,9 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
       || new RegExp(`^robots/${ID}/missions$`).test(path)
       || new RegExp(`^missions/${ID}/cancel$`).test(path)
       || new RegExp(`^evaluations/${ID}/(cancel|promote)$`).test(path);
+  } else if (method === "PUT" || method === "DELETE") {
+    // The caller's own workspace documents are the only replaceable or deletable resources.
+    allowed = new RegExp(`^${DOCUMENT}$`).test(path);
   }
   if (!allowed) return null;
   for (const [key, value] of search) {
@@ -117,8 +125,10 @@ function responseCookie(value: string, secure: boolean): string | null {
     duration ?? "", expires ?? ""].filter(Boolean).join("; ");
 }
 
+const PRIVATE_HEADERS = { "Cache-Control": "private, no-store", "Vary": "Cookie", "X-Content-Type-Options": "nosniff" };
+
 function json(value: unknown, status = 200): Response {
-  return Response.json(value, { status, headers: { "Cache-Control": "private, no-store", "Vary": "Cookie", "X-Content-Type-Options": "nosniff" } });
+  return Response.json(value, { status, headers: PRIVATE_HEADERS });
 }
 
 export async function proxyPlatform(request: Request, parts: string[]): Promise<Response> {
@@ -126,7 +136,7 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
     const origin = consoleOrigin(request);
     const path = allowedPlatformPath(parts, request.method, new URL(request.url).searchParams);
     if (!path) throw new ProxyFailure(404, "This console action is unavailable.");
-    const mutation = request.method === "POST";
+    const mutation = MUTATIONS.includes(request.method);
     if (mutation && (request.headers.get("origin") !== origin || request.headers.get("x-convoy-client") !== "web")) {
       throw new ProxyFailure(403, messages[403]);
     }
@@ -134,17 +144,21 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
     const logout = parts.join("/") === "auth/logout";
     const cookie = ownCookie(request);
     if (!cookie && !login && !logout) throw new ProxyFailure(401, messages[401]);
+    const document = parts[0] === "workspace-documents";
+    const requestLimit = document ? DOCUMENT_LIMIT : REQUEST_LIMIT;
+    const responseLimit = document ? DOCUMENT_LIMIT : RESPONSE_LIMIT;
     let body: string | undefined;
-    if (mutation) {
+    if (mutation && request.method !== "DELETE") {
       if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("content-type") ?? "")) throw new ProxyFailure(422, messages[422]);
       const length = request.headers.get("content-length");
-      if (length && (!/^\d+$/.test(length) || Number(length) > REQUEST_LIMIT)) throw new ProxyFailure(413, messages[413]);
-      body = await boundedBody(request.body, REQUEST_LIMIT);
+      if (length && (!/^\d+$/.test(length) || Number(length) > requestLimit)) throw new ProxyFailure(413, messages[413]);
+      body = await boundedBody(request.body, requestLimit);
       try { JSON.parse(body); } catch { throw new ProxyFailure(422, messages[422]); }
     }
     const headers = new Headers({ Accept: "application/json" });
     if (cookie) headers.set("Cookie", cookie);
-    if (mutation) { headers.set("Content-Type", "application/json"); headers.set("X-Convoy-Client", "web"); }
+    if (mutation) headers.set("X-Convoy-Client", "web");
+    if (body !== undefined) headers.set("Content-Type", "application/json");
     const key = request.headers.get("idempotency-key");
     if (key) {
       if (!/^[\x21-\x7e]{1,128}$/.test(key)) throw new ProxyFailure(422, messages[422]);
@@ -158,7 +172,11 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
       const status = messages[upstream.status] ? upstream.status : 503;
       throw new ProxyFailure(status, login && status === 401 ? "The email or password was not accepted." : messages[status] ?? "The management service is unavailable. Refresh before retrying an action.");
     }
-    const data: unknown = JSON.parse(await boundedBody(upstream.body, RESPONSE_LIMIT));
+    if (upstream.status === 204) {
+      await upstream.body?.cancel();
+      return new Response(null, { status: 204, headers: PRIVATE_HEADERS });
+    }
+    const data: unknown = JSON.parse(await boundedBody(upstream.body, responseLimit));
     const response = json(data, upstream.status);
     if (login || logout || (parts.join("/") === "auth/me" && cookie)) {
       // A validated legacy session can move to the shared BFF scope without a

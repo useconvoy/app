@@ -10,6 +10,11 @@ from starlette.responses import JSONResponse
 MAX_BODY = 256 * 1024
 RECORDING_BODY = 4 * 1024 * 1024
 RECORDING_COMMAND = re.compile(r"/api/agent/v1/robots/[^/]+/missions/[^/]+/recording/commands/[0-9]+")
+# A workspace document is at most 2 MiB of compact JSON (checked exactly after decoding). The raw PUT
+# may add its envelope and some formatting; anything larger is refused before it is decoded, which
+# happens before authentication.
+DOCUMENT_BODY = 2 * 1024 * 1024 + 64 * 1024
+DOCUMENT = re.compile(r"/api/v1/workspace-documents/[^/]+")
 
 
 class ChatBodyLimit:
@@ -18,7 +23,8 @@ class ChatBodyLimit:
 
     async def __call__(self, scope, receive, send):
         path = scope.get("path", "")
-        application = path.startswith((
+        document = DOCUMENT.fullmatch(path) is not None
+        application = document or path.startswith((
             "/api/agent/v1/robots/", "/api/v1/projects", "/api/v1/robots", "/api/v1/applications",
             "/api/v1/deployments", "/api/v1/missions/", "/api/v1/evaluations", "/api/v1/evaluation-suites",
         ))
@@ -26,10 +32,15 @@ class ChatBodyLimit:
             path.startswith("/api/agent/v1/chat/") or path.startswith("/api/v1/devices/") and "/chat" in path
         ) or application
         label = "application" if application else "chat"
-        # Camera observations exceed the ordinary management-body limit. Keep
-        # this exception exact and bounded, including requests without a length.
-        maximum = RECORDING_BODY if RECORDING_COMMAND.fullmatch(path) else MAX_BODY
-        if scope["type"] != "http" or scope.get("method") != "POST" or not limited:
+        # Camera observations and workspace documents exceed the ordinary management-body limit. Keep
+        # these exceptions exact and bounded, including requests without a length.
+        maximum = MAX_BODY
+        if RECORDING_COMMAND.fullmatch(path):
+            maximum = RECORDING_BODY
+        elif document:
+            maximum = DOCUMENT_BODY
+        method = "PUT" if document else "POST"
+        if scope["type"] != "http" or scope.get("method") != method or not limited:
             await self.app(scope, receive, send)
             return
         headers = dict(scope.get("headers", []))

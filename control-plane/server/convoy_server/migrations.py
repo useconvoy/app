@@ -29,6 +29,10 @@ log = logging.getLogger("convoy.migrations")
 # `plan_migration` -> `add_tables` path; no version bump or rebuild is involved.
 # Schema 4 adds the platform application lifecycle; old text release records are unchanged.
 # Schema 5 adds immutable evaluation suites, durable case jobs and release gates.
+# Schema 5 also carries the ADDITIVE table `workspace_documents` (owner-scoped workspace JSON). A v5
+# database that predates it gains the table at startup through the same `add_tables` path. The version
+# is deliberately not bumped: no earlier code reads or writes the table, and a release rollback keeps
+# the data directory, so a bump would make the previous server refuse the database it must start on.
 SCHEMA_VERSION = 5
 
 
@@ -279,7 +283,9 @@ def apply_migration(engine: Engine, plan: dict[str, Any], *, allow_rebuild: bool
         conn.execute(text("BEGIN IMMEDIATE"))
         try:
             for name in plan["add_tables"]:
-                conn.execute(text(str(CreateTable(tables[name]).compile(engine))))
+                # Services sharing the database (api, evaluations) start together and may plan the same
+                # additive table; the one that commits second must not fail on it.
+                conn.execute(text(str(CreateTable(tables[name], if_not_exists=True).compile(engine))))
                 for idx in tables[name].indexes:
                     conn.execute(text(str(CreateIndex(idx, if_not_exists=True).compile(engine))))
                 applied["add_tables"].append(name)

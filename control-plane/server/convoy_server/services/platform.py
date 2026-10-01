@@ -79,38 +79,57 @@ def dispatch_allowed(db: Session) -> None:
         raise HTTPException(409, "installation dispatch is paused")
 
 
+def require_idempotency_key(key: str | None) -> str:
+    if not key or len(key) > 128 or any(ord(c) < 33 or ord(c) > 126 for c in key):
+        raise HTTPException(422, "Idempotency-Key must contain 1–128 printable non-space characters")
+    return key
+
+
+def previous_receipt(
+    db: Session, principal: Principal, route: str, key: str, digest: str
+) -> MutationReceipt | None:
+    """The committed receipt for this owner, route and key; a different payload is a conflict."""
+    previous = db.scalar(
+        select(MutationReceipt).where(
+            MutationReceipt.owner_user_id == principal.user.id,
+            MutationReceipt.route == route,
+            MutationReceipt.key == key,
+        )
+    )
+    if previous is not None and previous.payload_digest != digest:
+        raise HTTPException(409, "Idempotency-Key was already used with a different payload")
+    return previous
+
+
+def record_receipt(
+    db: Session, principal: Principal, route: str, key: str, digest: str, response: dict
+) -> None:
+    db.add(
+        MutationReceipt(
+            id=new_id("rcp"),
+            owner_user_id=principal.user.id,
+            route=route,
+            key=key,
+            payload_digest=digest,
+            response=response,
+        )
+    )
+
+
 def mutate(
     db: Session, principal: Principal, route: str, key: str | None, payload: dict, action: Callable[[], dict]
 ) -> dict:
     """One durable transaction for the mutation and its idempotent response."""
-    if not key or len(key) > 128 or any(ord(c) < 33 or ord(c) > 126 for c in key):
-        raise HTTPException(422, "Idempotency-Key must contain 1–128 printable non-space characters")
+    key = require_idempotency_key(key)
     reject_invalid_json_values(payload)
     digest = canonical_digest(payload)
     with write_txn(db):
         assert_live_principal(db, principal, "operator")
-        previous = db.scalar(
-            select(MutationReceipt).where(
-                MutationReceipt.owner_user_id == principal.user.id,
-                MutationReceipt.route == route,
-                MutationReceipt.key == key,
-            )
-        )
+        previous = previous_receipt(db, principal, route, key, digest)
         if previous is not None:
-            if previous.payload_digest != digest:
-                raise HTTPException(409, "Idempotency-Key was already used with a different payload")
             return previous.response
         response = action()
-        db.add(
-            MutationReceipt(
-                id=new_id("rcp"),
-                owner_user_id=principal.user.id,
-                route=route,
-                key=key,
-                payload_digest=digest,
-                response=response,
-            )
-        )
+        record_receipt(db, principal, route, key, digest, response)
         audit(db, principal, "platform.mutate", response.get("id"), route=route)
         return response
 

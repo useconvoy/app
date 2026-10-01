@@ -105,6 +105,104 @@ test("replay is read-only and accepts only bounded frame paths without path or U
   }
 });
 
+const documentPath = ["workspace-documents", "configurations"];
+const documentLimit = 2 * 1024 * 1024 + 64 * 1024;
+
+test("workspace documents are the only PUT/DELETE routes and accept only contract names", () => {
+  assert.equal(allowedPlatformPath(["workspace-documents"], "GET", new URLSearchParams()), "/api/v1/workspace-documents");
+  assert.equal(allowedPlatformPath(["workspace-documents"], "GET", new URLSearchParams("owner=usr_other")), null);
+  for (const method of ["GET", "PUT", "DELETE"]) {
+    assert.equal(allowedPlatformPath(documentPath, method, new URLSearchParams()), "/api/v1/workspace-documents/configurations");
+    assert.equal(allowedPlatformPath(documentPath, method, new URLSearchParams("owner=usr_other")), null);
+    for (const name of ["Configurations", "-leading", "under_score", "a".repeat(65), ".."]) {
+      assert.equal(allowedPlatformPath(["workspace-documents", name], method, new URLSearchParams()), null);
+    }
+  }
+  assert.equal(allowedPlatformPath(["workspace-documents", "a".repeat(64)], "PUT", new URLSearchParams()), `/api/v1/workspace-documents/${"a".repeat(64)}`);
+  assert.equal(allowedPlatformPath(["workspace-documents", "0-sample-2"], "DELETE", new URLSearchParams()), "/api/v1/workspace-documents/0-sample-2");
+  assert.equal(allowedPlatformPath(documentPath, "POST", new URLSearchParams()), null);
+  assert.equal(allowedPlatformPath(documentPath, "PATCH", new URLSearchParams()), null);
+  assert.equal(allowedPlatformPath([...documentPath, "extra"], "GET", new URLSearchParams()), null);
+  for (const method of ["PUT", "DELETE"]) {
+    for (const path of [["workspace-documents"], ["projects"], ["devices", "dev_one"], ["robots", "rob_one"], ["auth", "me"], ["tokens", "tok_one"]]) {
+      assert.equal(allowedPlatformPath(path, method, new URLSearchParams()), null);
+    }
+  }
+});
+
+test("document writes forward session, method, key and a full 2 MiB document; deletes forward no body", async () => {
+  const fetch = globalThis.fetch;
+  process.env.CONVOY_API_URL = "http://127.0.0.1:8080";
+  const blob = "x".repeat(2 * 1024 * 1024 - 11); // {"blob":"…"} is exactly 2 MiB of compact JSON
+  const body = JSON.stringify({ schema_version: 1, body: { blob } });
+  const calls: { method?: string; body?: unknown; headers: Headers }[] = [];
+  globalThis.fetch = async (input, init) => {
+    assert.equal(String(input), "http://127.0.0.1:8080/api/v1/workspace-documents/configurations");
+    const headers = new Headers(init?.headers);
+    calls.push({ method: init?.method, body: init?.body, headers });
+    assert.equal(headers.get("cookie"), session);
+    assert.equal(headers.get("authorization"), null);
+    assert.equal(headers.get("x-convoy-client"), "web");
+    assert.equal(init?.redirect, "error");
+    if (init?.method === "DELETE") return new Response(null, { status: 204 });
+    return Response.json({ name: "configurations", schema_version: 1, body: { blob }, size_bytes: 2 * 1024 * 1024, updated_at: "2026-10-01T00:00:00Z" });
+  };
+  try {
+    const saved = await proxyPlatform(request("workspace-documents/configurations", { method: "PUT", body, headers: { "Idempotency-Key": "save-1", Authorization: "Bearer attacker" } }), documentPath);
+    assert.equal(saved.status, 200);
+    assert.match(saved.headers.get("cache-control") ?? "", /no-store/);
+    assert.equal((await saved.json()).body.blob, blob); // larger than the ordinary 2 MiB response cap
+    const removed = await proxyPlatform(request("workspace-documents/configurations", { method: "DELETE", headers: { "Idempotency-Key": "remove-1" } }), documentPath);
+    assert.equal(removed.status, 204);
+    assert.equal(await removed.text(), "");
+    assert.match(removed.headers.get("cache-control") ?? "", /no-store/);
+    assert.deepEqual(calls.map(call => call.method), ["PUT", "DELETE"]);
+    assert.equal(calls[0].body, body);
+    assert.equal(calls[0].headers.get("content-type"), "application/json");
+    assert.equal(calls[0].headers.get("idempotency-key"), "save-1");
+    assert.equal(calls[1].body, undefined);
+    assert.equal(calls[1].headers.get("content-type"), null);
+    assert.equal(calls[1].headers.get("idempotency-key"), "remove-1");
+  } finally { globalThis.fetch = fetch; }
+});
+
+test("document writes are CSRF, session and size checked before fetch", async () => {
+  const fetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error("must not reach upstream"); };
+  try {
+    for (const method of ["PUT", "DELETE"]) {
+      const body = method === "PUT" ? '{"schema_version":1,"body":{}}' : undefined;
+      for (const headers of [{ Origin: "https://other.test" }, { "X-Convoy-Client": "" }] as Record<string, string>[]) {
+        assert.equal((await proxyPlatform(request("workspace-documents/configurations", { method, body, headers }), documentPath)).status, 403);
+      }
+      assert.equal((await proxyPlatform(request("workspace-documents/configurations", { method, body, headers: { Cookie: "unrelated=private" } }), documentPath)).status, 401);
+    }
+    const put = (body: string, headers: Record<string, string> = {}) => proxyPlatform(request("workspace-documents/configurations", { method: "PUT", body, headers }), documentPath);
+    assert.equal((await put("x".repeat(documentLimit + 1))).status, 413);
+    assert.equal((await put("{}", { "Content-Length": String(documentLimit + 1) })).status, 413);
+    assert.equal((await put("{}", { "Content-Type": "text/plain" })).status, 422);
+    assert.equal((await put("{")).status, 422);
+    assert.equal((await put("{}", { "Idempotency-Key": "has space" })).status, 422);
+  } finally { globalThis.fetch = fetch; }
+});
+
+test("only document routes get the larger response allowance and upstream errors stay curated", async () => {
+  const fetch = globalThis.fetch;
+  let status = 200;
+  globalThis.fetch = async () => status === 200
+    ? Response.json({ blob: "x".repeat(2 * 1024 * 1024) })
+    : Response.json({ error: "private-owner-and-database-detail" }, { status });
+  try {
+    assert.equal((await proxyPlatform(request("projects"), ["projects"])).status, 413);
+    assert.equal((await proxyPlatform(request("workspace-documents/configurations"), documentPath)).status, 200);
+    for (status of [404, 409, 413, 422]) {
+      const failed = await proxyPlatform(request("workspace-documents/configurations"), documentPath);
+      assert.equal(failed.status, status);
+      assert.doesNotMatch(await failed.text(), /private-owner|database-detail/);
+    }
+  } finally { globalThis.fetch = fetch; }
+});
+
  test("private HTTP is explicit and restricted to the existing Compose service", () => {
   const previous = process.env.CONVOY_API_INTERNAL_HTTP;
   try {

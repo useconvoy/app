@@ -111,7 +111,7 @@ def database_check():
     migrator = "postgresql+psycopg://convoy_migrator:disposable-migration-password@postgres/convoy"
     runtime = "postgresql+psycopg://convoy_app:disposable-runtime-password@postgres/convoy"
     result = migrate_database(Settings(database_url=migrator, data_dir=Path("/tmp/migration")))
-    assert result["ok"] and result["target_revision"] == "0002_evaluations"
+    assert result["ok"] and result["target_revision"] == "0003_workspace_documents"
     signer = configure_signing()
     set_settings(Settings(database_url=runtime, data_dir=Path("/tmp/api"), simulator=True,
                           bootstrap_admin_email="operator@example.com",

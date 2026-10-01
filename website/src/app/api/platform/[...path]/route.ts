@@ -8,4 +8,4 @@ async function handle(request: Request, context: Context) {
   return proxyPlatform(request, (await context.params).path);
 }
 
-export { handle as GET, handle as POST };
+export { handle as DELETE, handle as GET, handle as POST, handle as PUT };
