@@ -73,8 +73,15 @@ export function ReplayView({ workspace, run, suite, configuration, pageConfigId,
   useEffect(() => { close.current = onClose; }, [onClose]);
   useEffect(() => {
     // The replay replaces the page body: start at its top at once, not with the page's smooth scrolling
-    // (from a row deep in the rollouts table that animated over the whole run page).
-    window.scrollTo({ top: 0, behavior: "instant" });
+    // (from a row deep in the rollouts table that animated over the whole run page). The inline style
+    // works in every browser, unlike the newer `behavior: "instant"` option; reading the layout makes
+    // the browser apply it before the scroll (as Next.js does for its own scrolling).
+    const root = document.documentElement;
+    const behavior = root.style.scrollBehavior;
+    root.style.scrollBehavior = "auto";
+    root.getClientRects();
+    window.scrollTo(0, 0);
+    root.style.scrollBehavior = behavior;
     title.current?.focus({ preventScroll: true });
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape" || event.defaultPrevented || document.querySelector("[aria-modal='true']")) return;

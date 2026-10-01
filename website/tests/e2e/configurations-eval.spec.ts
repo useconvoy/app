@@ -175,10 +175,14 @@ test("the replay opens from the URL or a row, closes with Escape or Back to the 
   await mock(page);
   await page.goto(`${RUN}/run-23`);
   const replayLink = page.getByRole("link", { name: "Replay ep-23-007", exact: true });
+  await replayLink.scrollIntoViewIfNeeded();
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
   await replayLink.click();
   await expect(page).toHaveURL(/rollout=ep-23-007/);
   await expect(h1(page)).toHaveText("ep-23-007 · Bin to tray transfer");
   await expect(h1(page)).toBeFocused();
+  // The replay starts at its top at once (no smooth scroll over the whole run page).
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
   await expect(page.getByRole("navigation", { name: "Breadcrumb" }).locator("[aria-current=page]")).toHaveText("ep-23-007");
   await expect(page.getByRole("heading", { name: "Run 23 · Bimanual station suite v1" })).toBeHidden();
   await page.keyboard.press("Escape");
