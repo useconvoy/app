@@ -40,9 +40,10 @@ from convoy_contracts.pairing import (
     validate_plan_result,
     validate_release_manifest,
 )
-from convoy_planner.artifact import STATIC_GATEWAY_FIELDS, validate_gateway_identity
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from convoy_planner.artifact import STATIC_GATEWAY_FIELDS, validate_gateway_identity
 
 STATE = "/run/convoy/state"
 CLEANUP = {"native_stopped", "native_marker_removed", "gateway_closed", "gateway_drained",

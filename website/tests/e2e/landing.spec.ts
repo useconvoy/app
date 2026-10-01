@@ -456,6 +456,12 @@ test.describe("landing page", () => {
       }
       await expect(page.locator("[data-contact-address]")).toBeVisible();
       // The header may be taller now; anchors still land below it, and the menu still closes on Escape.
+      // ResizeObserver delivers after layout; wait for its measured padding,
+      // rather than racing that callback on a busy CI browser.
+      await expect.poll(() => page.evaluate(() => {
+        const height = document.querySelector("header")!.getBoundingClientRect().height;
+        return parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) >= height;
+      }), { message: `scroll padding follows the measured header at ${width}` }).toBe(true);
       const headerHeight = await page.locator("header").evaluate((el) => el.getBoundingClientRect().height);
       const padding = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop));
       expect(padding, `scroll padding follows the measured header at ${width}`).toBeGreaterThanOrEqual(headerHeight);

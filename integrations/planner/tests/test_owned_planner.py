@@ -15,15 +15,15 @@ import psutil
 import pytest
 from convoy_agent.owned_process import OwnedProcess
 from convoy_contracts.execution import canonical_digest
+from fastapi.testclient import TestClient
+from test_planner import PROBE, Backend, manifest
+from test_signed_planner import keys as signing_keys  # noqa: F401
+from test_signed_planner import verifier
 
 # Imported pytest fixture; test parameters intentionally use its registration name.
 # ruff: noqa: F811
 from convoy_planner import owned
 from convoy_planner.artifact import artifact_digest
-from fastapi.testclient import TestClient
-from test_planner import PROBE, Backend, manifest
-from test_signed_planner import keys as signing_keys  # noqa: F401
-from test_signed_planner import verifier
 
 
 def receipt():
