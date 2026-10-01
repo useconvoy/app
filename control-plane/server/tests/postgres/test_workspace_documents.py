@@ -47,7 +47,7 @@ def test_previous_revision_upgrade_adds_owner_scoped_documents(postgres_database
         insert = text(
             "INSERT INTO workspace_documents "
             "(id,owner_user_id,name,schema_version,body,size_bytes,created_at,updated_at) "
-            "VALUES (:id,'user-upgrade','configurations',1,'{\"schemaVersion\":1}',18,now(),now())"
+            "VALUES (:id,'user-upgrade','configurations',1,'{\"schemaVersion\"\\:1}',18,now(),now())"
         )
         with engine.begin() as connection:
             assert connection.execute(text("SELECT email FROM users WHERE id='user-upgrade'")).scalar() == (
