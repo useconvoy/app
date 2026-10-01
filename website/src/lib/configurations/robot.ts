@@ -9,7 +9,7 @@
  * Measured values only ever come from live data (`LiveInference`); everything
  * else is read from the workspace document with its own provenance.
  */
-import { fmtCi, fmtCount, fmtMs, fmtNumber, fmtRatio, fmtSeconds, fmtShare, fmtTime, median, NOT_REPORTED, percentile } from "./format";
+import { fmtCi, fmtCount, fmtMs, fmtNumber, fmtRatio, fmtSeconds, fmtShare, fmtTime, median, NOT_REPORTED, percentile, provenanceLabel, runLabel } from "./format";
 import type { LiveInference } from "./live";
 import { getConfiguration, getSuite, latestGateRun, runsFor, spansForGroup, successShare, tracesFor } from "./selectors";
 import type { TraceFilter } from "./selectors";
@@ -212,6 +212,19 @@ export function gateSummary(suite: EvalSuite | null): string | null {
 /** The newest run still running or queued on a robot. */
 export function activeRunOn(ws: ConvoyWorkspace, robotId: string): EvalRun | null {
   return runsFor(ws, { robotId }).find(run => run.status === "running" || run.status === "queued") ?? null;
+}
+
+/**
+ * What the Run evaluation dialog says about the run already active on a robot. Its state is what
+ * the workspace document lists (no runner reports to it), so a running run is "listed as running"
+ * with its evidence label, never told as work happening now next to "No evaluation runner is
+ * connected": "Run 143 is listed as running on Bench 01 (412 of 1,080 episodes · Sample)."
+ */
+export function activeRunNote(run: EvalRun, robotName: string): string {
+  if (run.status !== "running") return `${runLabel(run)} is already queued on ${robotName}.`;
+  const evidence = run.provenance.kind === "not-reported" ? null : provenanceLabel(run.provenance);
+  const detail = [run.progress ? `${fmtCount(run.progress.done)} of ${fmtCount(run.progress.total)} episodes` : null, evidence].filter(Boolean).join(" · ");
+  return `${runLabel(run)} is listed as running on ${robotName}${detail ? ` (${detail})` : ""}.`;
 }
 
 /* ---------- evaluation rows ---------- */

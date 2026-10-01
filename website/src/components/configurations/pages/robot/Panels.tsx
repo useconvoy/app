@@ -9,7 +9,7 @@ import { Panel } from "@/components/configurations/Facts";
 import { LogPanel } from "@/components/configurations/LogPanel";
 import { EmptyState } from "@/components/configurations/States";
 import { FilterChips } from "@/components/configurations/Toolbar";
-import { fmtCount, fmtFixed, fmtMs, fmtNumber, fmtSeconds, fmtTime, runLabel } from "@/lib/configurations/format";
+import { fmtCount, fmtFixed, fmtMs, fmtNumber, fmtSeconds, rowTimeFormat, runLabel } from "@/lib/configurations/format";
 import type { LiveDeviceData, LiveInference } from "@/lib/configurations/live";
 import {
   edgeSpanStats, latencyBarChart, policyLabel, runRowFacts, timeWindowLabel, TRACE_EMPTY, TRACE_FILTER_LABEL, TRACE_FILTERS, traceCounts, type RunCell,
@@ -67,9 +67,11 @@ export function InferencePanel({ data, robot, now }: { data: LiveDeviceData | nu
   const chart = latencyBarChart(spans);
   const provenance: Provenance = spans.length ? { kind: "measured", at: stats.to ?? data.fetchedAt, n: spans.length, source: `${data.name} gateway` } : { kind: "not-reported" };
   const window = timeWindowLabel(spans.map(span => span.at));
+  // Every received span, not only the rows shown, decides whether rows carry their day.
+  const started = rowTimeFormat(spans.map(span => span.at));
   const shown = all ? spans : spans.slice(0, SHOWN);
   const columns: Array<Column<LiveInference>> = [
-    { key: "at", header: "Started (UTC)", cell: span => span.at ? fmtTime(span.at) : <NotReported /> },
+    { key: "at", header: "Started (UTC)", cell: span => span.at ? started.format(span.at) : <NotReported /> },
     { key: "trace", header: "Trace", cell: span => span.traceId },
     { key: "status", header: "Status", cell: span => span.status ? <Badge tone={span.status === "ok" ? "success" : "warning"}>{span.status}</Badge> : <NotReported /> },
     { key: "latency", header: "Device latency", numeric: true, cell: span => span.latencyMs === null ? <NotReported /> : `${fmtFixed(span.latencyMs, 1)} ms` },
@@ -117,8 +119,9 @@ export function ActionsPanel({ workspace, robot, now, openTraceId, onOpen }: { w
   const traces = tracesFor(workspace, robot.id, filter);
   const zone = robot.clock?.zone ?? "UTC";
   const window = timeWindowLabel(all.map(trace => trace.at), robot.clock);
+  const time = rowTimeFormat(all.map(trace => trace.at), robot.clock);
   const columns: Array<Column<ActionTrace>> = [
-    { key: "at", header: `Time (${zone})`, cell: trace => fmtTime(trace.at, robot.clock) },
+    { key: "at", header: `Time (${zone})`, cell: trace => time.format(trace.at) },
     { key: "instruction", header: "Instruction", wrap: true, cell: trace => <span className="rb-instr">{trace.instruction}</span>, detail: trace => trace.reference },
     { key: "decision", header: "Decision", cell: trace => trace.decision.kind === "skill" ? trace.decision.skill ?? <NotReported /> : "Declined", detail: trace => trace.decision.kind === "skill" ? trace.decision.params : trace.decision.reason },
     { key: "path", header: "Path", cell: trace => <PathChip path={trace.path} />, detail: trace => trace.route },

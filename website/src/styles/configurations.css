@@ -294,6 +294,8 @@ th[aria-sort] .cfg-sort { font-weight: 500; }
 /* ---------- Log panel (light, mono; level badges) ---------- */
 .cfg-log { border-top: 1px solid var(--border-subtle); font: .75rem/1.5 var(--font-mono); }
 .cfg-log__row { display: grid; grid-template-columns: 64px 48px minmax(120px, 176px) minmax(0, 1fr); gap: 4px 12px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--border-subtle); }
+/* Lines from more than one day carry their day: "Sep 14, 06:29:51". */
+.cfg-log--dated .cfg-log__row { grid-template-columns: 120px 48px minmax(120px, 176px) minmax(0, 1fr); }
 .cfg-log__time, .cfg-log__src { color: var(--text-secondary); }
 .cfg-log__level { justify-self: start; padding: 1px 6px; border-radius: var(--radius-badge); background: var(--surface-subtle); color: var(--text-secondary); font-size: .625rem; letter-spacing: .04em; }
 .cfg-log__level--warn { background: var(--warning-tint); color: var(--warning); }
@@ -428,7 +430,8 @@ body.cfg-locked { overflow: hidden; }
   .cfg-wf__ticks span:not(:first-child):not(:last-child) { display: none; }
   .cfg-page-head > :first-child { flex-basis: 100%; }
   .cfg-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .cfg-tabs a, .cfg-tabs button { flex: none; }
+  /* The phone padding of the kit's link tabs, for button tabs too: four tabs fit a 390 px screen. */
+  .cfg-tabs a, .cfg-tabs button { flex: none; padding-inline: var(--space-3); }
   .cfg-toolbar > * { flex: 1 1 100%; max-width: none; }
   .cfg-toolbar__end { margin-left: 0; }
   .cfg-choices, .cfg-cards { grid-template-columns: minmax(0, 1fr); }
@@ -441,7 +444,7 @@ body.cfg-locked { overflow: hidden; }
   .cfg-plot--sm { --cfg-plot-h: 80px; }
   .cfg-check { grid-template-columns: 28px minmax(0, 1fr); }
   .cfg-check__meta { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: center; }
-  .cfg-log__row { grid-template-columns: auto auto minmax(0, 1fr); }
+  .cfg-log__row, .cfg-log--dated .cfg-log__row { grid-template-columns: auto auto minmax(0, 1fr); }
   .cfg-log__msg { grid-column: 1 / -1; }
   .cfg-dialog__head, .cfg-drawer__head, .cfg-dialog__body, .cfg-drawer__body { padding-inline: 16px; }
   .cfg-dialog__foot, .cfg-drawer__foot { padding-inline: 16px; }

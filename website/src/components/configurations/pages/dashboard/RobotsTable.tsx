@@ -24,7 +24,9 @@ const metric = (value: number | null | undefined, format: (value: number) => str
 function lastReport(row: RobotRow, now: number | null): ReactNode {
   const seen = row.readings.lastSeenAt;
   if (!seen) return row.bound ? "No device report yet" : "No report yet";
-  return <time dateTime={seen} title={fmtDateTime(seen)}>{now === null ? fmtDateTime(seen) : fmtRelative(seen, now)}</time>;
+  // A live device's last contact reads as an age; a stored robot's is the stored time (an age would only grow).
+  const text = row.readings.live && now !== null ? fmtRelative(seen, now) : fmtDateTime(seen, row.robot.clock, false);
+  return <time dateTime={seen} title={fmtDateTime(seen)}>{text}</time>;
 }
 function silentReason(row: RobotRow): string {
   if (row.bound) return `Not reported · ${row.readings.baseHealthReason ?? "no device report"}`;

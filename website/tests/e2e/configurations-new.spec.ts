@@ -94,7 +94,7 @@ test("edits change the stepper and the review's compatibility check; Edit return
   await expect(stepButton(page, "Edge hardware")).toContainText("Jetson Orin Nano Super 8 GB · 15 W");
   await stepButton(page, "Edge model").click();
   await page.getByRole("checkbox", { name: /^Skill pack · Short-horizon skill pack/ }).uncheck();
-  await expect(page.locator(".ci-group__note").filter({ hasText: "of 7.4 GiB" })).toContainText("3.0 of 7.4 GiB · 4.4 GiB headroom");
+  await expect(page.locator(".ci-group__note").filter({ hasText: "of 7.4 GiB" })).toContainText("3.0 of 7.4 GiB · 4.4 GiB left for the system, agent and cameras");
   await stepButton(page, "Routing & safety").click();
   await page.getByLabel("Cloud RTT p95 above, ms").fill("300");
   await stepButton(page, "Review").click();

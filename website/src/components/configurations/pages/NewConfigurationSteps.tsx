@@ -213,7 +213,7 @@ export function EdgeStep({ catalog, draft, update, errors, now }: StepProps) {
     <ChoiceGroup legend={`Models on the ${hardware.name}`} type="checkbox" options={options} errors={errors("edgeModels")} onChange={(key, on) => update(current => toggleEdgeModel(catalog, current, key, on))} />
     <Group title="Resident memory" note={memory.total === null
       ? <>Not reported for {memory.missing.map(model => model.shortName).join(", ")}</>
-      : <>{fmtFixed(memory.total)} of {fmtFixed(hardware.memoryGiB)} GiB · {free !== null && free >= 0 ? `${fmtFixed(free)} GiB headroom` : `${fmtFixed(-(free ?? 0))} GiB over`} <ProvenanceBadge provenance={ESTIMATE} now={now} /></>}>
+      : <>{fmtFixed(memory.total)} of {fmtFixed(hardware.memoryGiB)} GiB · {free !== null && free >= 0 ? `${fmtFixed(free)} GiB left for the system, agent and cameras` : `${fmtFixed(-(free ?? 0))} GiB over`} <ProvenanceBadge provenance={ESTIMATE} now={now} /></>}>
       {draft.edgeModels.length
         ? <ul className="cfg-hbars cfg-series--edge" aria-label={`Resident memory by model, GiB of ${fmtFixed(hardware.memoryGiB)} GiB usable`}>
           {draft.edgeModels.map(model => <li key={modelKey(model)} className="cfg-hbar">

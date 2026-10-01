@@ -159,7 +159,7 @@ export function ConfigDashboardPage({ configId }: { configId: string }) {
     <TabPanel idPrefix={PREFIX} tabId="logs" selected={tab === "logs"}>{tab === "logs" && <LogsFull workspace={workspace} config={configuration} filter={logFilter} onFilter={setLogFilter} />}</TabPanel>
     <TabPanel idPrefix={PREFIX} tabId="spec" selected={tab === "spec"}>{tab === "spec" && <SpecificationFull workspace={workspace} config={configuration} revision={shownRev} rows={rows} live={live} onRevision={setSpecRev} now={now} />}</TabPanel>
 
-    {dialog?.kind === "add" && <AddRobotDialog workspace={workspace} config={configuration} canSave={ws.canSave} save={ws.save} now={now} onClose={closeDialog}
+    {dialog?.kind === "add" && <AddRobotDialog workspace={workspace} config={configuration} canSave={ws.canSave} save={ws.save} onClose={closeDialog}
       onDone={({ robot, role, rev }) => done(<>{robot.name} added to {configuration.name} {rev} as {role === "test" ? "a test robot" : "a production robot"}. <Link href={routes.robot(configuration.id, robot.id)}>Open {robot.name}</Link></>)} />}
     {dialog?.kind === "run" && <RunEvalDialog workspace={workspace} config={configuration} rows={rows} canSave={ws.canSave} save={ws.save} onClose={closeDialog}
       onDone={run => {

@@ -11,7 +11,7 @@ import { SelectField } from "@/components/configurations/Toolbar";
 import { useWorkspace } from "@/lib/configurations/client";
 import { fmtCount, fmtDateTime, fmtRatio, fmtShare, runLabel } from "@/lib/configurations/format";
 import { clearFlag, flagRobot, queueEvaluation, setRobotRole } from "@/lib/configurations/mutations";
-import { activeRunOn, evaluationChoices, gateSummary, VARIANT_LABEL } from "@/lib/configurations/robot";
+import { activeRunNote, activeRunOn, evaluationChoices, gateSummary, VARIANT_LABEL } from "@/lib/configurations/robot";
 import { getRevision, getSuite, successShare } from "@/lib/configurations/selectors";
 import type { Configuration, ConvoyWorkspace, EvalRun, FlagSeverity, Robot, RobotRole } from "@/lib/configurations/types";
 
@@ -189,7 +189,7 @@ export function RunEvaluationDialog({ workspace, configuration, robot, onClose, 
       ]} />
       {suite && <p className="rb-form__note">Timing: {suite.timing}.</p>}
       <label className="cfg-field">Purpose (optional)<input className="field-input cfg-input" type="text" maxLength={80} value={purpose} onChange={event => setPurpose(event.target.value)} placeholder="e.g. Confirmation · seeds 6–10" /></label>
-      <Notice tone="info">Queuing saves the run to the workspace document. <strong>No evaluation runner is connected</strong>, so the run stays queued and reports no results until one is.{active ? ` ${runLabel(active)} is ${active.status === "running" && active.progress ? `running on ${robot.name} (${fmtCount(active.progress.done)} of ${fmtCount(active.progress.total)} episodes)` : `already queued on ${robot.name}`}.` : ""}</Notice>
+      <Notice tone="info">Queuing saves the run to the workspace document. <strong>No evaluation runner is connected</strong>, so the run stays queued and reports no results until one is.{active ? ` ${activeRunNote(active, robot.name)}` : ""}</Notice>
       {submit.error && <p className="rb-form__error" role="alert">{submit.error}</p>}
     </form>
   </Modal>;

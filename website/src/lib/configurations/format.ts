@@ -58,6 +58,23 @@ export function fmtDateTime(at: string | null | undefined, clock?: ClockLabel, s
   const day = shifted(ms, clock).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
   return `${day}, ${fmtTime(at, clock, seconds)} ${zone(clock)}`;
 }
+/**
+ * Times for the rows of one list on one clock (the zone is named by the list's header): "09:41:20"
+ * while every row falls on the same day, else every row with its day (`dated`), "Sep 14, 06:29:51",
+ * so rows from different days never read alike.
+ */
+export function rowTimeFormat(times: ReadonlyArray<string | null | undefined>, clock?: ClockLabel, seconds = true): { dated: boolean; format: (at: string | null | undefined) => string } {
+  const dayOf = (ms: number) => shifted(ms, clock).toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric" });
+  const dated = new Set(times.map(parse).filter(Number.isFinite).map(dayOf)).size > 1;
+  return {
+    dated,
+    format: at => {
+      const ms = parse(at);
+      if (!Number.isFinite(ms)) return NOT_REPORTED;
+      return dated ? `${dayOf(ms)}, ${fmtTime(at, clock, seconds)}` : fmtTime(at, clock, seconds);
+    },
+  };
+}
 /** "Sep 14". */
 export function fmtDate(at: string | null | undefined): string {
   const ms = parse(at);

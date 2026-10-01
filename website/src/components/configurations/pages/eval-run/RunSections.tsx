@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { MouseEvent, ReactNode } from "react";
 import { runHref, sliceInfo, successShare, taskName } from "@/lib/configurations/client";
 import {
-  clockLabel, clockName, countNoun, familyOf, familyResults, failedEpisodes, fmtDuration, gateRows, largestSliceGap, pointsDelta, rowInterval, rowShare, runShare,
+  clockLabel, clockName, countNoun, familyOf, familyResults, failedEpisodes, fmtDuration, gateRows, largestSliceGap, pointsDelta, rowInterval, rowShare, runningElapsed, runShare,
   safetyRows, secondsBetween, signed, successInterval, valueDelta,
 } from "@/lib/configurations/eval-run";
 import { fmtCi, fmtCount, fmtDateTime, fmtFixed, fmtMs, fmtRatio, fmtSeconds, fmtShare, NOT_REPORTED, provenanceDetail, runLabel } from "@/lib/configurations/format";
@@ -38,14 +38,16 @@ function Change({ delta, better, unit, against }: { delta: number | null; better
 /* ---------- progress ---------- */
 
 /** Running: progress with a partial-results note. Queued: what happens next, honestly. */
-export function RunProgress({ run, now }: { run: EvalRun; now: number | null }) {
+export function RunProgress({ run }: { run: EvalRun }) {
   const progress = run.progress;
   if (run.status === "running" && progress) {
     const share = progress.total ? progress.done / progress.total : 0;
-    const elapsed = run.startedAt && now !== null ? fmtDuration((now - Date.parse(run.startedAt)) / 1000) : null;
+    // The stored progress is a snapshot: say when it was reported, never how long ago the run started.
+    const elapsed = runningElapsed(run);
+    const when = elapsed ? ` as of ${fmtDateTime(elapsed.asOf)}, ${fmtDuration(elapsed.seconds)} after it started` : run.startedAt ? `; started ${fmtDateTime(run.startedAt)}` : "";
     return <div className="ev-progress">
       <Notice tone="info" icon="clock">
-        <strong>{runLabel(run)} is in progress:</strong> {fmtCount(progress.done)} of {plural(progress.total, "episode")} ({fmtShare(share)}){elapsed ? `, running for ${elapsed}` : ""}. The metrics below cover the finished episodes and will change; the gate is decided when the run finishes.
+        <strong>{runLabel(run)} is in progress:</strong> {fmtCount(progress.done)} of {plural(progress.total, "episode")} ({fmtShare(share)}){when}. The metrics below cover the finished episodes and will change; the gate is decided when the run finishes.
         <ProgressBar wide done={progress.done} total={progress.total} label={`${runLabel(run)} episodes complete`} />
       </Notice>
     </div>;

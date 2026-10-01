@@ -334,7 +334,10 @@ test("running and queued runs show progress with partial or pending results", as
   await mock(page);
   await page.goto(`${RUN}/run-24`);
   await expect(page.getByRole("progressbar", { name: "Run 24 episodes complete" }).first()).toHaveAttribute("aria-valuenow", "212");
-  await expect(page.locator(".ev-progress")).toContainText("Run 24 is in progress: 212 of 360 episodes (58.9 %)");
+  await expect(page.locator(".ev-progress")).toContainText("Run 24 is in progress: 212 of 360 episodes (58.9 %); started ");
+  // Its stored progress has no report time, so no "running for" grows with the browser's clock.
+  await expect(page.locator(".ev-progress")).not.toContainText("running for");
+  await expect(page.locator(".cfg-page-head + .portal-updated")).not.toContainText("so far");
   await expect(tile(page, "Success rate")).toContainText("167 of 212 episodes so far");
   await expect(tile(page, "Success rate")).toContainText("Partial · 212/360");
   const gate = page.getByRole("region", { name: "Gate decided when the run finishes" });

@@ -7,7 +7,7 @@ import { unassignedRobots } from "@/lib/configurations/client";
 import type { SaveResult, WorkspaceUpdate } from "@/lib/configurations/client";
 import { revisionGate } from "@/lib/configurations/dashboard";
 import type { RevisionGate } from "@/lib/configurations/dashboard";
-import { fmtDate, fmtDateTime, fmtRelative } from "@/lib/configurations/format";
+import { fmtDate, fmtDateTime } from "@/lib/configurations/format";
 import { attachRobot } from "@/lib/configurations/mutations";
 import { routes } from "@/lib/configurations/routes";
 import type { Configuration, ConvoyWorkspace, Robot, RobotRole } from "@/lib/configurations/types";
@@ -41,9 +41,9 @@ export function GateSummary({ gate }: { gate: RevisionGate }) {
   return <Notice tone="warning" icon="blocked"><strong>Production needs a passing gate.</strong> {gate.reason}.{gate.run && <> <ProvenanceBadge provenance={gate.run.provenance} /></>}</Notice>;
 }
 
-function lastSeen(robot: Robot, now: number | null): string {
-  if (!robot.lastSeenAt) return "no report yet";
-  return `last seen ${now === null ? fmtDateTime(robot.lastSeenAt) : fmtRelative(robot.lastSeenAt, now)}`;
+/** The stored last-seen time itself: an age against this browser's clock would only grow while the document stays the same. */
+function lastSeen(robot: Robot): string {
+  return robot.lastSeenAt ? `last seen ${fmtDateTime(robot.lastSeenAt, robot.clock, false)}` : "no report yet";
 }
 
 /** "Pair a new device": the existing enrollment steps, with a copy button. Nothing is enrolled from here. */
@@ -71,8 +71,8 @@ function PairingGuide() {
  * through the workspace document (`attachRobot`); the dialog closes only after the
  * write is confirmed and shows the error otherwise.
  */
-export function AddRobotDialog({ workspace, config, canSave, save, now, onClose, onDone }: {
-  workspace: ConvoyWorkspace; config: Configuration; canSave: boolean; save: Save; now: number | null;
+export function AddRobotDialog({ workspace, config, canSave, save, onClose, onDone }: {
+  workspace: ConvoyWorkspace; config: Configuration; canSave: boolean; save: Save;
   onClose: () => void; onDone: (added: { robot: Robot; role: RobotRole; rev: string }) => void;
 }) {
   // Fixed while the dialog is open: the optimistic save would otherwise remove the chosen robot from the list mid-save.
@@ -127,7 +127,7 @@ export function AddRobotDialog({ workspace, config, canSave, save, now, onClose,
         <div className={`cfg-choices${candidates.length >= 2 ? " cd-choices--3" : ""}`}>
           {candidates.map((item, i) => <label className="cfg-choice" key={item.id}>
             <input type="radio" name={`${id}-robot`} value={item.id} checked={choice === item.id} onChange={() => pick(item.id)} data-autofocus={i === 0 ? "" : undefined} />
-            <span><span className="cfg-choice__title">{item.name}</span><span className="cfg-choice__text">{item.site} · registered {fmtDate(item.registeredAt)} · {lastSeen(item, now)}</span></span>
+            <span><span className="cfg-choice__title">{item.name}</span><span className="cfg-choice__text">{item.site} · registered {fmtDate(item.registeredAt)} · {lastSeen(item)}</span></span>
           </label>)}
           <label className="cfg-choice">
             <input type="radio" name={`${id}-robot`} value={PAIR} checked={pairing} onChange={() => pick(PAIR)} data-autofocus={candidates.length ? undefined : ""} />

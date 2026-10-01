@@ -8,7 +8,7 @@ import {
 import type { ActiveFlag } from "../../src/lib/configurations/selectors";
 import { flagRobot } from "../../src/lib/configurations/mutations";
 import type { ConvoyWorkspace } from "../../src/lib/configurations/types";
-import { fmtCi, fmtDateRange, fmtDateTime, fmtPct, fmtRelative, fmtUnit, fmtUpdated, median, percentile, provenanceLabel, wilson } from "../../src/lib/configurations/format";
+import { fmtCi, fmtDateRange, fmtDateTime, fmtPct, fmtRelative, fmtUnit, fmtUpdated, median, percentile, provenanceLabel, rowTimeFormat, wilson } from "../../src/lib/configurations/format";
 import { mapSnapshot } from "../../src/lib/configurations/live";
 import type { LiveBinding } from "../../src/lib/configurations/live";
 import { routes } from "../../src/lib/configurations/routes";
@@ -225,6 +225,17 @@ test("formatting keeps units, dates, provenance and statistics in house style", 
   assert.equal(fmtCi([0.735, 0.82]), "73.5–82.0 %");
   assert.equal(fmtDateTime("2026-10-01T09:41:20Z"), "Oct 1, 09:41:20 UTC");
   assert.equal(fmtDateTime("2026-10-01T18:25:40Z", { zone: "PDT", utcOffsetMinutes: -420 }), "Oct 1, 11:25:40 PDT");
+  // Row times: the time of day while a list stays on one day of its clock, the day too once it spans more.
+  const oneDay = rowTimeFormat(["2026-10-01T09:41:20Z", "2026-10-01T00:05:00Z", null]);
+  assert.equal(oneDay.dated, false);
+  assert.equal(oneDay.format("2026-10-01T09:41:20Z"), "09:41:20");
+  const days = rowTimeFormat(["2026-10-01T14:16:33Z", "2026-09-14T06:29:51Z"]);
+  assert.equal(days.dated, true);
+  assert.equal(days.format("2026-09-14T06:29:51Z"), "Sep 14, 06:29:51");
+  assert.equal(days.format(null), "Not reported");
+  const pdt = { zone: "PDT", utcOffsetMinutes: -420 };
+  assert.equal(rowTimeFormat(["2026-10-01T06:50:00Z", "2026-10-01T14:00:00Z"], pdt).format("2026-10-01T06:50:00Z"), "Sep 30, 23:50:00", "days are read on the list's own clock");
+  assert.equal(rowTimeFormat(["2026-10-01T07:50:00Z", "2026-10-01T14:00:00Z"], pdt).dated, false);
   assert.equal(fmtDateRange("2026-09-13T08:00:00Z", "2026-09-14T01:00:00Z"), "Sep 13–14");
   assert.equal(fmtDateRange("2026-09-30T08:00:00Z", "2026-10-01T01:00:00Z"), "Sep 30 – Oct 1");
   assert.equal(fmtRelative(new Date(NOW - 9000).toISOString(), NOW), "9s ago");

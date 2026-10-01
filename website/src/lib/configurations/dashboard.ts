@@ -338,6 +338,19 @@ export function revisionGate(ws: ConvoyWorkspace, config: Configuration, rev: st
   return { rev, run, passed: false, lines, reason: `${rev} is below gate on Run ${run.number}${failing.length ? ` (${failing.join("; ")})` : ""}` };
 }
 
+/* ---------- safety envelope ---------- */
+
+const SAFETY_SCOPE = "Checked in every evaluation episode";
+/**
+ * Caption of a revision's safety checks: the scope, then the envelope's stored note. A note that
+ * already states the scope is shown as is, so the sentence never appears twice.
+ */
+export function safetyCaption(note: string | null | undefined): string {
+  const text = note?.trim();
+  if (!text) return SAFETY_SCOPE;
+  return text.toLowerCase().startsWith(SAFETY_SCOPE.toLowerCase()) ? text : `${SAFETY_SCOPE} · ${text}`;
+}
+
 /* ---------- attention banner ---------- */
 
 export interface AttentionLine {

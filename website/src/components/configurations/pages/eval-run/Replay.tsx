@@ -72,7 +72,9 @@ export function ReplayView({ workspace, run, suite, configuration, pageConfigId,
   const close = useRef(onClose);
   useEffect(() => { close.current = onClose; }, [onClose]);
   useEffect(() => {
-    window.scrollTo({ top: 0 });
+    // The replay replaces the page body: start at its top at once, not with the page's smooth scrolling
+    // (from a row deep in the rollouts table that animated over the whole run page).
+    window.scrollTo({ top: 0, behavior: "instant" });
     title.current?.focus({ preventScroll: true });
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape" || event.defaultPrevented || document.querySelector("[aria-modal='true']")) return;
