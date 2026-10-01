@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "check:tokens": "node scripts/check-tokens.mjs",
     "test:e2e": "playwright test",
+    "test:live": "playwright test -c playwright.live.config.ts",
     "test:platform": "bash scripts/test-platform.sh",
     "test:configurations": "bash scripts/test-configurations.sh",
     "verify": "npm run typecheck && npm run lint && npm run check:tokens && bash scripts/test-portal.sh && npm run test:platform && npm run test:configurations && npm run build && npm run test:e2e"
