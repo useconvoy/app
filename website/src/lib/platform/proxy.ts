@@ -3,11 +3,19 @@ if (typeof window !== "undefined") throw new Error("Platform proxy is server-onl
 
 const REQUEST_LIMIT = 256 * 1024;
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
+// A workspace document is at most 2 MiB of compact JSON; the margin covers its request/response envelope.
+const DOCUMENT_LIMIT = 2 * 1024 * 1024 + 64 * 1024;
 const ID = "[A-Za-z0-9_-]{1,64}";
+const DOCUMENT = "workspace-documents/[a-z0-9][a-z0-9-]{0,63}";
+const MUTATIONS = ["POST", "PUT", "DELETE"];
 const COOKIE = "convoy_session";
+// A conditional document write names the revision it replaces (If-Match) or creates (If-None-Match: *).
+const REVISION = /^"[1-9][0-9]{0,17}"$/;
+const ERROR_LIMIT = 4 * 1024;
+const UNAVAILABLE = "The management service is unavailable. Refresh before retrying an action.";
 
 class ProxyFailure extends Error {
-  constructor(public status: number, message: string) { super(message); }
+  constructor(public status: number, message: string, public headers: Record<string, string> = {}) { super(message); }
 }
 
 const messages: Record<number, string> = {
@@ -20,6 +28,23 @@ const messages: Record<number, string> = {
   422: "Check the required fields and the supplied release manifest.",
   429: "Too many requests. Wait a moment before trying again.",
 };
+
+// Workspace documents: conditional saves, a per-account write budget and a document size limit.
+const documentMessages: Record<number, string> = {
+  ...messages,
+  404: "This workspace document does not exist.",
+  409: "This save conflicts with the stored workspace documents. Reload before saving again.",
+  412: "The workspace document changed since it was loaded. Reload it and apply your change again.",
+  413: "The workspace document is larger than the 2 MiB limit.",
+  422: "The workspace document or its save request is not valid.",
+  428: "The save did not name the document revision it replaces. Reload and try again.",
+  429: "Too many workspace saves. Wait a moment before trying again.",
+};
+// The API's 409 reasons for a document write, by the start of its (otherwise unforwarded) error text.
+const documentConflicts: [string, string][] = [
+  ["workspace document limit reached", "Your account has reached its workspace document limit. Delete a document before creating another."],
+  ["Idempotency-Key was already used", "This save was already submitted with different content. Reload before saving again."],
+];
 
 export function platformOrigin(value = process.env.CONVOY_API_URL ?? "http://127.0.0.1:8080"): string {
   const url = new URL(value);
@@ -40,11 +65,12 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
   let required: string[] = [];
   let allowed = false;
   if (method === "GET") {
-    allowed = /^(auth\/me|projects|devices)$/.test(path)
+    allowed = /^(auth\/me|projects|devices|workspace-documents)$/.test(path)
       || new RegExp(`^(devices|deployments|missions|episodes)/${ID}$`).test(path)
       || new RegExp(`^applications/${ID}/(releases|evaluation-suites|evaluation-gate)$`).test(path)
       || new RegExp(`^evaluation-suites/${ID}$`).test(path)
-      || new RegExp(`^episodes/${ID}/replay(?:/frames/[0-9]{1,4})?$`).test(path);
+      || new RegExp(`^episodes/${ID}/replay(?:/frames/[0-9]{1,4})?$`).test(path)
+      || new RegExp(`^${DOCUMENT}$`).test(path);
     if (["robots", "applications", "missions", "evaluations"].includes(path)) { allowed = true; keys = ["project_id"]; required = keys; }
     if (path === "deployments") { allowed = true; keys = ["project_id", "robot_id"]; required = ["project_id"]; }
     if (path === "episodes") { allowed = true; keys = ["mission_id"]; required = keys; }
@@ -56,6 +82,9 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
       || new RegExp(`^robots/${ID}/missions$`).test(path)
       || new RegExp(`^missions/${ID}/cancel$`).test(path)
       || new RegExp(`^evaluations/${ID}/(cancel|promote)$`).test(path);
+  } else if (method === "PUT" || method === "DELETE") {
+    // The caller's own workspace documents are the only replaceable or deletable resources.
+    allowed = new RegExp(`^${DOCUMENT}$`).test(path);
   }
   if (!allowed) return null;
   for (const [key, value] of search) {
@@ -81,8 +110,8 @@ export function ownCookie(request: Request): string | null {
   return /^convoy_session=cvs_[A-Za-z0-9_-]{16,128}$/.test(entry) ? entry : null;
 }
 
-async function boundedBody(body: ReadableStream<Uint8Array> | null, maximum: number): Promise<string> {
-  if (!body) return "";
+async function boundedBody(body: ReadableStream<Uint8Array> | null, maximum: number, tooLarge = messages[413]): Promise<Uint8Array<ArrayBuffer>> {
+  if (!body) return new Uint8Array(0);
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let bytes = 0;
@@ -93,16 +122,34 @@ async function boundedBody(body: ReadableStream<Uint8Array> | null, maximum: num
       const { done, value } = await Promise.race([reader.read(), expired]);
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > maximum) throw new ProxyFailure(413, messages[413]);
+      if (bytes > maximum) throw new ProxyFailure(413, tooLarge);
       chunks.push(value);
     }
-    return Buffer.concat(chunks).toString("utf8");
+    const joined = new Uint8Array(bytes);
+    let offset = 0;
+    for (const chunk of chunks) { joined.set(chunk, offset); offset += chunk.byteLength; }
+    return joined;
   } catch (error) {
     void reader.cancel().catch(() => undefined);
     throw error;
   } finally {
     clearTimeout(timeout);
     reader.releaseLock();
+  }
+}
+
+function utf8(bytes: Uint8Array<ArrayBuffer>): string {
+  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("utf8");
+}
+
+/** The curated message for a document write's 409, from the API's short error text. */
+async function conflictMessage(upstream: Response): Promise<string | undefined> {
+  try {
+    const data: unknown = JSON.parse(utf8(await boundedBody(upstream.body, ERROR_LIMIT)));
+    const error = data !== null && typeof data === "object" ? (data as { error?: unknown }).error : undefined;
+    return typeof error === "string" ? documentConflicts.find(([start]) => error.startsWith(start))?.[1] : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -117,8 +164,10 @@ function responseCookie(value: string, secure: boolean): string | null {
     duration ?? "", expires ?? ""].filter(Boolean).join("; ");
 }
 
-function json(value: unknown, status = 200): Response {
-  return Response.json(value, { status, headers: { "Cache-Control": "private, no-store", "Vary": "Cookie", "X-Content-Type-Options": "nosniff" } });
+const PRIVATE_HEADERS = { "Cache-Control": "private, no-store", "Vary": "Cookie", "X-Content-Type-Options": "nosniff" };
+
+function json(value: unknown, status = 200, headers: Record<string, string> = {}): Response {
+  return Response.json(value, { status, headers: { ...PRIVATE_HEADERS, ...headers } });
 }
 
 export async function proxyPlatform(request: Request, parts: string[]): Promise<Response> {
@@ -126,7 +175,9 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
     const origin = consoleOrigin(request);
     const path = allowedPlatformPath(parts, request.method, new URL(request.url).searchParams);
     if (!path) throw new ProxyFailure(404, "This console action is unavailable.");
-    const mutation = request.method === "POST";
+    const document = parts[0] === "workspace-documents";
+    const text = document ? documentMessages : messages;
+    const mutation = MUTATIONS.includes(request.method);
     if (mutation && (request.headers.get("origin") !== origin || request.headers.get("x-convoy-client") !== "web")) {
       throw new ProxyFailure(403, messages[403]);
     }
@@ -134,31 +185,70 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
     const logout = parts.join("/") === "auth/logout";
     const cookie = ownCookie(request);
     if (!cookie && !login && !logout) throw new ProxyFailure(401, messages[401]);
-    let body: string | undefined;
-    if (mutation) {
-      if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("content-type") ?? "")) throw new ProxyFailure(422, messages[422]);
-      const length = request.headers.get("content-length");
-      if (length && (!/^\d+$/.test(length) || Number(length) > REQUEST_LIMIT)) throw new ProxyFailure(413, messages[413]);
-      body = await boundedBody(request.body, REQUEST_LIMIT);
-      try { JSON.parse(body); } catch { throw new ProxyFailure(422, messages[422]); }
-    }
+    const requestLimit = document ? DOCUMENT_LIMIT : REQUEST_LIMIT;
+    const responseLimit = document ? DOCUMENT_LIMIT : RESPONSE_LIMIT;
     const headers = new Headers({ Accept: "application/json" });
     if (cookie) headers.set("Cookie", cookie);
-    if (mutation) { headers.set("Content-Type", "application/json"); headers.set("X-Convoy-Client", "web"); }
+    if (mutation) headers.set("X-Convoy-Client", "web");
     const key = request.headers.get("idempotency-key");
     if (key) {
-      if (!/^[\x21-\x7e]{1,128}$/.test(key)) throw new ProxyFailure(422, messages[422]);
+      if (!/^[\x21-\x7e]{1,128}$/.test(key)) throw new ProxyFailure(422, text[422]);
       headers.set("Idempotency-Key", key);
+    }
+    if (document && mutation) {
+      // Only well-formed document preconditions reach the API; reads are never made conditional.
+      const ifMatch = request.headers.get("if-match");
+      const ifNoneMatch = request.headers.get("if-none-match");
+      if (ifMatch !== null) {
+        if (!REVISION.test(ifMatch)) throw new ProxyFailure(422, text[422]);
+        headers.set("If-Match", ifMatch);
+      }
+      if (ifNoneMatch !== null) {
+        if (request.method !== "PUT" || ifNoneMatch !== "*") throw new ProxyFailure(422, text[422]);
+        headers.set("If-None-Match", "*");
+      }
+    }
+    let body: Uint8Array<ArrayBuffer> | string | undefined;
+    if (mutation && request.method !== "DELETE") {
+      if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("content-type") ?? "")) throw new ProxyFailure(422, text[422]);
+      const length = request.headers.get("content-length");
+      if (length && (!/^\d+$/.test(length) || Number(length) > requestLimit)) throw new ProxyFailure(413, text[413]);
+      const bytes = await boundedBody(request.body, requestLimit, text[413]);
+      if (document) {
+        // Up to 2 MiB pass through as received: the API decodes and validates a document only after
+        // authenticating the caller, so the console does not parse it as well.
+        body = bytes;
+      } else {
+        body = utf8(bytes);
+        try { JSON.parse(body); } catch { throw new ProxyFailure(422, messages[422]); }
+      }
+      headers.set("Content-Type", "application/json");
     }
     const upstream = await fetch(`${platformOrigin()}${path}`, {
       method: request.method, headers, body, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10000),
     });
     if (!upstream.ok) {
-      await upstream.body?.cancel();
-      const status = messages[upstream.status] ? upstream.status : 503;
-      throw new ProxyFailure(status, login && status === 401 ? "The email or password was not accepted." : messages[status] ?? "The management service is unavailable. Refresh before retrying an action.");
+      const status = text[upstream.status] ? upstream.status : 503;
+      let message = login && status === 401 ? "The email or password was not accepted." : text[status] ?? UNAVAILABLE;
+      if (document && status === 409) message = await conflictMessage(upstream) ?? message;
+      else await upstream.body?.cancel();
+      const retry = upstream.headers.get("retry-after");
+      throw new ProxyFailure(status, message, status === 429 && retry && /^\d{1,6}$/.test(retry) ? { "Retry-After": retry } : {});
     }
-    const data: unknown = JSON.parse(await boundedBody(upstream.body, RESPONSE_LIMIT));
+    if (upstream.status === 204) {
+      await upstream.body?.cancel();
+      return new Response(null, { status: 204, headers: PRIVATE_HEADERS });
+    }
+    if (document) {
+      // The API's JSON passes through unparsed; it is bounded like any other response.
+      if (!/^application\/json(?:\s*;|$)/i.test(upstream.headers.get("content-type") ?? "")) {
+        await upstream.body?.cancel();
+        throw new ProxyFailure(503, UNAVAILABLE);
+      }
+      const bytes = await boundedBody(upstream.body, responseLimit);
+      return new Response(bytes, { status: upstream.status, headers: { ...PRIVATE_HEADERS, "Content-Type": "application/json" } });
+    }
+    const data: unknown = JSON.parse(utf8(await boundedBody(upstream.body, responseLimit)));
     const response = json(data, upstream.status);
     if (login || logout || (parts.join("/") === "auth/me" && cookie)) {
       // A validated legacy session can move to the shared BFF scope without a
@@ -173,7 +263,7 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
     }
     return response;
   } catch (error) {
-    if (error instanceof ProxyFailure) return json({ error: error.message }, error.status);
-    return json({ error: "The management service is unavailable. Refresh before retrying an action." }, 503);
+    if (error instanceof ProxyFailure) return json({ error: error.message }, error.status, error.headers);
+    return json({ error: UNAVAILABLE }, 503);
   }
 }

@@ -105,6 +105,197 @@ test("replay is read-only and accepts only bounded frame paths without path or U
   }
 });
 
+const documentPath = ["workspace-documents", "configurations"];
+const documentLimit = 2 * 1024 * 1024 + 64 * 1024;
+
+test("workspace documents are the only PUT/DELETE routes and accept only contract names", () => {
+  assert.equal(allowedPlatformPath(["workspace-documents"], "GET", new URLSearchParams()), "/api/v1/workspace-documents");
+  assert.equal(allowedPlatformPath(["workspace-documents"], "GET", new URLSearchParams("owner=usr_other")), null);
+  for (const method of ["GET", "PUT", "DELETE"]) {
+    assert.equal(allowedPlatformPath(documentPath, method, new URLSearchParams()), "/api/v1/workspace-documents/configurations");
+    assert.equal(allowedPlatformPath(documentPath, method, new URLSearchParams("owner=usr_other")), null);
+    for (const name of ["Configurations", "-leading", "under_score", "a".repeat(65), ".."]) {
+      assert.equal(allowedPlatformPath(["workspace-documents", name], method, new URLSearchParams()), null);
+    }
+  }
+  assert.equal(allowedPlatformPath(["workspace-documents", "a".repeat(64)], "PUT", new URLSearchParams()), `/api/v1/workspace-documents/${"a".repeat(64)}`);
+  assert.equal(allowedPlatformPath(["workspace-documents", "0-sample-2"], "DELETE", new URLSearchParams()), "/api/v1/workspace-documents/0-sample-2");
+  assert.equal(allowedPlatformPath(documentPath, "POST", new URLSearchParams()), null);
+  assert.equal(allowedPlatformPath(documentPath, "PATCH", new URLSearchParams()), null);
+  assert.equal(allowedPlatformPath([...documentPath, "extra"], "GET", new URLSearchParams()), null);
+  for (const method of ["PUT", "DELETE"]) {
+    for (const path of [["workspace-documents"], ["projects"], ["devices", "dev_one"], ["robots", "rob_one"], ["auth", "me"], ["tokens", "tok_one"]]) {
+      assert.equal(allowedPlatformPath(path, method, new URLSearchParams()), null);
+    }
+  }
+});
+
+const documentUrl = "http://127.0.0.1:8080/api/v1/workspace-documents/configurations";
+const metadata = { name: "configurations", schema_version: 1, revision: 2, size_bytes: 2 * 1024 * 1024, updated_at: "2026-10-01T00:00:00Z" };
+
+test("document writes forward session, key, precondition and the exact bytes of a full 2 MiB document", async () => {
+  const fetch = globalThis.fetch;
+  process.env.CONVOY_API_URL = "http://127.0.0.1:8080";
+  const blob = "x".repeat(2 * 1024 * 1024 - 11); // {"blob":"…"} is exactly 2 MiB of compact JSON
+  const body = JSON.stringify({ schema_version: 1, body: { blob } });
+  const calls: { method?: string; body?: unknown; headers: Headers }[] = [];
+  globalThis.fetch = async (input, init) => {
+    assert.equal(String(input), documentUrl);
+    const headers = new Headers(init?.headers);
+    calls.push({ method: init?.method, body: init?.body, headers });
+    assert.equal(headers.get("cookie"), session);
+    assert.equal(headers.get("authorization"), null);
+    assert.equal(headers.get("x-convoy-client"), "web");
+    assert.equal(init?.redirect, "error");
+    if (init?.method === "DELETE") return new Response(null, { status: 204 });
+    return Response.json(metadata);
+  };
+  try {
+    const created = await proxyPlatform(request("workspace-documents/configurations", { method: "PUT", body, headers: { "Idempotency-Key": "save-1", "If-None-Match": "*", Authorization: "Bearer attacker" } }), documentPath);
+    assert.equal(created.status, 200);
+    assert.match(created.headers.get("cache-control") ?? "", /no-store/);
+    assert.equal(created.headers.get("content-type"), "application/json");
+    assert.deepEqual(await created.json(), metadata);
+    const replaced = await proxyPlatform(request("workspace-documents/configurations", { method: "PUT", body, headers: { "Idempotency-Key": "save-2", "If-Match": '"1"' } }), documentPath);
+    assert.equal(replaced.status, 200);
+    const removed = await proxyPlatform(request("workspace-documents/configurations", { method: "DELETE", headers: { "Idempotency-Key": "remove-1", "If-Match": '"2"' } }), documentPath);
+    assert.equal(removed.status, 204);
+    assert.equal(await removed.text(), "");
+    assert.match(removed.headers.get("cache-control") ?? "", /no-store/);
+    assert.deepEqual(calls.map(call => call.method), ["PUT", "PUT", "DELETE"]);
+    assert.deepEqual(calls.map(call => [call.headers.get("if-none-match"), call.headers.get("if-match")]), [["*", null], [null, '"1"'], [null, '"2"']]);
+    assert.ok(calls[0].body instanceof Uint8Array);
+    assert.equal(new TextDecoder().decode(calls[0].body), body);
+    assert.equal(calls[0].headers.get("content-type"), "application/json");
+    assert.equal(calls[0].headers.get("idempotency-key"), "save-1");
+    assert.equal(calls[2].body, undefined);
+    assert.equal(calls[2].headers.get("content-type"), null);
+    assert.equal(calls[2].headers.get("idempotency-key"), "remove-1");
+  } finally { globalThis.fetch = fetch; }
+});
+
+test("document bodies pass through as bytes in both directions without JSON.parse", async () => {
+  const fetch = globalThis.fetch;
+  const parse = JSON.parse;
+  // Formatting, non-ASCII text and even malformed JSON reach the API untouched: the API validates documents.
+  const sent = new TextEncoder().encode('{"schema_version": 1, "body": {"name": "Bänk 東京 🤖"}}');
+  const malformed = new TextEncoder().encode('{"schema_version":1,"body":{');
+  const stored = '{"name":"configurations","schema_version":1,"revision":1,"body":{"name":"Bänk 東京 🤖", "spaced" : true},"size_bytes":42,"updated_at":"2026-10-01T00:00:00Z"}';
+  const forwarded: Uint8Array[] = [];
+  let contentType = "application/json";
+  globalThis.fetch = async (_input, init) => {
+    const headers = new Headers(init?.headers);
+    if (init?.method === "PUT") { forwarded.push(init.body as Uint8Array); return Response.json(metadata); }
+    // Reads are never made conditional.
+    assert.equal(headers.get("if-none-match"), null);
+    assert.equal(headers.get("if-match"), null);
+    return new Response(stored, { headers: { "Content-Type": contentType } });
+  };
+  let parsed = 0;
+  JSON.parse = ((...args: Parameters<typeof JSON.parse>) => { parsed++; return parse(...args); }) as typeof JSON.parse;
+  let read: Response | undefined;
+  try {
+    for (const body of [sent, malformed]) {
+      const saved = await proxyPlatform(request("workspace-documents/configurations", { method: "PUT", body, headers: { "Idempotency-Key": "save", "If-None-Match": "*" } }), documentPath);
+      assert.equal(saved.status, 200);
+    }
+    read = await proxyPlatform(request("workspace-documents/configurations", { headers: { "If-None-Match": '"1"', "If-Match": "junk" } }), documentPath);
+  } finally { JSON.parse = parse; globalThis.fetch = fetch; }
+  assert.equal(parsed, 0);
+  assert.deepEqual(forwarded.map(bytes => Buffer.from(bytes).toString("hex")), [sent, malformed].map(bytes => Buffer.from(bytes).toString("hex")));
+  assert.equal(read.status, 200);
+  assert.equal(read.headers.get("content-type"), "application/json");
+  assert.equal(await read.text(), stored);
+  // Only JSON passes through.
+  globalThis.fetch = async () => new Response("<html>proxy error page</html>", { headers: { "Content-Type": contentType } });
+  try {
+    contentType = "text/html";
+    const html = await proxyPlatform(request("workspace-documents/configurations"), documentPath);
+    assert.equal(html.status, 503);
+    assert.doesNotMatch(await html.text(), /proxy error page/);
+  } finally { globalThis.fetch = fetch; }
+});
+
+test("document requests are CSRF, session, precondition and size checked before fetch", async () => {
+  const fetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error("must not reach upstream"); };
+  const invalid = { error: "The workspace document or its save request is not valid." };
+  try {
+    for (const method of ["PUT", "DELETE"]) {
+      const body = method === "PUT" ? '{"schema_version":1,"body":{}}' : undefined;
+      for (const headers of [{ Origin: "https://other.test" }, { "X-Convoy-Client": "" }] as Record<string, string>[]) {
+        assert.equal((await proxyPlatform(request("workspace-documents/configurations", { method, body, headers }), documentPath)).status, 403);
+      }
+      assert.equal((await proxyPlatform(request("workspace-documents/configurations", { method, body, headers: { Cookie: "unrelated=private" } }), documentPath)).status, 401);
+      for (const ifMatch of ["1", 'W/"1"', '"01"', '"0"', '"one"', "*", '"1", "2"', `"${"9".repeat(19)}"`]) {
+        const refused = await proxyPlatform(request("workspace-documents/configurations", { method, body, headers: { "If-Match": ifMatch } }), documentPath);
+        assert.equal(refused.status, 422, ifMatch);
+        assert.deepEqual(await refused.json(), invalid);
+      }
+    }
+    const put = (body: string, headers: Record<string, string> = {}) => proxyPlatform(request("workspace-documents/configurations", { method: "PUT", body, headers }), documentPath);
+    const tooLarge = await put("x".repeat(documentLimit + 1));
+    assert.equal(tooLarge.status, 413);
+    assert.deepEqual(await tooLarge.json(), { error: "The workspace document is larger than the 2 MiB limit." });
+    assert.equal((await put("{}", { "Content-Length": String(documentLimit + 1) })).status, 413);
+    for (const headers of [{ "Content-Type": "text/plain" }, { "Idempotency-Key": "has space" }, { "If-None-Match": '"1"' }, { "If-None-Match": "W/*" }] as Record<string, string>[]) {
+      const refused = await put("{}", headers);
+      assert.equal(refused.status, 422);
+      assert.deepEqual(await refused.json(), invalid);
+    }
+    const conditionalDelete = await proxyPlatform(request("workspace-documents/configurations", { method: "DELETE", headers: { "If-None-Match": "*" } }), documentPath);
+    assert.equal(conditionalDelete.status, 422);
+  } finally { globalThis.fetch = fetch; }
+});
+
+test("document errors get accurate curated messages and keep Retry-After; other routes keep theirs", async () => {
+  const fetch = globalThis.fetch;
+  let status = 200;
+  let error = "private-owner-and-database-detail";
+  let headers: Record<string, string> = {};
+  globalThis.fetch = async () => status === 200
+    ? Response.json({ blob: "x".repeat(2 * 1024 * 1024) })
+    : Response.json({ error }, { status, headers });
+  const read = async (path = documentPath) => {
+    const response = await proxyPlatform(request(path.join("/")), path);
+    const text = await response.text();
+    assert.doesNotMatch(text, /private-owner|database-detail|per account/);
+    return { status: response.status, body: JSON.parse(text) as unknown, retry: response.headers.get("retry-after") };
+  };
+  try {
+    assert.equal((await proxyPlatform(request("projects"), ["projects"])).status, 413);
+    assert.equal((await proxyPlatform(request("workspace-documents/configurations"), documentPath)).status, 200);
+    const expected: Record<number, string> = {
+      404: "This workspace document does not exist.",
+      409: "This save conflicts with the stored workspace documents. Reload before saving again.",
+      412: "The workspace document changed since it was loaded. Reload it and apply your change again.",
+      413: "The workspace document is larger than the 2 MiB limit.",
+      422: "The workspace document or its save request is not valid.",
+      428: "The save did not name the document revision it replaces. Reload and try again.",
+      429: "Too many workspace saves. Wait a moment before trying again.",
+    };
+    for (status of [404, 409, 412, 413, 422, 428, 429]) {
+      assert.deepEqual(await read(), { status, body: { error: expected[status] }, retry: null });
+    }
+    status = 429;
+    headers = { "Retry-After": "120" };
+    assert.equal((await read()).retry, "120");
+    headers = { "Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT" };
+    assert.equal((await read()).retry, null);
+    headers = {};
+    // The two reasons for a 409 on a document write, recognized from the API's text but never forwarded.
+    status = 409;
+    error = "workspace document limit reached (16 per account); delete one first";
+    assert.deepEqual((await read()).body, { error: "Your account has reached its workspace document limit. Delete a document before creating another." });
+    error = "Idempotency-Key was already used with a different payload";
+    assert.deepEqual((await read()).body, { error: "This save was already submitted with different content. Reload before saving again." });
+    // Other routes keep their own vocabulary, and statuses only documents use stay unavailable there.
+    status = 422;
+    assert.deepEqual((await read(["projects"])).body, { error: "Check the required fields and the supplied release manifest." });
+    for (status of [412, 428]) assert.equal((await read(["projects"])).status, 503);
+  } finally { globalThis.fetch = fetch; }
+});
+
  test("private HTTP is explicit and restricted to the existing Compose service", () => {
   const previous = process.env.CONVOY_API_INTERNAL_HTTP;
   try {

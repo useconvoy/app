@@ -1,2 +1,3 @@
 import { Console } from "@/components/console/Console";
-export default function ApplicationsPage() { return <Console />; }
+import { WorkspaceShell } from "@/components/workspace/WorkspaceShell";
+export default function ApplicationsPage() { return <WorkspaceShell><Console /></WorkspaceShell>; }

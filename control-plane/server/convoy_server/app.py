@@ -54,10 +54,11 @@ def create_app(settings: Settings | None = None, *, start_scheduler: bool | None
 
     for r in (auth.router, users.router, enrollment.router):
         app.include_router(r)
-    from .routers import evaluations, platform
+    from .routers import evaluations, platform, workspace_documents
 
     app.include_router(platform.router)
     app.include_router(evaluations.router)
+    app.include_router(workspace_documents.router)
     _include_optional(app)
 
     @app.exception_handler(HTTPException)
@@ -81,9 +82,13 @@ def create_app(settings: Settings | None = None, *, start_scheduler: bool | None
     @app.exception_handler(RequestValidationError)
     async def _validation_exc(request: Request, exc: RequestValidationError):
         errs = exc.errors()
-        summary = "; ".join(
-            f"{'.'.join(str(x) for x in e.get('loc', []) if x != 'body')}: {e.get('msg')}" for e in errs[:5]
-        )
+
+        def where(loc) -> str:
+            # Drop FastAPI's leading "body" source marker but keep fields that are themselves named body.
+            parts = list(loc)
+            return ".".join(str(x) for x in (parts[1:] if parts[:1] == ["body"] else parts))
+
+        summary = "; ".join(f"{where(e.get('loc', []))}: {e.get('msg')}" for e in errs[:5])
         safe = [
             {"loc": [str(x) for x in e.get("loc", [])], "msg": str(e.get("msg")), "type": str(e.get("type"))}
             for e in errs[:20]

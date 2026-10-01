@@ -100,9 +100,13 @@ def test_scheduler_ticks_and_renews_its_lease_while_a_long_backup_runs_single_fl
     real = bk.take_backup
     ticks = {"n": 0}
     steps = {"n": 0}
+    copying, resume = threading.Event(), threading.Event()
 
     def slow_step(status, remaining, total):
         steps["n"] += 1
+        if steps["n"] == 1:  # hold the copy (snapshot pinned) until the ticks below have been observed
+            copying.set()
+            resume.wait(30)
         time.sleep(0.25)  # 256 pages = 1 MiB per step: ~12 steps -> a copy of ~3 s, many ticks long
 
     def slow_backup(*a, **kw):
@@ -119,18 +123,27 @@ def test_scheduler_ticks_and_renews_its_lease_while_a_long_backup_runs_single_fl
     t = _worker(settings)
     t.start()
     try:
-        task = _wait(lambda: t._backup_task, 10)
+        # The worker assigns _backup_task before start(), so polling it can return an unstarted thread
+        # under load; the copy's first step proves the task is running (and holds it, snapshot pinned).
+        assert copying.wait(30)
+        task = t._backup_task
         assert isinstance(task, BackupTask) and task.is_alive()
         first_task = task
         exp0 = _lease_expiry(settings)
         ticks0 = ticks["n"]
-        time.sleep(1.2)
+        # Wait for the evidence, not a fixed 1.2 s: a tick is run_tick + 0.2 s, and on a loaded runner its
+        # database work alone can exceed 0.1 s (CI: 3 ticks in 1.2 s). The copy is held meanwhile.
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and not (ticks["n"] > ticks0 + 3 and _lease_expiry(settings) > exp0):
+            time.sleep(0.05)
         assert t._backup_task is first_task and first_task.is_alive()  # single flight, still copying
         assert ticks["n"] > ticks0 + 3  # the tick thread kept scheduling during the copy
         assert worker_health(settings)["ok"] is True
         assert _lease_expiry(settings) > exp0  # and renewing the lease
+        resume.set()
         _wait(lambda: t.last_backup is not None, 60)
     finally:
+        resume.set()
         t.stop()
         t.join(timeout=30)
     assert t.last_backup and t.last_backup["ok"], t.last_backup

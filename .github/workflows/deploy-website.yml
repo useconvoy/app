@@ -61,6 +61,7 @@ jobs:
           pnpm run check:tokens
           bash scripts/test-portal.sh
           pnpm run test:platform
+          pnpm run test:configurations
           pnpm run build
           cp -r public .next/standalone/
           cp -r .next/static .next/standalone/.next/
@@ -149,12 +150,14 @@ jobs:
           check "legacy portal redirect" "307 /app/applications?section=device&view=device" "$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "$SITE/portal/" | sed "s#${SITE}##")"
           check "portal session" 200 "$(curl -sS -o /tmp/portal-session.json -w '%{http_code}' --max-time 20 "$SITE/api/portal/session")"
           check "anonymous snapshot protected" 401 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/api/portal/snapshot")"
-          check "workspace entry" "307 /app/applications" "$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "$SITE/app" | sed "s#${SITE}##")"
+          check "workspace entry" "307 /app/configurations" "$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "$SITE/app" | sed "s#${SITE}##")"
+          check "configurations" 200 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/app/configurations")"
           check "robot applications" 200 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/app/applications")"
           check "legacy device redirect" "307 /app/applications?section=device&view=device" "$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "$SITE/app/device" | sed "s#${SITE}##")"
           check "device chat deep link" "307 /app/applications?section=device&view=chat" "$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "$SITE/app/device?view=chat" | sed "s#${SITE}##")"
           check "integrated device section" 200 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/app/applications?section=device&view=device")"
           check "anonymous management protected" 401 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/api/platform/auth/me")"
+          check "anonymous workspace documents protected" 401 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/api/platform/workspace-documents/configurations")"
           check "sitemap"     200 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/sitemap.xml")"
           echo "certificate: $(echo | openssl s_client -connect deployconvoy.com:443 -servername deployconvoy.com 2>/dev/null | openssl x509 -noout -issuer -enddate | tr '\n' ' ')"
           {
