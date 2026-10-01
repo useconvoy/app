@@ -120,7 +120,8 @@ def serve(args):
                 '--poll-seconds','1','--clock-uncertainty-seconds','2']),
             ('recordings','convoy_agent.coordinator.recordings',[]),
         ):
-            log = (state / (name+'.log')).open('ab'); logs.append(log)
+            log = (state / (name+'.log')).open('ab')
+            logs.append(log)
             child = subprocess.Popen([sys.executable,'-m',module,'--data-dir',str(state/'robot'),
                 '--robot-id',connection['robot_id'],*extra],env=env,cwd=ROOT,stdout=log,stderr=subprocess.STDOUT)
             children.append(child)
