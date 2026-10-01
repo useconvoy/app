@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { LiveInference } from "../../src/lib/configurations/live";
 import { flagRobot, setRobotRole } from "../../src/lib/configurations/mutations";
 import {
-  activeRunOn, clockText, displayHealth, edgeSpanStats, evaluationChoices, fmtStarted, gateShortfall, gateSummary, latencyBarChart, niceAxis, policyLabel, promotionState,
+  activeRunOn, clockText, edgeSpanStats, evaluationChoices, fmtStarted, gateShortfall, gateSummary, latencyBarChart, niceAxis, policyLabel, promotionState,
   runRowFacts, sampleStat, timeWindowLabel, traceCounts, traceFactGroups, traceWaterfalls,
 } from "../../src/lib/configurations/robot";
 import { createSampleWorkspace } from "../../src/lib/configurations/sample";
@@ -161,16 +161,15 @@ test("clock labels and time windows", () => {
   assert.equal(timeWindowLabel([]), null);
 });
 
-test("shown health follows the flags in effect, and offline stands", () => {
+test("the robot page's health is the shared displayed health: it follows the flags in effect", () => {
+  // The page renders `robotReadings(…).health`, the rule every page uses (selectors.displayHealth).
   const readings = (workspace: ConvoyWorkspace, id: string) => robotReadings(getRobot(workspace, id)!, getRevision(hybrid, getRobot(workspace, id)!.rev), null, NOW);
-  assert.deepEqual(displayHealth(readings(ws, "unit-07")), { health: "healthy", reason: null });
-  assert.deepEqual(displayHealth(readings(ws, "unit-08")), { health: "attention", reason: "Near thermal throttle" });
+  assert.deepEqual([readings(ws, "unit-07").health, readings(ws, "unit-07").healthReason], ["healthy", null]);
+  assert.deepEqual([readings(ws, "unit-08").health, readings(ws, "unit-08").healthReason], ["attention", "Near thermal throttle"]);
   const attention = flagRobot(ws, "unit-07", { label: "Gripper noise", note: "Clicking on close", severity: "attention" }, NOW);
-  assert.equal(readings(attention, "unit-07").health, "healthy", "stored health does not follow a new flag by itself");
-  assert.deepEqual(displayHealth(readings(attention, "unit-07")), { health: "attention", reason: "Gripper noise" });
+  assert.deepEqual([readings(attention, "unit-07").health, readings(attention, "unit-07").healthReason, readings(attention, "unit-07").baseHealth], ["attention", "Gripper noise", "healthy"]);
   const warning = flagRobot(ws, "unit-07", { label: "Loose cable", note: "Check the wrist camera cable" }, NOW);
-  assert.equal(displayHealth(readings(warning, "unit-07")).health, "degraded");
-  assert.deepEqual(displayHealth({ health: "offline", healthReason: "No recent live contact", flags: readings(attention, "unit-07").flags }), { health: "offline", reason: "No recent live contact" });
+  assert.equal(readings(warning, "unit-07").health, "degraded");
 });
 
 test("role changes keep the promotion rules consistent", () => {

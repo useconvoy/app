@@ -16,8 +16,9 @@
  */
 import { fmtDate, fmtTime, median } from "./format";
 import { routes } from "./routes";
+import { compareSortValues } from "./table";
 import { getRevision, getSuite, latestGateRun, resolveRobotRoute, robotReadings, robotsFor, timeTicks } from "./selectors";
-import type { ActiveFlag, FlaggedRobot, LiveMap, RobotReadings } from "./selectors";
+import type { AttentionRobot, LiveMap, RobotReadings } from "./selectors";
 import type {
   ConfigRevision, Configuration, ConvoyWorkspace, EvalRun, LatencySeries, LogLevel, LogLine, Percentiles, ProductionSummary, Provenance, Robot, RobotHealth,
   TelemetryReading,
@@ -76,9 +77,10 @@ export function robotRows(ws: ConvoyWorkspace, config: Configuration, live: Live
     const revision = getRevision(config, robot.rev);
     const readings = robotReadings(robot, revision, live[robot.id], now);
     const bound = !!robot.deviceId;
+    // Reporting is about the device or stored state, not the flags: read the health before flags.
     const reporting = bound
-      ? readings.live && readings.health !== "offline"
-      : readings.latest !== null && readings.health !== "offline" && readings.health !== "not-reported";
+      ? readings.live && readings.baseHealth !== "offline"
+      : readings.latest !== null && readings.baseHealth !== "offline" && readings.baseHealth !== "not-reported";
     const edge = !bound ? { ms: readings.edgeMs, provenance: readings.edgeProvenance }
       : reporting && readings.edgeProvenance.kind === "measured" ? { ms: readings.edgeMs, provenance: readings.edgeProvenance }
         : { ms: null, provenance: NOT_REPORTED };
@@ -103,12 +105,9 @@ export const ROBOT_FILTERS: readonly RobotFilter[] = ["all", "test", "production
 export function parseRobotFilter(value: string | null | undefined): RobotFilter {
   return ROBOT_FILTERS.includes(value as RobotFilter) ? value as RobotFilter : "all";
 }
-/**
- * Needs attention: the robot's health says so, or a flag in effect has that
- * severity (a manual flag does not change a stored robot's health).
- */
+/** Needs attention: the robot's displayed health (`displayHealth`, raised by its flags) says so. */
 export function needsAttention(row: RobotRow): boolean {
-  return row.readings.health === "attention" || row.readings.flags.some(flag => flag.severity === "attention");
+  return row.readings.health === "attention";
 }
 /** "attention" keeps robots that need attention (a warning alone is Degraded). */
 export function matchesRobotFilter(row: RobotRow, filter: RobotFilter): boolean {
@@ -129,10 +128,9 @@ export const ROBOT_SORT_FIRST: Record<RobotSortKey, RobotSort["dir"]> = { name: 
 export const DEFAULT_ROBOT_SORT: RobotSort = { key: "health", dir: "desc" };
 /** Triage order: Needs attention, Degraded, Healthy, then Offline and Not reported. */
 export const HEALTH_RANK: Record<RobotHealth, number> = { attention: 3, degraded: 2, healthy: 1, offline: 0, "not-reported": 0 };
-/** Health rank raised by the flags in effect: an attention flag ranks as Needs attention, a warning as Degraded. */
+/** Rank of the displayed health (already raised by the flags in effect). */
 export function triageRank(row: RobotRow): number {
-  if (needsAttention(row)) return HEALTH_RANK.attention;
-  return Math.max(HEALTH_RANK[row.readings.health], row.readings.flags.length ? HEALTH_RANK.degraded : 0);
+  return HEALTH_RANK[row.readings.health];
 }
 
 export function robotSortValue(row: RobotRow, key: RobotSortKey): string | number | null {
@@ -151,26 +149,12 @@ export function nextRobotSort(current: RobotSort, key: RobotSortKey): RobotSort 
 }
 /**
  * Sorted rows: live-bound robots stay pinned first; missing values sort last in
- * either direction; ties keep name order.
+ * either direction (`compareSortValues`, as in every table); ties keep name order.
  */
 export function sortRobotRows(rows: readonly RobotRow[], sort: RobotSort): RobotRow[] {
-  const direction = sort.dir === "asc" ? 1 : -1;
-  return rows.toSorted((a, b) => {
-    const pin = Number(b.bound) - Number(a.bound);
-    if (pin) return pin;
-    const va = robotSortValue(a, sort.key), vb = robotSortValue(b, sort.key);
-    if (va === null || vb === null) {
-      if (va !== vb) return va === null ? 1 : -1;
-    } else {
-      const order = typeof va === "number" && typeof vb === "number" ? va - vb : collator.compare(String(va), String(vb));
-      if (order) return order * direction;
-    }
-    return collator.compare(a.robot.name, b.robot.name);
-  });
-}
-/** Sort value for a table column that keeps missing values last in the given direction (for `DataTable` columns). */
-export function robotSortAccessor(key: RobotSortKey, dir: RobotSort["dir"]): (row: RobotRow) => string | number {
-  return row => robotSortValue(row, key) ?? (dir === "desc" ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY);
+  return rows.toSorted((a, b) => Number(b.bound) - Number(a.bound)
+    || compareSortValues(robotSortValue(a, sort.key), robotSortValue(b, sort.key), sort.dir)
+    || collator.compare(a.robot.name, b.robot.name));
 }
 
 /* ---------- production KPIs ---------- */
@@ -356,11 +340,27 @@ export function revisionGate(ws: ConvoyWorkspace, config: Configuration, rev: st
 
 /* ---------- attention banner ---------- */
 
-export interface AttentionLine { robot: Robot; flag: ActiveFlag; /** Further flags on the same robot. */ more: number }
-/** Flagged robots split into "needs attention" and "warning" lines, each with the robot's leading flag. */
-export function attentionSummary(flagged: readonly FlaggedRobot[]): { attention: AttentionLine[]; warning: AttentionLine[] } {
-  const line = (entry: FlaggedRobot): AttentionLine => ({ robot: entry.robot, flag: entry.flags.find(flag => flag.severity === entry.severity) ?? entry.flags[0], more: entry.flags.length - 1 });
-  return { attention: flagged.filter(entry => entry.severity === "attention").map(line), warning: flagged.filter(entry => entry.severity === "warning").map(line) };
+export interface AttentionLine {
+  robot: Robot;
+  /** Short reason, e.g. "Near thermal throttle". */
+  label: string;
+  /** Evidence sentence: the leading flag's detail, else the health reason. */
+  detail: string;
+  provenance: Provenance;
+  /** Further flags in effect on the same robot. */
+  more: number;
+}
+/**
+ * The attention banner: robots whose displayed health is Needs attention, and
+ * robots that are Degraded ("warnings"), each with its leading reason. The same
+ * robots carry those health badges in the robots table and on their pages.
+ */
+export function attentionSummary(entries: readonly AttentionRobot[]): { attention: AttentionLine[]; warning: AttentionLine[] } {
+  const line = (entry: AttentionRobot): AttentionLine => ({
+    robot: entry.robot, label: entry.label, detail: entry.detail, provenance: entry.provenance,
+    more: Math.max(0, entry.flags.length - (entry.readings.healthFlag ? 1 : 0)),
+  });
+  return { attention: entries.filter(entry => entry.severity === "attention").map(line), warning: entries.filter(entry => entry.severity === "warning").map(line) };
 }
 
 /* ---------- logs ---------- */

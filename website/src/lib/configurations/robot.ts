@@ -12,10 +12,10 @@
 import { fmtCi, fmtCount, fmtMs, fmtNumber, fmtRatio, fmtSeconds, fmtShare, fmtTime, median, NOT_REPORTED, percentile } from "./format";
 import type { LiveInference } from "./live";
 import { getConfiguration, getSuite, latestGateRun, runsFor, spansForGroup, successShare, tracesFor } from "./selectors";
-import type { RobotReadings, TraceFilter } from "./selectors";
+import type { TraceFilter } from "./selectors";
 import type {
   ActionTrace, ClockKind, ClockLabel, ConfigRevision, Configuration, ConvoyWorkspace, EvalRun, EvalSuite, FactGroup, ModelRole, ModelState, Percentiles,
-  Robot, RobotHealth, RobotKind, RouteMode, SpanPath, TraceSpan,
+  Robot, RobotKind, RouteMode, SpanPath, TraceSpan,
 } from "./types";
 
 const finite = (value: number | null | undefined): value is number => typeof value === "number" && Number.isFinite(value);
@@ -54,21 +54,6 @@ export function fmtStarted(at: string | null | undefined): string {
 }
 
 export const ROBOT_KIND_LABEL: Record<RobotKind, string> = { robot: "Physical robot", bench: "Hardware-in-the-loop bench", simulator: "Simulated robot" };
-
-/**
- * Health to show with the flags in effect. Bound robots already derive health from
- * their flags; robots without a live binding carry a stored health, so a flag added
- * since (manual or prepared) raises it: attention to "Needs attention", warning to
- * "Degraded". Offline stands.
- */
-export function displayHealth(readings: Pick<RobotReadings, "health" | "healthReason" | "flags">): { health: RobotHealth; reason: string | null } {
-  if (readings.health === "offline") return { health: "offline", reason: readings.healthReason };
-  const attention = readings.flags.find(flag => flag.severity === "attention");
-  if (attention) return { health: "attention", reason: attention.label };
-  const warning = readings.flags.find(flag => flag.severity === "warning");
-  if (warning && (readings.health === "healthy" || readings.health === "not-reported")) return { health: "degraded", reason: warning.label };
-  return { health: readings.health, reason: readings.healthReason };
-}
 
 /* ---------- on-device gateway spans (measured) ---------- */
 

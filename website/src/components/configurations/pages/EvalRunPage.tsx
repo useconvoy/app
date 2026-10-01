@@ -13,7 +13,7 @@ import type { EvaluationRun } from "@/lib/platform/client";
 import { AppShell, type Crumb } from "../AppShell";
 import { ProvenanceBadge, RoleBadge, RunStatus } from "../Badges";
 import { useNow } from "../hooks";
-import { Notice, WorkspaceNotice, WorkspaceSourceNotice } from "../Notice";
+import { Notice, WorkspaceNotice } from "../Notice";
 import { PageHeader } from "../PageHeader";
 import { LoadingState, NotFoundState } from "../States";
 import { usePlatformRead, useRunQuery } from "./eval-run/hooks";
@@ -85,7 +85,14 @@ function RunView({ workspace, configuration, robot, run, runConfiguration }: { w
     openedHere.current = false;
     const target = opener.current?.isConnected ? opener.current : document.querySelector<HTMLElement>(`[data-replay-link="${CSS.escape(closed)}"]`);
     opener.current = null;
-    (target ?? document.getElementById("main"))?.focus();
+    const restore = () => (target?.isConnected ? target : document.getElementById("main"))?.focus();
+    restore();
+    // Going back to an entry with a #fragment (the slices' "Filter rollouts" links) lets the browser move focus to
+    // the page after this effect, while it scrolls to the fragment: put it back on the opener once that has happened.
+    let frame = window.requestAnimationFrame(() => {
+      frame = window.requestAnimationFrame(() => { if (!document.activeElement || document.activeElement === document.body) restore(); });
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [replayId]);
 
   /* Comparison: the toggle keeps Back working and moves focus to the panel it opens. */
@@ -136,7 +143,6 @@ function RunView({ workspace, configuration, robot, run, runConfiguration }: { w
           {rerunnable && <button className="btn btn-primary cfg-btn" type="button" onClick={() => setRerunOpen(true)}>Re-run</button>}
         </> : undefined}
         meta={meta} />
-      <WorkspaceSourceNotice />
       <WorkspaceNotice workspace={workspace} configId={configuration.id} />
       {queued && <div role="status"><Notice tone="info" icon="clock" action={queuedHref ? <Link className="btn btn-secondary cfg-btn" href={queuedHref}>Open {runLabel(queued)}</Link> : undefined}>
         <strong>{runLabel(queued)} is queued</strong> · {queued.title} on {configName} {queued.rev}. No evaluation runner is connected, so it stays queued with no results until a runner reports them.

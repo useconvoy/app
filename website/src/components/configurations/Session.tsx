@@ -1,9 +1,10 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Brand, Login } from "@/components/console/Console";
 import { WorkspaceProvider } from "@/lib/configurations/client";
+import { LiveDeviceProvider } from "./LiveDeviceProvider";
 import { onSessionExpired } from "@/lib/configurations/session-events";
 import { api, ApiError, errorText } from "@/lib/platform/client";
 import type { Account } from "@/lib/platform/client";
@@ -48,7 +49,8 @@ export function WorkspaceSession({ children }: { children: ReactNode }) {
   } : null, [account, signOut, signingOut, signOutError]);
   if (account === undefined) return <div className="console-shell"><main className="console-auth"><Brand /><p role="status">Checking your session…</p></main></div>;
   if (!value) return <div className="console-shell"><Login initialError={error} onLogin={load} /></div>;
-  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+  // Keyed by account: everything below (workspace document, live device data) starts afresh for another account.
+  return <SessionContext.Provider value={value}><Fragment key={value.email}>{children}</Fragment></SessionContext.Provider>;
 }
 
 /** The signed-in account and sign-out; available under `WorkspaceSession`. */
@@ -58,7 +60,12 @@ export function useSession(): WorkspaceSessionValue {
   return value;
 }
 
-/** Everything a Configurations route needs above its page: the session gate and the workspace document. */
+/**
+ * Everything a Configurations route needs above its page: the session gate, the
+ * workspace document and the shared live-device poller. Both live inside the gate,
+ * so signing out (or a session ending) unmounts them: no device data or document
+ * from one session is shown in the next.
+ */
 export function ConfigurationsRoot({ children }: { children: ReactNode }) {
-  return <WorkspaceSession><WorkspaceProvider>{children}</WorkspaceProvider></WorkspaceSession>;
+  return <WorkspaceSession><WorkspaceProvider><LiveDeviceProvider>{children}</LiveDeviceProvider></WorkspaceProvider></WorkspaceSession>;
 }

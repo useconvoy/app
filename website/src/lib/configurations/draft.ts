@@ -13,10 +13,10 @@
  * values are never stored, so live device data is not used here.
  */
 import { fmtCount, fmtFixed, fmtNumber, fmtPct } from "./format";
-import { createConfiguration, uniqueId } from "./mutations";
+import { addRevision, createConfiguration } from "./mutations";
 import { currentRevision, getConfiguration, getRevision, getSuite, listConfigurations, nextRevision, robotsFor } from "./selectors";
 import type {
-  ActivityEvent, CheckVerdict, CloudModel, CompatibilityCheck, ConfigRevision, Configuration, ConvoyWorkspace, EdgeHardware, EdgeModel, FlagRules,
+  CheckVerdict, CloudModel, CompatibilityCheck, ConfigRevision, Configuration, ConvoyWorkspace, EdgeHardware, EdgeModel, FlagRules,
   ModelRole, ModelState, Robot, RobotSpec, RouteMode, RoutingPolicy, RunStatus, SafetyEnvelope, StoredProvenance,
 } from "./types";
 
@@ -546,26 +546,6 @@ export function draftRevision(draft: ConfigurationDraft, rev: string, createdAt:
     },
     safety: draft.safety, flagRules: draft.flagRules, compatibility,
   };
-}
-
-/**
- * Adds the next revision to a configuration as the revision under test. The
- * production revision and every robot keep the revision they run; the name and
- * purpose change for the whole configuration when given.
- */
-export function addRevision(ws: ConvoyWorkspace, configId: string, input: { revision: ConfigRevision; name?: string; purpose?: string; from?: string | null }, now: number | Date): ConvoyWorkspace {
-  const config = ws.configurations.find(item => item.id === configId);
-  if (!config) throw new Error(`Unknown configuration "${configId}".`);
-  if (config.revisions.some(revision => revision.rev === input.revision.rev)) throw new Error(`${config.name} already has a revision ${input.revision.rev}.`);
-  const at = new Date(now).toISOString();
-  const name = input.name?.trim() || config.name;
-  const updated: Configuration = { ...config, name, purpose: input.purpose ?? config.purpose, revisions: [...config.revisions, input.revision], candidateRev: input.revision.rev, updatedAt: at };
-  const event: ActivityEvent = {
-    id: uniqueId(`act-configuration-created-${new Date(now).getTime().toString(36)}`, ws.activity.map(item => item.id)), at, kind: "configuration-created",
-    subject: { type: "configuration", id: configId }, configId, message: `${name} ${input.revision.rev} created${input.from ? ` from ${input.from}` : ""}`,
-    provenance: { kind: "recorded", at, source: "Workspace change" },
-  };
-  return { ...ws, meta: { ...ws.meta, updatedAt: at }, configurations: ws.configurations.map(item => item.id === configId ? updated : item), activity: [event, ...ws.activity] };
 }
 
 /**

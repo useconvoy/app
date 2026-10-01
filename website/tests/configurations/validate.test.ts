@@ -66,6 +66,36 @@ test("unknown keys are kept as warnings, not errors", () => {
   assert.deepEqual(result.warnings.map(warning => warning.path), ["robots[0].nickname", "extra"]);
 });
 
+test("prototype keys and ids are refused, wherever they appear", () => {
+  // JSON.parse keeps "__proto__" as an own key, exactly as a stored document would arrive.
+  const parsed = (ws: ConvoyWorkspace, patch: (json: string) => string) => JSON.parse(patch(JSON.stringify(ws))) as unknown;
+  const proto = validateWorkspace(parsed(sample(), json => json.replace('"schemaVersion":1', '"schemaVersion":1,"__proto__":{"polluted":true}')));
+  assert.equal(proto.ok, false);
+  assert.deepEqual(!proto.ok && proto.issues, [{ path: "__proto__", message: "is a reserved key and is not allowed" }]);
+  assert.equal(({} as Record<string, unknown>).polluted, undefined);
+  const inMeta = validateWorkspace(parsed(sample(), json => json.replace('"meta":{', '"meta":{"constructor":"x",')));
+  assert.deepEqual(!inMeta.ok && inMeta.issues, [{ path: "meta.constructor", message: "is a reserved key and is not allowed" }]);
+  assert.deepEqual(issues(ws => { ws.robots[1].id = "constructor"; ws.logs = ws.logs.filter(line => line.robotId !== ws.robots[1].id); }).filter(issue => issue.path === "robots[1].id"),
+    [{ path: "robots[1].id", message: "\"constructor\" is reserved and cannot be an id" }]);
+  assert.deepEqual(issues(ws => { ws.robots[0].deviceId = "__proto__"; }), [{ path: "robots[0].deviceId", message: "\"__proto__\" is reserved and cannot be an id" }]);
+  // A key that only exists on Object.prototype is not mistaken for a field.
+  const toString = validateWorkspace(parsed(sample(), json => json.replace('"schemaVersion":1', '"schemaVersion":1,"toString":"x"')));
+  assert.deepEqual(toString.ok && toString.warnings.map(warning => warning.path), ["toString"]);
+});
+
+test("compatibility actions may only link inside the app", () => {
+  const withAction = (href: string | null) => validateWorkspace((() => {
+    const ws = sample();
+    ws.configurations[0].revisions[0].compatibility[0].action = { label: "Open the run", href };
+    return ws;
+  })());
+  for (const href of [null, "/app/configurations/hybrid", "/app/configurations/hybrid/robots/lab-bench?tab=traces", "/app"]) assert.equal(withAction(href).ok, true, String(href));
+  for (const href of ["https://example.test/", "javascript:alert(1)", "//example.test/app", "/app//example.test", "/app/../console", "/applications", "/app/x y", "/app\\x"]) {
+    const result = withAction(href);
+    assert.deepEqual(!result.ok && result.issues.map(issue => issue.message), ["expected a link inside this app, starting with /app/"], href);
+  }
+});
+
 test("issue summaries name the first problem and count the rest", () => {
   assert.equal(summarizeIssues([]), "");
   assert.equal(summarizeIssues([{ path: "robots[0].rev", message: "is required" }, { path: "runs", message: "expected an array" }]), "robots[0].rev: is required (and 1 more)");

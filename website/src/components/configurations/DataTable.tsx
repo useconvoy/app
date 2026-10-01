@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { ReactNode } from "react";
+import { sortRows } from "@/lib/configurations/table";
+import type { SortDirection, SortValue } from "@/lib/configurations/table";
 import { Icon } from "./Icons";
 
 export interface Column<T> {
@@ -14,27 +16,22 @@ export interface Column<T> {
   numeric?: boolean;
   /** Let long text wrap (`cfg-wrap`). */
   wrap?: boolean;
-  /** Providing a sort value makes the column sortable; null sorts last. */
-  sort?: (row: T) => string | number | null;
+  /** Providing a sort value makes the column sortable; a missing value (null) sorts last in both directions. */
+  sort?: (row: T) => SortValue;
   /** Direction on the first click (numbers usually "desc"). */
-  firstDir?: "asc" | "desc";
+  firstDir?: SortDirection;
   cell: (row: T) => ReactNode;
   /** Secondary line under the value (`<small>`). */
   detail?: (row: T) => ReactNode;
 }
-export interface SortState { key: string; dir: "asc" | "desc" }
-
-const collator = new Intl.Collator("en-US", { numeric: true, sensitivity: "base" });
-function compare(a: string | number | null, b: string | number | null): number {
-  if (a === null || b === null) return a === b ? 0 : a === null ? 1 : -1;
-  return typeof a === "number" && typeof b === "number" ? a - b : collator.compare(String(a), String(b));
-}
+export interface SortState { key: string; dir: SortDirection }
 
 /**
  * `portal-table cfg-table` in its focusable scroll wrapper. The first column is the
  * row header; with `rowHref` its content becomes the row link (`cfg-row-link`), which
  * makes the whole row clickable while other links and buttons stay on top.
- * Sorting is internal (from `defaultSort`) unless `sort` + `onSortChange` control it.
+ * Sorting is internal (from `defaultSort`) unless `sort` + `onSortChange` control it;
+ * it is stable and keeps missing values last whichever the direction (`sortRows`).
  * `pinFirst` keeps rows (e.g. the measured robot) above the sorted rest.
  * `rowCells` can replace every cell after the first for a row (e.g. one colspan cell).
  */
@@ -46,10 +43,8 @@ export function DataTable<T>({ caption, label, columns, rows, rowKey, rowHref, r
   const [internal, setInternal] = useState<SortState | null>(defaultSort);
   const active = sort !== undefined ? sort : internal;
   const column = active ? columns.find(item => item.key === active.key && item.sort) : undefined;
-  const ordered = column?.sort ? rows.toSorted((a, b) => {
-    const pin = pinFirst ? Number(pinFirst(b)) - Number(pinFirst(a)) : 0;
-    return pin || compare(column.sort!(a), column.sort!(b)) * (active!.dir === "asc" ? 1 : -1);
-  }) : pinFirst ? rows.toSorted((a, b) => Number(pinFirst(b)) - Number(pinFirst(a))) : rows;
+  const ordered = column?.sort && active ? sortRows(rows, column.sort, active.dir, pinFirst)
+    : pinFirst ? rows.toSorted((a, b) => Number(pinFirst(b)) - Number(pinFirst(a))) : rows;
   function choose(item: Column<T>) {
     const next: SortState = active?.key === item.key ? { key: item.key, dir: active.dir === "asc" ? "desc" : "asc" } : { key: item.key, dir: item.firstDir ?? "asc" };
     if (onSortChange) onSortChange(next); else setInternal(next);

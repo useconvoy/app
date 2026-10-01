@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef } from "react";
 import { ACTIVITY_LABEL, activitySubject, attentionCounts, cardVerdict, INDEX_QUERY, noResultsTitle, parseFilter, parseSort, robotCountsLabel, SORT_OPTIONS, stackRows, STATUS_FILTERS } from "@/lib/configurations/cards";
 import type { CardVerdict } from "@/lib/configurations/cards";
-import { boundRobots, configurationCounts, configurationSummary, flaggedRobots, listConfigurations, recentActivity, successShare, useWorkspace } from "@/lib/configurations/client";
+import { attentionRobots, boundRobots, configurationCounts, configurationSummary, listConfigurations, recentActivity, successShare, useWorkspace } from "@/lib/configurations/client";
 import type { ConfigFilter, ConfigSort, LiveMap } from "@/lib/configurations/client";
 import { fmtCount, fmtDate, fmtRelative, fmtShare, fmtTime, fmtUpdated } from "@/lib/configurations/format";
 import { LIVE_POLL_INTERVAL_MS } from "@/lib/configurations/live";
@@ -17,7 +17,7 @@ import { Panel } from "../Facts";
 import { useNow, useQueryState } from "../hooks";
 import { Icon } from "../Icons";
 import { useLiveRobots } from "../LiveDeviceProvider";
-import { ImportWorkspaceButton, WorkspaceNotice, WorkspaceSourceNotice } from "../Notice";
+import { ImportWorkspaceButton, WorkspaceNotice } from "../Notice";
 import { PageHeader } from "../PageHeader";
 import { EmptyState, LoadingState } from "../States";
 import { FilterChips, SelectField, Toolbar } from "../Toolbar";
@@ -31,8 +31,8 @@ const VERDICT_ICON = { good: "check", warning: "warning", blocked: "blocked" } a
 /**
  * Screen 1 · Configurations index (`/app/configurations`, `?q=`, `?status=`, `?sort=`):
  * search, status chips and sort kept in the URL; one card per configuration (stack,
- * revisions, robot counts, robots needing attention from stored flags and live
- * readings, the latest gate run with n and provenance, a verdict line); the add
+ * revisions, robot counts, robots needing attention by their displayed health
+ * (stored health, live readings and flags), the latest gate run with n and provenance, a verdict line); the add
  * tile; recent activity.
  */
 export function ConfigurationsIndexPage() {
@@ -62,8 +62,7 @@ export function ConfigurationsIndexPage() {
     <PageHeader eyebrow="Configurations" title="Configurations"
       actions={total > 0 && <Link className="btn btn-primary cfg-btn" href={routes.newConfiguration()}>Add configuration <Icon name="plus" /></Link>}
       meta={`${plural(total, "configuration")} · ${plural(attached.length, "robot")} attached · ${fmtUpdated(workspace.meta.updatedAt, null)}${bound ? ` · Device readings refresh every ${LIVE_POLL_INTERVAL_MS / 1000} seconds` : ""}`} />
-    <WorkspaceSourceNotice />
-    <WorkspaceNotice workspace={workspace} live={live} />
+    <WorkspaceNotice workspace={workspace} />
 
     {total === 0
       ? <EmptyState icon="info" title="No configurations in this workspace yet."
@@ -92,25 +91,35 @@ export function ConfigurationsIndexPage() {
   </AppShell>;
 }
 
+/** Pause in typing before the search reaches the URL (and filters the cards). */
+const SEARCH_DEBOUNCE_MS = 250;
+
 /**
  * The search field (same markup as the kit's SearchField). It is uncontrolled so typing never waits for
- * the URL, which the router updates in a transition; a change that comes from elsewhere (a link, Clear
- * filters) is copied into it while it is not being edited.
+ * the URL, which the router updates in a transition; the URL (and so the cards) follows once typing
+ * pauses, not on every key. A change that comes from elsewhere (a link, Clear filters) is copied into it
+ * while it is not being edited.
  */
 function SearchBox({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const input = useRef<HTMLInputElement>(null);
+  const timer = useRef<number | null>(null);
   useEffect(() => {
     const node = input.current;
     if (node && node.value !== value && document.activeElement !== node) node.value = value;
   }, [value]);
+  useEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current); }, []);
+  function type(next: string) {
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => { timer.current = null; onChange(next); }, SEARCH_DEBOUNCE_MS);
+  }
   return <label className="cfg-field cfg-search">Search configurations
-    <span className="cfg-search__box"><Icon name="search" /><input ref={input} className="field-input cfg-input" type="search" defaultValue={value} placeholder="Name, robot, model or device" onChange={event => onChange(event.target.value)} /></span>
+    <span className="cfg-search__box"><Icon name="search" /><input ref={input} className="field-input cfg-input" type="search" defaultValue={value} placeholder="Name, robot, model or device" onChange={event => type(event.target.value)} /></span>
   </label>;
 }
 
 function IndexCard({ workspace, config, live, now }: { workspace: ConvoyWorkspace; config: Configuration; live: LiveMap; now: number | null }) {
   const summary = configurationSummary(workspace, config, live, now);
-  const attention = attentionCounts(flaggedRobots(workspace, config.id, live, now));
+  const attention = attentionCounts(attentionRobots(workspace, config.id, live, now));
   const verdict = cardVerdict(workspace, config);
   const run = summary.latestRun;
   return <ConfigCard href={routes.configuration(config.id)} name={config.name}

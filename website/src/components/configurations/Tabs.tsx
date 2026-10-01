@@ -10,9 +10,11 @@ export interface TabItem { id: string; label: string; count?: number | string | 
 /**
  * Button tabs (`role="tablist"`) with arrow / Home / End keys and automatic
  * activation. Controlled: pair with `useQueryTab` to keep the tab in the URL.
- * Panels: wrap each in <TabPanel> with the same `idPrefix` and tab id.
+ * A click is a new history entry; moving with the keys replaces it, so Back does
+ * not step through every tab passed on the way. Panels: wrap each in <TabPanel>
+ * with the same `idPrefix` and tab id.
  */
-export function Tabs({ tabs, value, onChange, label, idPrefix }: { tabs: readonly TabItem[]; value: string; onChange: (id: string) => void; label: string; idPrefix?: string }) {
+export function Tabs({ tabs, value, onChange, label, idPrefix }: { tabs: readonly TabItem[]; value: string; onChange: (id: string, options?: { replace?: boolean }) => void; label: string; idPrefix?: string }) {
   const fallback = useId();
   const prefix = idPrefix ?? fallback;
   const list = useRef<HTMLDivElement>(null);
@@ -21,7 +23,7 @@ export function Tabs({ tabs, value, onChange, label, idPrefix }: { tabs: readonl
     const next = event.key === "ArrowRight" ? (index === last ? 0 : index + 1) : event.key === "ArrowLeft" ? (index === 0 ? last : index - 1) : event.key === "Home" ? 0 : event.key === "End" ? last : null;
     if (next === null) return;
     event.preventDefault();
-    onChange(tabs[next].id);
+    onChange(tabs[next].id, { replace: true });
     list.current?.querySelectorAll<HTMLButtonElement>("[role=tab]")[next]?.focus();
   }
   return <div ref={list} className="application-nav cfg-tabs" role="tablist" aria-label={label}>
@@ -41,10 +43,10 @@ export function TabPanel({ idPrefix, tabId, selected, children }: { idPrefix: st
 }
 
 /** The selected tab from `?{param}=`, falling back to the first tab for a missing or unknown value. */
-export function useQueryTab(tabs: readonly TabItem[], param = "tab"): [string, (id: string) => void] {
+export function useQueryTab(tabs: readonly TabItem[], param = "tab"): [string, (id: string, options?: { replace?: boolean }) => void] {
   const [value, setValue] = useQueryState(param);
   const selected = tabs.some(tab => tab.id === value) ? value as string : tabs[0]?.id ?? "";
-  return [selected, (id: string) => setValue(id === tabs[0]?.id ? null : id)];
+  return [selected, (id: string, options?: { replace?: boolean }) => setValue(id === tabs[0]?.id ? null : id, options)];
 }
 
 /** Link tabs (`nav.application-nav`), e.g. sections that are separate URLs. */

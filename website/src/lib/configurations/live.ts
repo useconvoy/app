@@ -10,12 +10,15 @@
  *   and for the configured device's hardware inventory every few minutes.
  *
  * `LiveDevicePoller` runs one shared poll for every bound robot on screen:
- * 15 s cadence, a single request cycle in flight, paused while the page is
- * hidden, exponential backoff on 429/5xx/network errors, and a stop on 401
- * (which ends the session). It is framework-free; the React provider lives in
- * src/components/configurations/LiveDeviceProvider.tsx.
+ * 15 s cadence (never sooner, even across page changes; the snapshot route allows
+ * 30 reads per minute per session), a single request cycle in flight, paused
+ * while the page is hidden, exponential backoff on 429/5xx/network errors, and a
+ * stop on 401 (which ends the session). Each read records the server clock's
+ * offset, so ages of server timestamps never depend on the browser clock. It is
+ * framework-free; the React provider (src/components/configurations/
+ * LiveDeviceProvider.tsx) is mounted inside the session gate.
  */
-import { api, ApiError } from "../platform/client";
+import { ApiError } from "../platform/client";
 import type { PortalInference, PortalSnapshot, PortalTelemetry } from "../portal/types";
 import { median, percentile } from "./format";
 import { notifySessionExpired } from "./session-events";
@@ -64,6 +67,13 @@ export interface LiveDeviceData {
   source: "portal-snapshot" | "platform-device";
   /** Server time of the read (snapshot `fetched_at`, or the response date). */
   fetchedAt: string;
+  /**
+   * Server clock minus this browser's clock when the read arrived (0 when the
+   * server gave no time). Ages of server timestamps (e.g. "no report for 90 s")
+   * use `browser now + clockOffsetMs`, so a skewed browser clock cannot flag a
+   * device that reports, or hide one that does not.
+   */
+  clockOffsetMs: number;
   /** Control-plane status: online, offline, never_seen, retired, credential_revoked. */
   status: string;
   /** Live contact now: a recent live report and no terminal identity state. */
@@ -149,8 +159,14 @@ function measured(latest: TelemetryReading | null, fetchedAt: string, samples: n
   return { kind: "measured", at: latest?.at ?? fetchedAt, n: samples, source: name };
 }
 
-/** Maps the curated device snapshot (`/api/portal/snapshot`). */
-export function mapSnapshot(snapshot: PortalSnapshot, hardware: LiveHardware | null = null): LiveDeviceData {
+/** Server clock minus the browser clock at receipt; 0 when either time is unknown. */
+export function clockOffset(serverTime: string | null | undefined, receivedWallMs: number | null | undefined): number {
+  const server = serverTime ? Date.parse(serverTime) : Number.NaN;
+  return Number.isFinite(server) && typeof receivedWallMs === "number" && Number.isFinite(receivedWallMs) ? server - receivedWallMs : 0;
+}
+
+/** Maps the curated device snapshot (`/api/portal/snapshot`); `receivedWallMs` (browser clock at receipt) sets `clockOffsetMs`. */
+export function mapSnapshot(snapshot: PortalSnapshot, hardware: LiveHardware | null = null, receivedWallMs?: number | null): LiveDeviceData {
   const samples = snapshot.telemetry.filter(sample => Number.isFinite(time(sample.ts))).toSorted((a, b) => time(a.ts) - time(b.ts));
   const series = emptySeries();
   for (const [metric, key] of METRICS) series[metric] = samples.map(sample => ({ at: sample.ts as string, value: num(sample[key]) }));
@@ -159,7 +175,7 @@ export function mapSnapshot(snapshot: PortalSnapshot, hardware: LiveHardware | n
   const identityState = identity(snapshot.device.status);
   const release = snapshot.release;
   return {
-    deviceId: snapshot.device.id, name: snapshot.device.name, source: "portal-snapshot", fetchedAt: snapshot.fetched_at,
+    deviceId: snapshot.device.id, name: snapshot.device.name, source: "portal-snapshot", fetchedAt: snapshot.fetched_at, clockOffsetMs: clockOffset(snapshot.fetched_at, receivedWallMs),
     status: snapshot.device.status, online: !!snapshot.chat.online && !identityState, identityState,
     liveAt: snapshot.device.live_at, observedAt: snapshot.device.observed_at, observedHealth: snapshot.device.observed_health,
     agentVersion: snapshot.device.agent_version, runtimeState: snapshot.device.runtime_state ?? latest?.runtimeState ?? null,
@@ -179,8 +195,11 @@ export function mapHardware(value: unknown): LiveHardware | null {
   return { model: str(h.jetson_model) ?? str(h.gpu_name), l4tRelease: text(h.l4t_release), cudaVersion: text(h.cuda_version), gpuName: str(h.gpu_name), computeCapability: text(h.compute_capability), cpuCount: num(h.cpu_count), memTotalMiB: num(h.mem_total_mb) };
 }
 
-/** Maps `/api/platform/devices/{id}`; the series appends the latest sample to `previous` when it is new. */
-export function mapPlatformDevice(value: unknown, previous: LiveDeviceData | null, fetchedAt: string): LiveDeviceData {
+/**
+ * Maps `/api/platform/devices/{id}`; the series appends the latest sample to `previous` when it is new.
+ * `fetchedAt` is the response's server time when known; `receivedWallMs` (browser clock at receipt) then sets `clockOffsetMs`.
+ */
+export function mapPlatformDevice(value: unknown, previous: LiveDeviceData | null, fetchedAt: string, receivedWallMs?: number | null): LiveDeviceData {
   const d = record(value);
   const id = str(d.id) ?? previous?.deviceId ?? "unknown";
   const name = str(d.name) ?? previous?.name ?? id;
@@ -193,7 +212,7 @@ export function mapPlatformDevice(value: unknown, previous: LiveDeviceData | nul
   }
   const identityState = identity(status);
   return {
-    deviceId: id, name, source: "platform-device", fetchedAt, status, online: status === "online" && !identityState, identityState,
+    deviceId: id, name, source: "platform-device", fetchedAt, clockOffsetMs: clockOffset(fetchedAt, receivedWallMs), status, online: status === "online" && !identityState, identityState,
     liveAt: str(d.live_at), observedAt: str(d.observed_at), observedHealth: str(d.observed_health), agentVersion: str(d.agent_version),
     runtimeState: latest?.runtimeState ?? null, releaseId: str(d.observed_active_release_id), release: null,
     hardware: mapHardware(d.hardware) ?? previous?.hardware ?? null, latest, series, staleAfterS: previous?.staleAfterS ?? null, heartbeatIntervalS: previous?.heartbeatIntervalS ?? null,
@@ -224,8 +243,14 @@ export const browserTransport: LiveTransport = {
     return data as PortalSnapshot;
   },
   async device(id) {
-    const body = await api<unknown>(`devices/${encodeURIComponent(id)}`);
-    return { body, date: null };
+    // Like the platform `api()` helper, plus the response Date: the server time the record was read at.
+    const response = await fetch(`/api/platform/devices/${encodeURIComponent(id)}`, { credentials: "same-origin", cache: "no-store", headers: { "Content-Type": "application/json", "X-Convoy-Client": "web" } });
+    const data: unknown = await response.json().catch(() => null);
+    if (!response.ok || data === null) {
+      const error = record(data).error;
+      throw new LiveRequestError(response.status || 502, "platform", (typeof error === "string" && error) || str(record(error).message) || "The device record could not be read. Try again.");
+    }
+    return { body: data, date: response.headers.get("Date") };
   },
 };
 
@@ -291,8 +316,6 @@ export class LiveDevicePoller {
   private lastPollAt: number | null = null;
   private timer: unknown = null;
   private inFlight = false;
-  /** A key was added during a poll: poll again right after it. */
-  private rerun = false;
   private started = false;
   private unauthorized = false;
   private unsubscribeVisibility: (() => void) | null = null;
@@ -313,7 +336,12 @@ export class LiveDevicePoller {
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   getSnapshot = (): LiveState => this.state;
 
-  /** Keeps these device keys polled until the returned release is called. */
+  /**
+   * Keeps these device keys polled until the returned release is called. A key
+   * added now is read at the next poll, which is never sooner than one interval
+   * after the last poll: navigating between pages (release, then retain the same
+   * device) does not add requests. Only the first poll of the poller runs at once.
+   */
   retain = (keys: readonly string[]): (() => void) => {
     let added = false;
     for (const key of new Set(keys)) {
@@ -322,7 +350,7 @@ export class LiveDevicePoller {
       this.refs.set(key, count + 1);
       if (!count) { added = true; if (!this.entries.has(key)) this.entries.set(key, { status: "loading", data: null, error: null, receivedAt: null }); }
     }
-    if (added) { this.unauthorized = false; this.emit(); if (this.inFlight) this.rerun = true; else this.schedule(0); }
+    if (added) { this.unauthorized = false; this.emit(); if (!this.inFlight) this.schedule(this.dueIn()); }
     let released = false;
     return () => {
       if (released) return;
@@ -352,9 +380,13 @@ export class LiveDevicePoller {
 
   private onVisibility = () => {
     if (!this.started || !this.visibility.visible() || !this.refs.size || this.inFlight) return;
-    const since = this.lastPollAt === null ? Infinity : this.clock() - this.lastPollAt;
-    this.schedule(Math.max(0, this.delay() - since));
+    this.schedule(this.dueIn());
   };
+  /** Time until the next poll is due: one interval (or backoff) after the last poll, at once before the first. */
+  private dueIn() {
+    const since = this.lastPollAt === null ? Infinity : this.clock() - this.lastPollAt;
+    return Math.max(0, this.delay() - since);
+  }
   private delay() { return this.failures ? Math.min(this.interval * 2 ** this.failures, this.maxBackoff) : this.interval; }
   private cancel() { if (this.timer !== null) this.timers.clear(this.timer); this.timer = null; }
   private schedule(ms: number) {
@@ -389,10 +421,11 @@ export class LiveDevicePoller {
         ...explicit.map(id => this.transport.device(id)),
       ]);
       const now = this.clock();
+      const wall = this.wallClock();
       if (snapshotResult.status === "fulfilled" && snapshotResult.value) {
         const snapshot = snapshotResult.value;
         this.configured = snapshot.device.id;
-        const data = mapSnapshot(snapshot, this.hardware.get(snapshot.device.id)?.value ?? null);
+        const data = mapSnapshot(snapshot, this.hardware.get(snapshot.device.id)?.value ?? null, wall);
         for (const key of [CONFIGURED_DEVICE, snapshot.device.id]) if (this.refs.has(key)) put(key, { status: "fresh", data, error: null, receivedAt: now });
       } else if (snapshotResult.status === "rejected") {
         const problem = failure(snapshotResult.reason);
@@ -414,8 +447,9 @@ export class LiveDevicePoller {
           }
           return;
         }
-        const fetchedAt = result.value.date && Number.isFinite(Date.parse(result.value.date)) ? new Date(result.value.date).toISOString() : new Date(this.wallClock()).toISOString();
-        put(id, { status: "fresh", data: mapPlatformDevice(result.value.body, this.entries.get(id)?.data ?? null, fetchedAt), error: null, receivedAt: now });
+        const serverTime = result.value.date && Number.isFinite(Date.parse(result.value.date)) ? new Date(result.value.date).toISOString() : null;
+        // Without a server time the read is dated by this browser, so its offset is 0.
+        put(id, { status: "fresh", data: mapPlatformDevice(result.value.body, this.entries.get(id)?.data ?? null, serverTime ?? new Date(wall).toISOString(), wall), error: null, receivedAt: now });
       });
       // Hardware inventory for the configured device comes from the platform device record, refreshed every few minutes.
       const configured = this.configured;
@@ -443,7 +477,6 @@ export class LiveDevicePoller {
     }
     if (ended) {
       this.unauthorized = true;
-      this.rerun = false;
       for (const key of this.refs.keys()) {
         const current = this.entries.get(key);
         this.entries.set(key, { status: "unauthorized", data: current?.data ?? null, error: "Your session ended. Sign in to continue.", receivedAt: current?.receivedAt ?? null });
@@ -454,19 +487,54 @@ export class LiveDevicePoller {
     }
     this.failures = backoff ? this.failures + 1 : 0;
     this.emit();
-    this.schedule(this.rerun ? 0 : this.delay());
-    this.rerun = false;
+    this.schedule(this.delay());
   }
 
   private emit() { this.state = this.build(); for (const listener of [...this.listeners]) listener(); }
   private build(): LiveState {
     const now = this.clock();
-    const devices: Record<string, LiveEntry> = {};
+    // Keys are device ids from the workspace document: a null-prototype map, so no key can reach Object.prototype.
+    const devices: Record<string, LiveEntry> = Object.create(null);
     for (const [key, entry] of this.entries) {
       const old = entry.receivedAt !== null && now - entry.receivedAt > this.staleAfter;
       devices[key] = entry.status === "fresh" && old ? { ...entry, status: "stale" } : entry;
     }
     return { devices, configuredDeviceId: this.configured, polling: this.inFlight, failures: this.failures, nextDelayMs: this.delay(), lastPollAt: this.lastPollAt };
+  }
+}
+
+/**
+ * What a binding says about its device right now, for status lines and notices:
+ * waiting (first read pending) · reporting (fresh read, device in live contact) ·
+ * stale (the last successful read is too old; its data is kept) · offline (the
+ * device reports no live contact) · unavailable (nothing could be read) ·
+ * signed-out (the session ended) · unbound (no device binding).
+ */
+export type DeviceState = "unbound" | "waiting" | "reporting" | "stale" | "offline" | "unavailable" | "signed-out";
+export function deviceState(binding: LiveBinding | null | undefined): DeviceState {
+  if (!binding || binding.status === "unbound") return "unbound";
+  if (binding.status === "unauthorized") return "signed-out";
+  if (binding.status === "loading") return "waiting";
+  if (!binding.data) return "unavailable";
+  if (!binding.data.online) return "offline";
+  return binding.status === "stale" ? "stale" : "reporting";
+}
+
+/**
+ * The provenance notice's sentence about a live-bound robot, never claiming a
+ * report the page has not received: "reports from a connected <hardware>." only
+ * while it reports; otherwise what is known. Without a binding (the page does not
+ * read live data) it says what the binding means instead.
+ */
+export function deviceSentence(binding: LiveBinding | null | undefined, hardware: string): string {
+  switch (binding ? deviceState(binding) : "unbound") {
+    case "reporting": return `reports from a connected ${hardware}.`;
+    case "stale": return `is bound to a ${hardware}; its latest device read is stale and Convoy keeps retrying.`;
+    case "waiting": return `is bound to a ${hardware}; waiting for its first device report.`;
+    case "offline": return `is bound to a ${hardware}, which is offline right now.`;
+    case "unavailable": return `is bound to a ${hardware}; no device report is available right now.`;
+    case "signed-out": return `is bound to a ${hardware}; sign in again to read it.`;
+    case "unbound": return `is bound to a ${hardware}; its values are marked Measured only while it reports.`;
   }
 }
 

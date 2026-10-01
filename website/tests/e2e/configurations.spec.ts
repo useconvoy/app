@@ -1,7 +1,8 @@
 import { AxeBuilder } from "@axe-core/playwright";
-import { expect, test, type Page, type Request } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import type { PortalSnapshot } from "../../src/lib/portal/types";
 import { createSampleWorkspace } from "../../src/lib/configurations/sample";
+import { mockDocuments, type DocumentServer } from "./support/documents";
 
 // Contract fixtures only: the generic sample workspace and a contract device, no real account data.
 function snapshot(): PortalSnapshot {
@@ -19,10 +20,10 @@ function snapshot(): PortalSnapshot {
   };
 }
 
-interface Mocks { authenticated?: boolean; document?: unknown | null; puts?: Request[]; snapshotCalls?: { count: number } }
-async function mock(page: Page, options: Mocks = {}) {
+interface Mocks { authenticated?: boolean; document?: unknown | null; revision?: number; snapshotCalls?: { count: number } }
+/** Account, device and the workspace documents API (contract v2: revisions and write preconditions). */
+async function mock(page: Page, options: Mocks = {}): Promise<DocumentServer> {
   let authenticated = options.authenticated ?? true;
-  let stored: unknown = options.document ?? null;
   const account = { user: { email: "fixture@example.test", role: "operator" }, installation: { simulator: true, dispatch_paused_at: null, quarantined_at: null } };
   await page.route("**/api/platform/auth/me", route => route.fulfill({ status: authenticated ? 200 : 401, json: authenticated ? account : { error: "Sign in" } }));
   await page.route("**/api/platform/auth/login", async route => { authenticated = true; await route.fulfill({ json: { user: account.user } }); });
@@ -30,18 +31,7 @@ async function mock(page: Page, options: Mocks = {}) {
   await page.route("**/api/platform/projects", route => route.fulfill({ json: [] }));
   await page.route("**/api/platform/devices/*", route => route.fulfill({ json: { id: "dev_contract", name: "Contract Jetson", status: "online", hardware: { jetson_model: "Contract Jetson board", l4t_release: "36.4", cuda_version: "12.6" }, last_telemetry: {} } }));
   await page.route("**/api/portal/snapshot", route => { if (options.snapshotCalls) options.snapshotCalls.count++; return route.fulfill({ json: snapshot() }); });
-  await page.route("**/api/platform/workspace-documents/configurations", async route => {
-    const request = route.request();
-    if (request.method() === "PUT") {
-      options.puts?.push(request);
-      const payload = request.postDataJSON() as { schema_version: number; body: unknown };
-      stored = payload.body;
-      return route.fulfill({ json: { name: "configurations", schema_version: payload.schema_version, body: payload.body, size_bytes: request.postData()?.length ?? 0, updated_at: new Date().toISOString() } });
-    }
-    return stored === null
-      ? route.fulfill({ status: 404, json: { error: "This resource is unavailable in your project." } })
-      : route.fulfill({ json: { name: "configurations", schema_version: 1, body: stored, size_bytes: 1, updated_at: new Date().toISOString() } });
-  });
+  return mockDocuments(page, { document: options.document ?? null, revision: options.revision });
 }
 async function noOverflow(page: Page) { expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true); }
 const h1 = (page: Page) => page.getByRole("heading", { level: 1 });
@@ -119,22 +109,69 @@ test("a valid stored document is used and an invalid one falls back to the sampl
   await expect(page.locator(".portal-workspace-label")).toHaveText("Sample workspace");
 });
 
-test("importing a workspace stores it with PUT and an Idempotency-Key", async ({ page }) => {
-  const puts: Request[] = [];
-  await mock(page, { puts });
+test("importing a workspace creates the document with PUT, If-None-Match and an Idempotency-Key", async ({ page }) => {
+  const server = await mock(page);
   await page.goto("/app/configurations");
+  // One notice while the sample is shown: where it comes from, what Sample means, the device, and Import.
+  const notice = page.getByRole("note").filter({ hasText: "Values marked Sample are illustrative" });
+  await expect(notice).toContainText("Sample workspace: no workspace document is stored for this account yet.");
+  await expect(notice.getByLabel("Import workspace")).toBeAttached();
+  await expect(page.locator(".cfg-notice")).toHaveCount(1);
   await page.getByLabel("Import workspace").setInputFiles({ name: "broken.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify({ schemaVersion: 1 })) });
   await expect(page.locator(".cfg-import__error")).toContainText("Not imported: meta: is required");
-  expect(puts).toHaveLength(0);
+  expect(server.writes).toHaveLength(0);
+  await page.getByLabel("Import workspace").setInputFiles({ name: "huge.json", mimeType: "application/json", buffer: Buffer.alloc(2 * 1024 * 1024 + 1, 32) });
+  await expect(page.locator(".cfg-import__error")).toContainText("a workspace document holds at most 2 MiB");
   const document = createSampleWorkspace();
   document.meta = { ...document.meta, label: "Imported workspace", sample: false };
   await page.getByLabel("Import workspace").setInputFiles({ name: "workspace.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(document)) });
   await expect(page.locator(".portal-workspace-label")).toHaveText("Imported workspace");
-  expect(puts).toHaveLength(1);
-  expect(puts[0].headers()["idempotency-key"]).toMatch(/^[\x21-\x7e]{1,128}$/);
-  expect(puts[0].headers()["x-convoy-client"]).toBe("web");
-  expect(puts[0].postDataJSON()).toMatchObject({ schema_version: 1, body: { schemaVersion: 1, meta: { label: "Imported workspace" } } });
+  expect(server.writes).toHaveLength(1);
+  expect(server.writes[0]).toMatchObject({ ifNoneMatch: "*", ifMatch: null, client: "web", status: 200, body: { schemaVersion: 1, meta: { label: "Imported workspace" } } });
+  expect(server.writes[0].idempotencyKey).toMatch(/^[\x21-\x7e]{1,128}$/);
   await expect(page.getByText("No workspace document is stored", { exact: false })).toHaveCount(0);
+});
+
+test("importing over a stored (invalid) document asks first and replaces exactly the revision read", async ({ page }) => {
+  const server = await mock(page, { document: { ...createSampleWorkspace(), schemaVersion: 2 }, revision: 7 });
+  await page.goto("/app/configurations");
+  await expect(page.getByText("The stored workspace could not be used", { exact: false })).toBeVisible();
+  const document = createSampleWorkspace();
+  document.meta = { ...document.meta, label: "Replacement workspace", sample: false };
+  const file = { name: "replacement.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(document)) };
+  await page.getByLabel("Import workspace").setInputFiles(file);
+  const confirm = page.getByRole("dialog", { name: "Replace the stored workspace?" });
+  await expect(confirm).toContainText("(revision 7");
+  await expect(confirm).toContainText("replacement.json");
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm).toBeHidden();
+  expect(server.writes).toHaveLength(0);
+  await page.getByLabel("Import workspace").setInputFiles(file);
+  await confirm.getByRole("button", { name: "Replace workspace" }).click();
+  await expect(page.locator(".portal-workspace-label")).toHaveText("Replacement workspace");
+  expect(server.writes).toMatchObject([{ ifMatch: "\"7\"", ifNoneMatch: null, status: 200 }]);
+  expect(server.revision).toBe(8);
+});
+
+test("a save that meets a newer document re-applies the change once on top of it", async ({ page }) => {
+  const document = createSampleWorkspace();
+  document.meta = { ...document.meta, label: "Lab workspace", sample: false };
+  const server = await mock(page, { document, revision: 3 });
+  await page.goto("/app/configurations/hybrid?tab=robots");
+  await expect(page.locator(".portal-workspace-label")).toHaveText("Lab workspace");
+  // Another tab renames the workspace after this page read revision 3.
+  server.changeElsewhere(current => ({ ...current, meta: { ...current.meta, label: "Lab workspace (renamed elsewhere)" } }));
+  await page.getByRole("button", { name: "Flag Unit 07" }).click();
+  const dialog = page.getByRole("dialog", { name: "Flags · Unit 07" });
+  await dialog.getByLabel("Reason").fill("Gripper slipping");
+  await dialog.getByLabel("Note").fill("Slipped twice on bin 4.");
+  await dialog.getByRole("button", { name: "Flag robot" }).click();
+  await expect(dialog).toBeHidden();
+  expect(server.writes.map(write => [write.ifMatch, write.status])).toEqual([["\"3\"", 412], ["\"4\"", 200]]);
+  expect(server.writes[1].body.meta.label).toBe("Lab workspace (renamed elsewhere)");
+  expect(server.writes[1].body.robots.find(robot => robot.id === "unit-07")?.flags[0]).toMatchObject({ label: "Gripper slipping", severity: "warning" });
+  await expect(page.locator(".portal-workspace-label")).toHaveText("Lab workspace (renamed elsewhere)");
+  await expect(page.locator(".cd-flash")).toContainText("Unit 07 flagged: Gripper slipping.");
 });
 
 test("live device data polls once for the page and stops when it leaves", async ({ page }) => {

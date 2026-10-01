@@ -10,8 +10,7 @@
  *   if (ws.status === "loading") return <AppShell crumbs={…}><LoadingState /></AppShell>;
  *   return <AppShell crumbs={[{ label: "Configurations", href: routes.index() }, { label: name }]}>
  *     <PageHeader eyebrow="Configuration" title={name} badges={…} actions={…} meta={fmtUpdated(at)} />
- *     <WorkspaceSourceNotice />                        // sample fallback / import / save errors
- *     <WorkspaceNotice workspace={ws.workspace} />     // the provenance notice, first on every page
+ *     <WorkspaceNotice workspace={ws.workspace} />     // one notice, first on every page: source (sample + Import), provenance, device status
  *     <Section title="…" note="…">…</Section>
  *   </AppShell>;
  *
@@ -43,7 +42,7 @@ export { ConvoyMark, Icon, ICON_PATHS, type IconName } from "./Icons";
 export { Delta, KpiGrid, KpiTile } from "./Kpi";
 export { LiveDeviceProvider, useLiveRefresh, useLiveRobot, useLiveRobots } from "./LiveDeviceProvider";
 export { LogPanel } from "./LogPanel";
-export { ImportWorkspaceButton, Notice, WorkspaceNotice, WorkspaceSourceNotice, type NoticeTone } from "./Notice";
+export { ImportWorkspaceButton, Notice, WorkspaceNotice, type NoticeTone } from "./Notice";
 export { Drawer, Modal, useDialog } from "./Overlay";
 export { PageHeader } from "./PageHeader";
 export { ProgressBar } from "./ProgressBar";

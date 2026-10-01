@@ -20,7 +20,7 @@ import { Panel } from "../Facts";
 import { useNow, useQueryState } from "../hooks";
 import { Icon } from "../Icons";
 import { useLiveRobots } from "../LiveDeviceProvider";
-import { ImportWorkspaceButton, Notice, WorkspaceNotice, WorkspaceSourceNotice } from "../Notice";
+import { ImportWorkspaceButton, Notice, WorkspaceNotice } from "../Notice";
 import { PageHeader } from "../PageHeader";
 import { EmptyState, LoadingState } from "../States";
 import { Stepper, type StepItem } from "../Stepper";
@@ -48,7 +48,6 @@ export function NewConfigurationPage() {
   if (!start) {
     return <AppShell crumbs={NEW_CRUMBS}>
       <PageHeader eyebrow="New configuration" title="New configuration" actions={<Link className="cfg-btn-text" href={routes.index()}>Cancel</Link>} />
-      <WorkspaceSourceNotice />
       <WorkspaceNotice workspace={ws.workspace} />
       <EmptyState icon="info" title="There is nothing to start a configuration from yet."
         text="New configurations start from the robots, edge hardware and models a workspace describes. Import a workspace file that includes at least one configuration."
@@ -142,8 +141,7 @@ function NewConfigurationForm({ workspace: current, initial, missing }: { worksp
     <PageHeader eyebrow={revisionMode ? "New revision" : "New configuration"} title={title} badges={<Badge>Draft</Badge>}
       actions={<Link className="cfg-btn-text" href={cancelHref}>Cancel</Link>}
       meta={`Started from ${revisionMode ? draft.baseRev : `${base?.name ?? "a template"} ${draft.baseRev}`} · Not saved yet · Creating stores ${revisionMode ? rev : "it"} in the workspace; nothing is deployed`} />
-    <WorkspaceSourceNotice />
-    <WorkspaceNotice workspace={workspace} live={live} />
+    <WorkspaceNotice workspace={workspace} />
     {missing && <Notice tone="warning">No configuration has the id “{missing}”, so this starts from <strong>{base?.name ?? "a template"}</strong> as a new configuration.</Notice>}
 
     <div className="cfg-split ci-split">
