@@ -1,6 +1,10 @@
 """Authenticated remote evidence survives retries without publishing partial data."""
 import json
+import random
 import sqlite3
+import struct
+import zlib
+from base64 import b64encode
 from types import SimpleNamespace
 
 import pytest
@@ -9,6 +13,33 @@ from convoy_server.services import replay
 from fastapi.testclient import TestClient
 from test_episode_replay import journal
 from test_platform_lifecycle import claim, pipeline, start  # noqa: F401
+
+
+@pytest.mark.parametrize('chunked', [False, True])
+def test_camera_sized_upload_through_full_middleware(pipeline, tmp_path, monkeypatch, chunked):  # noqa: F811
+    episode, payload = completed(pipeline, tmp_path, monkeypatch)
+    # A genuine, deterministic 480x480 RGB PNG, comparable to robot camera data.
+    pixels = random.Random(0).randbytes(480 * 480 * 3)
+
+    def chunk(kind, data):
+        return struct.pack('!I', len(data)) + kind + data + struct.pack('!I', zlib.crc32(kind + data))
+
+    scanlines = b''.join(b'\0' + pixels[i:i+1440] for i in range(0, len(pixels), 1440))
+    png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!IIBBBBB', 480, 480, 8, 2, 0, 0, 0))
+    png += chunk(b'IDAT', zlib.compress(scanlines)) + chunk(b'IEND', b'')
+    for observation in (payload['request']['observation'], payload['outcome']['observation']):
+        observation['image_png_base64'] = b64encode(png).decode()
+    body = json.dumps(payload).encode()
+    assert 256 * 1024 < len(body) < 4 * 1024 * 1024
+    route = f"{pipeline['base']}/missions/{episode.mission_id}/recording"
+    content = iter([body[:300000], body[300000:]]) if chunked else body
+    assert pipeline['agent'].client.post(route + '/commands/0', content=content).status_code == 200
+    assert pipeline['agent'].client.post(route + '/publish').status_code == 200
+    assert pipeline['admin'].get(f'/api/v1/episodes/{episode.id}/replay/frames/1').json()['image_png_base64'] == b64encode(png).decode()
+    # The larger allowance must not spread to ordinary reports or publication.
+    for other in ('/publish', '/commands/0/extra'):
+        assert pipeline['agent'].client.post(route + other, content=body).status_code == 413
+    assert pipeline['agent'].client.post(route + '/commands/0', content=iter([b'x' * (4 * 1024 * 1024 + 1)])).status_code == 413
 
 
 def completed(p, tmp_path, monkeypatch):

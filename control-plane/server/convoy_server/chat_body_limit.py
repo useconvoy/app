@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import re
 
 from starlette.responses import JSONResponse
 
 MAX_BODY = 256 * 1024
+RECORDING_BODY = 4 * 1024 * 1024
+RECORDING_COMMAND = re.compile(r"/api/agent/v1/robots/[^/]+/missions/[^/]+/recording/commands/[0-9]+")
 
 
 class ChatBodyLimit:
@@ -23,6 +26,9 @@ class ChatBodyLimit:
             path.startswith("/api/agent/v1/chat/") or path.startswith("/api/v1/devices/") and "/chat" in path
         ) or application
         label = "application" if application else "chat"
+        # Camera observations exceed the ordinary management-body limit. Keep
+        # this exception exact and bounded, including requests without a length.
+        maximum = RECORDING_BODY if RECORDING_COMMAND.fullmatch(path) else MAX_BODY
         if scope["type"] != "http" or scope.get("method") != "POST" or not limited:
             await self.app(scope, receive, send)
             return
@@ -31,7 +37,7 @@ class ChatBodyLimit:
             length = int(headers.get(b"content-length", b"0"))
         except ValueError:
             length = -1
-        if length < 0 or length > MAX_BODY:
+        if length < 0 or length > maximum:
             await JSONResponse({"error": f"{label} request body too large or invalid"}, status_code=413)(
                 scope, receive, send
             )
@@ -44,7 +50,7 @@ class ChatBodyLimit:
                     if message["type"] == "http.disconnect":
                         return
                     body.extend(message.get("body", b""))
-                    if len(body) > MAX_BODY:
+                    if len(body) > maximum:
                         await JSONResponse({"error": f"{label} request body too large"}, status_code=413)(
                             scope, receive, send
                         )
