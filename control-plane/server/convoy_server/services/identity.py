@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 from datetime import timedelta
 from typing import Any
 
@@ -27,9 +28,10 @@ HEX64 = 64
 
 
 class IdentityError(ValueError):
-    def __init__(self, msg: str, status: int = 400):
+    def __init__(self, msg: str, status: int = 400, retry_after: int | None = None):
         super().__init__(msg)
         self.status = status
+        self.retry_after = retry_after  # whole seconds until a throttled caller may try again
 
 
 # ---- throttles (persisted, no Redis) ----
@@ -41,13 +43,14 @@ def throttle_check(db: DbSession, key: str, limit: int, window_s: int) -> None:
         if row is None:
             db.add(Throttle(key=key, window_start=now, count=1))
             return
-        if (now - aware(row.window_start)).total_seconds() > window_s:
+        elapsed = (now - aware(row.window_start)).total_seconds()
+        if elapsed > window_s:
             row.window_start = now
             row.count = 1
             return
         row.count += 1
         if row.count > limit:
-            raise IdentityError("too many attempts; try again later", 429)
+            raise IdentityError("too many attempts; try again later", 429, max(1, math.ceil(window_s - elapsed)))
 
 
 # ---- users ----
