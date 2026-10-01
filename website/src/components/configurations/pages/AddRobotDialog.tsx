@@ -10,15 +10,17 @@ import type { Configuration } from "@/lib/configurations/types";
 import type { Device, Project, Robot as PlatformRobot } from "@/lib/platform/client";
 import { Modal } from "../Overlay";
 import { usePlatform } from "../platform";
+import { OfflinePicker } from "./OfflineEvaluations";
 
-type Kind = "device" | "simulator";
-const KINDS: ReadonlyArray<{ id: Kind; label: string }> = [{ id: "device", label: "Live device" }, { id: "simulator", label: "Simulator" }];
+type Kind = "device" | "simulator" | "offline";
+const KINDS: ReadonlyArray<{ id: Kind; label: string }> = [{ id: "device", label: "Live device" }, { id: "simulator", label: "Simulator" }, { id: "offline", label: "Simulator · offline" }];
 
 /**
  * Add robot: a name, and where its data comes from. A live device (one of the
  * account's devices) gives telemetry and traces; a control-plane project gives
  * evals, rollouts and replays from its real evaluations and episodes, optionally
- * only one platform robot's. Robots are added for testing.
+ * only one platform robot's; offline evaluations (imported, unsigned) give evals
+ * tagged "Offline sim". Robots are added for testing.
  */
 export function AddRobotDialog({ config, onClose, onAdded }: { config: Configuration; onClose: () => void; onAdded: (name: string) => void }) {
   const ws = useWorkspace();
@@ -28,6 +30,7 @@ export function AddRobotDialog({ config, onClose, onAdded }: { config: Configura
   const [deviceId, setDeviceId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [platformRobotId, setPlatformRobotId] = useState("");
+  const [offlineIds, setOfflineIds] = useState<string[]>([]);
   const [checked, setChecked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,16 +48,21 @@ export function AddRobotDialog({ config, onClose, onAdded }: { config: Configura
   const errors = {
     name: !name.trim() ? "Enter a name." : ws.workspace?.robots.some(robot => robot.configId === config.id && robot.name.trim().toLowerCase() === name.trim().toLowerCase()) ? "This configuration has a robot with this name." : null,
     device: kind === "device" && !chosenDevice ? "Choose a device." : null,
+    offline: kind === "offline" && !offlineIds.length ? "Choose an offline eval." : null,
   };
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
     setChecked(true);
-    if (errors.name || errors.device) return;
+    if (errors.name || errors.device || errors.offline) return;
     setBusy(true);
     setError(null);
-    const input = { configId: config.id, name, deviceId: chosenDevice || null, projectId: projectId || null, platformRobotId: projectId && platformRobotId ? platformRobotId : null };
+    const offline = kind === "offline";
+    const input = {
+      configId: config.id, name, deviceId: chosenDevice || null, projectId: !offline && projectId || null,
+      platformRobotId: !offline && projectId && platformRobotId ? platformRobotId : null, offlineEvaluationIds: offline ? offlineIds : null,
+    };
     const result = await ws.save(current => addRobot(current, input, Date.now()).workspace);
     setBusy(false);
     if (result.ok) onAdded(name.trim()); else setError(result.error);
@@ -88,13 +96,18 @@ export function AddRobotDialog({ config, onClose, onAdded }: { config: Configura
         </select>
         {checked && errors.device && <span className="cv-field__error" id={`${id}-device-error`}>{errors.device}</span>}
       </div>}
-      <label className="cv-field">Evals from
+      {kind === "offline" && <fieldset className="cv-field" disabled={busy}>
+        <legend>Offline evals</legend>
+        <OfflinePicker value={offlineIds} onChange={setOfflineIds} describedBy={checked && errors.offline ? `${id}-offline-error` : undefined} />
+        {checked && errors.offline && <span className="cv-field__error" id={`${id}-offline-error`}>{errors.offline}</span>}
+      </fieldset>}
+      {kind !== "offline" && <label className="cv-field">Evals from
         <select className="cv-input" value={projectId} disabled={busy} onChange={event => { setProjectId(event.target.value); setPlatformRobotId(""); }}>
           <option value="">None</option>
           {projectList.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
         </select>
-      </label>
-      {projectId && <label className="cv-field">Platform robot
+      </label>}
+      {kind !== "offline" && projectId && <label className="cv-field">Platform robot
         <select className="cv-input" value={platformRobotId} disabled={busy} onChange={event => setPlatformRobotId(event.target.value)}>
           <option value="">All robots</option>
           {robotList.map(robot => <option key={robot.id} value={robot.id}>{robot.name}</option>)}

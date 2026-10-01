@@ -70,6 +70,8 @@ test("robot status: a live robot's health, else whether an eval runs on it", () 
   assert.equal(robotStatus(sim, simReadings, null, [{ result: "running" }]), "running");
   assert.equal(robotStatus(sim, simReadings, null, [{ result: "passed" }]), "idle");
   assert.deepEqual([robotType(bench), robotType(sim)], ["Live device", "Simulator"]);
+  const offline = { ...sim, offlineEvaluationIds: ["oev_contract0001"] };
+  assert.deepEqual([robotType(offline), robotType({ ...offline, projectId: "prj_contract" })], ["Simulator · offline", "Simulator"]);
 });
 
 test("flag rules, and the robots that need attention", () => {

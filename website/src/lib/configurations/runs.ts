@@ -5,6 +5,8 @@
  * - the control plane, read through the existing proxy (`/api/platform/…`):
  *   a robot with `projectId` lists that project's evaluations, and the missions it
  *   ran outside an evaluation, as its evals (only `platformRobotId`'s when set);
+ *   a robot with `offlineEvaluationIds` lists those offline evaluations (episodes
+ *   recorded outside the hosted runner, imported unsigned: "Offline sim");
  *   a stored run may name `recordedEvaluationId` (its metrics and rollouts come
  *   from that evaluation) or `recordedEpisodeId`; a stored rollout may name
  *   `episodeId`.
@@ -13,7 +15,7 @@
  * Pure functions; the React hooks that fetch live in components/configurations/platform.tsx.
  */
 import { median } from "./format";
-import type { Episode, EvaluationRun, Mission } from "../platform/client";
+import type { Episode, EvaluationRun, Mission, OfflineEpisode, OfflineEvaluation, OfflineEvaluationDetail, OfflineOutcome } from "../platform/client";
 import type { ConvoyWorkspace, EvalRun, EvalSuite, Provenance, Robot, Rollout, RolloutOutcome, SliceResult } from "./types";
 
 /* ---------- platform records (the API's own field names) ---------- */
@@ -39,6 +41,10 @@ export const platformPaths = {
   projects: () => "projects",
   devices: () => "devices",
   robots: (projectId: string) => `robots?project_id=${encodeURIComponent(projectId)}`,
+  offlineEvaluations: () => "offline-evaluations",
+  offlineEvaluation: (id: string) => `offline-evaluations/${encodeURIComponent(id)}`,
+  /** An offline episode's recording; `/replay` and `/replay/frames/{i}` follow, as for hosted episodes. */
+  offlineEpisode: (evaluationId: string, episodeId: string) => `offline-evaluations/${encodeURIComponent(evaluationId)}/episodes/${encodeURIComponent(episodeId)}`,
 } as const;
 
 /* ---------- results ---------- */
@@ -83,9 +89,10 @@ export function missionResult(mission: Pick<Mission, "state">, episode: Pick<Epi
 
 /* ---------- evals ---------- */
 
-export type RunSource = "document" | "evaluation" | "mission";
+/** Where an eval comes from; "offline" is an imported offline evaluation (tagged "Offline sim"). */
+export type RunSource = "document" | "evaluation" | "mission" | "offline";
 export interface RunView {
-  /** Route id: a stored run id, an evaluation id (`eva_…`) or a mission id (`mis_…`). */
+  /** Route id: a stored run id, an evaluation id (`eva_…`), a mission id (`mis_…`) or an offline evaluation id (`oev_…`). */
   id: string;
   source: RunSource;
   number: number;
@@ -104,9 +111,12 @@ export interface RunView {
   run: EvalRun | null;
   evaluation: PlatformEvaluation | null;
   mission: PlatformMission | null;
+  offline?: OfflineEvaluation | null;
 }
 
 export const evalLabel = (number: number) => `Eval ${number}`;
+/** The tag every offline evaluation carries: uploaded by its owner, not run or signed by Convoy. */
+export const OFFLINE_TAG = "Offline sim";
 const time = (at: string | null | undefined) => (at ? Date.parse(at) : Number.NaN) || 0;
 const recordedAt = (at: string | null | undefined, source: string): Provenance => at ? { kind: "recorded", at, source } : { kind: "recorded", source };
 
@@ -140,6 +150,20 @@ export function missionView(mission: PlatformMission, episode: Episode | null | 
   };
 }
 
+/**
+ * An offline evaluation as an eval. It has no gate, so a finished import is "Completed"; its time is
+ * the median wall-clock episode time when the uploads report it, else the simulated one.
+ */
+export function offlineView(evaluation: OfflineEvaluation, number: number): RunView {
+  const summary = evaluation.summary;
+  return {
+    id: evaluation.id, source: "offline", number, label: evalLabel(number), at: evaluation.created_at,
+    episodes: summary.episodes, successes: summary.episodes ? summary.successes : null,
+    medianS: summary.median_wall_seconds ?? summary.median_sim_seconds ?? null, result: summary.episodes ? "completed" : "queued", progress: null,
+    provenance: recordedAt(evaluation.updated_at, `Offline evaluation ${evaluation.id}`), run: null, evaluation: null, mission: null, offline: evaluation,
+  };
+}
+
 /** Whether a platform record belongs to the robot: same project, and the robot's platform robot when it names one. */
 export function belongsTo(robot: Pick<Robot, "projectId" | "platformRobotId">, record: { project_id?: string; robot_id: string }): boolean {
   if (!robot.projectId) return false;
@@ -155,10 +179,11 @@ export function standaloneMissions(project: PlatformProject): PlatformMission[] 
 
 /**
  * Every eval on a robot, newest first: its stored runs and, with `projectId`, the
- * project's evaluations and standalone missions. Platform evals are numbered in the
- * order they were created, after the robot's highest stored run number.
+ * project's evaluations and standalone missions, and the offline evaluations it
+ * links (`offline`: the account's offline evaluations). Platform evals are numbered
+ * in the order they were created, after the robot's highest stored run number.
  */
-export function robotRuns(ws: ConvoyWorkspace, robot: Robot, project: PlatformProject | null | undefined): RunView[] {
+export function robotRuns(ws: ConvoyWorkspace, robot: Robot, project: PlatformProject | null | undefined, offline?: readonly OfflineEvaluation[] | null): RunView[] {
   const stored = ws.runs.filter(run => run.robotId === robot.id).map(storedRunView);
   const offset = stored.reduce((max, view) => Math.max(max, view.number), 0);
   const platform: Array<{ at: number; make: (number: number) => RunView }> = [];
@@ -169,6 +194,10 @@ export function robotRuns(ws: ConvoyWorkspace, robot: Robot, project: PlatformPr
     for (const mission of standaloneMissions(project)) {
       if (belongsTo(robot, mission)) platform.push({ at: time(mission.created_at ?? mission.updated_at), make: number => missionView(mission, mission.episode_id ? project.episodes[mission.episode_id] : null, number) });
     }
+  }
+  const linked = new Set(robot.offlineEvaluationIds ?? []);
+  for (const evaluation of offline ?? []) {
+    if (linked.has(evaluation.id)) platform.push({ at: time(evaluation.created_at), make: number => offlineView(evaluation, number) });
   }
   const numbered = platform.toSorted((a, b) => a.at - b.at).map((item, i) => item.make(offset + i + 1));
   const order = (view: RunView) => view.result === "running" ? 0 : view.result === "queued" ? 1 : 2;
@@ -192,6 +221,8 @@ export interface RolloutView {
   id: string;
   /** Replayable when set. */
   episodeId: string | null;
+  /** Proxy path of the episode's recording when it is not a hosted episode (`episodes/{id}`): an offline episode's. */
+  recording?: string;
   seed: number | null;
   /** Task (stored rollouts), else null. */
   task: string | null;
@@ -251,6 +282,30 @@ export function storedRunRollouts(ws: ConvoyWorkspace, run: EvalRun, suite: Eval
     rows.push({ id: run.recordedEpisodeId, episodeId: run.recordedEpisodeId, seed: null, task: null, steps: null, seconds: run.episodeTime?.medianS ?? null, result: scored ? (run.counts.successes ? "passed" : "failed") : "unknown" });
   }
   return rows;
+}
+
+const OFFLINE_OUTCOME: Record<OfflineOutcome, RolloutResult> = { success: "passed", failure: "failed", timeout: "timeout", "safety-stop": "safety-stop" };
+
+/** An offline evaluation's episodes, in upload order; each replays its uploaded frames. Time: wall clock, else simulated. */
+export function offlineRollouts(evaluation: Pick<OfflineEvaluationDetail, "id" | "episodes">): RolloutView[] {
+  return evaluation.episodes.map(episode => ({
+    id: episode.id, episodeId: episode.id, recording: platformPaths.offlineEpisode(evaluation.id, episode.id), seed: episode.seed, task: null,
+    steps: episode.steps, seconds: episode.wall_seconds ?? episode.sim_seconds, result: OFFLINE_OUTCOME[episode.outcome] ?? "unknown",
+  }));
+}
+
+export interface MetricView { name: string; mean: number; episodes: number }
+/** The mean of each numeric metric the episodes report, by name; `n` episodes reported it. Other values are not averaged. */
+export function offlineMetrics(episodes: readonly Pick<OfflineEpisode, "metrics">[]): MetricView[] {
+  const sums = new Map<string, { total: number; episodes: number }>();
+  for (const episode of episodes) {
+    for (const [name, value] of Object.entries(episode.metrics ?? {})) {
+      if (typeof value !== "number" || !Number.isFinite(value)) continue;
+      const entry = sums.get(name) ?? { total: 0, episodes: 0 };
+      sums.set(name, { total: entry.total + value, episodes: entry.episodes + 1 });
+    }
+  }
+  return [...sums.entries()].toSorted((a, b) => a[0].localeCompare(b[0])).map(([name, entry]) => ({ name, mean: entry.total / entry.episodes, episodes: entry.episodes }));
 }
 
 /** Median steps of the rollouts that report them. */

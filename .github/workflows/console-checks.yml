@@ -40,7 +40,9 @@ jobs:
       - name: Browser against real API, worker and physics
         shell: bash
         run: |
-          uv run --project ../integrations/simulation --frozen --extra managed python ../examples/manipulation/pipeline.py --serve --output ../integrations/simulation/runs/ci-console > /tmp/convoy-console-stack.log 2>&1 &
+          # No harness evaluation job: test-live-evaluations.mjs checks the requested cancellation
+          # before any job can acknowledge it, then starts its own job.
+          uv run --project ../integrations/simulation --frozen --extra managed python ../examples/manipulation/pipeline.py --serve --no-evaluation-job --output ../integrations/simulation/runs/ci-console > /tmp/convoy-console-stack.log 2>&1 &
           CONVOY_TEST_PID=$!
           trap 'kill -TERM "$CONVOY_TEST_PID" 2>/dev/null || true; wait "$CONVOY_TEST_PID" || true' EXIT
           python3 - <<'PY'

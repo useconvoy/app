@@ -15,6 +15,18 @@ export interface EvaluationReport { passed: boolean; successes: number; min_succ
 export interface EvaluationRun { id: string; project_id: string; suite_id: string; release_id: string; robot_id: string; state: string; detail: string; updated_at: string; cases: EvaluationCase[]; report: EvaluationReport | null }
 export interface Qualification { release_id: string; gate: { application_id: string; suite_id: string; generation: number } | null; promotion: { id: string; release_id: string; evaluation_id: string; suite_id: string; created_at: string } | null; deployment_allowed: boolean }
 export interface EvaluationComparison { candidate: EvaluationRun; baseline: EvaluationRun; success_count_delta: number; scope: string }
+/** An owner's offline evaluation: episodes recorded outside the hosted runner, imported unsigned (`source: "offline"`). */
+export interface OfflineEvaluation {
+  id: string; name: string; task: string; config_label: string; policy_label: string;
+  summary: { episodes: number; successes: number; success_rate: number | null; median_steps: number | null; median_wall_seconds: number | null; median_sim_seconds: number | null; stored_bytes: number };
+  source: "offline"; signed: false; scope: string; created_at: string; updated_at: string;
+}
+export type OfflineOutcome = "success" | "failure" | "timeout" | "safety-stop";
+export interface OfflineEpisode {
+  id: string; evaluation_id: string; seed: number; outcome: OfflineOutcome; steps: number; images: number; action_dim: number;
+  metrics: Record<string, number | boolean | string | null>; wall_seconds: number | null; sim_seconds: number | null; stored_bytes: number; created_at: string;
+}
+export interface OfflineEvaluationDetail extends OfflineEvaluation { episodes: OfflineEpisode[] }
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }

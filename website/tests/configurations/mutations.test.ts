@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildRevision, EMPTY_INPUT } from "../../src/lib/configurations/create";
-import { ACTIVITY_LIMIT, addRobot, createConfiguration, deleteConfiguration, emptyWorkspace, removeRobot, slugify, uniqueId } from "../../src/lib/configurations/mutations";
+import { ACTIVITY_LIMIT, addRobot, createConfiguration, deleteConfiguration, emptyWorkspace, linkOfflineEvaluations, removeRobot, slugify, uniqueId } from "../../src/lib/configurations/mutations";
 import { createSampleWorkspace } from "../../src/lib/configurations/sample";
 import { CONFIGURED_DEVICE } from "../../src/lib/configurations/types";
 import { validateWorkspace } from "../../src/lib/configurations/validate";
@@ -49,6 +49,23 @@ test("a robot is added for testing with its live device and its evals' project",
   valid(workspaceDevice.workspace);
   assert.throws(() => addRobot(start, { configId: "missing", name: "X" }, LATER), /Unknown configuration/);
   assert.throws(() => addRobot(start, { configId: "arm-a", name: "  " }, LATER), /needs a name/);
+});
+
+test("a simulator can show offline evaluations; its links can change later", () => {
+  const { workspace: start } = createConfiguration(emptyWorkspace(NOW), { name: "Arm A", revision: revision() }, NOW);
+  const added = addRobot(start, { configId: "arm-a", name: "Offline", offlineEvaluationIds: ["oev_contract0001", "oev_contract0001"] }, LATER);
+  valid(added.workspace);
+  assert.deepEqual([added.robot.kind, added.robot.offlineEvaluationIds, added.robot.projectId], ["simulator", ["oev_contract0001"], undefined]);
+  assert.equal(addRobot(start, { configId: "arm-a", name: "None", offlineEvaluationIds: [] }, LATER).robot.offlineEvaluationIds, undefined);
+  const relinked = linkOfflineEvaluations(added.workspace, added.robot.id, ["oev_contract0001", "oev_contract0002"], LATER + 1000);
+  valid(relinked);
+  assert.deepEqual(relinked.robots[0].offlineEvaluationIds, ["oev_contract0001", "oev_contract0002"]);
+  assert.equal(relinked.configurations[0].updatedAt, new Date(LATER + 1000).toISOString());
+  const unlinked = linkOfflineEvaluations(relinked, added.robot.id, [], LATER + 2000);
+  valid(unlinked);
+  assert.equal("offlineEvaluationIds" in unlinked.robots[0], false, "no links, no field");
+  assert.equal(added.workspace.robots[0].offlineEvaluationIds?.length, 1, "the input is not changed");
+  assert.throws(() => linkOfflineEvaluations(start, "missing", [], LATER), /Unknown robot/);
 });
 
 test("removing a robot removes what is stored about it; deleting a configuration removes its robots and runs", () => {

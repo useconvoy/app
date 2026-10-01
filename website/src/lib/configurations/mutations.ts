@@ -97,6 +97,8 @@ export interface NewRobot {
   /** A control-plane project whose evaluations and episodes are this robot's evals. */
   projectId?: string | null;
   platformRobotId?: string | null;
+  /** Offline evaluations (`oev_…`) shown as this robot's evals, tagged "Offline sim". */
+  offlineEvaluationIds?: readonly string[] | null;
 }
 
 /** Adds a test robot to a configuration's revision under test (else its newest revision). */
@@ -112,6 +114,7 @@ export function addRobot(ws: ConvoyWorkspace, input: NewRobot, now: number | Dat
     rev: config.candidateRev ?? config.productionRev ?? config.revisions[config.revisions.length - 1].rev,
     ...(input.deviceId ? { deviceId: input.deviceId } : {}),
     ...(input.projectId ? { projectId: input.projectId, ...(input.platformRobotId ? { platformRobotId: input.platformRobotId } : {}) } : {}),
+    ...(input.offlineEvaluationIds?.length ? { offlineEvaluationIds: [...new Set(input.offlineEvaluationIds)] } : {}),
     kind: input.deviceId ? "bench" : "simulator", health: "not-reported", healthReason: null, flags: [], registeredAt: at,
   };
   const workspace = withActivity({
@@ -120,6 +123,20 @@ export function addRobot(ws: ConvoyWorkspace, input: NewRobot, now: number | Dat
     configurations: ws.configurations.map(item => item.id === config.id ? touch(item, now) : item),
   }, { at, kind: "robot-added", subject: { type: "robot", id: robot.id }, configId: config.id, message: `${robot.name} added to ${config.name}` }, now);
   return { workspace, robot };
+}
+
+/** Sets the offline evaluations a robot shows as evals; an empty list removes the link. */
+export function linkOfflineEvaluations(ws: ConvoyWorkspace, robotId: string, ids: readonly string[], now: number | Date): ConvoyWorkspace {
+  const robot = ws.robots.find(item => item.id === robotId);
+  if (!robot) throw new Error(`Unknown robot "${robotId}".`);
+  const next: Robot = { ...robot, offlineEvaluationIds: [...new Set(ids)] };
+  if (!next.offlineEvaluationIds?.length) delete next.offlineEvaluationIds;
+  return {
+    ...ws,
+    meta: { ...ws.meta, updatedAt: iso(now) },
+    robots: ws.robots.map(item => item.id === robotId ? next : item),
+    configurations: ws.configurations.map(item => item.id === robot.configId ? touch(item, now) : item),
+  };
 }
 
 /** Removes a robot with its stored runs, rollouts, traces and logs. */

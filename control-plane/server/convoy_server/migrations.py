@@ -33,6 +33,8 @@ log = logging.getLogger("convoy.migrations")
 # database that predates it gains the table at startup through the same `add_tables` path. The version
 # is deliberately not bumped: no earlier code reads or writes the table, and a release rollback keeps
 # the data directory, so a bump would make the previous server refuse the database it must start on.
+# The ADDITIVE tables `offline_evaluations` and `offline_episodes` (owner-scoped offline simulation
+# imports) follow the same rule under schema 5.
 SCHEMA_VERSION = 5
 
 

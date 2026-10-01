@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createSampleWorkspace } from "../../src/lib/configurations/sample";
-import { demoDocument, h1, mockApi, PLATFORM_ROBOT, PROJECT, tile } from "./support/configurations";
+import {
+  demoDocument, h1, mockApi, noOverflow, OFFLINE_EPISODES, OFFLINE_EVAL, OFFLINE_LABELS, OFFLINE_OTHER, offlineDocument, PLATFORM_ROBOT, PROJECT, tile,
+} from "./support/configurations";
 
 // One page at a time: configurations, new configuration, the config dashboard, robots and evals.
 
@@ -302,5 +304,98 @@ test.describe("eval", () => {
     await expect(rows(page, "Slices")).toHaveCount(6);
     await expect(rows(page, "Rollouts")).toHaveCount(1);
     await expect(page.getByRole("button", { name: /^Replay epi_contract01/ })).toBeVisible();
+  });
+});
+
+test.describe("offline evals", () => {
+  const OFFLINE_ROBOT = `${VLA}/robots/offline-runner`;
+
+  test("a robot's offline evaluations are its evals, each tagged Offline sim", async ({ page }) => {
+    const { platform } = await mockApi(page, { document: offlineDocument() });
+    await page.goto(OFFLINE_ROBOT);
+    await expect(page.locator(".cv-head .cv-badge")).toHaveText(["Idle", "Simulator · offline"]);
+    await expect(rows(page, "Evals")).toHaveCount(2);
+    await expect(rows(page, "Evals").locator("th")).toHaveText(["Eval 2Offline sim", "Eval 1Offline sim"]);
+    await expect(rows(page, "Evals").locator(".cv-badge")).toHaveText(["Completed", "Completed"]);
+    await expect(tile(page, "Episodes")).toContainText("3");
+    expect(platform.paths).toContain("offline-evaluations");
+    await page.getByRole("tab", { name: "Details" }).click();
+    await expect(page.locator(".cv-facts")).toContainText("2 linked");
+  });
+
+  test("an offline eval: metrics, rollouts, and a replay of the uploaded frames with every action value labelled", async ({ page }) => {
+    const { platform } = await mockApi(page, { document: offlineDocument() });
+    await page.goto(`${OFFLINE_ROBOT}/evals/${OFFLINE_EVAL}`);
+    await expect(h1(page)).toHaveText("Eval 1");
+    await expect(page.locator(".cv-head .cv-tag")).toHaveText("Offline sim");
+    await expect(page.locator(".cv-head .cv-badge")).toHaveText("Completed");
+    await expect(tile(page, "Success rate")).toContainText("50%");
+    await expect(tile(page, "Success rate")).toContainText("1 of 2");
+    await expect(tile(page, "Median time")).toContainText("Wall clock");
+    await expect(tile(page, "Median steps")).toContainText("16");
+    await expect(rows(page, "Metrics")).toHaveText(["reward_sum32"]);
+    await expect(rows(page, "Rollouts")).toHaveCount(2);
+    await expect(rows(page, "Rollouts").locator(".cv-badge")).toHaveText(["Passed", "Timeout"]);
+    await page.getByRole("tab", { name: "Details" }).click();
+    await expect(page.locator(".cv-facts")).toContainText("Offline import · unsigned");
+    await expect(page.locator(".cv-facts")).toContainText("Pills into bottle");
+    await page.getByRole("tab", { name: "Overview" }).click();
+    await page.getByRole("button", { name: `Replay ${OFFLINE_EPISODES[0]}, seed 0` }).click();
+    const sheet = page.getByRole("dialog", { name: "Seed 0" });
+    await expect(sheet.locator(".cv-sheet__meta .cv-tag")).toHaveText("Offline sim");
+    await expect(sheet.getByRole("img", { name: "Recorded robot camera at action 0 of 12" })).toBeVisible();
+    await expect(sheet.locator(".cv-player__action small")).toHaveText(OFFLINE_LABELS);
+    await sheet.getByRole("button", { name: "Next step" }).click();
+    const jpeg = sheet.getByRole("img", { name: "Recorded robot camera at action 1 of 12" });
+    await expect(jpeg).toHaveAttribute("src", /^data:image\/jpeg;base64,/);
+    await expect.poll(() => jpeg.evaluate(node => (node as HTMLImageElement).naturalWidth)).toBe(16);
+    await expect(sheet.locator(".cv-player__action span").first()).toHaveText("l_x-0.65");
+    await expect(sheet.locator(".cv-player__action span").last()).toHaveText("r_grip0.65");
+    expect(platform.paths).toEqual(expect.arrayContaining([
+      `offline-evaluations/${OFFLINE_EVAL}`, `offline-evaluations/${OFFLINE_EVAL}/episodes/${OFFLINE_EPISODES[0]}/replay`,
+      `offline-evaluations/${OFFLINE_EVAL}/episodes/${OFFLINE_EPISODES[0]}/replay/frames/1`,
+    ]));
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(sheet.locator(".cv-player__action small")).toHaveCount(14);
+    await noOverflow(page);
+  });
+
+  test("Add robot from Simulator · offline links the chosen offline evals; Details relinks them", async ({ page }) => {
+    const { documents } = await mockApi(page, { document: demoDocument() });
+    await page.goto("/app/configurations/arm-cloud");
+    await page.getByRole("button", { name: "Add robot" }).click();
+    const dialog = page.getByRole("dialog", { name: "Add robot" });
+    await dialog.getByLabel("Name").fill("Offline 01");
+    await dialog.getByText("Simulator · offline", { exact: true }).click();
+    await expect(dialog.getByLabel("Evals from")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Add robot" }).click();
+    await expect(dialog.getByText("Choose an offline eval.")).toBeVisible();
+    await dialog.getByRole("checkbox", { name: /Bimanual · nominal/ }).check();
+    await dialog.getByRole("button", { name: "Add robot" }).click();
+    await expect(dialog).toBeHidden();
+    const saved = documents.writes.at(-1)!.body.robots.find(robot => robot.name === "Offline 01")!;
+    expect(saved).toMatchObject({ kind: "simulator", role: "test", offlineEvaluationIds: [OFFLINE_EVAL] });
+    expect(saved.projectId).toBeUndefined();
+    await expect(rows(page, "Robots").filter({ hasText: "Offline 01" })).toContainText("Simulator · offline");
+
+    await page.goto(`/app/configurations/arm-cloud/robots/${saved.id}?tab=details`);
+    await expect(page.locator(".cv-facts")).toContainText("1 linked");
+    await page.locator(".cv-facts").getByRole("button", { name: "Edit" }).click();
+    const links = page.getByRole("dialog", { name: "Offline evals" });
+    await links.getByRole("checkbox", { name: /Bimanual · outage/ }).check();
+    await links.getByRole("button", { name: "Save" }).click();
+    await expect(links).toBeHidden();
+    expect(documents.writes.at(-1)!.body.robots.find(robot => robot.id === saved.id)!.offlineEvaluationIds).toEqual([OFFLINE_EVAL, OFFLINE_OTHER]);
+    await expect(page.locator(".cv-facts")).toContainText("2 linked");
+  });
+
+  test("an offline evaluation the robot does not link is not its eval", async ({ page }) => {
+    const document = offlineDocument();
+    document.robots = document.robots.map(robot => robot.name === "Offline runner" ? { ...robot, offlineEvaluationIds: [OFFLINE_EVAL] } : robot);
+    await mockApi(page, { document });
+    await page.goto(`${OFFLINE_ROBOT}/evals/${OFFLINE_OTHER}`);
+    await expect(page.getByText("Eval not found.")).toBeVisible();
+    await page.goto(`${RUNNER}/evals/${OFFLINE_EVAL}`);
+    await expect(page.getByText("Eval not found.")).toBeVisible();
   });
 });

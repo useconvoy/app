@@ -134,7 +134,7 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
         planner_command: tuple[str, ...] | None = None, planner_evidence: str | None = None,
         planner_backend_kind: str | None = None, external_planner_url: str | None = None,
         planner_ca_file: Path | None = None, planner_probe_token: str | None = None,
-        execution_signing_keys_file: Path | None = None) -> dict:
+        execution_signing_keys_file: Path | None = None, evaluation_job: bool = True) -> dict:
     if not 1 <= repeat <= 3:
         raise ValueError("repeat must be between one and three")
     if manifest is None:
@@ -315,7 +315,11 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
             assert get(f"/api/v1/missions?project_id={project['id']}") == [], "deployment started a mission"
 
             if serve:
-                start("evaluations", "convoy_server.evaluation_worker")
+                # A running job settles a requested cancellation on its next 0.2 s poll when no case
+                # mission is active. A check that must observe that state first passes
+                # evaluation_job=False and starts its own job; connection.json records which applies.
+                if evaluation_job:
+                    start("evaluations", "convoy_server.evaluation_worker")
                 connection = output / "connection.json"
                 descriptor = os.open(connection, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
                 with os.fdopen(descriptor, "w") as stream:
@@ -325,7 +329,8 @@ def run(output: Path, *, faults: bool = False, serve: bool = False, postgres: bo
                                "harness_pid": os.getpid(), "planner_url": planner_url,
                                "planner_ownership": "external" if external else "harness" if paired else None,
                                "planner_evidence": planner_evidence,
-                               "planner_backend_kind": planner_backend_kind}, stream)
+                               "planner_backend_kind": planner_backend_kind,
+                               "evaluation_job": evaluation_job}, stream)
                 print(f"Ready and idle. Local connection settings: {connection}", flush=True)
                 stopped = threading.Event()
                 signal.signal(signal.SIGTERM, lambda *_: stopped.set())
@@ -476,15 +481,20 @@ def main():
     parser.add_argument("--serve", action="store_true", help="leave a seeded, ready, idle stack for console use")
     parser.add_argument("--postgres", action="store_true",
                         help="create a disposable database using CONVOY_TEST_POSTGRES_URL; drop it on exit")
+    parser.add_argument("--no-evaluation-job", action="store_true",
+                        help="with --serve: do not start the evaluation job; the caller starts and stops its own")
     args = parser.parse_args()
     if args.serve and args.faults:
         parser.error("choose the acceptance run (--faults) or an interactive stack (--serve)")
+    if args.no_evaluation_job and not args.serve:
+        parser.error("--no-evaluation-job applies only to an interactive stack (--serve)")
     def interrupted(*_):
         raise KeyboardInterrupt("pipeline interrupted")
 
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
-        result = run(args.output.resolve(), faults=args.faults, serve=args.serve, postgres=args.postgres)
+        result = run(args.output.resolve(), faults=args.faults, serve=args.serve, postgres=args.postgres,
+                     evaluation_job=not args.no_evaluation_job)
     finally:
         signal.signal(signal.SIGTERM, previous)
     print(json.dumps({"status": result["status"], "cases": [case["case"] for case in result["cases"]]}))

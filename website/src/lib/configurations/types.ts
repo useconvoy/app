@@ -338,6 +338,11 @@ export interface Robot {
   projectId?: string | null;
   /** Control-plane robot (`rob_…`) in `projectId`; when set, only its evaluations and missions count. */
   platformRobotId?: string | null;
+  /**
+   * The account's offline evaluations (`oev_…`) this robot shows as evals: episodes recorded
+   * outside the hosted runner and imported unsigned, tagged "Offline sim".
+   */
+  offlineEvaluationIds?: string[];
   kind: RobotKind;
   description?: string;
   /** Declared or sample health; a bound robot's health is derived from live data. */

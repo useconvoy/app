@@ -296,6 +296,134 @@ test("document errors get accurate curated messages and keep Retry-After; other 
   } finally { globalThis.fetch = fetch; }
 });
 
+const oev = "oev_abcdefgh2345";
+const oep = "oep_abcdefgh2345";
+const episodeLimit = 16 * 1024 * 1024;
+
+test("offline evaluations: reads, creation, episode uploads and deletion, with exact ids only", () => {
+  const allowed = (path: string, method: string, search = "") => allowedPlatformPath(path.split("/"), method, new URLSearchParams(search));
+  for (const path of ["offline-evaluations", `offline-evaluations/${oev}`, `offline-evaluations/${oev}/episodes/${oep}/replay`, `offline-evaluations/${oev}/episodes/${oep}/replay/frames/0`, `offline-evaluations/${oev}/episodes/${oep}/replay/frames/2048`]) {
+    assert.equal(allowed(path, "GET"), `/api/v1/${path}`);
+    assert.equal(allowed(path, "GET", "owner=usr_other"), null);
+  }
+  assert.equal(allowed("offline-evaluations", "POST"), "/api/v1/offline-evaluations");
+  assert.equal(allowed(`offline-evaluations/${oev}/episodes`, "POST"), `/api/v1/offline-evaluations/${oev}/episodes`);
+  for (const path of [`offline-evaluations/${oev}`, `offline-evaluations/${oev}/episodes/${oep}`]) assert.equal(allowed(path, "DELETE"), `/api/v1/${path}`);
+  for (const [path, methods] of [
+    ["offline-evaluations", ["PUT", "DELETE", "PATCH"]],
+    [`offline-evaluations/${oev}`, ["POST", "PUT", "PATCH"]],
+    [`offline-evaluations/${oev}/episodes`, ["GET", "PUT", "DELETE"]],
+    [`offline-evaluations/${oev}/episodes/${oep}`, ["GET", "POST", "PUT"]],
+    [`offline-evaluations/${oev}/episodes/${oep}/replay`, ["POST", "DELETE"]],
+    ["offline-evaluations/eva_abcdefgh2345", ["GET", "DELETE"]],
+    ["offline-evaluations/oev_ABCDEFGH2345", ["GET", "DELETE"]],
+    ["offline-evaluations/oev_short", ["GET", "DELETE"]],
+    [`offline-evaluations/${oev}/episodes/epi_abcdefgh2345/replay`, ["GET"]],
+    [`offline-evaluations/${oev}/episodes/${oep}/replay/frames/10000`, ["GET"]],
+    [`offline-evaluations/${oev}/episodes/${oep}/replay/frames/..`, ["GET"]],
+    [`offline-evaluations/${oev}/extra`, ["GET", "POST", "DELETE"]],
+  ] as const) {
+    for (const method of methods) assert.equal(allowed(path, method), null, `${method} ${path}`);
+  }
+});
+
+test("episode uploads pass through as bytes up to 16 MiB; other offline writes keep the ordinary bound", async () => {
+  const fetch = globalThis.fetch;
+  process.env.CONVOY_API_URL = "http://127.0.0.1:8080";
+  const forwarded: { url: string; method?: string; body?: unknown; headers: Headers }[] = [];
+  globalThis.fetch = async (input, init) => {
+    forwarded.push({ url: String(input), method: init?.method, body: init?.body, headers: new Headers(init?.headers) });
+    if (init?.method === "DELETE") return new Response(null, { status: 204 });
+    return Response.json({ id: oep }, { status: 201 });
+  };
+  const path = ["offline-evaluations", oev, "episodes"];
+  const exact = new Uint8Array(episodeLimit).fill(0x20);
+  exact.set(new TextEncoder().encode('{"seed":'));
+  try {
+    for (const body of [exact, new TextEncoder().encode('{"frames": [], "seed": 1 ')]) {
+      const sent = await proxyPlatform(request(path.join("/"), { method: "POST", body, headers: { "Idempotency-Key": "episode-1", Authorization: "Bearer attacker" } }), path);
+      assert.equal(sent.status, 201);
+      assert.deepEqual(await sent.json(), { id: oep });
+    }
+    const removed = await proxyPlatform(request(`offline-evaluations/${oev}`, { method: "DELETE", headers: { "Idempotency-Key": "delete-1" } }), ["offline-evaluations", oev]);
+    assert.equal(removed.status, 204);
+  } finally { globalThis.fetch = fetch; }
+  assert.deepEqual(forwarded.map(call => [call.method, call.url]), [
+    ["POST", `http://127.0.0.1:8080/api/v1/offline-evaluations/${oev}/episodes`],
+    ["POST", `http://127.0.0.1:8080/api/v1/offline-evaluations/${oev}/episodes`],
+    ["DELETE", `http://127.0.0.1:8080/api/v1/offline-evaluations/${oev}`],
+  ]);
+  assert.ok(forwarded[0].body instanceof Uint8Array && forwarded[0].body.byteLength === episodeLimit);
+  assert.equal(Buffer.from(forwarded[1].body as Uint8Array).toString(), '{"frames": [], "seed": 1 '); // unparsed: the API validates
+  for (const call of forwarded) {
+    assert.equal(call.headers.get("cookie"), session);
+    assert.equal(call.headers.get("authorization"), null);
+    assert.equal(call.headers.get("x-convoy-client"), "web");
+  }
+  assert.equal(forwarded[0].headers.get("idempotency-key"), "episode-1");
+  assert.equal(forwarded[2].headers.get("idempotency-key"), "delete-1");
+  assert.equal(forwarded[2].body, undefined);
+
+  globalThis.fetch = async () => { throw new Error("must not reach upstream"); };
+  try {
+    const tooLarge = await proxyPlatform(request(path.join("/"), { method: "POST", body: new Uint8Array(episodeLimit + 1) }), path);
+    assert.equal(tooLarge.status, 413);
+    assert.deepEqual(await tooLarge.json(), { error: "The episode is larger than the 16 MiB upload limit." });
+    assert.equal((await proxyPlatform(request(path.join("/"), { method: "POST", body: "{}", headers: { "Content-Length": String(episodeLimit + 1) } }), path)).status, 413);
+    // Creation keeps the ordinary 256 KiB bound and must be JSON.
+    assert.equal((await proxyPlatform(request("offline-evaluations", { method: "POST", body: "x".repeat(256 * 1024 + 1) }), ["offline-evaluations"])).status, 413);
+    assert.equal((await proxyPlatform(request("offline-evaluations", { method: "POST", body: "{" }), ["offline-evaluations"])).status, 422);
+    for (const headers of [{ Origin: "https://other.test" }, { "X-Convoy-Client": "" }] as Record<string, string>[]) {
+      assert.equal((await proxyPlatform(request(path.join("/"), { method: "POST", body: "{}", headers }), path)).status, 403);
+    }
+    assert.equal((await proxyPlatform(request(path.join("/"), { method: "POST", body: "{}", headers: { Cookie: "unrelated=private" } }), path)).status, 401);
+    assert.equal((await proxyPlatform(request(path.join("/"), { method: "POST", body: "{}", headers: { "Content-Type": "text/plain" } }), path)).status, 422);
+  } finally { globalThis.fetch = fetch; }
+});
+
+test("offline errors: curated messages, the storage limit, conflict reasons and the upload's own validation reason", async () => {
+  const fetch = globalThis.fetch;
+  let status = 422;
+  let error = "invalid request: frames.37.action: Value error, expected 14 values, the width of frame 1's action";
+  let headers: Record<string, string> = {};
+  globalThis.fetch = async () => Response.json({ error, detail: [{ loc: ["body", "frames", 37, "action"], msg: "x", type: "value_error" }] }, { status, headers });
+  const path = ["offline-evaluations", oev, "episodes"];
+  const write = async () => {
+    const response = await proxyPlatform(request(path.join("/"), { method: "POST", body: "{}" }), path);
+    return { status: response.status, body: await response.json() as unknown, retry: response.headers.get("retry-after") };
+  };
+  try {
+    assert.deepEqual(await write(), { status: 422, body: { error }, retry: null });
+    error = `invalid request: \u0000${"x".repeat(400)}`;
+    assert.deepEqual((await write()).body, { error: `invalid request:  ${"x".repeat(282)}` });
+    status = 507;
+    error = "Recording storage limit reached; delete offline evaluations to free space";
+    assert.deepEqual(await write(), { status: 507, body: { error: "Offline evaluation storage is full. Delete offline evaluations to free space." }, retry: null });
+    status = 409;
+    for (const [text, expected] of [
+      ["offline evaluation limit reached (100 per account); delete one first", "Your account has reached its offline evaluation limit. Delete one first."],
+      ["offline episode limit reached (200 per evaluation)", "This offline evaluation has reached its episode limit."],
+      ["Idempotency-Key was already used with a different payload", "This upload was already submitted with different content."],
+      ["private detail", "This upload conflicts with stored offline evaluations."],
+    ]) {
+      error = text;
+      assert.deepEqual((await write()).body, { error: expected });
+    }
+    status = 429;
+    headers = { "Retry-After": "300" };
+    assert.deepEqual(await write(), { status: 429, body: { error: "Too many offline evaluation writes. Wait a moment before trying again." }, retry: "300" });
+    headers = {};
+    status = 413;
+    assert.deepEqual((await write()).body, { error: "The episode is larger than the 16 MiB upload limit." });
+    // Reads keep curated messages; a 422 there is never the API's text.
+    status = 404;
+    const missing = await proxyPlatform(request(`offline-evaluations/${oev}`), ["offline-evaluations", oev]);
+    assert.deepEqual([missing.status, await missing.json()], [404, { error: "This offline evaluation does not exist." }]);
+    status = 507;
+    assert.equal((await proxyPlatform(request("projects", { method: "POST", body: "{}" }), ["projects"])).status, 503);
+  } finally { globalThis.fetch = fetch; }
+});
+
  test("private HTTP is explicit and restricted to the existing Compose service", () => {
   const previous = process.env.CONVOY_API_INTERNAL_HTTP;
   try {

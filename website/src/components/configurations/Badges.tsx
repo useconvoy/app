@@ -29,6 +29,11 @@ export function ConfigStatusBadge({ status }: { status: ConfigStatus }) {
   return <Badge tone={CONFIG_STATUS_TONE[status]}>{CONFIG_STATUS_LABEL[status]}</Badge>;
 }
 
+/** A small outlined label beside a name, e.g. "Offline sim" on an imported eval. */
+export function Tag({ children, title }: { children: ReactNode; title?: string }) {
+  return <span className="cv-tag" title={title}>{children}</span>;
+}
+
 /** A missing value: an en dash, with the reason for screen readers and on hover. */
 export function Missing({ label = "Not reported" }: { label?: string }) {
   return <span className="cv-missing" title={label}><span aria-hidden="true">–</span><span className="cv-sr">{label}</span></span>;

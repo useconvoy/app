@@ -12,8 +12,15 @@ import { mockDocuments, type DocumentServer } from "./documents";
  * and a 1 × 1 PNG frame. No real account data.
  */
 export const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+/** A 16 × 12 baseline JPEG (Pillow, quality 80): offline frames may be JPEG. */
+export const JPEG = "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAMABADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDzTS/CnT93+ldfpXhTp+7/AErutL0624+Suw0vTrbj5KMbndTU4+GOIqvun//Z";
 export const PROJECT = "prj_contract01";
 export const PLATFORM_ROBOT = "rob_contract01";
+/** Contract offline evaluations: the first with two episodes, the second with one. */
+export const OFFLINE_EVAL = "oev_contract0001";
+export const OFFLINE_OTHER = "oev_contract0002";
+export const OFFLINE_EPISODES = ["oep_contract0001", "oep_contract0002"];
+export const OFFLINE_LABELS = ["l_x", "l_y", "l_z", "l_rx", "l_ry", "l_rz", "l_grip", "r_x", "r_y", "r_z", "r_rx", "r_ry", "r_rz", "r_grip"];
 
 export function snapshot(options: { online?: boolean } = {}): PortalSnapshot {
   const online = options.online ?? true;
@@ -59,6 +66,29 @@ export const MISSIONS = [
   mission("mis_contract03", "epi_contract03", 101), mission("mis_contract04", "epi_contract04", 95),
 ];
 
+/** An offline evaluation as `GET offline-evaluations[/{id}]` returns it (contract values). */
+export function offlineEvaluation(id: string, minutes: number, episodes: Array<{ id: string; seed: number; outcome: string; steps: number; wall: number | null; metrics: Record<string, unknown> }>) {
+  const successes = episodes.filter(episode => episode.outcome === "success").length;
+  const sorted = (values: number[]) => values.toSorted((a, b) => a - b);
+  const middle = (values: number[]) => values.length ? sorted(values)[Math.floor(values.length / 2)] : null;
+  return {
+    id, name: id === OFFLINE_EVAL ? "Bimanual · nominal" : "Bimanual · outage", task: "Pills into bottle", config_label: "Edge planner r1", policy_label: "Scripted v2",
+    summary: { episodes: episodes.length, successes, success_rate: episodes.length ? successes / episodes.length : null, median_steps: middle(episodes.map(e => e.steps)),
+      median_wall_seconds: middle(episodes.flatMap(e => e.wall === null ? [] : [e.wall])), median_sim_seconds: null, stored_bytes: 40960 },
+    source: "offline", signed: false, scope: "Offline simulation import: recorded and uploaded by its owner; not run, verified or signed by Convoy",
+    created_at: minutesAgo(minutes), updated_at: minutesAgo(minutes - 1),
+    episodes: episodes.map(episode => ({ id: episode.id, evaluation_id: id, seed: episode.seed, outcome: episode.outcome, steps: episode.steps, images: episode.steps + 1, action_dim: 14,
+      metrics: episode.metrics, wall_seconds: episode.wall, sim_seconds: null, stored_bytes: 20480, created_at: minutesAgo(minutes) })),
+  };
+}
+export const OFFLINE = [
+  offlineEvaluation(OFFLINE_EVAL, 50, [
+    { id: OFFLINE_EPISODES[0], seed: 0, outcome: "success", steps: 12, wall: 3.5, metrics: { reward_sum: 4.5, grasped: true } },
+    { id: OFFLINE_EPISODES[1], seed: 1, outcome: "timeout", steps: 20, wall: 6.5, metrics: { reward_sum: 1.5, note: "dropped" } },
+  ]),
+  offlineEvaluation(OFFLINE_OTHER, 40, [{ id: "oep_contract0003", seed: 0, outcome: "failure", steps: 8, wall: null, metrics: {} }]),
+];
+
 export interface PlatformLog { frames: number[]; paths: string[] }
 export interface MockOptions { signedIn?: boolean; document?: unknown | null; revision?: number; online?: boolean; device?: "online" | "unavailable"; missingRecording?: string }
 
@@ -98,6 +128,22 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<{ 
       return route.fulfill(json({ index, image_png_base64: PNG, action: index ? [0.12, -0.4, 0.05, 1] : null, reward: index ? 0.25 : null, success: index ? false : null, policy_ms: index ? 512.3 : null }));
     }
     if (/^episodes\/[^/]+$/.test(path)) return route.fulfill(json({ id: id(url), mission_id: "mis_contract", state: "completed", detail: "", release_digest: "contract-release-digest", summary: { final_success: true, steps: 54 } }));
+    if (path === "offline-evaluations") return route.fulfill(json({ items: OFFLINE.map(item => Object.fromEntries(Object.entries(item).filter(([key]) => key !== "episodes"))) }));
+    if (/^offline-evaluations\/[^/]+$/.test(path)) { const found = OFFLINE.find(item => item.id === id(url)); return found ? route.fulfill(json(found)) : route.fulfill({ status: 404, json: { error: "This offline evaluation does not exist." } }); }
+    const offline = /^offline-evaluations\/([^/]+)\/episodes\/([^/]+)\/replay(?:\/frames\/(\d+))?$/.exec(path);
+    if (offline) {
+      const episode = OFFLINE.find(item => item.id === offline[1])?.episodes.find(item => item.id === offline[2]);
+      if (!episode) return route.fulfill({ status: 404, json: { error: "This offline evaluation does not exist." } });
+      if (offline[3] === undefined) {
+        return route.fulfill(json({ episode_id: episode.id, mission_id: null, release_digest: null, steps: episode.steps, skill: null, planner_ms: null, wall_seconds: episode.wall_seconds, sim_seconds: null,
+          source: "Offline simulation import · unsigned · frames and actions as uploaded", evaluation_id: offline[1], action_labels: OFFLINE_LABELS, action_dim: 14, images: episode.steps + 1 }));
+      }
+      const index = Number(offline[3]);
+      platform.frames.push(index);
+      // JPEG on odd steps and PNG on even ones: the player shows both as uploaded.
+      return route.fulfill(json({ index, image_png_base64: index % 2 ? JPEG : PNG, image_media_type: index % 2 ? "image/jpeg" : "image/png", image_index: index,
+        action: index ? OFFLINE_LABELS.map((_, axis) => Math.round((axis / 10 - 0.65) * 100) / 100) : null, reward: index ? 0.5 : null, success: index ? index === episode.steps : null, policy_ms: index ? 12.5 : null }));
+    }
     return route.fulfill({ status: 404, json: { error: "This console action is unavailable." } });
   });
   const documents = await mockDocuments(page, { document: options.document ?? null, revision: options.revision });
@@ -124,6 +170,13 @@ export function demoDocument(): ConvoyWorkspace {
   ws = addRobot(ws, { configId: cloud, name: "Bench 02", deviceId: CONFIGURED_DEVICE }, at).workspace;
   ws = addRobot(ws, { configId: vla, name: "Sim runner", projectId: PROJECT, platformRobotId: PLATFORM_ROBOT }, at).workspace;
   return ws;
+}
+
+/** The demo workspace plus a simulator whose evals are the contract offline evaluations. */
+export function offlineDocument(): ConvoyWorkspace {
+  const ws = demoDocument();
+  const config = ws.configurations.find(item => item.name === "Arm · Edge VLA")!.id;
+  return addRobot(ws, { configId: config, name: "Offline runner", offlineEvaluationIds: [OFFLINE_EVAL, OFFLINE_OTHER] }, Date.now() - 3_600_000).workspace;
 }
 
 export const h1 = (page: Page) => page.locator("h1:visible");

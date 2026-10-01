@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  belongsTo, evaluationResult, evaluationRollouts, evaluationView, latestScored, medianSteps, missionResult, missionRollouts, platformPaths, robotRuns, runShare, seedSlices, sliceViews,
-  standaloneMissions, storedRunRollouts, storedRunView,
+  belongsTo, evaluationResult, evaluationRollouts, evaluationView, latestScored, medianSteps, missionResult, missionRollouts, offlineMetrics, offlineRollouts, offlineView, platformPaths,
+  robotRuns, runShare, seedSlices, sliceViews, standaloneMissions, storedRunRollouts, storedRunView,
 } from "../../src/lib/configurations/runs";
 import type { PlatformEvaluation, PlatformMission, PlatformProject } from "../../src/lib/configurations/runs";
 import { createSampleWorkspace } from "../../src/lib/configurations/sample";
 import type { ConvoyWorkspace, Robot } from "../../src/lib/configurations/types";
-import type { Episode } from "../../src/lib/platform/client";
+import type { Episode, OfflineEpisode, OfflineEvaluation, OfflineEvaluationDetail } from "../../src/lib/platform/client";
 
 // Contract fixtures with the control plane's shapes; ids are made up.
 const NOW = Date.parse("2026-10-01T09:41:20Z");
@@ -121,6 +121,64 @@ test("a stored run linked to a recorded evaluation and episode lists each real e
   const rows = storedRunRollouts(document, run, document.suites[0], evaluation("eva_three", "2026-10-01T05:00:00Z", [{ seed: 0, episode: "epi_1", passed: true }, { seed: 1, episode: "epi_2", passed: false }]));
   assert.deepEqual(rows.filter(row => row.episodeId).map(row => row.episodeId), ["epi_1", "epi_2", "epi_4"]);
   assert.equal(rows.length, 10);
+});
+
+const offlineEpisode = (id: string, seed: number, outcome: OfflineEpisode["outcome"], extra: Partial<OfflineEpisode> = {}): OfflineEpisode => ({
+  id, evaluation_id: "oev_contract0001", seed, outcome, steps: 40 + seed, images: 41 + seed, action_dim: 14, metrics: {}, wall_seconds: 3 + seed, sim_seconds: 0.5,
+  stored_bytes: 20480, created_at: "2026-10-01T06:00:00Z", ...extra,
+});
+function offline(id: string, created: string, episodes: OfflineEpisode[]): OfflineEvaluationDetail {
+  const successes = episodes.filter(item => item.outcome === "success").length;
+  return {
+    id, name: `Offline ${id}`, task: "Generic task", config_label: "Config r1", policy_label: "Policy v1", source: "offline", signed: false, scope: "Offline simulation import",
+    summary: { episodes: episodes.length, successes, success_rate: episodes.length ? successes / episodes.length : null, median_steps: 41, median_wall_seconds: episodes.length ? 3.5 : null, median_sim_seconds: null, stored_bytes: 0 },
+    created_at: created, updated_at: created, episodes,
+  };
+}
+
+test("linked offline evaluations are evals numbered with the platform's, tagged by their source", () => {
+  const imports: OfflineEvaluation[] = [
+    offline("oev_contract0002", "2026-10-01T04:05:00Z", [offlineEpisode("oep_b", 0, "success")]),
+    offline("oev_contract0001", "2026-10-01T03:57:00Z", [offlineEpisode("oep_a", 0, "success"), offlineEpisode("oep_c", 1, "timeout")]),
+    offline("oev_notlinked0", "2026-10-01T05:00:00Z", [offlineEpisode("oep_d", 0, "failure")]),
+    offline("oev_empty00000", "2026-10-01T05:30:00Z", []),
+  ];
+  const robot = linked({ offlineEvaluationIds: ["oev_contract0001", "oev_contract0002", "oev_empty00000", "oev_deleted000"] });
+  const views = robotRuns(ws, robot, project, imports);
+  // Creation order: alone_1 (03:56:50), oev_…0001 (03:57), eva_first, eva_second, alone_2, oev_…0002 (04:05), running, eva_other_robot, oev_empty.
+  assert.deepEqual(views.filter(view => view.source === "offline").map(view => [view.id, view.label, view.result, view.episodes, view.successes]), [
+    ["oev_empty00000", "Eval 12", "queued", 0, null],
+    ["oev_contract0002", "Eval 9", "completed", 1, 1],
+    ["oev_contract0001", "Eval 5", "completed", 2, 1],
+  ]);
+  assert.equal(views.find(view => view.id === "oev_contract0001")?.offline?.scope, "Offline simulation import");
+  assert.deepEqual(robotRuns(ws, robot, project, null).filter(view => view.source === "offline"), [], "while the list loads there are none");
+  assert.deepEqual(robotRuns(ws, linked(), project, imports).filter(view => view.source === "offline"), [], "only linked evaluations count");
+  const solo = robotRuns(ws, { ...ws.robots.find(item => item.id === "sim-01")!, offlineEvaluationIds: ["oev_contract0001"] }, null, imports);
+  assert.deepEqual(solo.map(view => view.label), ["Eval 3", "Eval 4", "Eval 2", "Eval 1"], "after the stored runs, without a project");
+  const view = offlineView(imports[1], 5);
+  assert.deepEqual([runShare(view), view.medianS, view.provenance.source], [0.5, 3.5, "Offline evaluation oev_contract0001"]);
+  assert.equal(offlineView({ ...imports[1], summary: { ...imports[1].summary, median_wall_seconds: null, median_sim_seconds: 0.7 } }, 5).medianS, 0.7, "simulated time when no wall time is reported");
+});
+
+test("offline rollouts replay their uploaded recordings; metrics average numeric values only", () => {
+  const evaluation = offline("oev_contract0001", "2026-10-01T03:57:00Z", [
+    offlineEpisode("oep_a", 0, "success", { metrics: { reward_sum: 4.5, grasped: true, note: "fine" } }),
+    offlineEpisode("oep_b", 1, "timeout", { metrics: { reward_sum: 1.5, drops: 2 }, wall_seconds: null }),
+    offlineEpisode("oep_c", 2, "safety-stop", { metrics: { reward_sum: null } }),
+    offlineEpisode("oep_d", 3, "failure"),
+  ]);
+  const rows = offlineRollouts(evaluation);
+  assert.deepEqual(rows.map(row => [row.id, row.episodeId, row.recording, row.seed, row.steps, row.seconds, row.result]), [
+    ["oep_a", "oep_a", "offline-evaluations/oev_contract0001/episodes/oep_a", 0, 40, 3, "passed"],
+    ["oep_b", "oep_b", "offline-evaluations/oev_contract0001/episodes/oep_b", 1, 41, 0.5, "timeout"],
+    ["oep_c", "oep_c", "offline-evaluations/oev_contract0001/episodes/oep_c", 2, 42, 5, "safety-stop"],
+    ["oep_d", "oep_d", "offline-evaluations/oev_contract0001/episodes/oep_d", 3, 43, 6, "failed"],
+  ]);
+  assert.deepEqual(seedSlices(rows).map(slice => [slice.name, slice.successes, slice.episodes]), [["Seed 0", 1, 1], ["Seed 1", 0, 1], ["Seed 2", 0, 1], ["Seed 3", 0, 1]]);
+  assert.deepEqual(offlineMetrics(evaluation.episodes), [{ name: "drops", mean: 2, episodes: 1 }, { name: "reward_sum", mean: 3, episodes: 2 }]);
+  assert.equal(platformPaths.offlineEpisode("oev_a b", "oep_c"), "offline-evaluations/oev_a%20b/episodes/oep_c");
+  assert.equal(platformPaths.offlineEvaluations(), "offline-evaluations");
 });
 
 test("slices keep the suite's order and names; proxy paths encode ids", () => {

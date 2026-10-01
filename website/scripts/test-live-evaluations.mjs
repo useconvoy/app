@@ -1,6 +1,8 @@
 /** Real browser → BFF → API → evaluation job → coordinator → MuJoCo acceptance.
- * Start pipeline.py --serve first. CONVOY_EVALUATION_PYTHON must point at the
- * simulation managed environment. This test starts/stops only its own job/web.
+ * Start pipeline.py --serve --no-evaluation-job first: a running job acknowledges a
+ * cancellation within one poll, before the requested state can be observed.
+ * CONVOY_EVALUATION_PYTHON must point at the simulation managed environment. This
+ * test starts/stops only its own job/web.
  */
 import { chromium, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
@@ -17,6 +19,7 @@ if (!connectionPath || !outputPath || !process.env.CONVOY_EVALUATION_PYTHON) {
 }
 const connection = JSON.parse(await fs.readFile(connectionPath, 'utf8'));
 if (!['localhost', '127.0.0.1', '[::1]'].includes(new URL(connection.api_url).hostname)) throw new Error('Use a local acceptance API');
+if (connection.evaluation_job !== false) throw new Error('This test owns the evaluation job: start pipeline.py --serve --no-evaluation-job');
 const dataDir = path.join(path.dirname(path.resolve(connectionPath)), 'server');
 await fs.access(path.join(dataDir, 'convoy.db')); // specifically the private SQLite --serve harness
 const output = path.resolve(outputPath);

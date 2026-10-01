@@ -107,6 +107,20 @@ and its [MIT license](https://github.com/Farama-Foundation/Metaworld/blob/main/L
 [MuJoCo](https://github.com/google-deepmind/mujoco), and
 [LeRobot's LIBERO integration](https://huggingface.co/docs/lerobot/libero).
 
+## Import episodes recorded elsewhere
+
+`scripts/import_offline_eval.py` (standard library only) uploads episodes from any simulator, in
+the replay format, as an unsigned offline evaluation that Configurations shows as "Offline sim":
+
+```sh
+python scripts/import_offline_eval.py --write-example /tmp/offline-example   # generic frames
+CONVOY_SERVER=https://deployconvoy.com CONVOY_EMAIL=… CONVOY_PASSWORD=… \
+  python scripts/import_offline_eval.py /tmp/offline-example
+```
+
+The layout, limits and API are in [offline evaluations](../../docs/v1/offline-evaluations.md).
+`CONVOY_API_TOKEN` with an API origin replaces the sign-in. Credentials are never printed.
+
 ## Run through the Convoy deployment and mission pipeline
 
 The optional `managed` extra connects this simulator to the real control-plane
