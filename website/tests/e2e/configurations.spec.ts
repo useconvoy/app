@@ -7,9 +7,9 @@ import { demoDocument, h1, mockApi, noOverflow } from "./support/configurations"
 
 const crumbs = (page: Page) => page.getByRole("navigation", { name: "Breadcrumb" });
 
-test("/app opens Configurations behind the shared sign-in, in a top bar with no sidebar", async ({ page }) => {
+test("Configurations remains available behind the shared sign-in, in a top bar with no sidebar", async ({ page }) => {
   await mockApi(page, { signedIn: false });
-  await page.goto("/app");
+  await page.goto("/app/configurations");
   await expect(page).toHaveURL(/\/app\/configurations\/?$/);
   await expect(page.getByRole("heading", { name: "One workspace for your robots." })).toBeVisible();
   await page.getByLabel("Email", { exact: true }).fill("fixture@example.test");
@@ -21,7 +21,7 @@ test("/app opens Configurations behind the shared sign-in, in a top bar with no 
   await expect(bar.getByRole("link", { name: "Convoy" })).toHaveAttribute("href", "/app/configurations");
   await expect(bar.getByText("fixture@example.test")).toBeVisible();
   await expect(bar.getByText("Sample", { exact: true })).toBeVisible();
-  // Configurations is the only area: no sidebar, no links to other product areas.
+  // Existing configuration URLs retain their session and sample behavior.
   await expect(page.locator("aside")).toHaveCount(0);
   await expect(page.locator('a[href^="/app/applications"], a[href*="section=device"]')).toHaveCount(0);
   await page.getByRole("button", { name: "Sign out" }).click();
@@ -140,7 +140,9 @@ for (const width of [390, 1440]) {
     await page.goto("/app/configurations/arm-edge-vla/robots/sim-runner/evals/eva_contract02?rollout=epi_contract02");
     await expect(page.getByRole("img", { name: "Recorded robot camera at action 0 of 54" })).toBeVisible();
     await noOverflow(page);
-    expect((await new AxeBuilder({ page }).analyze()).violations.map(violation => `replay: ${violation.id}`)).toEqual([]);
+    // Check settled colors, not a partially transparent entrance animation.
+    await page.locator(".cv-sheet").evaluate(async node => { await Promise.all(node.getAnimations().map(animation => animation.finished)); });
+    expect((await new AxeBuilder({ page }).analyze()).violations.map(violation => `replay: ${violation.id} ${violation.nodes.map(node => `${node.target.join(" ")}: ${node.failureSummary}`).join(", ")}`)).toEqual([]);
     await page.goto("/app/configurations/arm-edge-vla");
     await page.getByRole("button", { name: "Add robot" }).click();
     await expect(page.getByRole("dialog", { name: "Add robot" })).toBeVisible();

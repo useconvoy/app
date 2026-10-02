@@ -296,3 +296,8 @@ body.cv-locked { overflow: hidden; }
   .cv-sheet { animation: none; }
   .cv-spinner { animation-duration: 2.4s; }
 }
+
+/* Project onboarding shares the workspace controls and spacing. */
+.project-create { margin-top: 24px; }
+.project-actions { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; margin-top: 20px; }
+.project-spec { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .75rem; }

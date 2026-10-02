@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "embodiment": "Replace with your robot model",
+  "description": "Starting template only. Supply real joints, sensors and asset identities before qualification.",
+  "description_asset": null,
+  "joints": [],
+  "sensors": [],
+  "command_interface": "skill",
+  "adapter": "Replace with your robot adapter",
+  "control_rate_hz": 1,
+  "dynamics": { "source": "unknown", "note": "Not calibrated" },
+  "simulations": [],
+  "execution_profile": null
+}
