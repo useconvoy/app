@@ -24,11 +24,13 @@ async function milestone(page: Page, testInfo: TestInfo, name: string, options: 
 test("J1 · explore: sign in, open a configuration, its simulated robot and an eval's slices and rollouts", async ({ page }, testInfo) => {
   await mockApi(page, { signedIn: false });
 
-  await test.step("Sign in and land on Configurations", async () => {
+  await test.step("Sign in to Projects and open existing Configurations", async () => {
     await page.goto("/app");
     await page.getByLabel("Email", { exact: true }).fill("fixture@example.test");
     await page.getByLabel("Password", { exact: true }).fill("fixture-only");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(h1(page)).toHaveText("Projects");
+    await page.getByRole("link", { name: "Existing configurations", exact: true }).click();
     await expect(h1(page)).toHaveText("Configurations");
     await expect(page.locator(".cv-config")).toHaveCount(3);
     await milestone(page, testInfo, "J1-01-configurations");
