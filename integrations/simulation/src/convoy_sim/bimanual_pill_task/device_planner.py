@@ -37,7 +37,7 @@ from .control import segment_point_distance
 from .planning import ARM_SEPARATION_M, PUSH_SKILL_ID, SKILL_ID, PlannerCall, PlannerProfile
 from .skills import ZONE_M
 
-PROMPT_VERSION = "pill-planner-v4"
+PROMPT_VERSION = "pill-planner-v5"
 MAX_TOKENS = 32  # a valid reply is ~20 tokens; the release caps output at 128
 ARM_CODE = {"left": "L", "right": "R"}
 SIDE = {"L": "left", "R": "right"}
@@ -53,6 +53,10 @@ MAX_PILL_ID = 999
 TERMINAL = ("succeeded", "failed", "expired")
 # A pick that reported one of these found no clear grasp: the skill library's remedy is push_apart first.
 PUSH_FIRST = ("no_clear_grasp", "blocked")
+# A pill is given up after this many picks or pushes (the stand-in planner's limits), or once a skill
+# reported that no grasp or push pose exists for it.
+MAX_PICKS, MAX_PUSHES = 4, 2
+NO_POSE = ("unreachable", "no_clear_push")
 
 
 # ---- the scene as text -------------------------------------------------------------------------------
@@ -93,8 +97,12 @@ class PillLine:
     state: str  # on_mat | in_bottle | held | lost | elsewhere
     xy_cm: tuple[int, int]
     reach: str  # "L", "R", "L+R" or "none"
-    available: bool  # for the requesting arm
-    note: str  # why it is not available, or the last try's result
+    action: str | None  # for the requesting arm: "pick" (can pick now), "push" (push apart first) or None
+    note: str  # why the arm cannot take it now, or the last try's result
+
+    @property
+    def available(self) -> bool:
+        return self.action is not None
 
 
 @dataclass(frozen=True)
@@ -113,6 +121,9 @@ class Scene:
     def available(self) -> list[int]:
         return [n for n, p in self.pills.items() if p.available]
 
+    def listed(self, action: str) -> list[PillLine]:
+        return sorted((p for p in self.pills.values() if p.action == action), key=lambda p: p.number)
+
 
 def scene(obs: dict, side: str) -> Scene:
     """What the request tells the model, computed from the observation for the requesting arm."""
@@ -129,17 +140,24 @@ def scene(obs: dict, side: str) -> Scene:
         number = pill_number(pill["id"])
         xy = pill["xy"]
         reach = "+".join(ARM_CODE[s] for s in ("left", "right") if reaches(obs, s, xy)) or "none"
-        note, available = "", False
+        note, action = "", None
+        last = pill.get("last_status")
         if pill["state"] == "on_mat":
             if not reaches(obs, side, xy):
                 note = "out of reach"
+            elif last in NO_POSE:
+                note = f"given up: last try {last}"
+            elif pill.get("attempts", 0) >= MAX_PICKS:
+                note = f"given up after {pill['attempts']} picks"
+            elif last in PUSH_FIRST and pill.get("pushes", 0) >= MAX_PUSHES:
+                note = f"given up: pushed {pill['pushes']} times, last pick {last}"
+            elif blocked := blocked_by_other_arm(obs, side, xy):
+                note = blocked
+            elif last in PUSH_FIRST:
+                action, note = "push", f"last pick {last}"
             else:
-                note = blocked_by_other_arm(obs, side, xy) or ""
-                available = not note
-            if available and pill.get("last_status"):
-                last = pill["last_status"]
-                note = (f"needs push_apart (last try {last})" if last in PUSH_FIRST else f"last try {last}")
-        lines[number] = PillLine(number, pill["state"], (round(xy[0] * 100), round(xy[1] * 100)), reach, available, note)
+                action, note = "pick", f"last try {last}" if last else ""
+        lines[number] = PillLine(number, pill["state"], (round(xy[0] * 100), round(xy[1] * 100)), reach, action, note)
     in_bottle = sorted(n for n, p in lines.items() if p.state == "in_bottle")
     return Scene(side, lines, in_bottle, held, other_number)
 
@@ -172,13 +190,17 @@ def build_prompt(obs: dict, side: str, feedback: str | None = None) -> str:
         f"In the bottle: {_ids(s.in_bottle)} ({len(s.in_bottle)} of {len(s.pills)} pills).",
     ]
     table = sorted((p for p in s.pills.values() if p.state == "on_mat"), key=lambda p: p.number)
-    free = [p for p in table if p.available]
-    other = [p for p in table if not p.available]
+
+    def row(p: PillLine) -> str:
+        return f"{p.number}: ({p.xy_cm[0]}, {p.xy_cm[1]})" + (f", {p.note}" if p.note else "")
+
     if table:
-        lines.append(f"Pills on the table that arm {me} can take now (id: position):")
-        lines += [f"{p.number}: ({p.xy_cm[0]}, {p.xy_cm[1]})" + (f", {p.note}" if p.note else "") for p in free] or ["none"]
+        lines.append(f"Pills on the table that arm {me} can pick now (id: position):")
+        lines += [row(p) for p in s.listed("pick")] or ["none"]
+        lines.append(f"Pills on the table that arm {me} must push apart before picking (id: position):")
+        lines += [row(p) for p in s.listed("push")] or ["none"]
         lines.append(f"Pills on the table that arm {me} cannot take now (id: position, reason):")
-        lines += [f"{p.number}: ({p.xy_cm[0]}, {p.xy_cm[1]}), {p.note}" for p in other] or ["none"]
+        lines += [row(p) for p in table if not p.available] or ["none"]
     else:
         lines.append("No pill is left on the table.")
     gone = [p.number for p in s.pills.values() if p.state in ("lost", "elsewhere")]
@@ -187,12 +209,12 @@ def build_prompt(obs: dict, side: str, feedback: str | None = None) -> str:
     lines += [
         "",
         "Actions:",
-        f'{{"arm": "{me}", "skill": "pick_and_drop", "pill": ID}} puts a pill arm {me} can take now into the bottle.',
-        f'{{"arm": "{me}", "skill": "push_apart", "pill": ID}} slides a pill arm {me} can take now away from its '
-        "neighbours; use it for a pill marked needs push_apart.",
-        f'{{"arm": "{me}", "skill": "wait"}} when the list of pills arm {me} can take now is none.',
+        f'{{"arm": "{me}", "skill": "pick_and_drop", "pill": ID}} puts a pill from the can-pick list into the bottle.',
+        f'{{"arm": "{me}", "skill": "push_apart", "pill": ID}} slides a pill from the must-push-apart list away '
+        "from its neighbours.",
+        f'{{"arm": "{me}", "skill": "wait"}} when the can-pick and must-push-apart lists are both none.',
         f'{{"arm": "{me}", "skill": "done"}} when no pill is left on the table.',
-        f"Never choose a pill from the list of pills arm {me} cannot take now.",
+        "Never choose a pill from the cannot-take list.",
         "Reply with exactly one of these JSON objects, ID being a pill id, and nothing else.",
     ]
     if feedback:
@@ -315,10 +337,15 @@ def check_choice(action: Action, obs: dict, side: str) -> tuple[str, str] | None
         if me not in pill.reach.split("+"):
             return "out_of_reach", f"pill {action.pill} is out of reach of arm {me}"
         if not pill.available:
-            return "pill_blocked", f"pill {action.pill} is not available ({pill.note})"
+            code = "given_up" if pill.note.startswith("given up") else "pill_blocked"
+            return code, f"pill {action.pill} is in the cannot-take list ({pill.note})"
+        if action.skill == SKILL_ID and pill.action == "push":
+            return "needs_push_apart", f"pill {action.pill} must be pushed apart before it is picked"
+        if action.skill == PUSH_SKILL_ID and pill.action == "pick":
+            return "push_not_needed", f"pill {action.pill} is in the can-pick list: push_apart is for the must-push-apart list"
         return None
     if action.skill == WAIT and s.available:
-        return "wait_with_pill_available", f"wait is only for when no pill on the table is available for arm {me}"
+        return "wait_with_pill_available", "wait is only for when the can-pick and must-push-apart lists are both none"
     if action.skill == DONE and s.on_table:
         return "done_with_pills_on_table", f"done is only for when no pill is left on the table ({len(s.on_table)} are)"
     return None

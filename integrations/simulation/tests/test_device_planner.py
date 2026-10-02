@@ -69,12 +69,14 @@ def test_prompt_describes_the_scene_as_text_for_the_free_arm():
     assert "Bottle at (37, 0)." in text and "Arm L: free, gripper at (33, 30)." in text
     assert "Arm R: busy with pill 3 (descend)." in text
     assert "In the bottle: 1 (1 of 6 pills)." in text
-    can, cannot = text.split("Pills on the table that arm L can take now (id: position):\n")[1].split(
-        "Pills on the table that arm L cannot take now (id: position, reason):\n")
-    assert can.splitlines() == ["0: (50, 12)", "4: (55, 20), needs push_apart (last try no_clear_grasp)"]
+    rest = text.split("Pills on the table that arm L can pick now (id: position):\n")[1]
+    pick, rest = rest.split("Pills on the table that arm L must push apart before picking (id: position):\n")
+    push, cannot = rest.split("Pills on the table that arm L cannot take now (id: position, reason):\n")
+    assert pick.splitlines() == ["0: (50, 12)"]
+    assert push.splitlines() == ["4: (55, 20), last pick no_clear_grasp"]
     # 4.7 cm from the right arm's target and 5 cm from its fingertips: the executive's 12 cm rule
     assert cannot.splitlines()[:2] == ["2: (48, -15), out of reach", "5: (47, 2), next to arm R"]
-    assert "3:" not in can + cannot.split("Actions:")[0]  # held by the other arm: not on the table
+    assert "3:" not in pick + push + cannot.split("Actions:")[0]  # held by the other arm: not on the table
     assert '{"arm": "L", "skill": "pick_and_drop", "pill": ID}' in text and text.endswith("and nothing else.")
 
 
@@ -85,7 +87,7 @@ def test_messages_are_one_worked_example_then_the_request_within_the_chat_limits
     assert messages[1]["content"] == EXAMPLE_REPLY
     assert check_choice(parse_reply(EXAMPLE_REPLY), EXAMPLE_OBSERVATION, "right") is None  # the example is right
     assert messages[2]["content"].endswith("Your previous reply \"x\" was refused: because. Reply again.")
-    assert PROMPT_VERSION == "pill-planner-v4" and MAX_TOKENS <= 128
+    assert PROMPT_VERSION == "pill-planner-v5" and MAX_TOKENS <= 128
     # A 30-pill table stays inside the device chat API's limits: 16 messages, 8 KiB of text.
     episode = Episode(EpisodeSpec(CONFIGS["edge_qwen_edge_skills"], SLICES["pill_count_30"], 0, 5.0),
                       planner=_ScriptedTransport([]))
@@ -158,12 +160,26 @@ def test_parser_refuses_everything_else_without_repairing_it(text, kind, reason)
     (Action("L", "pick_and_drop", 5), "pill_blocked"),
     (Action("L", "wait"), "wait_with_pill_available"),
     (Action("L", "done"), "done_with_pills_on_table"),
+    (Action("L", "pick_and_drop", 4), "needs_push_apart"),
+    (Action("L", "push_apart", 0), "push_not_needed"),
     (Action("L", "pick_and_drop", 0), None),
     (Action("L", "push_apart", 4), None),
 ])
 def test_choices_the_scene_rules_out_are_refused(action, code):
     refusal = check_choice(action, _obs(), "left")
     assert (refusal[0] if refusal else None) == code
+
+
+def test_pills_are_given_up_after_the_stand_in_planners_limits():
+    obs = _obs()
+    obs["pills"][0].update(attempts=4, last_status="grasp_failed")
+    obs["pills"][4].update(pushes=2)  # last pick no_clear_grasp, pushed twice already
+    s = scene(obs, "left")
+    assert s.pills[0].note == "given up after 4 picks" and s.pills[4].note.startswith("given up: pushed 2 times")
+    assert s.available == [] and check_choice(Action("L", "pick_and_drop", 0), obs, "left")[0] == "given_up"
+    assert check_choice(Action("L", "wait"), obs, "left") is None
+    obs["pills"][0].update(attempts=1, last_status="unreachable")
+    assert scene(obs, "left").pills[0].note == "given up: last try unreachable"
 
 
 def test_wait_and_done_are_valid_only_when_the_scene_allows_them():
@@ -440,9 +456,10 @@ class _FirstAvailable(_ScriptedTransport):
         self.sent.append(messages)
         text = messages[-1]["content"]
         arm = re.search(r"Arm (L|R) is free", text).group(1)
-        pill = re.search(r"can take now \(id: position\):\n(\d+): ", text)
-        if pill:
-            reply = {"arm": arm, "skill": "pick_and_drop", "pill": int(pill.group(1))}
+        pick = re.search(r"can pick now \(id: position\):\n(\d+): ", text)
+        push = re.search(r"must push apart before picking \(id: position\):\n(\d+): ", text)
+        if pick or push:
+            reply = {"arm": arm, "skill": "pick_and_drop" if pick else "push_apart", "pill": int((pick or push).group(1))}
         else:
             reply = {"arm": arm, "skill": "done" if "No pill is left" in text else "wait"}
         return ChatOutcome(request_id=str(uuid.uuid4()), status="succeeded", e2e_ms=1500.0, sent_at="t0",

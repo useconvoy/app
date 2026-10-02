@@ -239,7 +239,7 @@ the 84 mm gripper housing knocked the 22 g bottle over.
 ## Planner and policy hooks, and the four configurations (`planning.py`, `configs.py`)
 
 - `DecisionPolicy.decide(request) -> (decision, measured_latency_s | None)`: the hook
-  for a real planner. The request is JSON (instruction, pills, arms, bottle, motor
+  for the stand-in planner. The request is JSON (instruction, pills, arms, bottle, motor
   policy, recent results); the decision is
   `{"kind": "skill", "skill_id": "pick_and_drop" | "push_apart", "parameters": {...}}`,
   `wait`, `done` or `decline`. A measured latency replaces the modeled one.
@@ -254,14 +254,15 @@ the 84 mm gripper housing knocked the 22 g bottle over.
 
 | Config (label) | Skill planner (per skill call, closed loop) | Task planner | Motor policy |
 |---|---|---|---|
-| `edge_qwen_edge_skills` (Edge Qwen) | Edge Qwen2.5-1.5B Q4_K_M on the Jetson Orin Nano: p50 150 ms, p95 700 ms (Convoy soak 122/636 ms, deploy smoke 181/900 ms, `control-plane/docs/VERIFICATION.md`) | – | scripted skills on the robot |
-| `edge_qwen_cloud_astra` (Edge Qwen + GPT Astra) | Edge Qwen (as above) | Cloud GPT-6 Astra (low effort): decomposes the task before the start (waits ≤8 s), re-verifies every 8 placed pills without blocking | scripted skills |
+| `edge_qwen_edge_skills` (Edge Qwen) | **Real calls** to Qwen2.5-1.5B-Instruct Q4_K_M on a connected Jetson Orin Nano through the device chat API; latency measured per call, no stand-in ([below](#edge-qwen-the-real-on-device-planner-device_plannerpy)) | – | scripted skills on the robot |
+| `edge_qwen_cloud_astra` (Edge Qwen + GPT Astra) | Edge Qwen2.5-1.5B Q4_K_M on the Jetson Orin Nano, **modeled**: stand-in decisions, p50 150 ms, p95 700 ms (Convoy soak 122/636 ms, deploy smoke 181/900 ms, `control-plane/docs/VERIFICATION.md`) | Cloud GPT-6 Astra (low effort): decomposes the task before the start (waits ≤8 s), re-verifies every 8 placed pills without blocking | scripted skills |
 | `cloud_astra_only` (GPT Astra) | Cloud GPT-6 Astra: p50 3.9 s (Artificial Analysis, OpenAI API: median time to first answer token 2.96 s, 43.2 output tokens/s, plus ~40 output tokens), p95 6.0 s assumed (only medians are published) | – | scripted skills |
 | `edge_smolvla_cloud_astra` (Edge SmolVLA + GPT Astra) | Cloud GPT-6 Astra | – | SmolVLA-450M on the Jetson: **unavailable** (no checkpoint for this embodiment) |
 
-In the outage slice the hosted planner is unreachable from 15 s to 45 s: the edge
-configurations keep placing pills (the task planner's checks just fail), the
-cloud-only one holds and retries. SmolVLA's configuration dispatches the first
+In the outage slice the hosted planner is unreachable from 15 s to 45 s: Edge Qwen +
+GPT Astra keeps placing pills (the task planner's checks just fail), the
+cloud-only one holds and retries (Edge Qwen has no cloud link, so the slice does
+not apply to it). SmolVLA's configuration dispatches the first
 skill, gets `policy_unavailable` for both arms and the planner declines: the
 episode ends after ~8 s with no pill placed.
 
@@ -286,12 +287,13 @@ device, and the episode cannot start without that connection.
 **Text only.** Qwen2.5-1.5B-Instruct is a text model: it never sees the camera.
 Each request describes the scene in text computed from the simulator: the bottle
 position, the free arm and its gripper position, what the other arm is doing,
-which pills are already in the bottle, and one line per pill on the table with
-its position in cm, which arm reaches it and whether the free arm may take it
-now. "Reaches" is the arm's own half of the table plus 2 cm, 18–62 cm from its
-shoulder; "not available" applies the executive's separation rules (within 12 cm
-of the other arm's wrist, fingertips or target pill, or past the bottle while the
-other arm uses the bottle zone). A pill's last skill result is shown beside it.
+which pills are already in the bottle, and every pill on the table with its
+position in cm, in two lists: the pills the free arm can take now, and the ones
+it cannot, with the reason. "Can take" means the arm's own half of the table plus
+2 cm, 18–62 cm from its shoulder, and the executive's separation rules allow it
+(not within 12 cm of the other arm's wrist, fingertips or target pill, and not
+past the bottle while the other arm uses the bottle zone). A pill whose last pick
+found no clear grasp is marked "needs push_apart".
 
 **Request.** One worked exchange on a small fixed scene (user request, assistant
 reply) and then the real request, as three chat messages (`build_messages`): on
@@ -335,8 +337,11 @@ its manifest):
   like any round trip, and before the next request the client waits (wall clock
   only) until that request has finished or expired, so the device never has two.
 - When an accepted action arrives, the executive re-checks the separation rules on
-  the current state (the other arm kept moving during the round trip). A conflict
-  rejects it as stale and a new decision starts at once.
+  the current state (the other arm kept moving during the round trip). If its only
+  conflict is that the other arm now uses the bottle zone, the action is held until
+  the zone is free (at most 6 s, as a pick next to the bottle waits) and checked
+  again; any other conflict, or a hold that runs out, rejects it as stale and a new
+  decision starts at once. The model's choice is never changed.
 
 **Transport.** `PortalChatClient` uses the website's device chat routes with one
 signed-in operator session: `POST /api/portal/chat` with `{request_id,
@@ -382,15 +387,17 @@ slice runs seeds `i·N + seed`, so every episode of a configuration has its own
 seed (Convoy groups an offline evaluation's rollouts by seed), and every
 configuration runs the same layouts: a layout depends only on the slice and seed.
 
-### Demo results
+### Modelled demo results (stand-in planner)
 
-`scripts/pill_task_eval.sh` (seeds 0–2, stride 100): 4 configurations × 3 slices ×
-3 seeds = 36 episodes, every configuration on the same 9 layouts (MuJoCo 3.3.0,
-2 ms, 150 s horizon; 35 min on 4 CPU workers).
+`scripts/pill_task_eval.sh` (seeds 0–2, stride 100), every configuration on the
+same 9 layouts (MuJoCo 3.3.0, 2 ms, 150 s horizon; 35 min on 4 CPU workers). These
+are the stand-in configurations: their planner decisions are the rule-based
+stand-in and their latency is modeled. The Edge Qwen row this matrix once had (the
+stand-in with a latency model) is withdrawn: Edge Qwen now calls the real model,
+and its results are [the real run](#real-run-edge-qwen-on-the-jetson).
 
 | Configuration | nominal (0–2) | cloud outage 15–45 s (100–102) | 30 pills (200–202) | Episodes all placed | Pills placed | Median time to all placed (s) | Median planner wait (s) |
 |---|---|---|---|---|---|---|---|
-| Edge Qwen | 3/3 · 72/72 | 3/3 · 72/72 | 3/3 · 90/90 | 9/9 | 234/234 (100%) | 90.0 | 10.0 |
 | Edge Qwen + GPT Astra | 3/3 · 72/72 | 3/3 · 72/72 | 3/3 · 90/90 | 9/9 | 234/234 (100%) | 95.9 | 14.0 |
 | GPT Astra | 2/3 · 69/72 | 0/3 · 65/72 | 0/3 · 75/90 | 2/9 | 209/234 (89%) | 141.2 | 144.2 |
 | Edge SmolVLA + GPT Astra | 0/3 · 0/72 | 0/3 · 0/72 | 0/3 · 0/90 | 0/9 | 0/234 (0%) | – | 14.3 |
@@ -398,11 +405,9 @@ configuration runs the same layouts: a layout depends only on the slice and seed
 Cells: episodes with every pill in the bottle / episodes · pills placed / pills.
 Planner wait is summed over both arms (an arm waits from its request to the answer).
 
-- **Edge Qwen** placed every pill in all 9 episodes (84–131 s); the outage does
-  not touch it. Skill-planner p50 96–151 ms per episode.
-- **Edge Qwen + GPT Astra** behaves the same, about 4 s later at the start while
-  the task plan arrives; in the outage its 1 verification call per episode fails
-  and nothing waits on it. In one 30-pill episode the arms touched twice (peak
+- **Edge Qwen + GPT Astra** placed every pill in all 9 episodes; it starts about
+  4 s late while the task plan arrives, and in the outage its 1 verification call
+  per episode fails and nothing waits on it. In one 30-pill episode the arms touched twice (peak
   35 N); both contacts triggered protective stops, and the arms backed off and
   finished.
 - **GPT Astra** waits ~4 s per skill decision (p50 3.8–4.5 s per episode), so an
@@ -413,9 +418,9 @@ Planner wait is summed over both arms (an arm waits from its request to the answ
   back `policy_unavailable`, the planner declines, and the episode ends after
   6–8 s. This is the honest result for a policy that was never trained on this
   robot; nothing stands in for it.
-- Physics and safety across the matrix: 656 completed transfers placed their
-  pill and none dropped one; no pill left the table; peak bottle tilt 1.4°; no
-  unstable step.
+- Physics and safety across the matrix (including the withdrawn row): 656
+  completed transfers placed their pill and none dropped one; no pill left the
+  table; peak bottle tilt 1.4°; no unstable step.
 - Export: 6,491 frames (5,899 with an image; repeated frames carry none), 41.7 MB
   of JPEG in total, 5 KiB to 2.0 MB per episode; every configuration directory
   passes `import_offline_eval.py --dry-run`.
