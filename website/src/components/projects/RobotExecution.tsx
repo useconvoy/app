@@ -9,12 +9,12 @@ import { Notice } from "@/components/configurations/Notice";
 import { useSession } from "@/components/configurations/Session";
 import { EmptyState, LoadingState } from "@/components/configurations/States";
 import { Card, Facts } from "@/components/configurations/Tiles";
-import { ProjectWorkspace } from "@/components/console/Console";
 import { fmtWhen } from "@/lib/configurations/format";
 import { notifySessionExpired } from "@/lib/configurations/session-events";
 import type { Episode, Mission, Project, Qualification, Robot } from "@/lib/platform/client";
 import { useProjectResource, type RobotProfile } from "@/lib/projects/client";
 import { ComputerDetails } from "./ConnectionSetup";
+import { PolicyTools } from "./policy-tools/PolicyTools";
 import { configurationHref, newConfigurationHref } from "./ProjectConfigurations";
 import { engineLabel, projectCrumbs } from "./ProjectNavigation";
 import { currentRobotConfiguration, robotReleaseCompatible, useProjectRobotConfigurations, RobotConfigurationSummary } from "./ProjectRobotConfigurations";
@@ -130,7 +130,7 @@ export function RobotExecution({ projectId, robotId }: { projectId: string; robo
           </div>}
         </div>
       </section>
-      {!registered && robot.simulated !== false && <details className="cv-card cv-disclosure cv-disclosure--card" onToggle={event => setAdvancedTools(event.currentTarget.open)}><summary>Advanced policy and evaluation tools</summary>{advancedTools && <section className="console-shell cv-embedded" aria-label="Existing policy runtime"><ProjectWorkspace project={{ id: projectId, name: robot.name }} initialRobotId={robot.id} writable={operator} canDispatch={canDispatch} executionProfiles={account.installation.execution_profiles ?? []} onSessionEnd={notifySessionExpired} /></section>}</details>}
+      {!registered && robot.simulated !== false && <details className="cv-card cv-disclosure cv-disclosure--card" onToggle={event => setAdvancedTools(event.currentTarget.open)}><summary>Advanced policy and evaluation tools</summary>{advancedTools && <section className="console-shell cv-embedded" aria-label="Existing policy runtime"><PolicyTools project={{ id: projectId, name: robot.name }} initialRobotId={robot.id} writable={operator} canDispatch={canDispatch} executionProfiles={account.installation.execution_profiles ?? []} onSessionEnd={notifySessionExpired} /></section>}</details>}
       <Card title="Tasks"><div className="cv-card__body">
         {tasks.length === 0 && <EmptyState title="No tasks yet." />}
         {tasks.map(task => <article className="robot-task" key={task.id}>

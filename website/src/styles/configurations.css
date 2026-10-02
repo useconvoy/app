@@ -1,5 +1,5 @@
 /* Configurations (cv-*): the signed-in app at /app/configurations, plus the episode replay player
- * (cv-player), which the legacy console page uses too. Colours come from tokens only (tokens.css).
+ * (cv-player), which Projects and a robot page's policy tools use too. Colours come from tokens only (tokens.css).
  * House rules: small radii, hairline borders, no elevation shadows, sentence case, single-line cells,
  * equal tiles in a row, 40px controls (44px on touch screens). Breakpoints 899 / 639. */
 

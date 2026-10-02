@@ -82,7 +82,7 @@ When full, recording transfer stops with an explicit quota failure; mission
 outcomes remain available. Automatic retention and object-store migration remain
 future work. Preserve the coordinator journal until publication is verified.
 
-The Applications section also includes a collapsible **Jetson timing experiment**
-report. Its dated measurements, source digest and image identity are saved
-experimental evidence; the learned policy failed the measured real-time contract.
-This does not start a Jetson experiment or alter deployment gates.
+The dated **Jetson timing experiment** results (measurements, source digest and image
+identity) are kept as [saved experimental evidence](../evidence/jetson-timing-2026-09-29.json);
+the learned policy failed the measured real-time contract. They are not shown in the
+workspace, do not start a Jetson experiment, and do not alter deployment gates.

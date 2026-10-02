@@ -18,10 +18,10 @@ python3 infra/development/services.py verify
 python3 infra/development/services.py status
 ```
 
-Open `http://localhost:3300/console`. Use the generated email/password in
+Open `http://localhost:3300/app`. Use the generated email/password in
 `infra/development/.services/connection.json`. This private, ignored directory
 also holds local certificates, build logs and acceptance evidence. Do not commit
-or share it. The console authenticates with the account's own session; its server
+or share it. The workspace authenticates with the account's own session; its server
 does not receive an operator API token or the admin password.
 
 `up` builds the existing API and website images plus one CPU reference image,
@@ -53,7 +53,7 @@ control, physical safety or production availability.
 
 | Caller | Destination | Meaning |
 | --- | --- | --- |
-| Browser | `http://localhost:3300/console` | Loopback-only public console |
+| Browser | `http://localhost:3300/app` | Loopback-only workspace |
 | Host API tools | `https://localhost:8443` | Loopback-only public management endpoint |
 | Web server / device | `https://api:8443` | Container DNS name, verified TLS |
 | Device | `https://inference:8443` | Private inference endpoint, verified TLS |

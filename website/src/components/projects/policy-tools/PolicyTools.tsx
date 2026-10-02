@@ -1,15 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, errorText, MutationAttempts, terminal, timestamp } from "@/lib/platform/client";
-import type { Account, Application, Deployment, Device, Episode, EvaluationRun, Mission, Project, Qualification, Release, Robot } from "@/lib/platform/client";
-import { Portal } from "@/components/portal/Portal";
+import type { Application, Deployment, Device, Episode, EvaluationRun, Mission, Project, Qualification, Release, Robot } from "@/lib/platform/client";
+import { PAIRED_PROFILE, releaseComponents } from "@/lib/platform/manifest";
+import { EpisodeSummary } from "./EpisodeSummary";
 import { Evaluations } from "./Evaluations";
 import { ReleaseDetails } from "./ReleaseDetails";
-import { TimingEvidence } from "./TimingEvidence";
-import { EpisodeSummary } from "./EpisodeSummary";
-import { PAIRED_PROFILE, releaseComponents } from "@/lib/platform/manifest";
 
 const PROFILES = [
   { id: "metaworld-sawyer-pick-place-v1", label: "Sawyer · state observations" },
@@ -18,122 +15,19 @@ const PROFILES = [
 ];
 const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 
-export function Brand({ label = "Robot applications" }: { label?: string }) { return <Link className="console-brand" href="/app">{label}</Link>; }
 function Status({ state }: { state: string }) {
   return <span className={`console-status console-status-${["ready", "completed"].includes(state) ? "success" : ["failed", "unknown", "blocked"].includes(state) ? "warning" : "neutral"}`}>{state.replaceAll("_", " ")}</span>;
 }
 function Alert({ children }: { children: React.ReactNode }) { return <p className="console-alert" role="alert">{children}</p>; }
 
-export function Console() {
-  const [account, setAccount] = useState<Account | null | undefined>(undefined);
-  const [error, setError] = useState<string | null>(null);
-  const load = useCallback(async () => {
-    try { setAccount(await api<Account>("auth/me")); setError(null); }
-    catch (cause) { setAccount(null); if (!(cause instanceof ApiError && cause.status === 401)) setError(errorText(cause)); }
-  }, []);
-  useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
-  const signOut = useCallback(() => setAccount(null), []);
-  return <div className="console-shell">
-    {account === undefined ? <main className="console-auth"><Brand /><p role="status">Checking your session…</p></main>
-      : account === null ? <Login initialError={error} onLogin={load} />
-      : <Workspace account={account} onSessionEnd={signOut} />}
-  </div>;
-}
-
-/** The workspace sign-in form; Configurations reuses it behind its own session gate. */
-export function Login({ initialError, onLogin, brand }: { initialError: string | null; onLogin: () => Promise<void>; brand?: string }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(initialError);
-  const lock = useRef(false);
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (lock.current) return;
-    lock.current = true; setBusy(true); setError(null);
-    const form = event.currentTarget;
-    const data = new FormData(form);
-    try { await api("auth/login", { email: data.get("email"), password: data.get("password") }); form.reset(); await onLogin(); }
-    catch (cause) { setError(errorText(cause)); }
-    finally { lock.current = false; setBusy(false); }
-  }
-  return <main className="console-auth"><Brand label={brand} /><section className="console-card">
-    <p className="console-eyebrow">Your Convoy workspace</p><h1>One workspace for your robots.</h1>
-    <p>Sign in to connect a device, test its model, and manage robot applications.</p>
-    <form onSubmit={event => void submit(event)}>
-      <label>Email<input name="email" type="email" autoComplete="username" required /></label>
-      <label>Password<input name="password" type="password" autoComplete="current-password" required /></label>
-      {error && <Alert>{error}</Alert>}
-      <button className="btn btn-primary" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
-    </form><p className="console-note">Use your Convoy account for devices, applications, and simulation results.</p>
-  </section></main>;
-}
-
-function Workspace({ account, onSessionEnd }: { account: Account; onSessionEnd: () => void }) {
-  const [section, setSection] = useState<"applications" | "device">("applications");
-  const [deviceVisited, setDeviceVisited] = useState(false);
-  useEffect(() => {
-    const sync = () => {
-      const selected = new URLSearchParams(window.location.search).get("section") === "device" ? "device" : "applications";
-      setSection(selected);
-      if (selected === "device") setDeviceVisited(true);
-    };
-    const initial = window.setTimeout(sync, 0);
-    window.addEventListener("popstate", sync);
-    return () => { window.clearTimeout(initial); window.removeEventListener("popstate", sync); };
-  }, []);
-  function navigateSection(next: "applications" | "device") {
-    setSection(next);
-    if (next === "device") setDeviceVisited(true);
-    const params = new URLSearchParams(window.location.search);
-    params.set("section", next);
-    window.history.pushState(null, "", `/app/applications?${params}`);
-  }
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [projectId, setProjectId] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const attempts = useRef(new MutationAttempts());
-  const reload = useCallback(async () => {
-    try { setProjects(await api<Project[]>("projects")); }
-    catch (cause) { if (cause instanceof ApiError && cause.status === 401) onSessionEnd(); else setError(errorText(cause)); }
-  }, [onSessionEnd]);
-  useEffect(() => { const timer = window.setTimeout(() => void reload(), 0); return () => window.clearTimeout(timer); }, [reload]);
-  async function create(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if (busy) return; setBusy(true); setError(null);
-    const form = event.currentTarget;
-    try {
-      const project = await attempts.current.submit<Project>("projects", { name: new FormData(form).get("name") });
-      await reload(); setProjectId(project.id); form.reset();
-    } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
-  }
-  async function logout() {
-    try { await api("auth/logout", {}); onSessionEnd(); } catch (cause) { setError(errorText(cause)); }
-  }
-  const project = projects.find(item => item.id === projectId) ?? projects[0];
-  const writable = account.user.role !== "viewer";
-  const paused = !!(account.installation.dispatch_paused_at || account.installation.quarantined_at);
-  return <>
-    <a className="console-skip" href="#console-main">Skip to workspace</a>
-    <header className="console-header"><Brand /><div><span>{account.user.email}</span><button onClick={() => void logout()}>Sign out</button></div></header>
-    <main id="console-main" className="console-main" tabIndex={-1}>
-      <div className="console-heading"><div><p className="console-eyebrow">Robot applications</p><h1>Build. Deploy. Observe.</h1><p>Connect your device, test its model, and bring your application together.</p></div></div>
-      <nav className="application-nav" aria-label="Robot applications">{(["applications", "device"] as const).map(item => <a key={item} href={`/app/applications?section=${item}`} aria-current={section === item ? "page" : undefined} onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); navigateSection(item); } }}>{item === "device" ? "Device connection" : "Applications"}</a>)}</nav>
-      {error && <Alert>{error}</Alert>}
-      <div hidden={section !== "device"}>{deviceVisited && <Portal active={section === "device"} onSessionEnd={onSessionEnd} canChat={writable} />}</div>
-      <div hidden={section !== "applications"}>
-      <p className="console-scope">Sawyer pick-and-place simulation. Policy and environment identity are pinned in each release.</p>
-      <TimingEvidence />
-      {paused && <Alert>Dispatch is paused or the installation is in recovery. Existing observations remain available.</Alert>}
-      <section className="console-projects" aria-label="Project selection">
-        <label>Project<select value={project?.id ?? ""} onChange={event => setProjectId(event.target.value)}><option value="" disabled>{projects.length ? "Choose a project" : "No projects yet"}</option>{projects.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        {writable && <form onSubmit={event => void create(event)}><label>New project name<input name="name" maxLength={120} required /></label><button className="btn btn-secondary" disabled={busy}>Create project</button></form>}
-      </section>
-      {project ? <ProjectWorkspace key={project.id} project={project} writable={writable} canDispatch={!paused && account.installation.simulator} executionProfiles={account.installation.execution_profiles ?? []} onSessionEnd={onSessionEnd} /> : <p>Create a project to connect a simulator and register an application release.</p>}
-      </div>
-    </main>
-  </>;
-}
-
-export function ProjectWorkspace({ project, writable, canDispatch, executionProfiles, onSessionEnd, initialRobotId = "" }: { project: Project; writable: boolean; canDispatch: boolean; executionProfiles: string[]; onSessionEnd: () => void; initialRobotId?: string }) {
+/**
+ * Policy and evaluation tools for the simulated robots that run an existing execution
+ * profile (robots without a registered profile): simulator enrollment and robot binding,
+ * applications and immutable release manifests, release qualification, deployment,
+ * missions and their episodes, for one project. The robot page (`RobotExecution.tsx`)
+ * shows them under "Advanced policy and evaluation tools"; styles are in `console.css`.
+ */
+export function PolicyTools({ project, writable, canDispatch, executionProfiles, onSessionEnd, initialRobotId = "" }: { project: Project; writable: boolean; canDispatch: boolean; executionProfiles: string[]; onSessionEnd: () => void; initialRobotId?: string }) {
   const [robots, setRobots] = useState<Robot[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);

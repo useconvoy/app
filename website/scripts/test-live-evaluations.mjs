@@ -1,4 +1,5 @@
-/** Real browser → BFF → API → evaluation job → coordinator → MuJoCo acceptance.
+/** Real browser → BFF → API → evaluation job → coordinator → MuJoCo acceptance, through the seeded
+ * robot's page and its policy and evaluation tools (Advanced policy and evaluation tools).
  * Start pipeline.py --serve --no-evaluation-job first: a running job acknowledges a
  * cancellation within one poll, before the requested state can be observed.
  * CONVOY_EVALUATION_PYTHON must point at the simulation managed environment. This
@@ -29,6 +30,7 @@ await new Promise(resolve => reserve.listen(0, '127.0.0.1', resolve));
 const port = reserve.address().port;
 await new Promise(resolve => reserve.close(resolve));
 const origin = `http://127.0.0.1:${port}`;
+const robotPage = `${origin}/app/projects/${encodeURIComponent(connection.project_id)}/robots/${encodeURIComponent(connection.robot_id)}`;
 const processes = [];
 let processLog = '';
 function start(binary, args, env) {
@@ -43,46 +45,50 @@ let browser;
 const evidence = { status: 'failed', checks: [] };
 try {
   await expect.poll(async () => {
-    if (web.exitCode !== null) throw new Error('Console server exited');
-    return fetch(origin + '/console').then(response => response.status).catch(() => 0);
+    if (web.exitCode !== null) throw new Error('Web server exited');
+    return fetch(robotPage).then(response => response.status).catch(() => 0);
   }, { timeout: 30000 }).toBe(200);
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
   const failures = [];
   page.on('pageerror', error => failures.push(error.message));
-  await page.goto(origin + '/console');
+  await page.goto(robotPage);
   await page.getByLabel('Email', { exact: true }).fill(connection.email);
   await page.getByLabel('Password', { exact: true }).fill(connection.password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  const panel = page.locator('[aria-labelledby="evaluations-heading"]');
-  const deploy = page.getByRole('button', { name: 'Request deployment', exact: true });
-  const startMission = page.getByRole('button', { name: 'Start mission', exact: true });
+  // The robot page's own controls stay outside this region; every check below is scoped to the tools.
+  const tools = page.getByRole('region', { name: 'Existing policy runtime', exact: true });
+  const openTools = () => page.locator('summary', { hasText: 'Advanced policy and evaluation tools' }).click();
+  await openTools();
+  const panel = tools.locator('[aria-labelledby="evaluations-heading"]');
+  const deploy = tools.getByRole('button', { name: 'Request deployment', exact: true });
+  const startMission = tools.getByRole('button', { name: 'Start mission', exact: true });
   await expect(panel).toBeVisible();
   await expect(deploy).toBeEnabled();
   await panel.locator('summary', { hasText: 'Create an immutable suite' }).click();
-  await page.getByLabel('Suite name', { exact: true }).fill('Browser qualification');
-  await page.getByLabel('Scenario seeds', { exact: true }).fill('0, 1');
-  await page.getByRole('button', { name: 'Create suite', exact: true }).click();
-  await expect(page.getByRole('combobox', { name: 'Evaluation suite', exact: true })).toContainText('Browser qualification');
-  const suiteId = await page.getByRole('combobox', { name: 'Evaluation suite', exact: true }).inputValue();
+  await tools.getByLabel('Suite name', { exact: true }).fill('Browser qualification');
+  await tools.getByLabel('Scenario seeds', { exact: true }).fill('0, 1');
+  await tools.getByRole('button', { name: 'Create suite', exact: true }).click();
+  await expect(tools.getByRole('combobox', { name: 'Evaluation suite', exact: true })).toContainText('Browser qualification');
+  const suiteId = await tools.getByRole('combobox', { name: 'Evaluation suite', exact: true }).inputValue();
   await expect(deploy).toBeEnabled();
   await expect(startMission).toBeEnabled();
 
-  const evaluate = page.getByRole('button', { name: 'Evaluate selected release', exact: true });
-  const selection = page.getByRole('combobox', { name: 'Evaluation run', exact: true });
+  const evaluate = tools.getByRole('button', { name: 'Evaluate selected release', exact: true });
+  const selection = tools.getByRole('combobox', { name: 'Evaluation run', exact: true });
   await evaluate.click(); // the job is deliberately not running yet; reservation is durable
   await expect(panel.locator('.console-reservation')).toContainText('is reserved by evaluation');
   await expect(deploy).toBeDisabled();
   await expect(startMission).toBeDisabled();
-  await page.getByRole('button', { name: 'Request evaluation cancellation', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Evaluation cancellation awaiting acknowledgement', exact: true })).toBeVisible();
+  await tools.getByRole('button', { name: 'Request evaluation cancellation', exact: true }).click();
+  await expect(tools.getByRole('button', { name: 'Evaluation cancellation awaiting acknowledgement', exact: true })).toBeVisible();
   const jobEnv = { ...process.env, CONVOY_DATA_DIR: dataDir, CONVOY_SIMULATOR: '1', CONVOY_SQLITE_WAL: '0', CONVOY_SCHEDULER_INPROCESS: '0' };
   delete jobEnv.DATABASE_URL;
   start(path.resolve(process.env.CONVOY_EVALUATION_PYTHON), ['-m', 'convoy_server.evaluation_worker'], jobEnv);
   await expect(panel.locator('.console-evaluation-outcome')).toContainText('Did not pass', { timeout: 30000 });
   await expect(panel.locator('.console-reservation')).toHaveCount(0, { timeout: 10000 });
 
-  await page.getByRole('button', { name: 'Require selected suite', exact: true }).click();
+  await tools.getByRole('button', { name: 'Require selected suite', exact: true }).click();
   await expect(panel.getByText('The selected release needs a passing promotion', { exact: false })).toBeVisible();
   await expect(deploy).toBeDisabled();
   await expect(startMission).toBeDisabled();
@@ -96,30 +102,30 @@ try {
   await expect(selection).not.toHaveValue(baselineId);
   await expect(panel.locator('.console-evaluation-outcome')).toContainText('Passed', { timeout: 45000 });
   const candidateId = await selection.inputValue();
-  await page.getByRole('combobox', { name: 'Compare with baseline', exact: true }).selectOption(baselineId);
-  await page.getByRole('button', { name: 'Compare reports', exact: true }).click();
+  await tools.getByRole('combobox', { name: 'Compare with baseline', exact: true }).selectOption(baselineId);
+  await tools.getByRole('button', { name: 'Compare reports', exact: true }).click();
   await expect(panel.getByText('Success-count change: 0', { exact: false })).toBeVisible();
-  await page.getByRole('button', { name: 'Promote passing report', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Report promoted', exact: true })).toBeDisabled();
+  await tools.getByRole('button', { name: 'Promote passing report', exact: true }).click();
+  await expect(tools.getByRole('button', { name: 'Report promoted', exact: true })).toBeDisabled();
   await expect(deploy).toBeEnabled();
   await deploy.click();
   await expect(startMission).toBeEnabled({ timeout: 15000 });
-  const rows = page.locator('[aria-labelledby="episodes-heading"] tbody tr');
+  const rows = tools.locator('[aria-labelledby="episodes-heading"] tbody tr');
   const previous = await rows.first().locator('code').innerText();
   await startMission.click();
   await expect(rows.first()).not.toContainText(previous);
   await expect(rows.first()).toContainText('completed', { timeout: 20000 });
   await rows.first().getByRole('button', { name: 'View episode', exact: true }).click();
-  await expect(page.locator('.console-episode')).toContainText('Succeeded');
+  await expect(tools.locator('.console-episode')).toContainText('Succeeded');
 
   // A second real immutable release has the same suite contract but different
   // policy bytes. It has no promotion and is never served by this worker.
   const other = JSON.parse(await fs.readFile(connection.manifest_path, 'utf8'));
   other.policy.artifact_sha256 = other.policy.artifact_sha256 === 'e'.repeat(64) ? 'd'.repeat(64) : 'e'.repeat(64);
-  await page.locator('summary', { hasText: 'Register a release manifest' }).click();
-  await page.getByLabel('Manifest JSON', { exact: true }).fill(JSON.stringify(other));
-  await page.getByRole('button', { name: 'Register release', exact: true }).click();
-  const releaseSelect = page.getByRole('combobox', { name: 'Release', exact: true });
+  await tools.locator('summary', { hasText: 'Register a release manifest' }).click();
+  await tools.getByLabel('Manifest JSON', { exact: true }).fill(JSON.stringify(other));
+  await tools.getByRole('button', { name: 'Register release', exact: true }).click();
+  const releaseSelect = tools.getByRole('combobox', { name: 'Release', exact: true });
   await expect(releaseSelect).not.toHaveValue(connection.release_id);
   const unqualifiedId = await releaseSelect.inputValue();
   await expect(panel.getByText('The selected release needs a passing promotion', { exact: false })).toBeVisible();
@@ -128,15 +134,20 @@ try {
   let requestReady;
   const held = new Promise(resolve => { releaseHeld = resolve; });
   const ready = new Promise(resolve => { requestReady = resolve; });
-  let holdOnce = true;
+  // The robot page also polls this release's qualification for its own controls, so every
+  // matching response is held from here on; the tools' own request is among them.
+  let holding = true;
+  const deliveries = [];
   const pattern = '**/api/platform/applications/*/qualification?release_id=*';
   await page.route(pattern, async route => {
-    if (holdOnce && new URL(route.request().url()).searchParams.get('release_id') === connection.release_id) {
-      holdOnce = false;
+    if (holding && new URL(route.request().url()).searchParams.get('release_id') === connection.release_id) {
+      let delivered;
+      deliveries.push(new Promise(resolve => { delivered = resolve; }));
       const response = await route.fetch(); // real upstream response; only delivery is delayed
       requestReady();
       await held;
       await route.fulfill({ response });
+      delivered();
     } else await route.continue();
   });
   await releaseSelect.selectOption(connection.release_id);
@@ -145,7 +156,9 @@ try {
   await expect(panel.getByText('The selected release needs a passing promotion', { exact: false })).toBeVisible();
   await expect(deploy).toBeDisabled();
   const delivered = page.waitForResponse(response => response.url().includes(`qualification?release_id=${connection.release_id}`));
+  holding = false;
   releaseHeld();
+  await Promise.all(deliveries);
   await (await delivered).finished();
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await expect(deploy).toBeDisabled();
@@ -154,8 +167,9 @@ try {
   await releaseSelect.selectOption(connection.release_id);
   await expect(deploy).toBeEnabled();
   await page.reload();
-  await page.getByRole('combobox', { name: 'Release', exact: true }).selectOption(connection.release_id);
-  await expect(page.getByRole('button', { name: 'Report promoted', exact: true })).toBeDisabled();
+  await openTools();
+  await tools.getByRole('combobox', { name: 'Release', exact: true }).selectOption(connection.release_id);
+  await expect(tools.getByRole('button', { name: 'Report promoted', exact: true })).toBeDisabled();
 
   const runs = await page.evaluate(async project => (await fetch(`/api/platform/evaluations?project_id=${project}`)).json(), connection.project_id);
   const suiteRuns = runs.filter(run => run.suite_id === suiteId);
@@ -167,11 +181,11 @@ try {
 
   // Register a second, genuinely enrolled device with the visual profile. This
   // checks registration/display only; this CPU reference worker does not serve it.
-  const robotPanel = page.locator('[aria-labelledby="robots-heading"]');
+  const robotPanel = tools.locator('[aria-labelledby="robots-heading"]');
   await robotPanel.locator('summary', { hasText: 'Connect a simulator' }).click();
-  await page.getByLabel('Simulator name', { exact: true }).fill('Camera simulator registration');
+  await tools.getByLabel('Simulator name', { exact: true }).fill('Camera simulator registration');
   const enrollmentResponse = page.waitForResponse(response => response.url().endsWith('/api/platform/enrollments') && response.request().method() === 'POST');
-  await page.getByRole('button', { name: 'Create enrollment command', exact: true }).click();
+  await tools.getByRole('button', { name: 'Create enrollment command', exact: true }).click();
   const enrollment = await (await enrollmentResponse).json();
   const claim = await fetch(`${connection.api_url}/api/agent/v1/enroll`, { method: 'POST',
     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
@@ -180,33 +194,34 @@ try {
     }) });
   expect(claim.ok).toBe(true);
   const visualDevice = await claim.json();
-  const deviceSelect = page.getByRole('combobox', { name: 'Enrolled device', exact: true });
+  const deviceSelect = tools.getByRole('combobox', { name: 'Enrolled device', exact: true });
   await expect(deviceSelect).toContainText(visualDevice.device_id, { timeout: 10000 });
   await deviceSelect.selectOption(visualDevice.device_id);
-  await page.getByLabel('Robot name', { exact: true }).fill('Camera simulator');
+  await tools.getByLabel('Robot name', { exact: true }).fill('Camera simulator');
   const visualProfile = 'metaworld-smolvla-pick-place-rgb-v1';
-  await page.getByRole('combobox', { name: 'Simulator profile', exact: true }).selectOption(visualProfile);
-  await page.getByRole('button', { name: 'Register robot', exact: true }).click();
+  await tools.getByRole('combobox', { name: 'Simulator profile', exact: true }).selectOption(visualProfile);
+  await tools.getByRole('button', { name: 'Register robot', exact: true }).click();
   await expect(robotPanel.locator('.console-note').first()).toContainText(visualProfile);
   await expect(startMission).toBeDisabled();
   await robotPanel.locator('summary', { hasText: 'Connect a simulator' }).click();
   const recordedVisual = JSON.parse(await fs.readFile(path.join(website, '../examples/manipulation/evidence/smolvla-managed-seed0.json'), 'utf8'));
-  await page.locator('summary', { hasText: 'Register a release manifest' }).click();
-  await page.getByLabel('Manifest JSON', { exact: true }).fill(JSON.stringify(recordedVisual.manifest));
-  await page.getByRole('button', { name: 'Register release', exact: true }).click();
-  const releasePanel = page.locator('[aria-labelledby="application-heading"]');
+  await tools.locator('summary', { hasText: 'Register a release manifest' }).click();
+  await tools.getByLabel('Manifest JSON', { exact: true }).fill(JSON.stringify(recordedVisual.manifest));
+  await tools.getByRole('button', { name: 'Register release', exact: true }).click();
+  const releasePanel = tools.locator('[aria-labelledby="application-heading"]');
   await expect(releasePanel.locator('.console-note').first()).toContainText(visualProfile);
   await expect(releasePanel.locator('.console-note').first()).toContainText(recordedVisual.manifest.policy.runtime);
   await expect(evaluate).toBeDisabled(); // the existing suite requires state observations
-  await page.locator('summary', { hasText: 'Register a release manifest' }).click();
+  await tools.locator('summary', { hasText: 'Register a release manifest' }).click();
   await page.screenshot({ path: path.join(output, 'visual-registration.png'), fullPage: true });
-  await page.getByRole('combobox', { name: 'Selected robot', exact: true }).selectOption(connection.robot_id);
+  await tools.getByRole('combobox', { name: 'Selected robot', exact: true }).selectOption(connection.robot_id);
   await releaseSelect.selectOption(connection.release_id);
   await expect(deploy).toBeEnabled();
   await page.screenshot({ path: path.join(output, 'evaluation-console.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
   await page.screenshot({ path: path.join(output, 'evaluation-console-mobile.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Account', exact: true }).click();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
   expect(failures).toEqual([]);

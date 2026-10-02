@@ -1,41 +1,29 @@
-# One workspace for device inference and robot applications
+# One workspace for robots, configurations and device evidence
 
-`/app` opens Configurations at `/app/configurations`; robot applications and the
-device connection live at `/app/applications`. One account, sign-in and sign-out
-cover the workspace. Applications contains release/deployment/simulation
-workflows; Device connection contains physical-device status, model chat,
-measured usage and traces.
-The old device sidebar and separate demo login are removed.
-
-`/console` redirects to the application. `/portal?view=chat` and
-`/app/device?view=chat` redirect to `/app/applications?section=device&view=chat`;
-connection, usage and traces links are preserved too. Landing-page links begin at
-`/app`. Back/forward navigation switches sections, application drafts and chat
-history remain mounted across section changes, and device snapshot polling pauses
-when its section is hidden.
+`/app` opens the workspace: **Projects** (`/app/projects`) and **Configurations**
+(`/app/configurations`) share one account, sign-in and sign-out. The earlier console
+at `/app/applications`, with its Device, Chat, Usage and Traces views, has been
+removed. `/app/applications`, `/app/device`, `/portal` and `/console` redirect
+permanently to `/app/configurations`; browser Chat is gone. Landing-page links begin
+at `/app`.
 
 ## Feature map
 
 | Workspace area | Functionality |
 | --- | --- |
-| Applications | Projects; simulator enrollment and robot registration; immutable releases and component identities; deployment readiness; mission start/cancellation and history |
-| Release qualification | Fixed-seed suites, comparisons, promotion, deployment gates and evaluation cancellation |
+| Projects | Robots, profiles, fleets, runnable configurations and releases, simulator readiness, deployment, tasks and run results |
+| Policy and evaluation tools | On the page of a simulated robot that runs an existing execution profile: simulator enrollment and robot binding, immutable release manifests, fixed-seed suites, comparisons, promotion, deployment gates, missions and episodes |
+| Configurations | Saved configurations, their robots and evals; the configured device's live telemetry and inference traces on a robot bound to it |
 | Episode playback | Recorded frames, selected skill, policy commands, reward/success and separate wall/simulated timings |
-| Device connection | Test connection; physical-device telemetry; model chat; measured usage; request traces |
 
-The signed-in user's session is forwarded to the control plane for both sections;
-no operator-token bridge elevates a viewer's role. Viewers can inspect evidence,
-while operators/admins can submit model requests. Revocation and sign-out apply to
-both sections. The API's existing device permissions are installation-wide;
-application resources retain project ownership. The one configured physical
-device is explicitly workspace-wide, not implicitly attached to a selected robot.
-
-A connection test reads recent live-contact evidence; a Chat request tests the
-actual model path. Neither qualifies physical robot actuation or a policy's timing.
-The separate Jetson timing experiment and its qualification criteria are unchanged.
-The [device API guide](../../website/src/lib/portal/README.md) covers cookie
-migration, retired demo configuration and permission behavior. Existing management
-sessions migrate automatically; demo-only users need a Convoy management account.
+The signed-in user's session is forwarded to the control plane; no operator-token
+bridge elevates a viewer's role. Revocation and sign-out apply to the whole workspace.
+The API's existing device permissions are installation-wide; application resources
+retain project ownership. The one configured physical device is explicitly
+workspace-wide, not implicitly attached to a selected robot. Live device evidence
+does not qualify physical robot actuation or a policy's timing. The
+[device API guide](../../website/src/lib/portal/README.md) covers the device API and
+its permission behavior.
 
 ## Recordings
 
@@ -69,7 +57,7 @@ MetaWorld benchmark success is not proof of stable physical placement.
 
 The existing Lightsail deployment still consists of the same Next.js service and
 Python API. Its Compose configuration now supplies the management API connection
-for both application and device requests. HTTP is explicitly allowed only to the
+for both workspace and device requests. HTTP is explicitly allowed only to the
 named `control-plane:8080` service on that private single-host network; other
 remote origins still require HTTPS. The public mutation origin defaults to the
 existing `PORTAL_PUBLIC_ORIGIN` unless `CONVOY_CONSOLE_ORIGIN` is provided.
@@ -78,7 +66,7 @@ trials and any GPU service remain separate operator actions.
 
 ## Validation and next experiment
 
-Keep the existing portal browser regressions and platform proxy tests. The new
+Keep the workspace browser regressions and platform proxy tests. The
 API tests cover recording-to-episode identity, frame bounds, missing recordings,
 unauthenticated access and another project's access. Verify a learned-policy
 mission through the UI and watch its resulting recording without a manual export.

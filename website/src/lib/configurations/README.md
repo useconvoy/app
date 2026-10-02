@@ -13,8 +13,8 @@ title. The Configurations journey is four pages:
 | Robot | `/[configId]/robots/[robotId]` | Test robots: evals. Live devices: telemetry and traces. Details tab. |
 | Eval | `…/evals/[runId]` | Metrics, slices and rollouts; a rollout with a real episode opens the replay (`?rollout=`). |
 
-`/app/applications` (and the `/portal`, `/app/device` and `/console` redirects to it)
-stays reachable on the same session, but Configurations never links to it.
+The earlier console (`/app/applications`, `/app/device`, `/portal`, `/console`) is gone; those
+paths redirect permanently to `/app/configurations`.
 
 **Entry.** The server redirects `/app` to `/app/projects` (it cannot see the session
 cookie, which is scoped to `/api`). A page load that arrives through that redirect goes on
@@ -80,8 +80,8 @@ Change, Unlink in a dialog); it is hidden when there is nothing to link to.
   - `Rollout.episodeId` (`epi_…`): a stored rollout backed by a real episode.
   A rollout is replayable only with a real episode id; there is no simulated replay.
   The replay plays the episode's recorded frames in a bottom sheet with
-  `components/console/EpisodeReplay.tsx`, the same player as the console's
-  evaluations, and says "No recording for this episode." when there are none.
+  `components/configurations/EpisodeReplay.tsx`, the same player as Projects' runs and a
+  robot page's policy tools, and says "No recording for this episode." when there are none.
 - **Robot preview.** `RobotSpec.preview` names a simulated robot the website ships, by id
   (`ROBOT_PREVIEW_IDS`: `bimanual-station`); `previews.ts` maps the id to its committed files
   under `public/sim/<id>/` (a VP9 and an H.264 turntable loop and a WebP still, rendered by

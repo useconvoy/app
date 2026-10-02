@@ -1,6 +1,6 @@
 locals {
   frontends = {
-    web       = { ingress = "management", port = 3000, health = "/console" }
+    web       = { ingress = "management", port = 3000, health = "/app/configurations" }
     api       = { ingress = "management", port = 8080, health = "/api/health" }
     inference = { ingress = "inference", port = 8080, health = "/health" }
   }

@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import { WorkspaceRoot } from "@/components/configurations/Session";
-import "@/styles/workspace.css";
+// The sign-in form and a robot page's policy and evaluation tools.
 import "@/styles/console.css";
-import "@/styles/portal.css";
-// After console.css: the replay player is shared with the legacy console page.
 import "@/styles/configurations.css";
 
 export const metadata: Metadata = {
