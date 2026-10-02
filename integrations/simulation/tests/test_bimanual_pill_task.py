@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 from convoy_sim.bimanual_pill_task import physics as P
-from convoy_sim.bimanual_pill_task.configs import CONFIGS, SLICES, EpisodeSpec, release_manifest
+from convoy_sim.bimanual_pill_task.configs import CONFIGS, EDGE_QWEN, SLICES, EpisodeSpec, release_manifest
 from convoy_sim.bimanual_pill_task.control import ArmKinematics, grasp_rotation
 from convoy_sim.bimanual_pill_task.episode import Episode, run_episode
 from convoy_sim.bimanual_pill_task.evaluate import task_label
@@ -176,8 +176,22 @@ def test_transits_are_lifted_until_the_gripper_clears_the_bottle():
     assert probe.path_clear(lifted) and lifted.points[1][2] > plain.points[1][2]
 
 
-def test_executive_rejects_a_stale_decision_next_to_the_other_arm():
-    episode = Episode(EpisodeSpec(CONFIGS["edge_qwen_edge_skills"], SLICES["nominal"], 0, 30.0))
+class _NoDeviceCalls:
+    """A device connection that must not be used (the test drives the executive directly)."""
+
+    release_id = "rel_unused"
+
+    def device(self):
+        raise AssertionError("no device call expected")
+
+    def send(self, messages, max_tokens):
+        raise AssertionError("no device call expected")
+
+
+@pytest.mark.parametrize("config", ["edge_qwen_edge_skills", "cloud_astra_only"])
+def test_executive_rejects_a_stale_decision_next_to_the_other_arm(config):
+    planner = _NoDeviceCalls() if CONFIGS[config].skill_planner.source == "device" else None
+    episode = Episode(EpisodeSpec(CONFIGS[config], SLICES["nominal"], 0, 30.0), planner=planner)
     pills = episode.world.pills()
     target = next(p for p in pills if p.pos[1] < -0.05)
     near = next(p for p in pills if p.index != target.index and np.linalg.norm(p.pos[:2] - target.pos[:2]) < 0.10)
@@ -198,7 +212,7 @@ def test_executive_rejects_a_stale_decision_next_to_the_other_arm():
 def test_cloud_calls_fail_during_an_outage_and_edge_calls_do_not():
     network = NetworkModel(rtt=LatencyModel(0.03, 0.09), outages=((10.0, 20.0),))
     cloud = CONFIGS["cloud_astra_only"].skill_planner
-    edge = CONFIGS["edge_qwen_edge_skills"].skill_planner
+    edge = EDGE_QWEN  # the modeled edge profile (the skill router of "Edge Qwen + GPT Astra")
 
     class Fixed:
         def decide(self, request):
@@ -316,7 +330,7 @@ def test_same_seed_same_layout_and_outcome():
     a = sample_layout(np.random.default_rng(5), 24, (0.49, 0.0), (0.1, 0.22))
     b = sample_layout(np.random.default_rng(5), 24, (0.49, 0.0), (0.1, 0.22))
     assert a == b
-    spec = EpisodeSpec(CONFIGS["edge_qwen_edge_skills"], SLICES["nominal"], 2, horizon_s=6.0)
+    spec = EpisodeSpec(CONFIGS["cloud_astra_only"], SLICES["nominal"], 2, horizon_s=6.0)
     first, second = run_episode(spec), run_episode(spec)
     for key in ("placed", "skills", "planner_calls", "simulated_duration_s", "planner_latency_p50_ms"):
         assert first[key] == second[key]
@@ -516,5 +530,5 @@ def test_a_hosted_planner_answers_both_arms_at_once_and_the_edge_queues():
 
     cloud = finish_times(CONFIGS["cloud_astra_only"].skill_planner)
     assert cloud["left"][0] == cloud["right"][0] == 0.0  # both calls start at once
-    edge = finish_times(CONFIGS["edge_qwen_edge_skills"].skill_planner)
+    edge = finish_times(EDGE_QWEN)
     assert edge["left"][0] == 0.0 and edge["right"][0] >= edge["left"][1]  # one call at a time on the Jetson

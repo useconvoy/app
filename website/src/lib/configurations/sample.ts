@@ -1,7 +1,8 @@
 /**
  * The generic sample workspace: shown when an account has no workspace document,
- * and used by local development and tests. Three configurations of one tabletop
- * arm, each with one test robot:
+ * and used by local development and tests. Three configurations of one bimanual
+ * station robot (the simulated robot the configuration page shows turning), each
+ * with one test robot:
  *
  * - Edge planner: a planner on the Jetson; its robot is bound to the workspace's
  *   configured device, so its telemetry and traces are measured live;
@@ -30,16 +31,17 @@ export function seededRandom(seed: number): () => number {
   return () => (state = (state * 16807) % 2147483647) / 2147483647;
 }
 
-const ARM: RobotSpec = {
-  name: "Tabletop arm", summary: "6-DOF arm · parallel gripper", cameras: ["Wrist RGB", "Overhead RGB"], controlRateHz: 20,
-  actionSpace: "End-effector delta and gripper", simTwin: { name: "Tabletop twin", engine: "MuJoCo" }, provenance: SAMPLE,
+const ROBOT: RobotSpec = {
+  name: "Bimanual station", summary: "2 × 6-DOF arms · wheeled base", cameras: ["Head RGB-D", "2 × wrist RGB"], controlRateHz: 20,
+  actionSpace: "End-effector delta and gripper, per arm", simTwin: { name: "Bimanual station twin", engine: "MuJoCo" },
+  preview: "bimanual-station", provenance: SAMPLE,
 };
 const [PLANNER, POLICY] = EDGE_MODELS;
 const CLOUD_PLANNER: CloudModel = { id: "cloud-planner", role: "planner", name: "Hosted LLM planner", shortName: "Hosted LLM", serving: "Managed endpoint", state: "active" };
 
 function revision(createdAt: string, edge: EdgeModel[], cloud: CloudModel[]): ConfigRevision {
   return {
-    rev: "r1", createdAt, robot: ARM, edgeHardware: HARDWARE[0].hardware, edgeModels: edge, cloudModels: cloud,
+    rev: "r1", createdAt, robot: ROBOT, edgeHardware: HARDWARE[0].hardware, edgeModels: edge, cloudModels: cloud,
     routing: routingFor(routeMode(edge.length > 0, cloud.length > 0)), safety: { name: "Default", definitions: [] }, flagRules: JETSON_FLAG_RULES, compatibility: [],
   };
 }
@@ -130,7 +132,7 @@ export function createSampleWorkspace(now: number | Date = Date.now()): ConvoyWo
   // A JSON round trip: exactly what a stored document looks like, with no objects shared between parts.
   return JSON.parse(JSON.stringify({
     schemaVersion: WORKSPACE_SCHEMA_VERSION,
-    meta: { id: SAMPLE_WORKSPACE_ID, name: "Sample workspace", label: "Sample", description: "Three sample configurations of one tabletop arm.", updatedAt: ago(25 * MINUTE), sample: true },
+    meta: { id: SAMPLE_WORKSPACE_ID, name: "Sample workspace", label: "Sample", description: "Three sample configurations of one bimanual robot.", updatedAt: ago(25 * MINUTE), sample: true },
     configurations, robots, suites: [SUITE], runs, rollouts, traces: [], logs: [], activity: [],
   } satisfies ConvoyWorkspace)) as ConvoyWorkspace;
 }

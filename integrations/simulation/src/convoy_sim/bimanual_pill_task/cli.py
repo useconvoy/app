@@ -5,12 +5,19 @@ host run under ``xvfb-run -a`` with ``MUJOCO_GL=glfw`` (or use EGL/OSMesa).
 ``--replay offline`` records in the offline replay format that
 ``scripts/import_offline_eval.py`` uploads; ``--replay journal`` (the default)
 writes the hosted coordinator journal.
+
+``edge_qwen_edge_skills`` (Edge Qwen) asks the model on a connected device for every
+decision: give the website origin (``--planner-server`` or ``CONVOY_SERVER``) and a
+signed-in operator session, either a file holding the ``convoy_session=…`` cookie
+(``--planner-session-file`` or ``CONVOY_SESSION_FILE``) or ``CONVOY_EMAIL`` and
+``CONVOY_PASSWORD`` (one sign-in, signed out at the end). Credentials are never printed.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -48,6 +55,36 @@ def _seeds(value: str) -> list[int]:
     return out
 
 
+def _print(line: str) -> None:
+    print(line, flush=True)
+
+
+def _planner_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--planner-server", default=os.environ.get("CONVOY_SERVER"),
+                        help="website origin for the device planner (default: $CONVOY_SERVER)")
+    parser.add_argument("--planner-session-file", type=Path, default=os.environ.get("CONVOY_SESSION_FILE"),
+                        help="file holding a signed-in convoy_session cookie (default: $CONVOY_SESSION_FILE)")
+
+
+def _device_planner(args, configs: list[str]):
+    """(client, close) for the device-planner configurations among `configs`, else (None, no-op)."""
+    if not any(CONFIGS[c].skill_planner.source == "device" for c in configs):
+        return None, lambda: None
+    from .device_planner import PortalChatClient, sign_in, sign_out
+
+    if not args.planner_server:
+        raise SystemExit("a device-planner configuration needs --planner-server (or CONVOY_SERVER)")
+
+    if args.planner_session_file:
+        return PortalChatClient.from_session_file(args.planner_server, args.planner_session_file, log=_print), lambda: None
+    email, password = os.environ.get("CONVOY_EMAIL"), os.environ.get("CONVOY_PASSWORD")
+    if not email or not password:
+        raise SystemExit("a device-planner configuration needs --planner-session-file, or CONVOY_EMAIL and CONVOY_PASSWORD")
+    cookie = sign_in(args.planner_server, email, password)
+    client = PortalChatClient(args.planner_server, cookie, log=_print)
+    return client, lambda: sign_out(args.planner_server, cookie)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m convoy_sim.bimanual_pill_task", description=__doc__)
     parser.add_argument("--timestep", type=float, help=f"physics step in seconds (default {P.TIMESTEP_S})")
@@ -63,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
                      help="recording format: hosted journal, or the offline import format")
     one.add_argument("--preview-camera", help="add this camera (e.g. photo) beside the head view in previews")
     one.add_argument("--output", type=Path, required=True, help="new directory")
+    _planner_options(one)
 
     ev = sub.add_parser("evaluate", help="seeds x slices x configs")
     ev.add_argument("--configs", default="all")
@@ -77,7 +115,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="recording format; offline also writes OUTPUT/CONFIG/evaluation.json for the import")
     ev.add_argument("--preview-camera", help="add this camera (e.g. photo) beside the head view in previews")
     ev.add_argument("--previews", default="", help="CONFIG:SLICE:SEED entries that get previews (default: all recorded)")
+    ev.add_argument("--name", help="the offline evaluation's name (default: Pills to bottle · <configuration>)")
     ev.add_argument("--output", type=Path, required=True, help="new directory")
+    _planner_options(ev)
 
     ph = sub.add_parser("check-physics", help="settling, drop, bottle fill and grasp-slip measurements")
     ph.add_argument("--output", type=Path, help="write JSON here")
@@ -97,9 +137,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "episode":
         from .evaluate import run_job
 
-        summary = run_job({"config": args.config, "slice": args.slice, "seed": args.seed, "horizon": args.horizon,
-                           "record": args.record, "replay": args.replay, "output": str(args.output),
-                           "timestep": args.timestep, "preview_camera": args.preview_camera})
+        planner, close = _device_planner(args, [args.config])
+        try:
+            if planner is not None:
+                state = planner.device()
+                if not (state.online and state.eligible):
+                    raise SystemExit(f"the device is not ready for chat: {state.reason or state.status}")
+            summary = run_job({"config": args.config, "slice": args.slice, "seed": args.seed, "horizon": args.horizon,
+                               "record": args.record, "replay": args.replay, "output": str(args.output),
+                               "timestep": args.timestep, "preview_camera": args.preview_camera}, planner,
+                              _print if planner else None)
+        finally:
+            close()
         print(json.dumps({k: v for k, v in summary.items() if k != "events"}, indent=2, default=float))
         return 0 if summary.get("status") == "completed" else 2
     if args.command == "evaluate":
@@ -107,9 +156,14 @@ def main(argv: list[str] | None = None) -> int:
 
         configs, slices, seeds = _ids(args.configs, CONFIGS), _ids(args.slices, SLICES), _seeds(args.seeds)
         record = "all" if args.record == "all" else _triples(args.record)
-        report = evaluate(args.output, configs, slices, seeds, jobs=args.jobs, horizon=args.horizon, record=record,
-                          timestep=args.timestep, preview_camera=args.preview_camera, replay=args.replay,
-                          seed_stride=args.seed_stride, previews=_triples(args.previews) if args.previews else None)
+        planner, close = _device_planner(args, configs)
+        try:
+            report = evaluate(args.output, configs, slices, seeds, jobs=args.jobs, horizon=args.horizon, record=record,
+                              timestep=args.timestep, preview_camera=args.preview_camera, replay=args.replay,
+                              seed_stride=args.seed_stride, previews=_triples(args.previews) if args.previews else None,
+                              planner=planner, planner_log=_print if planner else None, name=args.name)
+        finally:
+            close()
         print((args.output / "results.md").read_text())
         return 0 if all(e.get("status") == "completed" for e in report["episodes"]) else 2
     if args.command == "check-physics":

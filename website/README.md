@@ -31,7 +31,7 @@ src/styles/tokens.css   the only source file that may contain a hex color
 src/styles/globals.css  Tailwind bridge, shared typography and controls
 src/styles/portal.css   responsive portal layout using the same semantic tokens
 src/assets/brand/       brand source assets
-public/                 versioned icons, share cards, hero artwork
+public/                 versioned icons, share cards, hero artwork; sim/ robot previews
 infra/deploy/           existing Lightsail web-release script
 tests/e2e/              Playwright UI, accessibility, keyboard, responsive checks
 tests/portal/           isolated server API contract/security tests

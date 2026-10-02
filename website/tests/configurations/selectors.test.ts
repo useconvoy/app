@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  attentionRobots, currentRevision, displayHealth, evaluateFlagRules, getRevision, healthSeverity, listConfigurations, resolveRobotRoute, robotReadings, robotsFor, tracesFor,
+  attentionRobots, currentRevision, displayHealth, evaluateFlagRules, getRevision, healthSeverity, listConfigurations, offlineEvaluationIdsFor, offlineEvaluationsElsewhere,
+  offlineEvaluationsFor, resolveRobotRoute, robotReadings, robotsFor, tracesFor,
 } from "../../src/lib/configurations/selectors";
 import type { ActiveFlag } from "../../src/lib/configurations/selectors";
 import type { ConvoyWorkspace, Flag } from "../../src/lib/configurations/types";
@@ -72,6 +73,36 @@ test("robot status: a live robot's health, else whether an eval runs on it", () 
   assert.deepEqual([robotType(bench), robotType(sim)], ["Live device", "Simulator"]);
   const offline = { ...sim, offlineEvaluationIds: ["oev_contract0001"] };
   assert.deepEqual([robotType(offline), robotType({ ...offline, projectId: "prj_contract" })], ["Simulator · offline", "Simulator"]);
+});
+
+test("an offline eval belongs to the configuration whose robot links it: other configurations never offer it", () => {
+  const [mine, theirs, free, spare] = ["oev_contract0001", "oev_contract0002", "oev_contract0003", "oev_contract0004"].map(id => ({ id, name: id }));
+  const all = [theirs, mine, free, spare];
+  const sim = ws.robots.find(robot => robot.id === "sim-01")!;
+  const links: Record<string, string[]> = { "sim-01": [mine.id], "sim-02": [theirs.id] };
+  const linked: ConvoyWorkspace = {
+    ...ws,
+    robots: [
+      ...ws.robots.map(robot => links[robot.id] ? { ...robot, offlineEvaluationIds: links[robot.id] } : robot),
+      // A robot outside every configuration makes an eval belong nowhere.
+      { ...sim, id: "spare-01", name: "Spare 01", configId: null, rev: null, offlineEvaluationIds: [spare.id] },
+    ],
+  };
+  assert.deepEqual(offlineEvaluationsFor(linked, "edge-vla", all), [mine, free, spare], "its own and unassigned ones, in the order given");
+  assert.deepEqual(offlineEvaluationsFor(linked, "cloud-planner", all), [theirs, free, spare]);
+  assert.deepEqual(offlineEvaluationsFor(linked, "edge-planner", all), [free, spare], "a configuration without links is offered unassigned ones only");
+  assert.equal(offlineEvaluationsFor(linked, "edge-vla", all)[0], mine, "the items themselves, not copies");
+  assert.deepEqual(offlineEvaluationsElsewhere(linked, "edge-planner"), new Map([[mine.id, "edge-vla"], [theirs.id, "cloud-planner"]]), "each linked eval with the configuration it belongs to");
+  assert.deepEqual(offlineEvaluationsElsewhere(linked, "edge-vla"), new Map([[theirs.id, "cloud-planner"]]));
+  assert.deepEqual(offlineEvaluationsFor(ws, "edge-planner", all), all, "nothing linked: every eval is unassigned");
+  assert.deepEqual(offlineEvaluationsFor(linked, "edge-vla", []), []);
+  // An older document links one eval in two configurations: it is offered only to the robots that keep it.
+  const shared: ConvoyWorkspace = { ...linked, robots: linked.robots.map(robot => robot.id === "sim-02" ? { ...robot, offlineEvaluationIds: [theirs.id, mine.id] } : robot) };
+  assert.deepEqual(offlineEvaluationsFor(shared, "edge-vla", all), [free, spare]);
+  assert.deepEqual(offlineEvaluationsFor(shared, "edge-vla", all, [mine.id]), [mine, free, spare], "a robot can still see, and remove, its own link");
+  // A selection: a chosen eval that another configuration linked meanwhile drops out; an id no robot links stays.
+  assert.deepEqual(offlineEvaluationIdsFor(linked, "edge-planner", [free.id, mine.id, "oev_contract0009", theirs.id]), [free.id, "oev_contract0009"]);
+  assert.deepEqual(offlineEvaluationIdsFor(shared, "edge-vla", [mine.id, theirs.id], [mine.id]), [mine.id]);
 });
 
 test("flag rules, and the robots that need attention", () => {

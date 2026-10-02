@@ -124,7 +124,9 @@ body.cv-locked { overflow: hidden; }
 .cv-card > .cv-card__note { padding: 10px 20px; background: var(--warning-tint); color: var(--warning); font-size: .8125rem; }
 .cv-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; margin: 0; }
 .cv-facts > div { display: grid; grid-template-columns: 128px minmax(0, 1fr); align-items: center; gap: 16px; min-height: 48px; border-bottom: 1px solid var(--border-subtle); }
-.cv-facts > div:nth-last-child(-n + 2):nth-child(odd), .cv-facts > div:last-child { border-bottom: 0; }
+.cv-facts:not(.cv-facts--single) > div:nth-last-child(-n + 2):nth-child(odd), .cv-facts > div:last-child { border-bottom: 0; }
+.cv-facts--single { grid-template-columns: minmax(0, 1fr); }
+.cv-facts--single > div { grid-template-columns: 112px minmax(0, 1fr); gap: 12px; }
 .cv-facts dt { font-size: .8125rem; color: var(--text-secondary); }
 .cv-facts dd { min-width: 0; margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .cv-facts .cv-fact-action { min-height: 0; margin-left: 12px; font-size: .8125rem; }
@@ -146,6 +148,18 @@ body.cv-locked { overflow: hidden; }
 .cv-meter { display: block; width: 180px; height: 6px; border-radius: 3px; background: var(--surface-subtle); overflow: hidden; }
 .cv-meter > span { display: block; height: 100%; border-radius: 3px; background: var(--signal); }
 .cv-slice__family { display: inline-block; min-width: 72px; margin-right: 12px; font-weight: 400; }
+
+/* ---------- robot preview ---------- */
+/* The turntable (wider) beside its facts, the two equal in height; stacked below 900px. The stage is the
+ * render's own background colour (--surface-subtle), so the loop fills it edge to edge with no seam. */
+.cv-robot { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
+.cv-robot > .cv-card { display: flex; flex-direction: column; margin-top: 0; }
+.cv-robot .cv-facts { flex: 1 1 auto; grid-auto-rows: minmax(48px, 1fr); }
+.cv-stage { position: relative; align-self: stretch; min-width: 0; background: var(--surface-subtle); border: 1px solid var(--border-subtle); border-radius: var(--radius); overflow: hidden; }
+.cv-stage > video, .cv-stage > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cv-stage__toggle { position: absolute; right: 12px; bottom: 12px; display: inline-grid; place-items: center; width: 32px; height: 32px; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: var(--radius); color: var(--text-secondary); transition: color var(--duration-control) var(--ease-state), border-color var(--duration-control) var(--ease-state); }
+.cv-stage__toggle:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.cv-stage__toggle:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 
 /* ---------- configurations ---------- */
 .cv-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 16px; }
@@ -252,8 +266,9 @@ body.cv-locked { overflow: hidden; }
 @media (max-width: 899px) {
   .cv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cv-player { grid-template-columns: 1fr; }
+  .cv-robot { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .cv-facts { grid-template-columns: 1fr; }
-  .cv-facts > div:nth-last-child(-n + 2):nth-child(odd) { border-bottom: 1px solid var(--border-subtle); }
+  .cv-facts > div:nth-last-child(-n + 2):nth-child(odd):not(:last-child) { border-bottom: 1px solid var(--border-subtle); }
 }
 @media (max-width: 639px) {
   .cv-bar__in { flex-wrap: wrap; gap: 0 12px; padding: 6px 16px 0; }
@@ -289,7 +304,7 @@ body.cv-locked { overflow: hidden; }
 @media (pointer: coarse) {
   .cv-btn { min-height: 44px; }
   .cv-btn--small { min-height: 40px; }
-  .cv-icon-btn, .cv-player button.cv-ctl { width: 44px; height: 44px; }
+  .cv-icon-btn, .cv-player button.cv-ctl, .cv-stage__toggle { width: 44px; height: 44px; }
   .cv-input, .cv-player select.cv-speed { height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
