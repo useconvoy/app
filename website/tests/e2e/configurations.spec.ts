@@ -18,7 +18,7 @@ test("Configurations remains available behind the shared sign-in, in a top bar w
   await expect(h1(page)).toHaveText("Configurations");
   expect(await page.title()).toBe("Convoy | Configurations");
   const bar = page.locator("header.cv-bar");
-  await expect(bar.getByRole("link", { name: "Convoy" })).toHaveAttribute("href", "/app/configurations");
+  await expect(bar.getByRole("link", { name: "Convoy" })).toHaveAttribute("href", "/app/projects");
   await expect(bar.getByText("fixture@example.test")).toBeVisible();
   await expect(bar.getByText("Sample", { exact: true })).toBeVisible();
   // Existing configuration URLs retain their session and sample behavior.
