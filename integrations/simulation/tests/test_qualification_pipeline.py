@@ -104,20 +104,15 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
                     time.sleep(self.delay)
                     return self.override if self.override is not None else super().get_action(observation)
 
-            runtime = DelayedReference({"target_joint_positions": [0.25]})
-            manifest = {
-                "schema_version": 3, "profile": runtime.profile,
-                "policy": {"runtime": runtime.runtime, "artifact_sha256": runtime.artifact_sha256},
-                "environment": {"engine": "mujoco", "version": "3.3.0", "robot_profile_sha256": profile["digest"],
-                                "asset_sha256": model["asset"]["sha256"]},
-                "interface": {"joint_names": ["shoulder"], "command_interface": "joint-position",
-                              "action_bounds": [[-1, 1]], "control_rate_hz": 50},
-                "task": {"instruction": "Reach the shoulder target", "target_joint_positions": [0.25],
-                         "position_tolerance": 0.01, "velocity_tolerance": 0.02},
-                "execution": {"max_steps": 200, "decision_timeout_ms": 1000, "mission_timeout_s": 60},
-            }
-            application = post("applications", {"project_id": project["id"], "name": "Joint target"})
-            release = post(f"applications/{application['id']}/releases", {"manifest": manifest})
+            configured = post("configurations", {"project_id": project["id"], "name": "Joint target",
+                "configuration": {"profile_id": profile["id"], "policy": {"kind": "reference"},
+                                  "instruction": "Reach the shoulder target", "targets": {"shoulder": 0.25}}})
+            release = configured["release"]
+            setup = client.get(f"/api/v1/applications/{configured['application']['id']}/releases/{release['id']}/setup")
+            assert setup.status_code == 200
+            manifest = json.loads(setup.json()["manifest_json"])
+            runtime = DelayedReference(json.loads(setup.json()["reference_policy_json"]))
+            assert manifest["policy"]["artifact_sha256"] == runtime.artifact_sha256
             deployment = post("deployments", {"robot_id": robot["id"], "release_id": release["id"], "expected_generation": 0})
             worker_socket = socket.socket()
             worker_socket.bind(("127.0.0.1", 0))

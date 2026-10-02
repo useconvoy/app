@@ -121,3 +121,30 @@ Verification: 166 selected contract/worker/coordinator/API tests, 32 PostgreSQL 
 journeys pass. Frontend type checks, lint and production build pass; browser checks cover accessibility
 and mobile overflow. The preceding registry and qualification PRs (#113/#114) also have all CI checks
 passing. This slice still needs its own remote CI before merge.
+
+
+## Project configuration releases slice
+
+Branch: `codex/project-configuration-releases`, stacked on registered execution. The Project
+Configurations tab and existing Configurations routes now create authoritative application/release
+records, revise them immutably and link a chosen release into the robot deployment/task controls.
+The server derives the interface from an owned immutable profile and rejects wrong projects,
+missing/extra targets, unsupported controllers and out-of-range positions before creating records.
+Installed-policy identity is supported alongside the explicitly controlled reference; neither choice
+claims automatic installation. Setup downloads retain the server's canonical JSON numeric representation.
+
+The real HTTP/MuJoCo acceptance now creates its release through this configuration API and consumes
+its downloaded setup strings before running the actual worker/coordinator, success, cancellation and
+invalid-action cases. This is still functional lockstep simulation, not learned-policy or real-time
+qualification. Earlier PR #115 now has all nine remote CI checks passing.
+
+Remaining: explicit legacy workspace-document links/migration, automatic enrollment and installation,
+learned edge/cloud pairing, independent timing, scenario/chat, Isaac, fleet rollout and characterization.
+The existing hosting and AWS resources are unchanged.
+
+Verification for this slice: 13 selected API/SQLite lifecycle tests, six PostgreSQL configuration and
+qualification cases, the actual HTTP/worker/MuJoCo pipeline, 18 platform frontend checks and 32 browser
+journeys pass. Browser checks include release creation/revision/download, preservation of earlier
+releases, navigation with the exact selected release, existing device/replay flows, accessibility and
+mobile overflow. Type checks, lint, design-token checks and the production build pass. Remote CI for
+this branch still needs to run. The disposable PostgreSQL container and local test services were stopped.

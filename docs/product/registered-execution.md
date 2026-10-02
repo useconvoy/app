@@ -14,16 +14,38 @@ requires the selected release to match the acknowledged deployment. Stop remains
 coordinator acknowledges cancellation. Unknown execution prevents new tasks. Task history is queried
 for that robot before the server applies its result limit.
 
-Application/release creation still uses the existing management API. The configuration document UI
-is not yet an installer or an authoritative release editor. Linking its revisions to these actual
-applications/releases, automatic model installation, and project onboarding remain the next slice.
-Task result summaries are available here; uploaded visual replay for this new joint interface is not
-implemented yet. Existing Sawyer recordings keep their existing viewer.
+Project → Configurations → Create runnable configuration now creates the application and first release
+in one transaction. The existing Configurations index also lists project applications. The form pins
+a registered profile, derives its joint order/limits/cadence and model identity, and accepts named
+joint targets, success tolerances and execution timeouts. Choose the controlled reference or a trusted
+operator-installed joint-state policy worker; entering a runtime/artifact name does not install it.
+
+The release page preserves earlier releases, creates a new immutable release when edited, reports
+matching verified simulators and opens their deployment controls with that exact release selected.
+It offers exact serialized setup files: browser re-serialization would change numeric representations
+and invalidate artifact identity. Saving a release never starts installation or changes a running robot.
+
+Existing workspace configuration documents remain readable/editable separately; their names are not
+assumed to identify backend applications. Explicit linking/migration of those documents, automatic model
+installation and project onboarding remain unfinished. Task result summaries are available here;
+uploaded visual replay for this joint interface is not implemented yet. Existing Sawyer recordings
+keep their existing viewer.
 
 ## Release contract
 
-Use the existing `POST /api/v1/applications` and `POST /api/v1/applications/{id}/releases` routes.
-The release's `manifest` has this shape (replace digests and robot fields with the actual registered
+The UI uses `POST /api/v1/configurations` with `name`, `project_id` and a `configuration` containing
+`profile_id`, named `targets`, `instruction`, `policy`, optional success tolerances and execution limits.
+`policy` is either `{"kind":"reference"}` or `{"kind":"installed","runtime":"…","artifact_sha256":"…"}`.
+The response contains the authoritative `application` and `release`. New compiled revisions use
+`POST /api/v1/applications/{id}/configuration-releases`. All mutations require the existing idempotency
+header and operator role, with profile/application project ownership enforced by the API.
+
+`GET /api/v1/applications/{id}/releases/{release_id}/setup` returns `manifest_json` and, for matching
+reference-policy releases, `reference_policy_json` as strings preserving canonical numeric bytes.
+Save these strings directly rather than parsing and serializing them in JavaScript.
+
+Advanced callers can still use `POST /api/v1/applications` and
+`POST /api/v1/applications/{id}/releases` directly. The release's `manifest` has this shape (replace digests and robot fields with the actual registered
 profile and installed artifacts):
 
 ```json

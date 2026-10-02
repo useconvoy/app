@@ -6,6 +6,7 @@ import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { WorkspaceSession, useSession } from "@/components/configurations/Session";
 import { Breadcrumbs, PageHeader } from "@/components/configurations/AppShell";
 import { ConvoyMark } from "@/components/configurations/Icons";
+import { ProjectConfigurations } from "./ProjectConfigurations";
 import { SimulatorReadiness } from "./SimulatorReadiness";
 import { ApiError, errorText, MutationAttempts, type Project, type Robot, type Device } from "@/lib/platform/client";
 import { notifySessionExpired } from "@/lib/configurations/session-events";
@@ -105,7 +106,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
     {projects.data && !project && <p role="alert">This project is unavailable.</p>}
     {errors.map((error, i) => <p role="alert" key={i}>{error}</p>)}
     {project && <>
-      <div className="cv-tabs" role="tablist" aria-label="Project sections">{["Robots", "Profiles", "Fleets"].map(label => <button key={label} type="button" role="tab" aria-selected={tab === label} onClick={() => setTab(label)}>{label}</button>)}</div>
+      <div className="cv-tabs" role="tablist" aria-label="Project sections">{["Robots", "Profiles", "Fleets", "Configurations"].map(label => <button key={label} type="button" role="tab" aria-selected={tab === label} onClick={() => setTab(label)}>{label}</button>)}</div>
       {tab === "Robots" && <section aria-label="Robots">
         <p>Physical robots and simulated instances keep separate connections and share a versioned physical profile.</p>
         {robots.data?.length === 0 && <div className="cv-empty"><h2>No robots yet</h2><p>Import a robot profile, then connect an enrolled device to it.</p><button className="cv-btn cv-btn--primary" onClick={() => setTab("Profiles")}>Add a profile</button></div>}
@@ -131,6 +132,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
         {mutation.error && <p role="alert">{mutation.error}</p>}
         {session.operator && adding && profiles.data && devices.data && <RegistrationForm key={source?.id ?? "new"} projectId={projectId} profiles={profiles.data} fleets={fleets.data ?? []} devices={devices.data.filter(d => !robots.data?.some(r => r.device_id === d.id))} source={source} onCancel={() => { setSource(undefined); setAdding(false); }} onSaved={() => { setSource(undefined); setAdding(false); refresh(); }} />}
       </section>}
+      {tab === "Configurations" && <ProjectConfigurations projectId={projectId} />}
       {tab === "Profiles" && <section aria-label="Robot profiles">
         <p>Each revision pins the robot interfaces and simulation assets. Asset declarations still require runner verification and calibration.</p>
         {profiles.data?.map(profile => <article className="cv-card" key={profile.id}><div><h2>{profile.name} · revision {profile.revision}</h2><p>{profile.spec.embodiment} · {profile.spec.joints.length} joints · {profile.spec.sensors.length} sensors</p><p>{profile.simulation.engines.length ? `Simulation assets: ${profile.simulation.engines.join(", ")}` : "Simulation assets missing"} · Dynamics: {profile.simulation.dynamics_source}</p><p>{profile.simulation.detail}</p><details><summary>Profile specification</summary><pre className="project-spec">{JSON.stringify(profile.spec, null, 2)}</pre></details></div></article>)}

@@ -67,6 +67,7 @@ function NewConfigurationForm() {
   return <>
     <PageHeader title="New configuration" />
     <WorkspaceNotice />
+    <p>This form saves a workspace configuration document. To create an executable release for a registered robot, open <Link className="cv-link" href="/app/projects">your project’s Configurations tab</Link>.</p>
     <form ref={form} className="cv-form" onSubmit={event => void submit(event)} noValidate>
       <div className="cv-field">
         <label htmlFor={`${id}-name`}>Name</label>

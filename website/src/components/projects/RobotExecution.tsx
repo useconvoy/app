@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { newConfigurationHref, configurationHref } from "./ProjectConfigurations";
 import { useState } from "react";
 import { useSession } from "@/components/configurations/Session";
 import { PageHeader } from "@/components/configurations/AppShell";
@@ -15,8 +17,9 @@ const finished = (state: string) => ["completed", "failed", "cancelled"].include
 export function RobotExecution({ projectId, robotId }: { projectId: string; robotId: string }) {
   const { operator } = useSession();
   const [revision, setRevision] = useState(0);
-  const [applicationId, setApplicationId] = useState("");
-  const [releaseId, setReleaseId] = useState("");
+  const query = useSearchParams();
+  const [applicationId, setApplicationId] = useState(query.get("application_id") ?? "");
+  const [releaseId, setReleaseId] = useState(query.get("release_id") ?? "");
   const [episodeId, setEpisodeId] = useState<string | null>(null);
   const refresh = () => setRevision(n => n + 1);
   const mutation = useMutation(refresh);
@@ -57,6 +60,8 @@ export function RobotExecution({ projectId, robotId }: { projectId: string; robo
           {deployment?.observed_at && <p>Last reported: {new Date(deployment.observed_at).toLocaleString()}</p>}
           {deployment?.detail && <p>{deployment.detail}</p>}
           <p>Runs the pinned robot model in functional simulation. Real-time timing and physical accuracy require separate experiments.</p>
+          {operator && <p><Link className="cv-link" href={newConfigurationHref(projectId, robot.profile_id)}>Create runnable configuration</Link></p>}
+          {selectedApplication && <p><Link className="cv-link" href={configurationHref(selectedApplication)}>View configuration releases</Link></p>}
           {applications.data?.length === 0 ? <p>No runnable configurations in this project yet.</p> : <>
             <label className="cv-field">Configuration<select className="cv-input" value={selectedApplication ?? ""} onChange={e => { setApplicationId(e.target.value); setReleaseId(""); }}>
               {applications.data?.map(app => <option key={app.id} value={app.id}>{app.name}</option>)}

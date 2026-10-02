@@ -107,8 +107,9 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
   let allowed = false;
   if (method === "GET") {
     allowed = /^(auth\/me|projects|devices|robot-connections|workspace-documents)$/.test(path)
-      || new RegExp(`^(devices|robots|robot-profiles|deployments|missions|episodes)/${ID}$`).test(path)
+      || new RegExp(`^(devices|robots|robot-profiles|applications|deployments|missions|episodes)/${ID}$`).test(path)
       || new RegExp(`^robots/${ID}/qualification$`).test(path)
+      || new RegExp(`^applications/${ID}/releases/${ID}/setup$`).test(path)
       || new RegExp(`^applications/${ID}/(releases|evaluation-suites|evaluation-gate)$`).test(path)
       || new RegExp(`^evaluation-suites/${ID}$`).test(path)
       || new RegExp(`^episodes/${ID}/replay(?:/frames/[0-9]{1,4})?$`).test(path)
@@ -121,8 +122,8 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
     if (new RegExp(`^applications/${ID}/qualification$`).test(path)) { allowed = true; keys = ["release_id"]; required = keys; }
     if (new RegExp(`^(${OFFLINE}|${OFFLINE_EVALUATION}|${OFFLINE_EPISODE}/replay(?:/frames/[0-9]{1,4})?)$`).test(path)) allowed = true;
   } else if (method === "POST") {
-    allowed = /^(auth\/(login|logout)|projects|robots|robot-profiles|robot-registrations|fleets|applications|deployments|enrollments|evaluations)$/.test(path)
-      || new RegExp(`^applications/${ID}/(releases|evaluation-suites|evaluation-gate)$`).test(path)
+    allowed = /^(auth\/(login|logout)|projects|robots|robot-profiles|robot-registrations|fleets|applications|configurations|deployments|enrollments|evaluations)$/.test(path)
+      || new RegExp(`^applications/${ID}/(releases|configuration-releases|evaluation-suites|evaluation-gate)$`).test(path)
       || new RegExp(`^fleets/${ID}/members(?:/${ID}/remove)?$`).test(path)
       || new RegExp(`^robots/${ID}/(missions|qualification)$`).test(path)
       || new RegExp(`^missions/${ID}/cancel$`).test(path)

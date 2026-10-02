@@ -27,6 +27,12 @@ test("allowlist excludes controller/device writes, path traversal, unknown query
   assert.equal(allowedPlatformPath(["projects"], "GET", new URLSearchParams("url=http://other")), null);
   assert.equal(allowedPlatformPath(["robots"], "GET", new URLSearchParams()), null);
   assert.equal(allowedPlatformPath(["projects"], "DELETE", new URLSearchParams()), null);
+  assert.equal(allowedPlatformPath(["configurations"], "POST", new URLSearchParams()), "/api/v1/configurations");
+  assert.equal(allowedPlatformPath(["applications", "app_one"], "GET", new URLSearchParams()), "/api/v1/applications/app_one");
+  assert.equal(allowedPlatformPath(["applications", "app_one", "configuration-releases"], "POST", new URLSearchParams()), "/api/v1/applications/app_one/configuration-releases");
+  assert.equal(allowedPlatformPath(["applications", "app_one", "configuration-releases"], "GET", new URLSearchParams()), null);
+  assert.equal(allowedPlatformPath(["applications", "app_one", "releases", "apr_one", "setup"], "GET", new URLSearchParams()), "/api/v1/applications/app_one/releases/apr_one/setup");
+  assert.equal(allowedPlatformPath(["applications", "app_one", "releases", "apr_one", "setup"], "POST", new URLSearchParams()), null);
   assert.equal(platformOrigin("http://localhost:8080"), "http://localhost:8080");
   for (const url of ["http://external.test", "https://user:pass@example.test", "https://example.test/base", "https://example.test?url=other"]) assert.throws(() => platformOrigin(url));
 });

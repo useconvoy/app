@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { api, ApiError, errorText } from "@/lib/platform/client";
 import { notifySessionExpired } from "@/lib/configurations/session-events";
 
+export interface ProfileJoint { name: string; kind: string; lower: number | null; upper: number | null }
+export interface ProfileSimulation { engine: string; engine_version: string; controller: string; asset: { sha256: string; uri: string; format: string } }
 export interface RobotProfile {
   id: string; project_id: string; name: string; revision: number; digest: string;
-  spec: { embodiment: string; command_interface: string; adapter: string; control_rate_hz: number; joints: unknown[]; sensors: unknown[] };
+  spec: { embodiment: string; command_interface: string; adapter: string; control_rate_hz: number; joints: ProfileJoint[]; sensors: unknown[]; simulations: ProfileSimulation[]; execution_profile?: string | null };
   simulation: { state: string; engines: string[]; runtime_verified: boolean; dynamics_source: string; detail: string };
 }
 export interface Fleet { id: string; project_id: string; name: string; robot_ids: string[] }
