@@ -61,7 +61,8 @@ test("a project's imported evaluation replays exact planner state alongside acti
   await expect(value("System 2 state")).toContainText("accepted");
   await expect(value("Active skill")).toContainText("pick_place");
   await expect(value("Target")).toContainText("A");
-  await expect(value("Planner latency")).toContainText("120.25 ms");
+  await expect(value("Last planner latency")).toContainText("120.25 ms");
+  await expect(value("Last proposal age")).toContainText("40.5 ms");
   await expect(value("Physics lag")).toContainText("0.123 ms");
   await expect(value("Policy")).toContainText("0.125 ms");
   await expect(readout.locator(".cv-player__action span").first()).toHaveText("dx0.20");

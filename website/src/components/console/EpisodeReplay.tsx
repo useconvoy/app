@@ -180,8 +180,8 @@ export function EpisodeReplay({ episodeId, path }: { episodeId: string; path?: s
         <div><dt>Task revision</dt><dd>{hierarchy?.task_revision ?? "–"}</dd></div></>}
       <div><dt>{hierarchical ? "Active skill" : "Skill"}</dt><dd className="cv-mono">{hierarchical ? hierarchy?.active_skill ?? "–" : recording.skill ?? "–"}</dd></div>
       {hierarchical && <div><dt>Target</dt><dd>{hierarchy?.target ?? "–"}</dd></div>}
-      <div><dt>{hierarchical ? "Planner latency" : "Planner"}</dt><dd>{hierarchical ? measuredMs(hierarchy?.planner_latency_ms) : ms(recording.planner_ms)}</dd></div>
-      {hierarchical && <><div><dt>Observation age</dt><dd>{measuredMs(hierarchy?.observation_age_ms)}</dd></div>
+      <div><dt>{hierarchical ? "Last planner latency" : "Planner"}</dt><dd>{hierarchical ? measuredMs(hierarchy?.planner_latency_ms) : ms(recording.planner_ms)}</dd></div>
+      {hierarchical && <><div><dt>Last proposal age</dt><dd>{measuredMs(hierarchy?.observation_age_ms)}</dd></div>
         <div><dt>Physics lag</dt><dd>{measuredMs(hierarchy?.physics_lag_ms)}</dd></div></>}
       <div className="cv-player__action"><dt>Action</dt><dd>{axes.map((axis, i) => {
         const value = exact?.action?.[i];

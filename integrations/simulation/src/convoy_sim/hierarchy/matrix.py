@@ -68,7 +68,9 @@ def main(argv=None) -> int:
         provenance = {**common, "fault_profile": profile,
                       "fault_source": "none" if profile in {"nominal", "local-reference"} else "controlled delay/outage wrapper",
                       "fault_parameters": PROFILES.get(profile, {}),
-                      "planner_host": args.edge_host if mode == "local" else args.planner_host}
+                      "planner_host": args.edge_host if mode == "local" else args.planner_host,
+                      "model": "deterministic local reference" if mode == "local" else args.model,
+                      "model_sha256": "not applicable" if mode == "local" else args.model_sha256}
         pending = []
         config = ExperimentConfig(mode=mode, seed=seed, duration_s=args.duration,
                                   revise_at_s=2.5, refresh_interval_s=.5,

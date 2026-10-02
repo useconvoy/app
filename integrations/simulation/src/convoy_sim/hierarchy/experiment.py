@@ -152,6 +152,20 @@ class PlannerCall:
                 self.mailbox.get_nowait()
 
 
+def admit_command(command: dict | None, epoch: int, applied_ns: int, previous_grip: float):
+    """Select the latest command at physical admission, after any lock wait.
+
+    Fences and expired observations retain only the already applied gripper
+    command; neither can repeat an old motion or adopt an unapplied grip target.
+    """
+    hold = ([0.0, 0.0, 0.0, previous_grip], None)
+    if command is None or command["epoch"] != epoch:
+        return *hold, "idle_hold", False
+    if not command["captured_ns"] <= applied_ns < command["expires_ns"]:
+        return *hold, "expired_hold", False
+    return command["action"], command["target"], command["source"], True
+
+
 class PhysicsLoop:
     """Physics owns the environment; the executive publishes only the latest command."""
 
@@ -190,11 +204,14 @@ class PhysicsLoop:
         with self.lock:
             self.hierarchy = dict(values)
 
-    def publish(self, action, target, observation_seq, captured_ns, *, source="reference"):
+    def publish(self, action, target, observation_seq, captured_ns, *, source="reference", valid_until_ns=None):
         values = validate_action(action).tolist()
+        expires = captured_ns + round(self.config.command_validity_s * 1e9)
+        if valid_until_ns is not None:
+            expires = min(expires, valid_until_ns)
         with self.lock:
             self.command = {"action": values, "target": target, "observation_seq": observation_seq,
-                            "captured_ns": captured_ns, "expires_ns": captured_ns + round(self.config.command_validity_s * 1e9),
+                            "captured_ns": captured_ns, "expires_ns": expires,
                             "epoch": self.epoch, "source": source}
 
     def fence(self, *, revision=None):
@@ -232,28 +249,15 @@ class PhysicsLoop:
                 scheduled = self.started_ns + slot * period_ns
                 if self.stopped.wait(max(0, (scheduled - time.monotonic_ns()) / 1e9)):
                     break
-                dispatched = time.monotonic_ns()
-                if (dispatched - self.started_ns) / 1e9 >= self.config.duration_s:
-                    break
-                raw_lag_ms = max(0, (dispatched - scheduled) / 1e6)
-                dropped = max(0, (dispatched - scheduled) // period_ns)
-                slot += dropped
-                with self.lock:
-                    command, hierarchy = self.command, dict(self.hierarchy)
-                    epoch = self.epoch
-                valid = command is not None and command["epoch"] == epoch and dispatched < command["expires_ns"]
-                if valid:
-                    action, target, source = command["action"], command["target"], command["source"]
-                else:
-                    action, target = [0.0, 0.0, 0.0, grip], None
-                    source = "expired_hold" if command else "idle_hold"
                 # The lock fences task changes against the complete physical command.
                 # Only short MuJoCo stepping is inside it, never planner/network I/O.
                 with self.lock:
-                    if epoch != self.epoch:
-                        action, target, source = [0.0, 0.0, 0.0, grip], None, "idle_hold"
-                        valid = False
+                    command = self.command
                     hierarchy = dict(self.hierarchy)
+                    applied_ns = time.monotonic_ns()
+                    if self.stopped.is_set() or (applied_ns - self.started_ns) / 1e9 >= self.config.duration_s:
+                        break
+                    action, target, source, valid = admit_command(command, self.epoch, applied_ns, grip)
                     outcome = scene.step(action, target)
                     grip = action[3]
                     sequence += 1
@@ -261,6 +265,9 @@ class PhysicsLoop:
                     elapsed = (captured - self.started_ns) / 1e9
                     self.latest = {**outcome, "sequence": sequence, "captured_ns": captured, "elapsed_s": elapsed,
                                    "gripper_command": grip}
+                raw_lag_ms = max(0, (applied_ns - scheduled) / 1e6)
+                dropped = max(0, (applied_ns - scheduled) // period_ns)
+                slot += dropped
                 image_name = None
                 render_ms = 0.0
                 if self.config.frames and elapsed >= next_frame:
@@ -273,8 +280,9 @@ class PhysicsLoop:
                 self.trace.append({**outcome, "type": "step", "sequence": sequence, "elapsed_s": elapsed,
                                    "simulated_s": sequence * scene.control_period_s,
                                    "action": action, "action_source": source,
+                                   "action_applied_elapsed_s": (applied_ns - self.started_ns) / 1e9,
                                    "command_observation_seq": command["observation_seq"] if valid else None,
-                                   "observation_to_action_ms": (dispatched - command["captured_ns"]) / 1e6 if valid else None,
+                                   "observation_to_action_ms": (applied_ns - command["captured_ns"]) / 1e6 if valid else None,
                                    "dispatch_lag_ms": raw_lag_ms,
                                    "completion_lag_ms": (captured - scheduled) / 1e6,
                                    "render_ms": render_ms, "dropped_scheduler_slots": int(dropped),
@@ -345,23 +353,27 @@ def run_episode(config: ExperimentConfig, planner, output: Path, *, stop_event=N
         events.append({"type": kind, "elapsed_s": (now_ns - physics.started_ns) / 1e9 if physics.started_ns else 0,
                        "task_revision": gate.revision, **values})
 
+    def revise_task(now_ns):
+        nonlocal revised, target, active, stable, next_plan_ns
+        if not revised and now_ns >= physics.started_ns + round(config.revise_at_s * 1e9):
+            revised, target, active = True, config.revised_target, None
+            gate.revision += 1
+            physics.fence(revision=gate.revision)
+            stable = 0
+            next_plan_ns = 0
+            emit("task_revised", target=target, pending_request_id=pending.request.context["request_id"] if pending else None)
+
     try:
         physics.start()
         metadata["environment"]["targets"] = physics.targets
         _write(output / "metadata.json", metadata)
         while not physics.stopped.is_set():
             now = time.monotonic_ns()
-            elapsed = (now - physics.started_ns) / 1e9
             if stop_event.is_set():
                 terminal = "cancelled"
                 break
-            if not revised and elapsed >= config.revise_at_s:
-                revised, target, active = True, config.revised_target, None
-                gate.revision += 1
-                physics.fence(revision=gate.revision)
-                stable = 0
-                next_plan_ns = 0
-                emit("task_revised", target=target, pending_request_id=pending.request.context["request_id"] if pending else None)
+            revise_task(now)
+            now = time.monotonic_ns()
             if active is not None and now >= active[1]:
                 emit("goal_expired", now, request_id=active[0].request_id)
                 active = None
@@ -373,6 +385,10 @@ def run_episode(config: ExperimentConfig, planner, output: Path, *, stop_event=N
                     result, failure, completed_ns = reply
                     request = pending.request
                     last_latency = (completed_ns - request.submitted_ns) / 1e6
+                    # A physics fence may have waited. Authority/age use fresh
+                    # admission time, never the earlier loop timestamp.
+                    revise_task(time.monotonic_ns())
+                    now = time.monotonic_ns()
                     last_age = (now - request.observed_ns) / 1e6
                     planner_latencies.append(last_latency)
                     if failure is not None:
@@ -383,6 +399,9 @@ def run_episode(config: ExperimentConfig, planner, output: Path, *, stop_event=N
                              injected_delay_ms=getattr(failure, "injected_delay_ms", 0),
                              fault_mode=getattr(failure, "fault_mode", None))
                     else:
+                        revise_task(time.monotonic_ns())
+                        now = time.monotonic_ns()
+                        last_age = (now - request.observed_ns) / 1e6
                         reason = gate.admit(request, result.decision, now)
                         planner_state = "accepted" if reason == "accepted" else "stale"
                         emit("planner_result", now, request_id=request.context["request_id"],
@@ -411,6 +430,8 @@ def run_episode(config: ExperimentConfig, planner, output: Path, *, stop_event=N
             if snapshot is None:
                 raise RuntimeError("physics produced no observation")
             if pending is None and now >= next_plan_ns:
+                revise_task(time.monotonic_ns())
+                now = time.monotonic_ns()
                 context = {"request_id": uuid.uuid4().hex, "observation_seq": snapshot["sequence"],
                            "task_revision": gate.revision, "instruction": f"Pick and place the puck at target {target}.",
                            "task_target": target, "available_skills": ["pick_place", "hold"],
@@ -426,6 +447,12 @@ def run_episode(config: ExperimentConfig, planner, output: Path, *, stop_event=N
                 planner_state = "pending"
                 emit("planner_requested", now, **context,
                      expires_elapsed_s=(request.expires_ns - physics.started_ns) / 1e9)
+            revise_task(time.monotonic_ns())
+            if active is not None and time.monotonic_ns() >= active[1]:
+                emit("goal_expired", request_id=active[0].request_id)
+                active = None
+                physics.fence()
+                next_plan_ns = 0
             blocked = config.mode == "blocking" and pending is not None
             if snapshot["sequence"] != previous_seq:
                 previous_seq = snapshot["sequence"]
@@ -435,7 +462,8 @@ def run_episode(config: ExperimentConfig, planner, output: Path, *, stop_event=N
                     action = (reference.action(snapshot["observation"], physics.targets[decision.target])
                               if decision.skill == "pick_place" else [0, 0, 0, snapshot["gripper_command"]])
                     physics.publish(action, decision.target, snapshot["sequence"], snapshot["captured_ns"],
-                                    source="reference" if decision.skill == "pick_place" else "requested_hold")
+                                    source="reference" if decision.skill == "pick_place" else "requested_hold",
+                                    valid_until_ns=active[1])
                     controller_ages.append((before - snapshot["captured_ns"]) / 1e6)
                     if previous_control_ns is not None:
                         controller_gaps.append((before - previous_control_ns) / 1e6)

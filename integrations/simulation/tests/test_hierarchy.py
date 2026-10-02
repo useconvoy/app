@@ -13,6 +13,7 @@ from convoy_sim.hierarchy.experiment import (
     PlannerCall,
     PlanRequest,
     ProposalGate,
+    admit_command,
     run_episode,
 )
 from convoy_sim.hierarchy.planner import DeterministicPlanner
@@ -58,6 +59,18 @@ def test_late_planner_completion_cannot_publish_after_cancel():
     assert call.done.wait(3)
     assert call.poll() is None
     assert call.late_discarded == 1
+
+
+def test_physical_admission_uses_application_time_after_preemption_and_preserves_grip_on_fence():
+    command = {"epoch": 2, "captured_ns": 1_000_000_000, "expires_ns": 1_100_000_000,
+               "action": [.4, .2, .1, -1.0], "target": "A", "source": "reference"}
+    # A command valid when dispatched becomes stale while waiting to apply.
+    dispatched_ns, after_lock_ns = 1_090_000_000, 1_100_000_000
+    assert admit_command(command, 2, dispatched_ns, 1.0)[3] is True
+    action, target, source, valid = admit_command(command, 2, after_lock_ns, 1.0)
+    assert (action, target, source, valid) == ([0, 0, 0, 1.0], None, "expired_hold", False)
+    # A revised task cannot adopt either motion or the pending gripper target.
+    assert admit_command(command, 3, dispatched_ns, 1.0) == ([0, 0, 0, 1.0], None, "idle_hold", False)
 
 
 class CountingScene:
