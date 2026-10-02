@@ -1,5 +1,6 @@
-"""The on-device planner of the Edge Qwen configuration: prompt, strict parsing, choice check, failure policy,
-transport and episode wiring. The network is mocked here (and only here): no test reaches a device."""
+"""The on-device planner (the edge device planner configuration): prompt, strict parsing, choice check, failure policy,
+transport and episode wiring. The HTTP layer is mocked here; test_platform_chat_contract.py drives the transport through
+the real website, control plane and agent chat relay. No test reaches a real device."""
 
 import json
 import re
@@ -8,28 +9,48 @@ import uuid
 import numpy as np
 import pytest
 
-from convoy_sim.bimanual_pill_task.configs import CONFIGS, SLICES, EpisodeSpec, release_manifest
+from convoy_sim.bimanual_pill_task.configs import (
+    CONFIGS,
+    SLICES,
+    EpisodeSpec,
+    device_labels,
+    release_manifest,
+)
 from convoy_sim.bimanual_pill_task.device_planner import (
     EXAMPLE_OBSERVATION,
     EXAMPLE_REPLY,
+    LEGACY_TRANSPORT,
     MAX_TOKENS,
     PROMPT_VERSION,
+    TRANSPORT,
+    AccessRefused,
     Action,
     ChatOutcome,
     DevicePlannerEndpoint,
+    DeviceSelectionError,
     DeviceState,
     FailurePolicy,
-    PortalChatClient,
+    PlatformChatClient,
     ReplyError,
     SessionEnded,
     build_messages,
     build_prompt,
     check_choice,
+    decision_counts,
+    describe_model,
+    model_label,
     parse_reply,
+    runtime_label,
     scene,
+    transport_of,
 )
 from convoy_sim.bimanual_pill_task.episode import Episode, run_episode
-from convoy_sim.bimanual_pill_task.offline_replay import OfflineReplayRecorder, episode_metrics
+from convoy_sim.bimanual_pill_task.offline_replay import (
+    OfflineReplayRecorder,
+    device_metrics,
+    episode_metrics,
+    write_evaluation,
+)
 
 COOKIE = "convoy_session=cvs_" + "x" * 24
 
@@ -201,6 +222,8 @@ def test_wait_and_done_are_valid_only_when_the_scene_allows_them():
 class _ScriptedTransport:
     """Answers from a script: each item is a reply text, or a ChatOutcome field dict for a failure."""
 
+    transport = "scripted-test"
+
     def __init__(self, script, *, online=True, e2e_ms=2000.0):
         self.script, self.online, self.e2e_ms = list(script), online, e2e_ms
         self.release_id = "rel_test"
@@ -332,33 +355,79 @@ class _Response:
         return False
 
 
-class _FakePortal:
-    """The website's chat routes: POST answers 202 queued, reads report running until `ready_after` reads."""
+VALID_LEFT = '{"arm": "L", "skill": "pick_and_drop", "pill": 0}'  # valid for the left arm in _obs()
 
-    def __init__(self, *, ready_after=2, post_status=202, never_finish=False):
+
+class _FakePlatform:
+    """The website's device chat contract (platform-chat-v1) as the client sees it: the device list with its
+    release and model, POST answers 202 queued (or `post_status`), reads report running until `ready_after`
+    reads, then succeeded with `reply`. A POST naming another release than the device's is a 409."""
+
+    def __init__(self, *, ready_after=2, post_status=202, never_finish=False, devices=("dev_board1",),
+                 release="rel_live", reply='{"arm": "L", "skill": "wait"}', post_headers=None, limits=None):
         self.ready_after, self.post_status, self.never_finish = ready_after, post_status, never_finish
-        self.requests, self.reads = [], {}
+        self.devices, self.release, self.reply = list(devices), release, reply
+        self.post_headers = post_headers or {}
+        self.limits = limits if limits is not None else {"window_s": 60, "sends_per_session": 6, "reads_per_session": 180}
+        self.requests, self.reads, self.post_times = [], {}, []
+        self.clock = lambda: 0.0
+        self.fail_next_post: Exception | None = None
+        self.online = True
+
+    def entry(self, device_id):
+        return {
+            "id": device_id, "name": f"Board {device_id[-1]}", "status": "online", "online": self.online,
+            "eligible": self.online,
+            "reason": None, "reason_code": None, "release_id": self.release, "max_tokens": 128, "context_window": 2048,
+            "agent_version": "0.9.0", "hardware_profile": "jetson-orin-nano-8gb",
+            "release": {"id": self.release, "name": "Edge model", "version": "3", "digest": "d" * 64,
+                        "model": {"repo": "example-org/Example-1B-GGUF", "revision": "c" * 40,
+                                  "file": "example-1b-q4_k_m.gguf", "sha256": "e" * 64, "quantization": "Q4_K_M",
+                                  "name": "Example 1B", "architecture": "qwen2"},
+                        "runtime": {"name": "llama.cpp", "backend": "cuda", "version": "b6550"},
+                        "decoding": {"temperature": 0, "seed": 42}, "context_window": 2048, "output_limit": 128},
+            "runtime": {"backend": "cuda", "build": "b6550-5266f24d", "context_window": 2048, "gpu_layers": 29,
+                        "gpu_layers_total": 29},
+        }
 
     def open(self, request, timeout=None):
         self.requests.append(request)
         path = request.full_url.split("example.test", 1)[1]
-        if path == "/api/portal/snapshot":
-            return _Response(200, {"device": {"status": "online"}, "chat": {
-                "online": True, "eligible": True, "release_id": "rel_live", "max_tokens": 128, "context_window": 2048}})
+        listing = re.fullmatch(r"/api/platform/chat/devices(?:\?device_id=(dev_[a-z0-9]+))?", path)
+        if listing:
+            named = listing.group(1)
+            return _Response(200, {"contract": TRANSPORT, "limits": self.limits,
+                                   "devices": [self.entry(d) for d in self.devices if named in (None, d)]})
+        match = re.fullmatch(r"/api/platform/devices/(dev_[a-z0-9]+)/chat(?:/([0-9a-f-]{36}))?", path)
+        assert match and match.group(1) in self.devices, path
         if request.get_method() == "POST":
+            self.post_times.append(self.clock())
+            if self.fail_next_post is not None:
+                error, self.fail_next_post = self.fail_next_post, None
+                raise error
             body = json.loads(request.data)
             if self.post_status != 202:
-                return _Response(self.post_status, {"error": {"code": "rate_limited"}}, {"Retry-After": "60"})
+                code = {401: "authentication_required", 403: "forbidden", 429: "rate_limited"}.get(self.post_status, "unavailable")
+                return _Response(self.post_status, {"error": "curated", "code": code}, self.post_headers)
+            if body["expected_release_id"] != self.release:
+                return _Response(409, {"error": "The device's active model changed.", "code": "release_changed"})
             self.reads[body["request_id"]] = 0
-            return _Response(202, {"id": body["request_id"], "status": "queued"})
-        request_id = path.rsplit("/", 1)[1]
+            return _Response(202, {"id": body["request_id"], "status": "queued", "release_id": self.release,
+                                   "expires_at": "2026-10-02T00:02:00Z"})
+        request_id = match.group(2)
+        if request_id not in self.reads:
+            return _Response(404, {"error": "This device or request is not available.", "code": "not_found"})
         self.reads[request_id] += 1
         if self.never_finish or self.reads[request_id] < self.ready_after:
             return _Response(200, {"id": request_id, "status": "running"})
-        return _Response(200, {"id": request_id, "status": "succeeded", "content": '{"arm": "L", "skill": "wait"}',
-                               "finish_reason": "stop", "trace_id": "tr_00ab", "release_id": "rel_live",
+        return _Response(200, {"id": request_id, "status": "succeeded", "content": self.reply,
+                               "finish_reason": "stop", "trace_id": "tr_00ab", "release_id": self.release,
                                "usage": {"prompt_tokens": 1034, "completion_tokens": 13, "total_tokens": 1047},
                                "metrics": {"latency_ms": 812.4, "ttft_ms": 455.0, "queue_ms": 0.2}})
+
+    def methods(self):
+        """(method, last path segment) of every request, in order."""
+        return [(r.get_method(), r.full_url.rsplit("/", 1)[1]) for r in self.requests]
 
 
 class _Clock:
@@ -372,68 +441,164 @@ class _Clock:
         self.now += seconds
 
 
-def _client(portal, **kwargs):
+def _client(platform, **kwargs):
     clock = _Clock()
-    client = PortalChatClient("https://example.test", COOKIE, opener=portal, clock=clock, sleep=clock.sleep,
-                              wall=lambda: 1.9e9 + clock.now, **kwargs)
+    platform.clock = clock
+    client = PlatformChatClient("https://example.test", COOKIE, opener=platform, clock=clock, sleep=clock.sleep,
+                                wall=lambda: 1.9e9 + clock.now, **kwargs)
     return client, clock
 
 
-def test_portal_client_sends_the_chat_api_body_and_measures_the_round_trip():
-    portal = _FakePortal(ready_after=3)
-    client, clock = _client(portal)
-    assert client.device().release_id == "rel_live"
-    outcome = client.send([{"role": "user", "content": "scene"}], 32)
-    post = portal.requests[1]
+SCENE = [{"role": "user", "content": "scene"}]
+
+
+def test_the_client_finds_the_device_and_records_the_model_the_platform_reports():
+    platform = _FakePlatform()
+    client, _ = _client(platform)
+    assert client.device_id is None and client.release_id is None and client.transport == TRANSPORT == "platform-chat-v1"
+    state = client.device()
+    assert (state.device_id, state.release_id, state.online, state.eligible) == ("dev_board1", "rel_live", True, True)
+    assert (client.device_id, client.release_id) == ("dev_board1", "rel_live")  # pinned for the run
+    m = client.model
+    assert (m["release_id"], m["model_repo"], m["model_file"], m["quantization"]) == (
+        "rel_live", "example-org/Example-1B-GGUF", "example-1b-q4_k_m.gguf", "Q4_K_M")
+    assert (m["runtime"], m["runtime_backend"], m["runtime_version"], m["device_runtime_build"], m["gpu_layers"]) == (
+        "llama.cpp", "cuda", "b6550", "b6550-5266f24d", 29)
+    assert (m["temperature"], m["seed"], m["context_window"], m["hardware_profile"]) == (0, 42, 2048, "jetson-orin-nano-8gb")
+    assert model_label(m) == "example-org/Example-1B-GGUF Q4_K_M" and runtime_label(m) == "llama.cpp cuda b6550"
+    assert client.min_interval_s == 10.5, "6 sends a minute: 10.5 s apart"
+    client.device()
+    assert [r.full_url for r in platform.requests] == ["https://example.test/api/platform/chat/devices",
+                                                      "https://example.test/api/platform/chat/devices?device_id=dev_board1"]
+    # What the platform does not report is "unknown", never a guess (not from the file name either).
+    bare = describe_model({"id": "dev_x", "release_id": None, "release": None, "runtime": None})
+    assert {bare[k] for k in ("release_id", "model_repo", "model_file", "quantization", "runtime")} == {"unknown"}
+    assert bare["context_window"] is None and model_label(bare) == "unknown model" and runtime_label(bare) == "runtime unknown"
+    assert model_label({**bare, "model_file": "model-q4_k_m.gguf"}) == "model-q4_k_m.gguf (quantization unknown)"
+    assert "Qwen" not in json.dumps(m) + repr(client)
+
+
+def test_the_device_must_be_named_when_the_account_sees_several():
+    two = _FakePlatform(devices=("dev_board1", "dev_board2"))
+    with pytest.raises(DeviceSelectionError, match="several devices.*--planner-device"):
+        _client(two)[0].device()
+    named, _ = _client(two, device_id="dev_board2")
+    assert named.device().device_id == "dev_board2" and named.model["device_name"] == "Board 2"
+    with pytest.raises(DeviceSelectionError, match="dev_other is not listed"):
+        _client(two, device_id="dev_other")[0].device()
+    with pytest.raises(DeviceSelectionError, match="no physical device"):
+        _client(_FakePlatform(devices=()))[0].device()
+    with pytest.raises(ValueError):
+        PlatformChatClient("https://example.test", COOKIE, device_id="../dev_board1")
+    with pytest.raises(RuntimeError, match="check the device first"):
+        _client(two)[0].send(SCENE, 32)
+    # Once pinned, a device that leaves the list is reported as not ready (the run then stops).
+    client, _ = _client(two, device_id="dev_board2")
+    client.device()
+    two.devices = ["dev_board1"]
+    gone = client.device()
+    assert (gone.online, gone.eligible, gone.reason) == (False, False, "the device is no longer listed for chat")
+
+
+def test_the_client_sends_the_contract_body_and_measures_the_round_trip():
+    platform = _FakePlatform(ready_after=3)
+    client, clock = _client(platform)
+    client.device()
+    outcome = client.send(SCENE, 32)
+    post = next(r for r in platform.requests if r.get_method() == "POST")
+    assert post.full_url == "https://example.test/api/platform/devices/dev_board1/chat"
     body = json.loads(post.data)
     assert set(body) == {"request_id", "expected_release_id", "messages", "max_tokens"}  # no temperature: not settable
     assert uuid.UUID(body["request_id"]).version == 4 and body["expected_release_id"] == "rel_live"
     headers = dict(post.header_items())
     assert headers["Origin"] == "https://example.test" and headers["X-convoy-client"] == "web"
     assert headers["Cookie"] == COOKIE and COOKIE not in repr(client) and "cvs_" not in str(outcome)
-    assert outcome.status == "succeeded" and outcome.trace_id == "tr_00ab" and outcome.polls == 3
-    assert outcome.e2e_ms == pytest.approx(750.0)  # three 0.25 s reads after the POST
+    reads = [r for r in platform.requests if r.get_method() == "GET" and "/devices/dev_board1/chat/" in r.full_url]
+    assert [r.full_url for r in reads] == [f"https://example.test/api/platform/devices/dev_board1/chat/{body['request_id']}"] * 3
+    assert outcome.status == "succeeded" and outcome.trace_id == "tr_00ab" and outcome.release_id == "rel_live"
+    assert outcome.polls == 3 and outcome.e2e_ms == pytest.approx(750.0)  # three 0.25 s reads after the POST
     assert (outcome.device_latency_ms, outcome.ttft_ms, outcome.tokens_in, outcome.tokens_out) == (812.4, 455.0, 1034, 13)
 
 
-def test_portal_client_paces_sends_to_the_route_rate_limit():
-    portal = _FakePortal(ready_after=1)
-    client, clock = _client(portal)
+def test_sends_are_paced_to_the_contract_limit():
+    platform = _FakePlatform(ready_after=1)
+    client, _ = _client(platform)
     client.device()
-    times = []
     for _ in range(4):
-        client.send([{"role": "user", "content": "scene"}], 32)
-        times.append(next(r for r in reversed(portal.requests) if r.get_method() == "POST") and clock.now)
-    posts = [r for r in portal.requests if r.get_method() == "POST"]
-    assert len(posts) == 4
-    # 6 sends per minute per session: consecutive POSTs are at least 10.5 s apart.
-    gaps = np.diff([t - 0.25 for t in times])
-    assert np.all(gaps >= 10.5 - 1e-9)
-
-
-def test_portal_client_reports_http_errors_honours_retry_after_and_never_overlaps_a_timed_out_request():
-    limited = _FakePortal(post_status=429)
-    client, clock = _client(limited)
+        client.send(SCENE, 32)
+    # 6 sends per minute per session: consecutive POSTs are at least 10.5 s apart (wall clock, not sim time).
+    assert len(platform.post_times) == 4 and np.all(np.diff(platform.post_times) >= 10.5 - 1e-9)
+    slower = _FakePlatform(ready_after=1, limits={"window_s": 60, "sends_per_session": 4})
+    client, _ = _client(slower)
     client.device()
-    outcome = client.send([{"role": "user", "content": "scene"}], 32)
-    assert (outcome.status, outcome.http_status, outcome.error_code) == ("http_error", 429, "rate_limited")
-    before = clock.now
-    client.send([{"role": "user", "content": "scene"}], 32)
-    assert clock.now - before >= 60  # waited for Retry-After before the next POST
+    assert client.min_interval_s == 15.5  # derived from the listed limit
+    fixed, _ = _client(_FakePlatform(ready_after=1), min_interval_s=12.0)
+    fixed.device()
+    assert fixed.min_interval_s == 12.0  # an explicit spacing is kept
 
-    slow = _FakePortal(never_finish=True)
+
+def test_one_request_outstanding_a_timed_out_or_uncertain_send_is_read_to_its_end_first():
+    slow = _FakePlatform(never_finish=True)
     client, clock = _client(slow, deadline_s=45.0, expire_wait_s=20.0)
     client.device()
-    timed_out = client.send([{"role": "user", "content": "scene"}], 32)
-    assert timed_out.status == "timeout" and timed_out.e2e_ms >= 45000
+    timed_out = client.send(SCENE, 32)
+    assert timed_out.status == "timeout" and 45000 <= timed_out.e2e_ms <= 46000  # the client's deadline
     slow.never_finish = False
-    client.send([{"role": "user", "content": "scene"}], 32)
+    client.send(SCENE, 32)
+    methods = slow.methods()
+    second_post = [i for i, (method, _) in enumerate(methods) if method == "POST"][1]
+    assert methods[second_post - 1] == ("GET", timed_out.request_id), "read to its end right before the next send"
     assert client.late_results[0]["request_id"] == timed_out.request_id
-    assert client.late_results[0]["status"] == "succeeded"  # read to its end before anything new was sent
+    assert client.late_results[0]["status"] == "succeeded"
+
+    # A send whose outcome is uncertain (connection lost, or a 5xx) is reconciled by reading it, never re-sent.
+    for failure in (ConnectionResetError("reset"), None):
+        platform = _FakePlatform(ready_after=1)
+        client, _ = _client(platform)
+        client.device()
+        if failure is not None:
+            platform.fail_next_post = failure
+        else:
+            platform.post_status = 503
+        lost = client.send(SCENE, 32)
+        assert lost.status == ("transport_error" if failure else "http_error")
+        platform.post_status = 202
+        client.send(SCENE, 32)
+        posts = [i for i, (method, _) in enumerate(platform.methods()) if method == "POST"]
+        assert platform.methods()[posts[1] - 1] == ("GET", lost.request_id)
+        assert client.late_results[-1] == {**client.late_results[-1], "request_id": lost.request_id, "status": "not_found"}
 
 
-def test_portal_client_raises_when_the_session_is_refused():
-    class Refused(_FakePortal):
+def test_http_errors_are_recorded_and_429_retry_after_is_honoured():
+    limited = _FakePlatform(post_status=429, post_headers={"retry-after": "42"})  # lower case, as the website sends it
+    client, clock = _client(limited)
+    client.device()
+    outcome = client.send(SCENE, 32)
+    assert (outcome.status, outcome.http_status, outcome.error_code, outcome.retry_after_s) == ("http_error", 429, "rate_limited", 42.0)
+    limited.post_status = 202
+    client.send(SCENE, 32)
+    assert limited.post_times[1] - limited.post_times[0] >= 42  # the next POST waited for Retry-After
+    no_header = _FakePlatform(post_status=429)
+    client, _ = _client(no_header)
+    client.device()
+    assert client.send(SCENE, 32).retry_after_s is None
+    no_header.post_status = 202
+    client.send(SCENE, 32)
+    assert no_header.post_times[1] - no_header.post_times[0] >= 60  # without one: a minute
+
+
+def test_a_refused_session_or_account_stops_the_run():
+    for status, error, stop in ((401, SessionEnded, "session_ended"), (403, AccessRefused, "access_refused")):
+        platform = _FakePlatform(post_status=status)
+        client, _ = _client(platform)
+        client.device()
+        with pytest.raises(error):
+            client.send(SCENE, 32)
+        endpoint = DevicePlannerEndpoint(CONFIGS["edge_qwen_edge_skills"].skill_planner, client, lambda side: _obs(), 6)
+        endpoint.submit("left", {}, 0.0)
+        assert _run(endpoint, until=300)[0].decision == {"kind": "stop", "reason": stop} and not endpoint.records
+
+    class Refused(_FakePlatform):
         def open(self, request, timeout=None):
             import urllib.error
 
@@ -443,7 +608,135 @@ def test_portal_client_raises_when_the_session_is_refused():
     with pytest.raises(SessionEnded):
         client.device()
     with pytest.raises(ValueError):
-        PortalChatClient("http://example.test", COOKIE)  # never a session over plain http
+        PlatformChatClient("http://example.test", COOKIE)  # never a session over plain http
+
+
+def test_a_release_change_on_the_device_stops_the_planner():
+    from convoy_sim.bimanual_pill_task.evaluate import _device_problem
+
+    platform = _FakePlatform(ready_after=1, reply=VALID_LEFT)
+    client, _ = _client(platform)
+    client.device()
+    endpoint = DevicePlannerEndpoint(CONFIGS["edge_qwen_edge_skills"].skill_planner, client, lambda side: _obs(), 6)
+    endpoint.submit("left", {}, 0.0)
+    first, t = _run(endpoint, until=300)
+    assert first.decision["kind"] == "skill" and endpoint.records[0]["transport"] == TRANSPORT
+    assert endpoint.records[0]["release_id"] == "rel_live" and endpoint.records[0]["trace_id"] == "tr_00ab"
+    platform.release = "rel_next"  # the device now serves another release
+    endpoint.submit("left", {}, t)
+    second, _ = _run(endpoint, t0=t, until=t + 300)
+    assert second.decision == {"kind": "stop", "reason": "device_model_changed"}
+    last = endpoint.records[-1]
+    assert (last["result"], last["http_status"], last["error_code"]) == ("http_error", 409, "release_changed")
+    assert endpoint.device_checks[-1]["release_id"] == "rel_next" and "model" not in endpoint.device_checks[-1]
+    assert endpoint.stats(t)["model"]["release_id"] == "rel_live", "the model the run started on"
+    assert _device_problem(client).startswith("device model changed")
+    assert client.release_id == "rel_live", "the pin never moves"
+    # Mid-swap the device may read offline: the control plane's release_changed is still the recorded cause.
+    swapping = _FakePlatform(ready_after=1, reply=VALID_LEFT)
+    client, _ = _client(swapping)
+    client.device()
+    endpoint = DevicePlannerEndpoint(CONFIGS["edge_qwen_edge_skills"].skill_planner, client, lambda side: _obs(), 6)
+    swapping.release, swapping.online = "rel_next", False
+    endpoint.submit("left", {}, 0.0)
+    assert _run(endpoint, until=300)[0].decision == {"kind": "stop", "reason": "device_model_changed"}
+    assert endpoint.device_checks[-1]["online"] is False
+
+
+def test_decisions_are_counted_by_how_they_ended():
+    def rec(decision, attempt, result, next_step=None):
+        return {"decision": decision, "attempt": attempt, "result": result, **({"next": next_step} if next_step else {})}
+
+    records = [
+        rec(1, 1, "valid", "delivered"),  # accepted on the first call
+        rec(2, 1, "invalid_json", "re-asked"), rec(2, 2, "valid", "rejected_stale: arm_conflict"),  # accepted after a re-ask
+        rec(3, 1, "timeout", "re-asked"), rec(3, 2, "invalid_choice", "re-asked"), rec(3, 3, "invalid_choice", "failed_decision"),
+        rec(4, 1, "valid"),  # answered as the episode ended: still a valid reply
+        rec(5, 1, "invalid_schema", "re-asked"),  # open: its re-ask never happened
+        rec(6, 1, "http_error", "stopped"),  # stopped: not resolved
+    ]
+    assert decision_counts(records) == {"resolved": 4, "first_call_accepted": 2, "reasked": 2, "failed": 1}
+    # Through the endpoint: first call accepted, accepted after a re-ask, a failed decision.
+    endpoint, _, _ = _endpoint([VALID_LEFT, "not json", VALID_LEFT, '{"arm": "R", "skill": "wait"}',
+                                '{"arm": "L", "skill": "pick_and_drop", "pill": 1}', '{"arm": "L", "skill": "done"}'])
+    t = 0.0
+    for _ in range(3):
+        endpoint.submit("left", {}, t)
+        t = _run(endpoint, t0=t)[1]
+    stats = endpoint.stats(t)
+    assert stats["decision_counts"] == {"resolved": 3, "first_call_accepted": 1, "reasked": 2, "failed": 1}
+    assert [r["decision"] for r in endpoint.records] == [1, 2, 2, 3, 3, 3]
+    assert stats["transport"] == "scripted-test" and {r["transport"] for r in endpoint.records} == {"scripted-test"}
+    summary = {"pills": 6, "placed": 1, "fraction_placed": 1 / 6, "slice": "nominal", "outcome": "horizon",
+               "device_planner": stats}
+    metrics = device_metrics(summary)
+    assert (metrics["planner_decisions"], metrics["planner_first_call_accepted"], metrics["planner_reasked_decisions"],
+            metrics["planner_failed_decisions"]) == (3, 1, 2, 1)
+    assert metrics["planner_decisions"] == metrics["planner_valid_replies"] + metrics["planner_failed_decisions"]
+    assert metrics["planner_calls"] == (metrics["planner_valid_replies"] + metrics["planner_invalid_format"]
+                                        + metrics["planner_invalid_choice"] + metrics["planner_call_failures"])
+    assert (metrics["planner_invalid_format"], metrics["planner_invalid_choice"], metrics["planner_call_failures"]) == (1, 3, 0)
+    assert len(metrics) == 32, "the import's cap"
+    assert all(re.fullmatch(r"[a-z][a-z0-9_]{0,47}", name) for name in metrics), "the import's metric names"
+    assert len(json.dumps(metrics, separators=(",", ":"))) <= 4096
+    for merged in ("planner_invalid_json", "planner_invalid_schema", "planner_device_errors", "planner_http_errors",
+                   "planner_timeouts"):
+        assert merged not in metrics
+
+
+def test_every_record_names_its_transport_and_older_records_read_as_the_portal_relay():
+    platform = _FakePlatform(ready_after=1, reply=VALID_LEFT)
+    client, _ = _client(platform)
+    client.device()
+    seen = []
+    endpoint = DevicePlannerEndpoint(CONFIGS["edge_qwen_edge_skills"].skill_planner, client, lambda side: _obs(), 6,
+                                     on_record=seen.append)
+    endpoint.submit("left", {}, 0.0)
+    _run(endpoint, until=300)
+    assert endpoint.records[0]["transport"] == seen[0]["transport"] == TRANSPORT == "platform-chat-v1"
+    assert transport_of(endpoint.records[0]) == TRANSPORT
+    earlier = {k: v for k, v in endpoint.records[0].items() if k != "transport"}  # a record from before the field
+    assert transport_of(earlier) == LEGACY_TRANSPORT == "portal-relay"
+    assert DevicePlannerEndpoint.trace_record(earlier)["transport"] == "portal-relay"
+
+
+def test_the_offline_labels_name_the_model_release_and_transport_the_platform_reported(tmp_path):
+    platform = _FakePlatform()
+    client, _ = _client(platform)
+    client.device()
+    config = CONFIGS["edge_qwen_edge_skills"]
+    path = write_evaluation(tmp_path / "eval", config, "Pills to bottle · nominal (seeds 0–4)",
+                            planner={"model": client.model, "transport": client.transport})
+    labels = json.loads(path.read_text())
+    assert labels["config_label"] == "Edge: example-org/Example-1B-GGUF Q4_K_M · llama.cpp cuda b6550 · rel_live · Cloud: none"
+    assert labels["policy_label"] == ("Scripted IK skills on sim state; planner: the device's model via platform-chat-v1, "
+                                      "real calls, measured latency")
+    assert labels["name"] == "Pills to bottle · Edge device planner · example-org/Example-1B-GGUF Q4_K_M · platform-chat-v1"
+    assert all(len(value) <= 120 for value in labels.values())
+    unknown = device_labels(config, describe_model({"id": "dev_x"}), TRANSPORT)
+    assert unknown["config_label"] == "Edge: unknown model · runtime unknown · release unknown · Cloud: none"
+    long = device_labels(config, {**client.model, "model_repo": "org/" + "x" * 150}, TRANSPORT)
+    assert all(len(value) <= 120 for value in long.values())
+    # No configuration text names a model any more: the labels come from the run.
+    text = json.dumps([config.label, config.description, config.deployment, config.policy, config.skill_planner.model])
+    assert "Qwen" not in text and "1.5B" not in text
+
+
+def test_the_cli_refuses_an_ambiguous_device_before_anything_runs(tmp_path, monkeypatch):
+    from convoy_sim.bimanual_pill_task import device_planner
+    from convoy_sim.bimanual_pill_task.cli import main
+
+    session = tmp_path / "session"
+    session.write_text(COOKIE)
+
+    def ambiguous(self):
+        raise DeviceSelectionError("several devices are listed for chat (dev_a, dev_b): choose one with --planner-device")
+
+    monkeypatch.setattr(device_planner.PlatformChatClient, "device", ambiguous)
+    with pytest.raises(SystemExit, match="cannot start: several devices.*--planner-device"):
+        main(["episode", "--planner-server", "https://example.test", "--planner-session-file", str(session),
+              "--output", str(tmp_path / "out")])
+    assert not (tmp_path / "out").exists()
 
 
 # ---- episode wiring --------------------------------------------------------------------------------------
@@ -524,6 +817,10 @@ def test_an_episode_executes_device_decisions_and_reports_only_measured_numbers(
     assert len(metrics) <= 32 and len(json.dumps(metrics)) <= 4096
     assert metrics["planner_calls"] == device["calls"] and metrics["planner_e2e_p50_ms"] == 1500.0
     assert "network_outage_s" not in metrics and "motor_policy_available" not in metrics
+    # Every reply was accepted on its first call: each decision resolved at once (one may be open at the end).
+    assert metrics["planner_first_call_accepted"] == metrics["planner_decisions"] == metrics["planner_valid_replies"]
+    assert metrics["planner_reasked_decisions"] == metrics["planner_failed_decisions"] == 0
+    assert device["transport"] == "scripted-test" and device["decision_counts"]["resolved"] == metrics["planner_decisions"]
     replay = json.loads((out / "replay.json").read_text())
     assert replay["planner_ms"] == 1500.0 and replay["skill"].startswith("pick_and_drop ×")
     local = [json.loads(p.read_text()) for p in sorted((out / "frames").glob("*.json"))]
@@ -554,7 +851,7 @@ def test_evaluate_runs_device_episodes_one_after_another_and_stops_when_the_devi
 
     transport = GoesOffline([])
     report = evaluate(tmp_path / "run", ["edge_qwen_edge_skills"], ["nominal"], [0, 1], horizon=6.0, planner=transport,
-                      name="Pills to bottle · Edge Qwen · test")
+                      name="Pills to bottle · Edge device planner · test")
     first, second = sorted(report["episodes"], key=lambda e: e["seed"])
     assert first["status"] == "completed" and first["device_planner"]["calls"] == len(transport.sent) >= 2
     assert second["status"] == "not_run" and "offline" in second["reason"] and report["not_run"] == [second]
@@ -564,6 +861,8 @@ def test_evaluate_runs_device_episodes_one_after_another_and_stops_when_the_devi
     manifest = json.loads((tmp_path / "run" / "manifest.json").read_text())
     assert manifest["device_planner"]["prompt_version"] == PROMPT_VERSION
     assert manifest["device_planner"]["device_at_start"]["release_id"] == "rel_test"
+    assert manifest["device_planner"]["transport"] == "scripted-test"
+    assert json.loads(calls[0])["transport"] == "scripted-test"
 
 
 def test_an_unreadable_device_status_is_asked_again_before_it_stops_the_evaluation(monkeypatch):

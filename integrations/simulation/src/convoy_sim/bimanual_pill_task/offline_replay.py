@@ -9,7 +9,9 @@
     <episode>/summary.json        the full episode summary (kept locally, not uploaded)
 
 ``write_evaluation`` puts the evaluation's labels (``evaluation.json``) beside the
-episode directories.
+episode directories. For a planner on a connected device the labels are built from
+the model the platform reported at run start and the transport
+(``configs.device_labels``), not from the configuration's static text.
 
 * One replay step is 0.5 s of simulated time, about one skill phase (approach,
   descend, close, lift, transfer, release...). Steps are capped at 299, so an
@@ -31,7 +33,8 @@ episode directories.
   modeled latency of the episode's skill-planner calls; for a planner on a
   connected device it is the median measured end-to-end round trip of the calls
   the model answered, ``skill`` lists the skills the model chose, and the
-  metrics are the device calls' measured counts and latencies.
+  metrics are the device calls' measured counts and latencies, and how the
+  episode's decisions ended (``device_metrics``).
 * The import's frame shape has no planner fields, so the calls that completed
   during a step are kept in the local ``frames/NNNN.json`` under ``planner``
   (with each arm's active skill under ``skills``). The import script reads only
@@ -73,12 +76,28 @@ def _count(summary: dict, *names: str) -> int:
     return int(sum(skills.get(name, 0) for name in names))
 
 
+# Device-planner calls by result, as the import's metrics group them (the 32-metric cap): the record's own
+# result stays in calls.jsonl and summary.json.
+INVALID_FORMAT = ("invalid_json", "invalid_schema")
+CALL_FAILURES = ("device_error", "http_error", "transport_error", "timeout")
+
+
 def device_metrics(summary: dict) -> dict:
     """The import's metrics for an episode planned by the model on a connected device: measured call
-    counts by result, end-to-end and on-device latency, tokens, and the task and safety outcomes.
-    Nothing here is modeled; a value that was not measured is null."""
+    counts by result, how the episode's decisions ended, end-to-end and on-device latency, tokens, and the
+    task and safety outcomes. Nothing here is modeled; a value that was not measured is null.
+
+    Calls: ``planner_calls`` = valid replies + ``planner_invalid_format`` (not one JSON object of the
+    declared shape: invalid JSON or schema) + ``planner_invalid_choice`` + ``planner_call_failures`` (no
+    reply: a device error or expiry, an HTTP or connection error, or a client timeout). Decisions
+    (``device_planner.decision_counts``): ``planner_decisions`` resolved (= valid replies + failed
+    decisions), ``planner_first_call_accepted``, ``planner_reasked_decisions`` (needed a re-ask: accepted
+    after it, or failed) and ``planner_failed_decisions``. Exports before platform-chat-v1 had
+    planner_invalid_json, planner_invalid_schema, planner_device_errors, planner_http_errors and
+    planner_timeouts instead of the two merged counts, and no decision counts."""
     d = summary["device_planner"]
     by = d.get("by_result", {})
+    decisions = d.get("decision_counts") or {}
     return {
         "pills_total": summary["pills"],
         "pills_placed": summary["placed"],
@@ -86,12 +105,12 @@ def device_metrics(summary: dict) -> dict:
         "time_to_all_placed_s": summary.get("time_to_all_placed_s"),
         "planner_calls": d["calls"],
         "planner_valid_replies": by.get("valid", 0),
-        "planner_invalid_json": by.get("invalid_json", 0),
-        "planner_invalid_schema": by.get("invalid_schema", 0),
+        "planner_invalid_format": sum(by.get(name, 0) for name in INVALID_FORMAT),
         "planner_invalid_choice": by.get("invalid_choice", 0),
-        "planner_device_errors": by.get("device_error", 0),
-        "planner_http_errors": by.get("http_error", 0) + by.get("transport_error", 0),
-        "planner_timeouts": by.get("timeout", 0),
+        "planner_call_failures": sum(by.get(name, 0) for name in CALL_FAILURES),
+        "planner_decisions": decisions.get("resolved"),
+        "planner_first_call_accepted": decisions.get("first_call_accepted"),
+        "planner_reasked_decisions": decisions.get("reasked"),
         "planner_failed_decisions": d.get("failed_decisions", 0),
         "planner_stale_rejections": d.get("stale_rejections", 0),
         "planner_e2e_p50_ms": d.get("e2e_p50_ms"),
@@ -164,11 +183,19 @@ def chosen_skills(summary: dict) -> str:
     return (text or "no skill chosen")[:64]
 
 
-def write_evaluation(directory: Path, config, task: str, name: str | None = None) -> Path:
-    """evaluation.json: the labels the import creates the offline evaluation with."""
+def write_evaluation(directory: Path, config, task: str, name: str | None = None, planner: dict | None = None) -> Path:
+    """evaluation.json: the labels the import creates the offline evaluation with. `planner` is a device
+    planner run's ``{"model": describe_model(), "transport": ...}``: its labels say which model (as the
+    platform reported it at run start) and which transport, instead of the configuration's static text."""
     directory.mkdir(parents=True, exist_ok=True)
     labels = {"name": name or f"Pills to bottle · {config.label}", "task": task,
               "config_label": config.deployment or config.label, "policy_label": config.policy or config.motor.name}
+    if planner is not None:
+        from .configs import device_labels
+
+        measured = device_labels(config, planner.get("model"), planner.get("transport") or "unknown")
+        labels.update(config_label=measured["config_label"], policy_label=measured["policy_label"])
+        labels["name"] = name or measured["name"]
     for key, value in labels.items():
         if not 0 < len(value) <= 120:
             raise ValueError(f"{key} must be 1-120 characters: {value!r}")

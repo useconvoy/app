@@ -145,7 +145,8 @@ export function addRobot(ws: ConvoyWorkspace, input: NewRobot, now: number | Dat
 
 /**
  * Sets the offline evaluations a robot shows as evals; an empty list removes the link. A new
- * link to one that another configuration's robots link is refused; links the robot has stay.
+ * link to one that another configuration's robots link is refused; links the robot has stay,
+ * with their declared provenance (an unlinked evaluation's goes with its link).
  */
 export function linkOfflineEvaluations(ws: ConvoyWorkspace, robotId: string, ids: readonly string[], now: number | Date): ConvoyWorkspace {
   const robot = ws.robots.find(item => item.id === robotId);
@@ -154,6 +155,8 @@ export function linkOfflineEvaluations(ws: ConvoyWorkspace, robotId: string, ids
   refuseLinkedElsewhere(ws, robot.configId, links.filter(id => !robot.offlineEvaluationIds?.includes(id)));
   const next: Robot = { ...robot, offlineEvaluationIds: links };
   if (!next.offlineEvaluationIds?.length) delete next.offlineEvaluationIds;
+  const kept = Object.entries(robot.offlineEvaluationProvenance ?? {}).filter(([id]) => links.includes(id));
+  if (kept.length) next.offlineEvaluationProvenance = Object.fromEntries(kept); else delete next.offlineEvaluationProvenance;
   return {
     ...ws,
     meta: { ...ws.meta, updatedAt: iso(now) },

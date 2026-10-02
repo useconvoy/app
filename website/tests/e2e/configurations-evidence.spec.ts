@@ -109,12 +109,17 @@ test.describe("evidence panels", () => {
       "Autonomous episodes0 / 100 %", "Interventions per episode2.929 in 10 episodes", "Per 100 decisions9.429 in 308",
       "Decisions between10.6interventions, mean", "Accepted on first call–Not reported", "Decisions308valid + failed",
     ]);
-    await expect(card.locator("thead th")).toHaveText(["Intervention", "Events", "Episodes"]);
-    await expect(card.locator("tbody tr")).toHaveText(["Failed decision157", "Protective stop81", "Unfinished episode66", "Arm–arm contactNot counted1401"]);
-    await expect(card.locator("tbody tr").last(), "shown, not counted").toHaveClass("cv-au__uncounted");
+    const interventions = card.getByRole("table", { name: "Interventions by type" });
+    await expect(interventions.locator("thead th")).toHaveText(["Intervention", "Events", "Episodes"]);
+    await expect(interventions.locator("tbody tr")).toHaveText(["Failed decision157", "Protective stop81", "Unfinished episode66", "Arm–arm contactNot counted1401"]);
+    await expect(interventions.locator("tbody tr").last(), "shown, not counted").toHaveClass("cv-au__uncounted");
+    // This fixture records invalid choices only: the other refusal and failure counts are Not reported, never 0.
+    await expect(card.getByRole("table", { name: "Planner calls by result" }).locator("tbody tr")).toHaveText([
+      "Valid reply29310", "Refused by the executive–Not reported–Not reported", "Device or transport failure–Not reported–Not reported",
+    ]);
     await expect(card.locator(".cv-ev__facts > div")).toHaveText(["Planner calls378 · 78 % valid", "Counts reported10 of 10 episodes"]);
     await card.getByRole("button", { name: "Autonomy: definitions" }).click();
-    await expect(card.locator(".cv-ev__definitions dt")).toHaveText(["Intervention", "Autonomous episode", "Decisions", "Failed decision", "Protective stop", "Unfinished episode", "Arm–arm contact", "First call"]);
+    await expect(card.locator(".cv-ev__definitions dt")).toHaveText(["Intervention", "Autonomous episode", "Decisions", "Refused", "Device or transport failure", "Failed decision", "Protective stop", "Unfinished episode", "Arm–arm contact", "First call"]);
     await axe(page);
     await card.getByRole("button", { name: "Autonomy: definitions" }).click();
 
@@ -142,6 +147,18 @@ test.describe("evidence panels", () => {
     await expect(card.locator("tbody tr").first()).toHaveText("Failed decision–Not reported–Not reported");
     await expect(card.locator("tbody tr").nth(1), "reported counts stay").toHaveText("Protective stop81");
     await expect(card.locator(".cv-ev__facts > div").last()).toHaveText("Counts reported9 of 10 episodes");
+
+    // Episodes that export the decision-level counts (platform-chat-v1): the first-call share over its own
+    // decisions, 273 of 308 here.
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await mockApi(page, { document: evidenceDocument() });
+    await mockPlannerEval(page, metrics => {
+      const valid = metrics.planner_valid_replies as number, failed = metrics.planner_failed_decisions as number;
+      Object.assign(metrics, { planner_decisions: valid + failed, planner_first_call_accepted: valid - 2, planner_reasked_decisions: failed + 2 });
+    });
+    await page.goto(EVAL_PAGE);
+    await expect(card.locator(".cv-au__kpi").nth(4)).toHaveText("Accepted on first call89 %of decisions");
+    await expect(card.locator(".cv-au__kpi").nth(5)).toHaveText("Decisions308valid + failed");
   });
 
   test("the dashboard: compact latency budget and autonomy of the newest eval, equal in height; a live device's when there is none", async ({ page }, testInfo) => {

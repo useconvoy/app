@@ -5,8 +5,9 @@
  */
 import { fmtFixed, fmtMs, fmtPct, seriesPoints } from "./format";
 import type { LiveBinding } from "./live";
+import { EVAL_PROVENANCE_FIELDS } from "./types";
 import type {
-  ActionTrace, ConfigRevision, Configuration, ConvoyWorkspace, EvalSuite, Flag, FlagRules,
+  ActionTrace, ConfigRevision, Configuration, ConvoyWorkspace, EvalProvenance, EvalProvenanceField, EvalSuite, Flag, FlagRules,
   FlagSeverity, Percentiles, Provenance, Robot, RobotHealth, SeriesPoint, TelemetryMetric, TelemetryReading,
 } from "./types";
 
@@ -83,6 +84,29 @@ export function offlineEvaluationsFor<T extends { id: string }>(ws: ConvoyWorksp
 /** `offlineEvaluationsFor` on ids: the ones among `ids` a robot in `configId` may link, in order (a chosen one linked elsewhere meanwhile drops out). */
 export function offlineEvaluationIdsFor(ws: ConvoyWorkspace, configId: string | null, ids: readonly string[], keep: readonly string[] = []): string[] {
   return offlineEvaluationsFor(ws, configId, ids.map(id => ({ id })), keep).map(item => item.id);
+}
+
+/** The declared provenance of an offline evaluation the robot links; null when the robot does not link it or declares none. */
+export function offlineProvenance(robot: Pick<Robot, "offlineEvaluationIds" | "offlineEvaluationProvenance">, evaluationId: string): EvalProvenance | null {
+  const declared = robot.offlineEvaluationProvenance;
+  if (!declared || !robot.offlineEvaluationIds?.includes(evaluationId) || !Object.hasOwn(declared, evaluationId)) return null;
+  return declared[evaluationId] ?? null;
+}
+
+const PROVENANCE_LABEL: Record<EvalProvenanceField, string> = { run: "Run", perception: "Perception", control: "Control", planner: "Planner", runner: "Runner", transport: "Transport" };
+/** Fields whose value reads as a fact only with its name in front ("Runner: Mac"); the others read on their own ("Scripted IK"). */
+const PROVENANCE_NAMED = new Set<EvalProvenanceField>(["runner", "transport"]);
+export interface ProvenanceItem { field: EvalProvenanceField; label: string; value: string; /** The line's text: "Runner: Mac", "Scripted IK". */ text: string }
+/** The declared fields in display order (`EVAL_PROVENANCE_FIELDS`), trimmed; blank ones are left out. */
+export function provenanceItems(provenance: EvalProvenance | null | undefined): ProvenanceItem[] {
+  if (!provenance) return [];
+  return EVAL_PROVENANCE_FIELDS.flatMap(field => {
+    const raw = Object.hasOwn(provenance, field) ? provenance[field] : undefined;
+    const value = typeof raw === "string" ? raw.trim() : "";
+    if (!value) return [];
+    const label = PROVENANCE_LABEL[field];
+    return [{ field, label, value, text: PROVENANCE_NAMED.has(field) ? `${label}: ${value}` : value }];
+  });
 }
 
 /* ---------- traces ---------- */

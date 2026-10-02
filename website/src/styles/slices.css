@@ -1,0 +1,38 @@
+/* Slice results and declared provenance (cv-slices, cv-provenance): an eval's successes per slice in
+ * tables, tiles and cards, and how an eval ran on one line. Imported by
+ * components/configurations/SliceResults.tsx. Colours come from tokens only. Breakpoint 639. */
+
+/* "Nominal 3/5  Pill count 30 0/5": names muted, counts in ink; items wrap, never break inside. */
+.cv-slices { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0 14px; min-width: 0; font-variant-numeric: tabular-nums; white-space: normal; }
+.cv-slices__item { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.cv-slices__name { color: var(--text-secondary); font-weight: 400; }
+.cv-slices b { color: var(--text-primary); font-weight: 600; }
+/* In a tile, in the value's place: at most two lines, so the tile keeps its height. */
+.cv-tile__value .cv-slices { display: flex; max-height: 2.75rem; overflow: hidden; gap: 0 16px; font-size: .875rem; line-height: 1.375rem; letter-spacing: 0; }
+.cv-tile__value .cv-slices b { font-size: 1.125rem; font-weight: 500; letter-spacing: -.01em; }
+/* A long name in a table cell: one line, cut with an ellipsis (the full name on hover). */
+.cv-cell-clip { display: inline-block; max-width: 240px; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+/* A card's foot: the slices may take a line of their own. */
+.cv-config__foot:has(.cv-slices) { flex-wrap: wrap; row-gap: 6px; }
+
+/* How an eval ran: one muted line of short facts, separated by middots (a wrapped line ends with one, never starts with one). */
+.cv-provenance { display: flex; flex-wrap: wrap; margin: -12px 0 20px; padding: 0; color: var(--text-secondary); font-size: .8125rem; line-height: 1.5; list-style: none; }
+.cv-provenance li { min-width: 0; overflow-wrap: anywhere; }
+.cv-provenance li:not(:last-child)::after { content: "·"; content: "·" / ""; margin: 0 8px; color: var(--text-muted); }
+
+/* Tables with one column per slice: in a table, the slices stay on one line where there is room. */
+.cv-table .cv-slices { flex-wrap: nowrap; }
+/* The robot's evals on a phone: the runner and date under the eval's name (their columns are hidden). */
+.cv-cell-sub { display: none; }
+
+@media (max-width: 639px) {
+  .cv-tile__value .cv-slices { max-height: 2.5rem; gap: 0 12px; font-size: .8125rem; line-height: 1.25rem; }
+  .cv-tile__value .cv-slices b { font-size: 1rem; }
+  .cv-provenance { margin-top: -8px; font-size: .75rem; }
+  .cv-table .cv-slices { flex-wrap: wrap; }
+  .cv-cell-sub { display: block; margin-top: 2px; color: var(--text-secondary); font-size: .75rem; font-weight: 400; line-height: 1.3; }
+  /* Per-slice tables: narrower cells, and the first column wraps so every slice keeps its column. */
+  .cv-compare .cv-table :is(th, td) { padding: 6px 10px; }
+  .cv-compare .cv-table tbody th { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
+  .cv-compare .cv-table thead th { white-space: normal; line-height: 1.3; }
+}

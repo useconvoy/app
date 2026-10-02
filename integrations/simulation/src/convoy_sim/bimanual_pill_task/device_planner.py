@@ -1,11 +1,13 @@
 """Skill decisions from a language model on the robot's edge computer, through Convoy's device chat API.
 
-The "Edge Qwen" configuration asks Qwen2.5-1.5B-Instruct (Q4_K_M, llama.cpp CUDA) on a Jetson Orin
-Nano for every skill decision. The model reads text only, so each request carries a compact text
-description of the simulator state: pill ids and positions, which pills are already in the bottle,
-the bottle position, both arms' state and which arm can reach which pill. The model answers with one
-JSON action and the scripted skills execute it on the simulator state. Nothing here falls back to the
-rule-based stand-in or repairs a reply:
+The on-device configuration (``edge_qwen_edge_skills``) asks the model of the connected device's
+active release for every skill decision. Which model that is (repository, file, quantization,
+runtime) is read from the platform when the run starts and recorded with it; nothing here assumes
+one. The model reads text only, so each request carries a compact text description of the simulator
+state: pill ids and positions, which pills are already in the bottle, the bottle position, both arms'
+state and which arm can reach which pill. The model answers with one JSON action and the scripted
+skills execute it on the simulator state. Nothing here falls back to the rule-based stand-in or
+repairs a reply:
 
 * ``build_prompt`` writes the request; ``parse_reply`` accepts exactly one JSON object of the declared
   shape (no code fence, no text around it); ``check_choice`` refuses an action that the scene in the
@@ -13,9 +15,11 @@ rule-based stand-in or repairs a reply:
 * ``FailurePolicy`` decides what follows a refused reply, a device error, an HTTP error or a timeout.
 * ``DevicePlannerEndpoint`` makes the calls one at a time. The requesting arm holds in simulated time
   for the measured end-to-end round trip of each call; the other arm keeps working.
-* ``PortalChatClient`` is the transport: the website's device chat routes (``/api/portal/chat``), relayed
-  by the control plane to the agent on the device. It paces requests to the routes' rate limit and
-  never logs the session.
+* ``PlatformChatClient`` is the transport (``TRANSPORT``, "platform-chat-v1"): the website's public
+  device chat contract (``/api/platform/chat/devices``, ``/api/platform/devices/{device}/chat``),
+  relayed by the control plane to the agent on the device. It paces requests to the contract's rate
+  limit, keeps one request outstanding and never logs the session. Runs made before it used the
+  website portal's relay (``/api/portal/chat``, ``LEGACY_TRANSPORT``): a different timing condition.
 """
 
 from __future__ import annotations
@@ -39,6 +43,18 @@ from .skills import ZONE_M
 
 PROMPT_VERSION = "pill-planner-v5"
 MAX_TOKENS = 32  # a valid reply is ~20 tokens; the release caps output at 128
+# The transport is part of the timing condition: every call record and export says which one it used.
+TRANSPORT = "platform-chat-v1"  # the website's public device chat contract (/api/platform/...)
+LEGACY_TRANSPORT = "portal-relay"  # earlier runs: the website portal's relay (/api/portal/chat); records have no transport
+UNKNOWN = "unknown"  # a model or runtime fact the platform did not report: never a guess
+
+
+def transport_of(record: dict) -> str:
+    """The transport a call record or manifest names; one from before the field existed came through the
+    legacy portal relay."""
+    return record.get("transport") or LEGACY_TRANSPORT
+
+
 ARM_CODE = {"left": "L", "right": "R"}
 SIDE = {"L": "left", "R": "right"}
 OTHER = {"left": "right", "right": "left"}
@@ -366,8 +382,9 @@ class FailurePolicy:
       time, whichever comes first (as after a "wait").
     * An episode makes at most `budget_per_pill` x pills + `budget_extra` calls; then it ends
       (`planner_call_budget_exhausted`).
-    * The device going offline or out of chat eligibility, the active model changing, or the session
-      ending stops the episode and the evaluation (recorded, never retried around).
+    * The device going offline or out of chat eligibility, the active model changing, the session
+      ending or the account being refused (403) stops the episode and the evaluation (recorded, never
+      retried around). The device is checked after every call that brings no reply.
     * A call that reaches no terminal result within `client_deadline_s` is a timeout. Its elapsed time
       counts like any round trip; before the next call the client waits, in wall-clock time only, for
       that request to finish or expire so that the device never has two requests.
@@ -414,6 +431,7 @@ class ChatOutcome:
     post_ms: float | None = None
     polls: int = 0
     paced_wait_s: float = 0.0  # wall-clock wait before the POST for the route's rate limit (not sim time)
+    retry_after_s: float | None = None  # a 429's Retry-After: the next POST waits this long (wall clock)
 
 
 @dataclass(frozen=True)
@@ -427,6 +445,9 @@ class DeviceState:
     context_window: int | None
     checked_at: str
     http_status: int
+    device_id: str | None = None
+    device_name: str | None = None
+    model: dict | None = None  # describe_model(): the release and runtime the platform reports for the device
 
 
 class ChatTransport(Protocol):
@@ -439,6 +460,16 @@ class SessionEnded(RuntimeError):
     """The signed-in session was refused (401): nothing more can be sent."""
 
 
+class AccessRefused(RuntimeError):
+    """The account may not do this (403: a role below operator, or a request the website could not
+    verify). Not retried: the run stops."""
+
+
+class DeviceSelectionError(RuntimeError):
+    """No single device to plan on: none listed, the requested one is not listed, or several are and
+    none was named (``--planner-device``). The run does not start."""
+
+
 def _utc(ts: float) -> str:
     return datetime.fromtimestamp(ts, UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
@@ -448,48 +479,142 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-class PortalChatClient:
-    """The website's device chat routes with one signed-in operator session.
+def _text(value) -> str:
+    return value if isinstance(value, str) and value else UNKNOWN
 
-    ``POST /api/portal/chat`` takes ``{request_id, expected_release_id, messages, max_tokens}`` (user and
-    assistant messages only, at most 16 and 8 KiB, 1-128 output tokens; no temperature or seed: decoding
-    is the active release's) and answers 202; ``GET /api/portal/chat/{request_id}`` reads it until it is
-    succeeded, failed or expired. The routes allow 6 sends and 180 reads per minute per session (20 and
-    1200 for the site); ``GET /api/portal/snapshot`` (30 per minute) says whether the device is online
-    and eligible. Sends are spaced `min_interval_s` apart; reads poll every `poll_s` for the first
-    `fast_poll_s`, then every second.
+
+def _number(value) -> float | int | None:
+    return value if isinstance(value, int | float) and not isinstance(value, bool) else None
+
+
+def describe_model(entry: dict) -> dict:
+    """The model and runtime a device entry of ``GET /api/platform/chat/devices`` reports: the active release
+    as the platform records it (model repository, revision, file, SHA-256 and quantization from the GGUF
+    header; runtime name, backend and version; decoding) and the runtime the device itself reports. A fact
+    that is not reported is "unknown" (numbers: None), never filled in."""
+    release = entry.get("release") if isinstance(entry.get("release"), dict) else {}
+    model = release.get("model") if isinstance(release.get("model"), dict) else {}
+    runtime = release.get("runtime") if isinstance(release.get("runtime"), dict) else {}
+    decoding = release.get("decoding") if isinstance(release.get("decoding"), dict) else {}
+    device = entry.get("runtime") if isinstance(entry.get("runtime"), dict) else {}
+    return {
+        "source": f"{TRANSPORT}: GET /api/platform/chat/devices",
+        "device_id": _text(entry.get("id")), "device_name": _text(entry.get("name")),
+        "hardware_profile": _text(entry.get("hardware_profile")), "agent_version": _text(entry.get("agent_version")),
+        "release_id": _text(entry.get("release_id")), "release_name": _text(release.get("name")),
+        "release_version": _text(release.get("version")), "release_digest": _text(release.get("digest")),
+        "model_repo": _text(model.get("repo")), "model_revision": _text(model.get("revision")),
+        "model_file": _text(model.get("file")), "model_sha256": _text(model.get("sha256")),
+        "model_name": _text(model.get("name")), "quantization": _text(model.get("quantization")),
+        "runtime": _text(runtime.get("name")), "runtime_backend": _text(runtime.get("backend")),
+        "runtime_version": _text(runtime.get("version")),
+        "temperature": _number(decoding.get("temperature")), "seed": _number(decoding.get("seed")),
+        "context_window": _number(release.get("context_window")), "output_limit": _number(release.get("output_limit")),
+        "device_runtime_backend": _text(device.get("backend")), "device_runtime_build": _text(device.get("build")),
+        "device_context_window": _number(device.get("context_window")),
+        "gpu_layers": _number(device.get("gpu_layers")), "gpu_layers_total": _number(device.get("gpu_layers_total")),
+    }
+
+
+def _known(model: dict | None, key: str) -> str | None:
+    value = (model or {}).get(key)
+    return value if isinstance(value, str) and value and value != UNKNOWN else None
+
+
+def model_label(model: dict | None) -> str:
+    """"<repository or file> <quantization>" of a describe_model() record, e.g. "org/Model-GGUF Q4_K_M";
+    "unknown model" when the platform reported neither."""
+    name = _known(model, "model_repo") or _known(model, "model_file")
+    if name is None:
+        return "unknown model"
+    quantization = _known(model, "quantization")
+    return f"{name} {quantization}" if quantization else f"{name} (quantization unknown)"
+
+
+def runtime_label(model: dict | None) -> str:
+    """"llama.cpp cuda b6550" from the release's runtime; "runtime unknown" when it was not reported."""
+    parts = [_known(model, key) for key in ("runtime", "runtime_backend", "runtime_version")]
+    return " ".join(p for p in parts if p) or "runtime unknown"
+
+
+def select_device(devices: list[dict], requested: str | None) -> dict:
+    """The device to plan on: the requested one, or the only physical device listed. Anything else is
+    ambiguous and refused (a run measures one device, named or unique)."""
+    listed = [d for d in devices if isinstance(d, dict) and isinstance(d.get("id"), str)]
+    names = ", ".join(f"{d['id']} ({d.get('name') or 'unnamed'})" for d in listed) or "none"
+    if requested:
+        match = next((d for d in listed if d["id"] == requested), None)
+        if match is None:
+            raise DeviceSelectionError(f"device {requested} is not listed for chat" + (f" (listed: {names})" if listed else ""))
+        return match
+    if not listed:
+        raise DeviceSelectionError("no physical device is listed for chat")
+    if len(listed) > 1:
+        raise DeviceSelectionError(f"several devices are listed for chat ({names}): choose one with --planner-device")
+    return listed[0]
+
+
+def _retry_after(headers: dict) -> float | None:
+    value = str(headers.get("retry-after", "")).strip()
+    return float(value) if value.isdigit() and 0 < int(value) <= 3600 else None
+
+
+class PlatformChatClient:
+    """The website's public device chat contract (``platform-chat-v1``) with one signed-in session.
+
+    ``GET /api/platform/chat/devices`` lists the physical devices: chat availability, the active release
+    (model, quantization, runtime) and the contract's limits. The client plans on the device it is given
+    or on the only one listed, and pins that device and its active release at the first check; once a
+    device is named or pinned, it asks for that one (``?device_id=``).
+    ``POST /api/platform/devices/{device}/chat`` takes ``{request_id, expected_release_id, messages,
+    max_tokens}`` (user and assistant messages only, at most 16 and 8 KiB, 1-128 output tokens; no
+    temperature or seed: decoding is the release's) and answers 202; ``GET .../chat/{request_id}`` reads
+    it until it is succeeded, failed or expired. The contract allows 6 sends and 180 reads per minute per
+    session (20 and 1,200 for the site) and 30 device lists; sends are spaced ``min_interval_s`` apart
+    (60 s / the listed sends per session + 0.5 s, 10.5 s by default). Reads poll every ``poll_s`` for the
+    first ``fast_poll_s``, then every second. One request is outstanding at a time: after a timeout, or a
+    send whose outcome is uncertain, the next send first reads that request until it is finished or gone.
     """
 
-    CHAT = "/api/portal/chat"
-    SNAPSHOT = "/api/portal/snapshot"
+    transport = TRANSPORT
+    DEVICES = "/api/platform/chat/devices"
 
-    def __init__(self, server: str, cookie: str, *, min_interval_s: float = 10.5, poll_s: float = 0.25,
-                 fast_poll_s: float = 5.0, deadline_s: float = 45.0, expire_wait_s: float = 130.0,
+    def __init__(self, server: str, cookie: str, *, device_id: str | None = None, min_interval_s: float | None = None,
+                 poll_s: float = 0.25, fast_poll_s: float = 5.0, deadline_s: float = 45.0, expire_wait_s: float = 130.0,
                  opener=None, clock=time.monotonic, sleep=time.sleep, wall=time.time, log=None):
         origin = server.rstrip("/")
         if not re.fullmatch(r"https://[A-Za-z0-9.-]+(:\d+)?|http://(localhost|127\.0\.0\.1)(:\d+)?", origin):
             raise ValueError("server must be an https origin (or http on localhost)")
         if not re.fullmatch(r"convoy_session=cvs_[A-Za-z0-9_-]{16,128}", cookie):
             raise ValueError("cookie must be a convoy_session value")
+        if device_id is not None and not re.fullmatch(r"dev_[a-z0-9]{1,60}", device_id):
+            raise ValueError("device_id must be a dev_… id")
         self.server, self._cookie = origin, cookie
-        self.min_interval_s, self.poll_s, self.fast_poll_s = min_interval_s, poll_s, fast_poll_s
+        self.requested_device = device_id
+        self.device_id: str | None = None  # pinned at the first device check
+        self.release_id: str | None = None  # the active release when the device was first ready: pinned for the run
+        self.model: dict | None = None  # describe_model() at that check
+        self.limits: dict = {}
+        self._paced_by_limit = min_interval_s is None
+        self.min_interval_s = 10.5 if min_interval_s is None else min_interval_s
+        self.poll_s, self.fast_poll_s = poll_s, fast_poll_s
         self.deadline_s, self.expire_wait_s = deadline_s, expire_wait_s
         self.opener = opener or urllib.request.build_opener(_NoRedirect)
         self.clock, self.sleep, self.wall = clock, sleep, wall
         self.log = log or (lambda message: None)
-        self.release_id: str | None = None
         self._last_post: float | None = None
         self._not_before = 0.0
         self._unfinished: str | None = None
-        self.late_results: list[dict] = []  # timed-out requests read after their deadline
+        self.late_results: list[dict] = []  # requests read after their deadline (or after an uncertain send)
         self.sends = 0
         self.reads = 0
+        self.lists = 0
 
     def __repr__(self) -> str:  # never shows the session
-        return f"PortalChatClient({self.server!r})"
+        return f"PlatformChatClient({self.server!r}, device={self.device_id or self.requested_device!r})"
 
     @classmethod
-    def from_session_file(cls, server: str, path, **kwargs) -> PortalChatClient:
+    def from_session_file(cls, server: str, path, **kwargs) -> PlatformChatClient:
         from pathlib import Path
 
         return cls(server, Path(path).read_text().strip(), **kwargs)
@@ -512,23 +637,53 @@ class PortalChatClient:
             parsed = json.loads(raw or b"{}")
         except ValueError:
             parsed = {}
+        parsed = parsed if isinstance(parsed, dict) else {}
         if status == 401:
             raise SessionEnded("the session was refused (401)")
-        return status, parsed if isinstance(parsed, dict) else {}, response_headers
+        if status == 403:
+            raise AccessRefused(f"refused (403 {parsed.get('code') or 'forbidden'})")
+        return status, parsed, {str(k).lower(): v for k, v in response_headers.items()}
+
+    def _chat(self, request_id: str | None = None) -> str:
+        return f"/api/platform/devices/{self.device_id}/chat" + (f"/{request_id}" if request_id else "")
 
     def device(self) -> DeviceState:
-        """The configured device's chat availability (``GET /api/portal/snapshot``)."""
-        status, data, _ = self._request("GET", self.SNAPSHOT)
-        self.reads += 1
-        chat, device = data.get("chat") or {}, data.get("device") or {}
+        """The device's chat availability, active release and model (``GET /api/platform/chat/devices``). The
+        first call picks the device (``select_device``: refuses an ambiguous or unknown one); the first call
+        that finds it ready pins its active release and records its model (``model``)."""
+        named = self.device_id or self.requested_device  # a named device always comes with its release details
+        status, data, _ = self._request("GET", self.DEVICES + (f"?device_id={named}" if named else ""))
+        self.lists += 1
+        checked = _utc(self.wall())
+        if status != 200:
+            return DeviceState(False, False, f"device list HTTP {status}", None, None, None, None, checked, status,
+                               device_id=self.device_id)
+        self._apply_limits(data.get("limits"))
+        devices = [d for d in data.get("devices") or [] if isinstance(d, dict)]
+        if self.device_id is None:
+            self.device_id = select_device(devices, self.requested_device)["id"]
+        entry = next((d for d in devices if d.get("id") == self.device_id), None)
+        if entry is None:
+            return DeviceState(False, False, "the device is no longer listed for chat", None, "unlisted", None, None,
+                               checked, status, device_id=self.device_id)
+        model = describe_model(entry)
         state = DeviceState(
-            online=status == 200 and chat.get("online") is True, eligible=status == 200 and chat.get("eligible") is True,
-            reason=chat.get("reason") or (None if status == 200 else f"snapshot HTTP {status}"),
-            release_id=chat.get("release_id"), status=device.get("status"), max_tokens=chat.get("max_tokens"),
-            context_window=chat.get("context_window"), checked_at=_utc(self.wall()), http_status=status)
-        if state.online and state.eligible and state.release_id:
-            self.release_id = self.release_id or state.release_id
+            online=entry.get("online") is True, eligible=entry.get("eligible") is True, reason=entry.get("reason"),
+            release_id=entry.get("release_id") if isinstance(entry.get("release_id"), str) else None,
+            status=entry.get("status"), max_tokens=_number(entry.get("max_tokens")),
+            context_window=_number(entry.get("context_window")), checked_at=checked, http_status=status,
+            device_id=self.device_id, device_name=entry.get("name"), model=model)
+        if state.online and state.eligible and state.release_id and self.release_id is None:
+            self.release_id, self.model = state.release_id, model
         return state
+
+    def _apply_limits(self, limits) -> None:
+        if not isinstance(limits, dict):
+            return
+        self.limits = {k: v for k, v in limits.items() if isinstance(v, int | float) and not isinstance(v, bool)}
+        sends, window = self.limits.get("sends_per_session"), self.limits.get("window_s", 60)
+        if self._paced_by_limit and sends and sends > 0 and window and window > 0:
+            self.min_interval_s = round(window / sends + 0.5, 3)  # 6 a minute: 10.5 s apart
 
     def _pace(self) -> float:
         now = self.clock()
@@ -540,17 +695,24 @@ class PortalChatClient:
 
     def _read(self, request_id: str) -> tuple[int, dict, dict]:
         self.reads += 1
-        return self._request("GET", f"{self.CHAT}/{request_id}")
+        return self._request("GET", self._chat(request_id))
 
     def _settle_unfinished(self) -> None:
-        """Before a new send: the timed-out request must be finished or expired (one request at a time)."""
+        """Before a new send: a timed-out (or uncertain) request must be finished, expired or unknown to the
+        device, so the device never has two requests from this client."""
         if not self._unfinished:
             return
         request_id, started = self._unfinished, self.clock()
         result: dict = {"request_id": request_id, "status": "unknown"}
         while self.clock() - started < self.expire_wait_s:
             self.sleep(1.0)
-            status, data, _ = self._read(request_id)
+            try:
+                status, data, _ = self._read(request_id)
+            except (urllib.error.URLError, TimeoutError, ConnectionError, OSError):
+                continue
+            if status == 404:  # an uncertain send that never arrived (or a result already forgotten)
+                result = {"request_id": request_id, "status": "not_found", "read_at": _utc(self.wall())}
+                break
             if status == 200 and data.get("status") in TERMINAL:
                 result = {"request_id": request_id, "status": data["status"], "trace_id": data.get("trace_id"),
                           "content": data.get("content"), "read_at": _utc(self.wall())}
@@ -560,8 +722,8 @@ class PortalChatClient:
         self._unfinished = None
 
     def send(self, messages: list[dict], max_tokens: int) -> ChatOutcome:
-        if self.release_id is None:
-            raise RuntimeError("check the device first: no active release is known")
+        if self.device_id is None or self.release_id is None:
+            raise RuntimeError("check the device first: no device and active release are pinned")
         self._settle_unfinished()
         paced = self._pace()
         request_id = str(uuid.uuid4())
@@ -577,18 +739,21 @@ class PortalChatClient:
                                **values)
 
         try:
-            status, data, headers = self._request("POST", self.CHAT, body)
-        except SessionEnded:
+            status, data, headers = self._request("POST", self._chat(), body)
+        except (SessionEnded, AccessRefused):
             raise
         except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as error:
+            self._unfinished = request_id  # the send may have arrived: read it before the next one
             return outcome("transport_error", error_code=type(error).__name__)
         post_ms = round((self.clock() - t0) * 1000, 1)
         if status != 202:
-            retry = str(headers.get("Retry-After", ""))
+            code = data.get("code") if isinstance(data.get("code"), str) else None
+            retry = _retry_after(headers)
             if status == 429:
-                self._not_before = self.clock() + (int(retry) if retry.isdigit() else 60)
-            code = (data.get("error") or {}).get("code") if isinstance(data.get("error"), dict) else None
-            return outcome("http_error", http_status=status, error_code=code, post_ms=post_ms)
+                self._not_before = self.clock() + (retry or 60)
+            if status >= 500:
+                self._unfinished = request_id  # the request may exist upstream
+            return outcome("http_error", http_status=status, error_code=code, post_ms=post_ms, retry_after_s=retry)
         polls, errors = 0, 0
         while data.get("status") not in TERMINAL:
             elapsed = self.clock() - t0
@@ -598,7 +763,7 @@ class PortalChatClient:
             self.sleep(self.poll_s if elapsed < self.fast_poll_s else 1.0)
             try:
                 read_status, read, read_headers = self._read(request_id)
-            except SessionEnded:
+            except (SessionEnded, AccessRefused):
                 raise
             except (urllib.error.URLError, TimeoutError, ConnectionError, OSError):
                 read_status, read, read_headers = 0, {}, {}
@@ -608,8 +773,7 @@ class PortalChatClient:
                 continue
             errors += 1
             if read_status == 429:
-                retry = str(read_headers.get("Retry-After", ""))
-                self.sleep(min(30, int(retry) if retry.isdigit() else 5))
+                self.sleep(min(30.0, _retry_after(read_headers) or 5.0))
             if errors >= 5:
                 self._unfinished = request_id
                 return outcome("http_error", http_status=read_status or None, error_code="poll_failed",
@@ -663,6 +827,7 @@ class _Decision:
     call: PlannerCall  # the episode's view: requested at submitted_s, answered at completes_s
     calls: int = 0
     feedback: str | None = None
+    index: int = 0  # the episode's decision number, given at its first call
 
 
 @dataclass
@@ -676,6 +841,33 @@ class _InFlight:
 
 def _percentile(values: list[float], q: float) -> float | None:
     return round(float(np.percentile(values, q)), 1) if values else None
+
+
+def decision_counts(records: list[dict]) -> dict:
+    """The episode's decisions by how they ended, from its call records (in call order).
+
+    A decision (one action for one free arm) is *resolved* when a call returned an accepted action (a
+    valid reply: parsed and not ruled out by the scene) or when it failed after the policy's calls; a
+    decision still open when the episode ended (a re-ask pending, stopped, unanswered) is not counted.
+    ``first_call_accepted``: resolved decisions whose first call was accepted. ``reasked``: resolved
+    decisions that needed at least one re-ask (accepted after it, or failed). ``failed``: no usable action
+    after the policy's calls. So resolved = first_call_accepted + reasked (with two or more calls per
+    decision), failed is part of reasked, and accepted after a re-ask = reasked - failed. A stale
+    rejection of an accepted action starts a new decision; it does not change this one."""
+    last: dict[int, dict] = {}
+    for record in records:
+        last[record["decision"]] = record
+    accepted = first_call = reasked = failed = 0
+    for record in last.values():
+        if record.get("result") == "valid":
+            accepted += 1
+            first_call += record["attempt"] == 1
+        elif record.get("next") == "failed_decision":
+            failed += 1
+        else:
+            continue
+        reasked += record["attempt"] > 1
+    return {"resolved": accepted + failed, "first_call_accepted": first_call, "reasked": reasked, "failed": failed}
 
 
 class DevicePlannerEndpoint:
@@ -695,6 +887,7 @@ class DevicePlannerEndpoint:
         self.policy = policy or FailurePolicy()
         self.network, self.on_record, self.max_tokens, self.label = network, on_record, max_tokens, label
         self.log = log or (lambda message: None)
+        self.transport_name = getattr(transport, "transport", UNKNOWN)  # recorded with every call
         self.budget = self.policy.budget(pills)
         self.queue: list[_Decision] = []
         self.current: _InFlight | None = None
@@ -737,10 +930,13 @@ class DevicePlannerEndpoint:
         except SessionEnded:
             self.stopped = "session_ended"
             return None
+        except AccessRefused:
+            self.stopped = "access_refused"
+            return None
         except Exception as error:  # noqa: BLE001 - an unreadable status is recorded, not hidden
             self.device_checks.append({"why": why, "error": type(error).__name__})
             return None
-        self.device_checks.append({"why": why, **asdict(state)})
+        self.device_checks.append({"why": why, **{k: v for k, v in asdict(state).items() if k != "model"}})
         if not (state.online and state.eligible):
             self.stopped = "device_offline" if not state.online else "device_not_eligible"
         elif getattr(self.transport, "release_id", None) and state.release_id != self.transport.release_id:
@@ -758,23 +954,30 @@ class DevicePlannerEndpoint:
             return
         if decision.calls == 0:
             self.decisions += 1
+            decision.index = self.decisions
         decision.calls += 1
         obs = self.observe(side)
         messages = build_messages(obs, side, decision.feedback)
         try:
             outcome = self.transport.send(messages, self.max_tokens)
-        except SessionEnded:
-            self.stopped = "session_ended"
+        except (SessionEnded, AccessRefused) as refused:
+            self.stopped = "session_ended" if isinstance(refused, SessionEnded) else "access_refused"
             self.current = _InFlight(decision, {}, t, None, stop=self.stopped)
             return
         record = {
-            "call": len(self.records) + 1, "decision": self.decisions, "attempt": decision.calls,
+            "call": len(self.records) + 1, "decision": decision.index, "attempt": decision.calls,
             "arm": ARM_CODE[side], "sim_start_s": round(t, 3), "prompt_version": PROMPT_VERSION,
+            "transport": self.transport_name,
             "prompt_sha256": hashlib.sha256(json.dumps(messages, sort_keys=True).encode()).hexdigest(),
             "messages": messages, "max_tokens": self.max_tokens, **asdict(outcome),
         }
         action = None
-        if outcome.status == "succeeded":
+        pinned = getattr(self.transport, "release_id", None)
+        if outcome.status == "succeeded" and pinned and outcome.release_id and outcome.release_id != pinned:
+            # Not possible through the contract (each request names its release); never used if it happens.
+            record["result"], record["error_code"] = "device_error", "release_mismatch"
+            self.stopped = "device_model_changed"
+        elif outcome.status == "succeeded":
             try:
                 action = parse_reply(outcome.content)
                 refusal = check_choice(action, obs, side)
@@ -787,8 +990,11 @@ class DevicePlannerEndpoint:
                 record["result"], record["refusal_code"], record["refusal"] = error.kind, error.kind, error.reason
         else:
             record["result"] = {"failed": "device_error", "expired": "device_error"}.get(outcome.status, outcome.status)
-            if outcome.status in ("http_error", "transport_error", "timeout", "expired") or outcome.http_status == 409:
-                self._check_device(f"after {outcome.status}")
+            self._check_device(f"after {outcome.status}" + (f" ({outcome.error_code})" if outcome.error_code else ""))
+            if outcome.error_code == "release_changed" and self.stopped not in ("session_ended", "access_refused"):
+                # The control plane's answer: the pinned release is gone. That is the cause, whatever the check
+                # then saw of the device (offline or not eligible while the new release starts).
+                self.stopped = "device_model_changed"
         record["action"] = None if action is None else action.as_dict()
         record["sim_end_s"] = round(t + outcome.e2e_ms / 1000.0, 3)
         self.records.append(record)
@@ -854,7 +1060,7 @@ class DevicePlannerEndpoint:
     @staticmethod
     def trace_record(record: dict) -> dict:
         """The per-step view of a call (recordings): what was chosen and how long it took."""
-        return {"call_id": record["call"], "role": "skill", "arm": record["arm"],
+        return {"call_id": record["call"], "role": "skill", "arm": record["arm"], "transport": transport_of(record),
                 "status": "ok" if record["result"] == "valid" else record["result"],
                 "latency_ms": record["e2e_ms"], "device_latency_ms": record.get("device_latency_ms"),
                 "ttft_ms": record.get("ttft_ms"), "tokens_in": record.get("tokens_in"),
@@ -899,6 +1105,8 @@ class DevicePlannerEndpoint:
             "trace_ids": [x["trace_id"] for x in r if x.get("trace_id")],
             "budget": self.budget, "stopped": self.stopped, "device_checks": self.device_checks,
             "prompt_version": PROMPT_VERSION, "max_tokens": self.max_tokens, "policy": asdict(self.policy),
+            "transport": self.transport_name, "model": getattr(self.transport, "model", None),
+            "decision_counts": decision_counts(r),
         }
 
 

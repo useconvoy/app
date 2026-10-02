@@ -2,12 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { resolveRobotRoute, tracesFor, useWorkspace } from "@/lib/configurations/client";
-import { fmtCount, fmtDate, fmtFixed, fmtNumber, fmtSeconds, fmtWhen, median } from "@/lib/configurations/format";
+import { offlineProvenance, resolveRobotRoute, tracesFor, useWorkspace } from "@/lib/configurations/client";
+import { fmtCount, fmtDate, fmtFixed, fmtNumber, fmtSeconds, fmtWhen } from "@/lib/configurations/format";
 import type { LiveInference } from "@/lib/configurations/live";
 import { emptyWorkspace, removeRobot } from "@/lib/configurations/mutations";
 import { routes } from "@/lib/configurations/routes";
-import { latestScored, OFFLINE_TAG, platformPaths, runShare } from "@/lib/configurations/runs";
+import { latestScored, OFFLINE_TAG, platformPaths } from "@/lib/configurations/runs";
 import type { RunView } from "@/lib/configurations/runs";
 import { robotType } from "@/lib/configurations/status";
 import { CONFIGURED_DEVICE } from "@/lib/configurations/types";
@@ -23,6 +23,7 @@ import { EmptyState, LoadingState, NotFoundState } from "../States";
 import { TabPanel, Tabs, useQueryTab, type TabItem } from "../Tabs";
 import { Card, Facts, Tile, Tiles } from "../Tiles";
 import { usePlatform } from "../platform";
+import { RunSuccess, slicedOf, SuccessTile, useRunSlices } from "../SliceResults";
 import { useRobotViews, type RobotView } from "../useRobots";
 import { CpuTile, InferenceTile, MemoryTile, TemperatureTile } from "./LiveTiles";
 import { LinkOfflineDialog } from "./OfflineEvaluations";
@@ -53,6 +54,7 @@ function RobotDashboard({ workspace, config, view, retry }: { workspace: ConvoyW
   const ws = useWorkspace();
   const router = useRouter();
   const { robot, runs } = view;
+  const slices = useRunSlices(runs);
   const live = !!robot.deviceId;
   const traces = tracesFor(workspace, robot.id);
   const inference = view.live.data?.inference ?? [];
@@ -82,17 +84,25 @@ function RobotDashboard({ workspace, config, view, retry }: { workspace: ConvoyW
     if (result.ok) router.push(routes.configuration(config.id)); else setError(result.error);
   }
 
+  // The tiles describe the newest scored eval only: evals of one robot can differ in how they ran, so none is pooled.
   const latest = latestScored(runs);
-  const share = latest ? runShare(latest) : null;
-  const episodes = runs.reduce((sum, run) => sum + (run.episodes ?? 0), 0);
-  const medianTime = median(runs.map(run => run.medianS));
   const release = view.live.data?.release ?? null;
+  const runners = new Map(runs.flatMap(run => { const runner = run.source === "offline" ? offlineProvenance(robot, run.id)?.runner?.trim() : null; return runner ? [[run.id, runner] as const] : []; }));
+  const anySliced = runs.some(run => slicedOf(slices.get(run.id)) !== null);
+  // Evals that ran differently are told apart by name, runner and date; on a phone the runner and date sit under the eval.
   const runColumns: Array<Column<RunView>> = [
-    { key: "eval", header: "Eval", cell: run => run.source === "offline" ? <>{run.label}<Tag title={run.offline?.scope}>{OFFLINE_TAG}</Tag></> : run.label },
-    { key: "at", header: "Started", wide: true, cell: run => run.at ? fmtWhen(run.at) : <Missing /> },
-    { key: "episodes", header: "Episodes", numeric: true, wide: true, cell: run => run.episodes === null ? <Missing /> : fmtCount(run.episodes) },
-    { key: "success", header: "Success", numeric: true, cell: run => { const value = runShare(run); return value === null ? <Missing /> : `${fmtFixed(value * 100, 0)} %`; } },
-    { key: "result", header: "Result", cell: run => <ResultBadge result={run.result} progress={run.progress} /> },
+    { key: "eval", header: "Eval", cell: run => <>
+      {run.label}{run.source === "offline" && <Tag title={run.offline?.scope}>{OFFLINE_TAG}</Tag>}
+      {runners.size > 0 && <span className="cv-cell-sub">{[runners.get(run.id), run.at ? fmtDate(run.at) : null].filter(Boolean).join(" · ")}</span>}
+    </> },
+    ...(runs.some(run => run.offline) ? [{ key: "name", header: "Name", wide: true, cell: (run: RunView) => run.offline ? <span className="cv-cell-clip" title={run.offline.name}>{run.offline.name}</span> : <Missing label="No name" /> }] : []),
+    ...(runners.size ? [{ key: "runner", header: "Runner", wide: true, cell: (run: RunView) => runners.get(run.id) ?? <Missing label="Not declared" /> }] : []),
+    { key: "at", header: "Date", wide: true, cell: run => run.at ? fmtWhen(run.at) : <Missing /> },
+    // Per-slice results carry their episode counts, so the column gives way to them.
+    ...(anySliced ? [] : [{ key: "episodes", header: "Episodes", numeric: true, wide: true, cell: (run: RunView) => run.episodes === null ? <Missing /> : fmtCount(run.episodes) }]),
+    { key: "success", header: "Success", numeric: !anySliced, cell: run => <RunSuccess run={run} slices={slices.get(run.id)} counts={anySliced} /> },
+    // On a phone per-slice results need the room; the eval page keeps the result.
+    { key: "result", header: "Result", wide: anySliced, cell: run => <ResultBadge result={run.result} progress={run.progress} /> },
   ];
 
   return <AppShell crumbs={[{ label: "Configurations", href: routes.index() }, { label: config.name, href: routes.configuration(config.id) }, { label: robot.name }]}>
@@ -103,9 +113,9 @@ function RobotDashboard({ workspace, config, view, retry }: { workspace: ConvoyW
       ? <Tiles label="Device"><InferenceTile view={view} /><CpuTile view={view} /><MemoryTile view={view} /><TemperatureTile view={view} /></Tiles>
       : <Tiles label="Evals summary">
         <Tile label="Evals" value={view.runsLoading ? null : fmtCount(runs.length)} sub={runs[0]?.at ? `Latest ${fmtDate(runs[0].at)}` : "None yet"} />
-        <Tile label="Success rate" value={share === null ? null : fmtFixed(share * 100, 0)} unit="%" sub={latest ? `${latest.label} · ${latest.successes}/${latest.episodes}` : "No evals"} />
-        <Tile label="Episodes" value={view.runsLoading ? null : fmtCount(episodes)} sub={runs.length ? "All evals" : undefined} />
-        <Tile label="Median time" value={medianTime === null ? null : fmtFixed(medianTime, 1)} unit="s" sub={medianTime === null ? undefined : "Per episode"} />
+        <SuccessTile run={latest} slices={latest ? slices.get(latest.id) : undefined} slicedSub={latest ? `${latest.label}${runners.get(latest.id) ? ` · ${runners.get(latest.id)}` : ""}` : ""} />
+        <Tile label="Episodes" value={view.runsLoading || !latest || latest.episodes === null ? null : fmtCount(latest.episodes)} sub={latest ? latest.label : runs.length ? undefined : "No evals"} />
+        <Tile label="Median time" value={latest?.medianS == null ? null : fmtFixed(latest.medianS, 1)} unit="s" sub={latest?.medianS == null ? undefined : `${latest.label} · per episode`} />
       </Tiles>}
     <Tabs tabs={tabs} value={tab} onChange={setTab} label="Robot views" idPrefix="rb" />
     <TabPanel idPrefix="rb" tabId="evals" selected={tab === "evals"}>

@@ -134,10 +134,11 @@ function facts(budget: LatencyBudget, compact: boolean): Fact[] {
 /**
  * Latency budget of one planner decision: where its time goes (prefill, decode, network / relay) at p50
  * and p95, against the configuration's latency targets, with tokens and the prefill share. Values are
- * measured: an eval's recorded per-episode metrics, or a live device's spans. `compact`: p50 only, with
- * `source` (a link to where the values come from) in its foot.
+ * measured: an eval's recorded per-episode metrics, or a live device's spans. `slice`: the slice the
+ * episodes are, named first in the scope line. `compact`: p50 only, with `source` (a link to where the
+ * values come from) in its foot.
  */
-export function LatencyBudgetPanel({ budget, targets, source, compact = false }: { budget: LatencyBudget; targets: readonly LatencyTarget[]; source?: ReactNode; compact?: boolean }) {
+export function LatencyBudgetPanel({ budget, targets, slice, source, compact = false }: { budget: LatencyBudget; targets: readonly LatencyTarget[]; slice?: string; source?: ReactNode; compact?: boolean }) {
   const rows: Percentile[] = compact ? ["p50"] : ["p50", "p95"];
   const fromEval = budget.source === "eval";
   const scope = fromEval ? `median of ${fmtCount(budget.n)} ${budget.n === 1 ? "episode" : "episodes"}` : `${fmtCount(budget.n)} ${budget.n === 1 ? "request" : "requests"}`;
@@ -150,7 +151,7 @@ export function LatencyBudgetPanel({ budget, targets, source, compact = false }:
   ];
   return <EvidenceCard title="Latency budget" compact={compact} definitions={definitions} facts={facts(budget, compact)} note="Motor loop runs separately on the robot." source={source}
     provenance={fromEval ? "Measured: real calls to the model on the device, recorded per episode in this eval" : "Measured: the device's latest inference requests"}>
-    <p className="cv-ev__sub">{fromEval ? "Per planner decision" : "Per request, on the device"} · {compact ? "p50" : scope} · linear scale</p>
+    <p className="cv-ev__sub">{slice ? `${slice} · per planner decision` : fromEval ? "Per planner decision" : "Per request, on the device"} · {compact ? "p50" : scope} · linear scale</p>
     <BudgetChart budget={budget} rows={rows} targets={targets} />
     {compact ? <BudgetLegend budget={budget} /> : <BudgetTable budget={budget} rows={rows} />}
   </EvidenceCard>;

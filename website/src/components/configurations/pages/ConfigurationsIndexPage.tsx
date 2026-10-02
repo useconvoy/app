@@ -7,6 +7,7 @@ import { currentRevision, listConfigurations, useWorkspace } from "@/lib/configu
 import { emptyWorkspace } from "@/lib/configurations/mutations";
 import { routes } from "@/lib/configurations/routes";
 import { latestScored, runShare } from "@/lib/configurations/runs";
+import { sliceResultsText } from "@/lib/configurations/slices";
 import { fmtShare } from "@/lib/configurations/format";
 import type { Configuration } from "@/lib/configurations/types";
 import { AppShell, PageHeader, type Crumb } from "../AppShell";
@@ -14,6 +15,7 @@ import { ConfigStatusBadge, ResultBadge } from "../Badges";
 import { useNow } from "../hooks";
 import { ImportButton, WorkspaceNotice } from "../Notice";
 import { EmptyState, LoadingState } from "../States";
+import { RunSuccess, SliceList, slicedOf, useRunSlices } from "../SliceResults";
 import { useRobotViews, type RobotView } from "../useRobots";
 
 const CRUMBS: Crumb[] = [{ label: "Configurations" }];
@@ -45,6 +47,9 @@ function ConfigCard({ config, robots }: { config: Configuration; robots: RobotVi
   const latest = latestScored(robots.flatMap(view => view.runs));
   const running = robots.flatMap(view => view.runs).find(run => run.result === "running");
   const online = robots.filter(view => view.status === "online").length;
+  // A sliced eval's successes per slice, never one pooled rate; an offline eval waits for its episodes.
+  const slices = useRunSlices([latest]).get(latest?.id ?? "");
+  const sliced = slicedOf(slices);
   return <Link className="cv-config" href={routes.configuration(config.id)}>
     <div className="cv-config__head"><h2>{config.name}</h2><ConfigStatusBadge status={config.status} /></div>
     <dl className="cv-config__facts">
@@ -56,8 +61,10 @@ function ConfigCard({ config, robots }: { config: Configuration; robots: RobotVi
     <div className="cv-config__foot">
       <span>{robots.length === 1 ? "1 robot" : `${robots.length} robots`}{online > 0 && <span className="cv-live"><i className="cv-dot" aria-hidden="true" />{online} online</span>}</span>
       {running ? <ResultBadge result="running" progress={running.progress} />
-        : latest ? <span className="cv-config__eval">{fmtShare(runShare(latest), 0)}<ResultBadge result={latest.result} /></span>
-          : <span className="cv-muted">No evals</span>}
+        : latest && sliced ? <span className="cv-config__eval" title={`${latest.label}: ${sliceResultsText(sliced)}`}><span className="cv-sr">{latest.label}: </span><SliceList slices={sliced} /></span>
+          : latest?.source === "offline" && slices?.status !== "ready" ? <span className="cv-config__eval"><RunSuccess run={latest} slices={slices} /></span>
+            : latest ? <span className="cv-config__eval">{fmtShare(runShare(latest), 0)}<ResultBadge result={latest.result} /></span>
+              : <span className="cv-muted">No evals</span>}
     </div>
   </Link>;
 }

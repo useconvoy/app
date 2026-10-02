@@ -6,10 +6,12 @@ Traces) were removed with the old console, and `/portal` and `/app/device` now r
 to `/app/configurations`. Its current callers are:
 
 - `GET /api/portal/snapshot`: the Configurations live-device poller
-  (`src/lib/configurations/live.ts`), for robots bound to the configured device, and the
-  simulation's real-device planner, which checks that the device is online.
-- `POST /api/portal/chat`, `GET /api/portal/chat/{requestId}`: the simulation's
-  real-device planner (`integrations/simulation`, Edge Qwen). No browser page sends chat.
+  (`src/lib/configurations/live.ts`), for robots bound to the configured device.
+- `POST /api/portal/chat`, `GET /api/portal/chat/{requestId}`: no caller. The simulation's
+  real-device planner moved to the public device chat contract (`platform-chat-v1`,
+  `/api/platform/chat/devices` and `/api/platform/devices/{id}/chat`, in
+  `src/lib/platform/chat.ts`), which keeps these routes' limits and checks for any physical
+  device. No browser page sends chat.
 - `GET /api/portal/session`: a read-only session/health adapter, used by the deployment
   health check. Login and logout use only `/api/platform/auth/login` and `/logout`.
 

@@ -12,13 +12,13 @@ Scope, stated plainly:
 - **Skills read simulator state** (pill and bottle poses). They are a scripted,
   privileged-state skill library like the MetaWorld scripted reference in this
   package, not perception or a learned policy.
-- **Edge Qwen's planner decisions are real model calls.** Every skill decision of
-  the Edge Qwen configuration is a request to Qwen2.5-1.5B-Instruct (Q4_K_M,
-  llama.cpp CUDA) on a connected Jetson Orin Nano through Convoy's device chat API;
-  its latency is measured, not modeled, and nothing stands in when a call fails
-  ([below](#edge-qwen-the-real-on-device-planner-device_plannerpy)). Qwen2.5-1.5B
-  reads text only, so it gets the scene as text computed from the simulator state,
-  not camera images.
+- **The edge device planner's decisions are real model calls.** Every skill
+  decision of `edge_qwen_edge_skills` is a request to the model of a connected
+  device's active release through Convoy's device chat API. Which model that is
+  (repository, file, quantization, runtime) is read from the platform when the run
+  starts and recorded with it. Its latency is measured, not modeled, and nothing
+  stands in when a call fails ([below](#the-edge-device-planner-real-on-device-calls-device_plannerpy)). The model reads text only,
+  so it gets the scene as text computed from the simulator state, not camera images.
 - **The other three configurations use one deterministic rule-based stand-in.**
   They differ only in where the planner runs, its latency distribution (from
   measured or published numbers) and what a network outage does. Nothing claims a
@@ -55,15 +55,23 @@ python scripts/import_offline_eval.py --dry-run runs/demo/cloud_astra_only
 CONVOY_SERVER=https://deployconvoy.com CONVOY_EMAIL=… CONVOY_PASSWORD=… \
     python scripts/import_offline_eval.py runs/demo/cloud_astra_only
 
-# Edge Qwen: real calls to the model on the connected device (an operator session on the website):
-CONVOY_SERVER=https://deployconvoy.com CONVOY_SESSION_FILE=~/.convoy-session \
+# The edge device planner: real calls to the model on a connected device, through the website's
+# device chat contract (platform-chat-v1) with an operator session. CONVOY_PLANNER_DEVICE (or
+# --planner-device) names the device; without it the run uses the only physical device listed.
+CONVOY_SERVER=https://deployconvoy.com CONVOY_SESSION_FILE=~/.convoy-session CONVOY_PLANNER_DEVICE=dev_… \
 MUJOCO_GL=glfw xvfb-run -a uv run --frozen convoy-sim-pills evaluate --configs edge_qwen_edge_skills \
     --slices nominal,pill_count_30 --seeds 0-4 --seed-stride 200 --record all --replay offline \
-    --name "Pills to bottle · Edge Qwen · real on-device planner (Jetson)" --output runs/edge-qwen-real
+    --output runs/edge-device
+
+# The device chat contract end to end, without a device: the real control plane, a production build
+# of the website (`next start`), a device on the agent's chat relay with a scripted model, and the
+# planner's transport (needs Node and the website's dependencies).
+(cd ../../website && pnpm install --frozen-lockfile && pnpm build)
+uv run --frozen --extra managed pytest -q tests/test_platform_chat_contract.py
 ```
 
 Every command writes to a new directory and refuses to overwrite a recording.
-`scripts/pill_task_eval.sh` runs the modelled demo matrix (not Edge Qwen).
+`scripts/pill_task_eval.sh` runs the modelled demo matrix (not the edge device planner).
 
 ## Robot model (`robot.py`)
 
@@ -254,14 +262,14 @@ the 84 mm gripper housing knocked the 22 g bottle over.
 
 | Config (label) | Skill planner (per skill call, closed loop) | Task planner | Motor policy |
 |---|---|---|---|
-| `edge_qwen_edge_skills` (Edge Qwen) | **Real calls** to Qwen2.5-1.5B-Instruct Q4_K_M on a connected Jetson Orin Nano through the device chat API; latency measured per call, no stand-in ([below](#edge-qwen-the-real-on-device-planner-device_plannerpy)) | – | scripted skills on the robot |
+| `edge_qwen_edge_skills` (Edge device planner) | **Real calls** to the model of a connected device's active release (recorded per run) through the device chat API; latency measured per call, no stand-in ([below](#the-edge-device-planner-real-on-device-calls-device_plannerpy)) | – | scripted skills on the robot |
 | `edge_qwen_cloud_astra` (Edge Qwen + GPT Astra) | Edge Qwen2.5-1.5B Q4_K_M on the Jetson Orin Nano, **modeled**: stand-in decisions, p50 150 ms, p95 700 ms (Convoy soak 122/636 ms, deploy smoke 181/900 ms, `control-plane/docs/VERIFICATION.md`) | Cloud GPT-6 Astra (low effort): decomposes the task before the start (waits ≤8 s), re-verifies every 8 placed pills without blocking | scripted skills |
 | `cloud_astra_only` (GPT Astra) | Cloud GPT-6 Astra: p50 3.9 s (Artificial Analysis, OpenAI API: median time to first answer token 2.96 s, 43.2 output tokens/s, plus ~40 output tokens), p95 6.0 s assumed (only medians are published) | – | scripted skills |
 | `edge_smolvla_cloud_astra` (Edge SmolVLA + GPT Astra) | Cloud GPT-6 Astra | – | SmolVLA-450M on the Jetson: **unavailable** (no checkpoint for this embodiment) |
 
 In the outage slice the hosted planner is unreachable from 15 s to 45 s: Edge Qwen +
 GPT Astra keeps placing pills (the task planner's checks just fail), the
-cloud-only one holds and retries (Edge Qwen has no cloud link, so the slice does
+cloud-only one holds and retries (the edge device planner has no cloud link, so the slice does
 not apply to it). SmolVLA's configuration dispatches the first
 skill, gets `policy_unavailable` for both arms and the planner declines: the
 episode ends after ~8 s with no pill placed.
@@ -270,21 +278,22 @@ Simulated time is what the robot experiences: a planner call's latency elapses i
 simulation while the arms hold, so planning delays and outages cost task time.
 Wall-clock compute of the stand-in decision code is recorded separately.
 
-## Edge Qwen: the real on-device planner (`device_planner.py`)
+## The edge device planner: real on-device calls (`device_planner.py`)
 
-The Edge Qwen configuration (`edge_qwen_edge_skills`) has no latency model and no
-stand-in. Every skill decision is a real request to the model on a connected
-device, and the episode cannot start without that connection.
+The edge device planner (`edge_qwen_edge_skills`; the id predates it and is kept
+for earlier runs) has no latency model and no stand-in. Every skill decision is a
+real request to the model on a connected device, and the episode cannot start
+without that connection.
 
 | Part | What it is | Measured or scripted |
 |---|---|---|
-| Decision: which arm, which pill, which skill, or wait / done | Qwen2.5-1.5B-Instruct Q4_K_M, llama.cpp CUDA, on a Jetson Orin Nano (the device's active release) | real call per decision |
+| Decision: which arm, which pill, which skill, or wait / done | the model of the device's active release, as the platform reports it at run start | real call per decision |
 | Scene the model reads | text computed from the simulator state (privileged) | from the simulator |
 | Executive: when to ask, parsing, the choice check, the failure policy, the separation re-check | `device_planner.py`, `episode.py` | scripted, fixed before the run |
 | Motion | the IK skill library on the simulator state | scripted |
 | Time an arm waits for a decision | each call's measured end-to-end round trip | measured |
 
-**Text only.** Qwen2.5-1.5B-Instruct is a text model: it never sees the camera.
+**Text only.** The planner model reads text: it never sees the camera.
 Each request describes the scene in text computed from the simulator: the bottle
 position, the free arm and its gripper position, what the other arm is doing,
 which pills are already in the bottle, and every pill on the table with its
@@ -334,9 +343,10 @@ its manifest):
   asks again after the other arm's next skill result, or 10 s of simulated time.
 - An episode makes at most 2 × pills + 12 calls (60 for 24 pills, 72 for 30); then
   it ends as `planner_stopped:planner_call_budget_exhausted`.
-- After a transport failure the device is checked. Offline, not eligible for
-  chat, a changed model or a refused session stops the episode and the evaluation
-  (`planner_stopped:…`; later episodes are reported as not run).
+- After any call that brings no reply the device is checked. Offline, not
+  eligible for chat, a changed model, or a refused session (401) or account (403)
+  stops the episode and the evaluation (`planner_stopped:…`; later episodes are
+  reported as not run).
 - A call with no terminal result after 45 s is a timeout; its elapsed time counts
   like any round trip, and before the next request the client waits (wall clock
   only) until that request has finished or expired, so the device never has two.
@@ -347,19 +357,54 @@ its manifest):
   again; any other conflict, or a hold that runs out, rejects it as stale and a new
   decision starts at once. The model's choice is never changed.
 
-**Transport.** `PortalChatClient` uses the website's device chat routes with one
-signed-in operator session: `POST /api/portal/chat` with `{request_id,
-expected_release_id, messages, max_tokens}` (202), then `GET
-/api/portal/chat/{request_id}` until `succeeded`, `failed` or `expired`; the
-control plane relays it (`/api/v1/devices/{device}/chat`) to the agent on the
-device, which claims requests once a second and runs them through its gateway.
+**Transport.** `PlatformChatClient` (transport `platform-chat-v1`) uses the
+website's public device chat contract with one signed-in operator session:
+
+- `GET /api/platform/chat/devices` lists the physical devices the account sees:
+  chat availability, the active release (model repository, revision, file,
+  SHA-256, quantization from the GGUF header, runtime, decoding) and the runtime
+  the device reports. The client plans on the device named by `--planner-device`,
+  or on the only one listed. With several and none named it refuses to start.
+- `POST /api/platform/devices/{device}/chat` with `{request_id,
+  expected_release_id, messages, max_tokens}` (202), then `GET
+  /api/platform/devices/{device}/chat/{request_id}` until `succeeded`, `failed` or
+  `expired`. The result carries the device's inference trace id and the release
+  id. The control plane relays the request (`/api/v1/devices/{device}/chat`) to the
+  agent on the device, which claims requests about once a second and runs them
+  through its gateway.
+
 Limits: user and assistant messages only, at most 16 messages and 8 KiB of text,
 1–128 output tokens, one request at a time per device; 6 sends and 180 reads per
-minute per session (20 and 1,200 per site); requests expire after 120 s. Sends
-are spaced 10.5 s apart; reads poll every 0.25 s for 5 s, then every second. The
-API takes no temperature or seed: decoding is the active release's, which the
-device reports in its runtime arguments as `--temp 0.0 --seed 42` (greedy),
-2,048-token context, 128-token output cap.
+minute per session (20 and 1,200 per site); requests expire after 120 s. Sends are
+spaced by the listed limit (60 s / 6 + 0.5 s = 10.5 s); reads poll every 0.25 s for
+5 s, then every second. A 429 is recorded with its `Retry-After`, and the next send
+waits that long. One request is outstanding at a time: after a timeout, or a send
+whose outcome is uncertain, the next send first reads that request until it is
+finished, expired or unknown. A refused session (401) or account (403) stops the
+run. The active release is pinned when the run starts; a 409 `release_changed`,
+or a device check that finds another release, stops it as `device_model_changed`.
+The API takes no temperature or seed: decoding is the active release's.
+
+Runs before this transport used the website portal's relay (`/api/portal/chat` and
+`/api/portal/snapshot`). That is a different timing condition: the measured round
+trip went through other website routes, so runs on the two transports are not
+compared one to one. Their call records have no `transport` field and read as the
+legacy portal relay (`portal-relay`, `device_planner.transport_of`). Every record
+and export from this transport says `platform-chat-v1`.
+
+**Model.** When the run starts, the client records what the platform reports for
+the device (`describe_model`): device and release ids, release name and digest,
+model repository, revision, file, SHA-256 and quantization, runtime name, backend
+and version, decoding, context and output limits, and the runtime the device
+reports (backend, build, GPU layers). A fact the platform does not report is
+recorded as "unknown", never inferred from a file name. It goes into
+`manifest.json` (`device_planner.model`, with `transport`), each episode's
+`summary.json` and the offline evaluation's labels:
+
+- the configuration label, e.g. "Edge: `<repository> <quantization>` · `<runtime>` ·
+  `<release>` · Cloud: none";
+- the policy label, which names the transport;
+- the default evaluation name, which names the model and the transport.
 
 **Time.** Each call blocks the simulation in wall-clock time; then the requesting
 arm holds in simulated time for exactly the call's measured end-to-end round trip
@@ -372,12 +417,29 @@ the on-device latency, so these episodes are pessimistic about planning time.
 The pacing wait for the routes' rate limit is wall-clock only and not counted.
 
 **Audit.** Every call is a line in the episode's `planner_calls.jsonl` (and in
-`OUTPUT/<config>/calls.jsonl`): the messages sent, the raw reply, the platform
-trace id (the device's inference trace, listed in its Traces), request id, send
-and finish times, HTTP and relay status, on-device latency, first-token and queue
-time, tokens in and out, the end-to-end round trip, the parse result and refusal
-reason, the action, what followed (delivered, re-asked, failed decision, stale
-rejection, stopped) and the simulated start and end times. No credentials.
+`OUTPUT/<config>/calls.jsonl`): the transport, the messages sent, the raw reply,
+the platform trace id (the device's inference trace, listed in its Traces), the
+release id, request id, send and finish times, HTTP and relay status (with a
+429's `Retry-After`), on-device latency, first-token and queue time, tokens in and
+out, the end-to-end round trip, the parse result and refusal reason, the action,
+what followed (delivered, re-asked, failed decision, stale rejection, stopped) and
+the simulated start and end times. No credentials.
+
+**Decisions.** A decision is one action for one free arm. It is *resolved* when a
+call returns an accepted action (a valid reply) or when it fails after its three
+calls; a decision still open when the episode ends is not counted. Each episode
+exports, from its call records:
+
+- `planner_decisions`: resolved decisions (= valid replies + failed decisions);
+- `planner_first_call_accepted`: resolved decisions whose first call was accepted;
+- `planner_reasked_decisions`: resolved decisions that needed at least one re-ask,
+  accepted after it or failed;
+- `planner_failed_decisions`: no usable action after three calls.
+
+So decisions = first-call accepted + re-asked, and accepted after a re-ask =
+re-asked − failed. Configurations shows "Accepted on the first call" as
+Σ first-call accepted ÷ Σ decisions. Earlier evaluations do not report these
+counts and show it as Not reported.
 
 ## Evaluation (`evaluate.py`)
 
@@ -391,12 +453,16 @@ slice runs seeds `i·N + seed`, so every episode of a configuration has its own
 seed (Convoy groups an offline evaluation's rollouts by seed), and every
 configuration runs the same layouts: a layout depends only on the slice and seed.
 
-### Real run: Edge Qwen on the Jetson
+### Earlier real run on a Jetson (legacy portal relay)
+
+This run used the transport before `platform-chat-v1`: the website portal's relay
+(`/api/portal/chat`), a different timing condition. Its records carry no transport
+or decision-level counts, and its model is the one the device then reported.
 
 2026-10-02, 76 min of wall time. Every decision was a real call to the connected
 Jetson Orin Nano: release `rel_7horo87k6lxs`, Qwen2.5-1.5B-Instruct Q4_K_M,
-llama.cpp CUDA, `--temp 0.0 --seed 42` as the device reports. Calls went through
-the website's device chat routes. Physics as above (2 ms, noslip 4), 150 s
+llama.cpp CUDA, `--temp 0.0 --seed 42` as the device reported. Calls went through
+the portal relay. Physics as above (2 ms, noslip 4), 150 s
 horizon, nominal seeds 0–4 and 30-pill seeds 200–204. The prompt (`pill-planner-v5`),
 the 32-token cap and the failure policy were fixed before the run; prompt work
 used development seeds 1000, 1001 and 1100 only.
@@ -430,9 +496,10 @@ used development seeds 1000, 1001 and 1100 only.
 `scripts/pill_task_eval.sh` (seeds 0–2, stride 100), every configuration on the
 same 9 layouts (MuJoCo 3.3.0, 2 ms, 150 s horizon; 35 min on 4 CPU workers). These
 are the stand-in configurations: their planner decisions are the rule-based
-stand-in and their latency is modeled. The Edge Qwen row this matrix once had (the
-stand-in with a latency model) is withdrawn: Edge Qwen now calls the real model,
-and its results are [the real run](#real-run-edge-qwen-on-the-jetson).
+stand-in and their latency is modeled. The `edge_qwen_edge_skills` row this matrix
+once had (the stand-in with a latency model) is withdrawn: that configuration now
+calls the real model, and its results are
+[the real run](#earlier-real-run-on-a-jetson-legacy-portal-relay).
 
 | Configuration | nominal (0–2) | cloud outage 15–45 s (100–102) | 30 pills (200–202) | Episodes all placed | Pills placed | Median time to all placed (s) | Median planner wait (s) |
 |---|---|---|---|---|---|---|---|
@@ -504,14 +571,24 @@ creates one offline evaluation, tagged "Offline sim" in Configurations.
 - `--preview-camera photo` (with `--previews` to pick episodes) also writes
   `preview.mp4` and `preview.gif`: the wide view beside the head camera with a
   caption. They are not uploaded.
-- Edge Qwen (device planner) episodes export measured numbers instead: `planner_ms`
-  is the median end-to-end round trip of the calls the model answered, `skill`
-  lists the skills it chose and the executive started (e.g. `pick_and_drop ×30,
-  push_apart ×3`), and the 32 metrics are the calls by result (valid, invalid JSON,
-  schema or choice, device and HTTP errors, timeouts), failed decisions, stale
-  rejections, end-to-end and on-device p50/p95, first-token p50, tokens in and out
-  p50 and planner wait, besides the task and safety counts. Outage seconds and
-  motor-policy availability do not apply and are left out.
+- Device-planner episodes export measured numbers instead. `planner_ms` is the
+  median end-to-end round trip of the calls the model answered. `skill` lists the
+  skills it chose and the executive started (e.g. `pick_and_drop ×30, push_apart
+  ×3`). The 32 metrics (the import's cap) are:
+  - the calls by result: valid, `planner_invalid_format` (invalid JSON or schema),
+    invalid choice and `planner_call_failures` (device errors or expiries, HTTP
+    or connection errors, client timeouts), which add up to `planner_calls`;
+  - the decision counts above;
+  - stale rejections, end-to-end and on-device p50/p95, first-token p50, tokens in
+    and out p50 and planner wait;
+  - the task and safety counts.
+
+  Outage seconds and motor-policy availability do not apply and are left out.
+  Exports before `platform-chat-v1` had five separate counts instead of the two
+  merged ones (`planner_invalid_json`, `planner_invalid_schema`,
+  `planner_device_errors`, `planner_http_errors`, `planner_timeouts`); the
+  merge makes room for the decision counts. The per-result counts stay in
+  `calls.jsonl` and `summary.json`.
 - The import's frame shape (`index, image_png_base64, action, reward, success,
   policy_ms`) has no planner fields, and the replay page shows `skill` and
   `planner_ms` once per episode. The calls that completed during a step are kept in

@@ -5,11 +5,11 @@ import { WorkspaceConfigurationLink } from "@/components/projects/WorkspaceConfi
 import { useMemo, useState } from "react";
 import { currentRevision, getConfiguration, robotsFor, useWorkspace } from "@/lib/configurations/client";
 import { ROUTE_LABEL } from "@/lib/configurations/create";
-import { fmtCount, fmtDate, fmtFixed, fmtWhen } from "@/lib/configurations/format";
+import { fmtCount, fmtDate, fmtWhen } from "@/lib/configurations/format";
 import { deleteConfiguration, emptyWorkspace, NOT_SPECIFIED } from "@/lib/configurations/mutations";
 import { robotPreview, type RobotPreview } from "@/lib/configurations/previews";
 import { routes } from "@/lib/configurations/routes";
-import { latestScored, runShare } from "@/lib/configurations/runs";
+import { latestScored } from "@/lib/configurations/runs";
 import type { ConfigRevision, Configuration } from "@/lib/configurations/types";
 import { robotType } from "@/lib/configurations/status";
 import { AppShell, PageHeader, type Crumb } from "../AppShell";
@@ -22,6 +22,7 @@ import { LoadingState, NotFoundState } from "../States";
 import { TabPanel, Tabs, useQueryTab, type TabItem } from "../Tabs";
 import { Card, Facts, Tile, Tiles } from "../Tiles";
 import { Turntable } from "../Turntable";
+import { SuccessTile, useRunSlices } from "../SliceResults";
 import { useRobotViews, type RobotView } from "../useRobots";
 import { AddRobotDialog } from "./AddRobotDialog";
 import { CpuTile, InferenceTile, MemoryTile, PowerTile, TemperatureTile } from "./LiveTiles";
@@ -62,7 +63,9 @@ function Dashboard({ config, views }: { config: Configuration; views: RobotView[
   const runs = views.flatMap(view => view.runs);
   const latest = latestScored(runs);
   const newest = runs.toSorted((a, b) => (Date.parse(b.at ?? "") || 0) - (Date.parse(a.at ?? "") || 0))[0] ?? null;
-  const share = latest ? runShare(latest) : null;
+  // A sliced eval's success is per slice, never pooled; an offline eval waits for its episodes.
+  const slices = useRunSlices([latest]).get(latest?.id ?? "");
+  const latestRobot = latest ? views.find(view => view.runs.includes(latest))?.robot ?? null : null;
   const live = views.find(view => view.robot.deviceId) ?? null;
   const attention = views.filter(view => view.status === "attention" || view.status === "degraded");
   const mode = revision.edgeHardware.powerModes.find(item => item.id === revision.edgeHardware.powerModeId);
@@ -94,7 +97,7 @@ function Dashboard({ config, views }: { config: Configuration; views: RobotView[
     <Tiles label="Summary">
       <Tile label="Robots" value={fmtCount(views.length)} sub={robotsSub} />
       <Tile label="Evals" value={fmtCount(runs.length)} sub={newest?.at ? `Latest ${fmtDate(newest.at)}` : "None yet"} />
-      <Tile label="Success rate" value={share === null ? null : fmtFixed(share * 100, 0)} unit="%" sub={latest ? `${latest.label} · ${latest.successes}/${latest.episodes}` : "No evals"} />
+      <SuccessTile run={latest} slices={slices} slicedSub={latest ? `${latest.label}${latestRobot ? ` · ${latestRobot.name}` : ""}` : ""} />
       <InferenceTile view={live} />
     </Tiles>
     {live && <section className="cv-row" aria-label={`${live.robot.name} telemetry`}>
