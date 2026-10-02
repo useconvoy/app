@@ -4,6 +4,7 @@ import { buildRevision, EMPTY_INPUT } from "../../src/lib/configurations/create"
 import { ACTIVITY_LIMIT, addRobot, createConfiguration, deleteConfiguration, emptyWorkspace, linkOfflineEvaluations, removeRobot, slugify, uniqueId } from "../../src/lib/configurations/mutations";
 import { createSampleWorkspace } from "../../src/lib/configurations/sample";
 import { CONFIGURED_DEVICE } from "../../src/lib/configurations/types";
+import type { ConvoyWorkspace } from "../../src/lib/configurations/types";
 import { validateWorkspace } from "../../src/lib/configurations/validate";
 
 const NOW = Date.parse("2026-10-01T09:41:20Z");
@@ -66,6 +67,33 @@ test("a simulator can show offline evaluations; its links can change later", () 
   assert.equal("offlineEvaluationIds" in unlinked.robots[0], false, "no links, no field");
   assert.equal(added.workspace.robots[0].offlineEvaluationIds?.length, 1, "the input is not changed");
   assert.throws(() => linkOfflineEvaluations(start, "missing", [], LATER), /Unknown robot/);
+});
+
+test("an offline eval belongs to one configuration: another configuration's robots cannot link it", () => {
+  const [one, two, three] = ["oev_contract0001", "oev_contract0002", "oev_contract0003"];
+  let ws = createConfiguration(emptyWorkspace(NOW), { name: "Arm A", revision: revision() }, NOW).workspace;
+  ws = createConfiguration(ws, { name: "Arm B", revision: revision() }, NOW).workspace;
+  const a = addRobot(ws, { configId: "arm-a", name: "Offline A", offlineEvaluationIds: [one] }, LATER);
+  const b = addRobot(a.workspace, { configId: "arm-b", name: "Offline B", offlineEvaluationIds: [two] }, LATER);
+  valid(b.workspace);
+  const linksOf = (workspace: ConvoyWorkspace, robotId: string) => workspace.robots.find(robot => robot.id === robotId)!.offlineEvaluationIds;
+  // A form read before Arm A linked the eval cannot take it.
+  const refused = { message: "An offline eval you chose belongs to Arm A." };
+  assert.throws(() => addRobot(b.workspace, { configId: "arm-b", name: "Late", offlineEvaluationIds: [three, one] }, LATER), refused);
+  assert.throws(() => linkOfflineEvaluations(b.workspace, b.robot.id, [two, one], LATER), refused);
+  // Robots in its own configuration share it; an unassigned eval is free.
+  assert.deepEqual(addRobot(b.workspace, { configId: "arm-a", name: "Second A", offlineEvaluationIds: [one] }, LATER).robot.offlineEvaluationIds, [one]);
+  assert.deepEqual(linksOf(linkOfflineEvaluations(b.workspace, b.robot.id, [two, three], LATER), b.robot.id), [two, three]);
+  // Once no robot in Arm A links it, it is unassigned again.
+  for (const freed of [removeRobot(b.workspace, a.robot.id, LATER), linkOfflineEvaluations(b.workspace, a.robot.id, [], LATER), deleteConfiguration(b.workspace, "arm-a", LATER)]) {
+    assert.deepEqual(linksOf(linkOfflineEvaluations(freed, b.robot.id, [two, one], LATER), b.robot.id), [two, one]);
+  }
+  // An older document links one eval in both: a robot keeps or removes its link, but none adds it again.
+  const shared: ConvoyWorkspace = { ...b.workspace, robots: b.workspace.robots.map(robot => robot.id === b.robot.id ? { ...robot, offlineEvaluationIds: [two, one] } : robot) };
+  valid(shared);
+  assert.deepEqual(linksOf(linkOfflineEvaluations(shared, b.robot.id, [two, one, three], LATER), b.robot.id), [two, one, three]);
+  assert.deepEqual(linksOf(linkOfflineEvaluations(shared, b.robot.id, [two], LATER), b.robot.id), [two]);
+  assert.throws(() => addRobot(shared, { configId: "arm-b", name: "Late", offlineEvaluationIds: [one] }, LATER), refused);
 });
 
 test("removing a robot removes what is stored about it; deleting a configuration removes its robots and runs", () => {

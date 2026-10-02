@@ -340,7 +340,9 @@ export interface Robot {
   platformRobotId?: string | null;
   /**
    * The account's offline evaluations (`oev_…`) this robot shows as evals: episodes recorded
-   * outside the hosted runner and imported unsigned, tagged "Offline sim".
+   * outside the hosted runner and imported unsigned, tagged "Offline sim". Each belongs to
+   * this robot's configuration: robots in other configurations cannot link it
+   * (`offlineEvaluationsFor`).
    */
   offlineEvaluationIds?: string[];
   kind: RobotKind;

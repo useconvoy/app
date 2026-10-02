@@ -8,6 +8,7 @@
  * Actions are recorded facts about the document (provenance "recorded" with the
  * time of the change). They never add measured values.
  */
+import { offlineEvaluationsElsewhere } from "./selectors";
 import { ID_PATTERN, WORKSPACE_SCHEMA_VERSION } from "./types";
 import type { ActivityEvent, ConfigRevision, Configuration, ConvoyWorkspace, Robot, StoredProvenance } from "./types";
 import { RESERVED_KEYS } from "./validate";
@@ -57,6 +58,18 @@ function withActivity(ws: ConvoyWorkspace, event: Omit<ActivityEvent, "id" | "pr
 }
 const touch = (config: Configuration, now: number | Date): Configuration => ({ ...config, updatedAt: iso(now) });
 
+/**
+ * An offline evaluation belongs to the configuration whose robots link it, so a robot in
+ * `configId` may not link one that a robot in another configuration links (a form read
+ * before that link was made). The message is shown as the save error.
+ */
+function refuseLinkedElsewhere(ws: ConvoyWorkspace, configId: string | null, ids: readonly string[]): void {
+  const elsewhere = offlineEvaluationsElsewhere(ws, configId);
+  const owner = ids.map(id => elsewhere.get(id)).find(other => other !== undefined);
+  if (owner === undefined) return;
+  throw new Error(`An offline eval you chose belongs to ${ws.configurations.find(config => config.id === owner)?.name ?? "another configuration"}.`);
+}
+
 /** Adds a configuration with its first revision, under test unless a status is given. */
 export function createConfiguration(ws: ConvoyWorkspace, input: { name: string; purpose?: string; revision: ConfigRevision; status?: Configuration["status"]; suiteId?: string | null; id?: string }, now: number | Date): { workspace: ConvoyWorkspace; configuration: Configuration } {
   const at = iso(now);
@@ -101,12 +114,16 @@ export interface NewRobot {
   offlineEvaluationIds?: readonly string[] | null;
 }
 
-/** Adds a test robot to a configuration's revision under test (else its newest revision). */
+/**
+ * Adds a test robot to a configuration's revision under test (else its newest revision).
+ * Offline evaluations that another configuration's robots link are refused.
+ */
 export function addRobot(ws: ConvoyWorkspace, input: NewRobot, now: number | Date): { workspace: ConvoyWorkspace; robot: Robot } {
   const config = ws.configurations.find(item => item.id === input.configId);
   if (!config) throw new Error(`Unknown configuration "${input.configId}".`);
   const name = input.name.trim();
   if (!name) throw new Error("A robot needs a name.");
+  refuseLinkedElsewhere(ws, config.id, input.offlineEvaluationIds ?? []);
   const at = iso(now);
   const robot: Robot = {
     // "Not specified" keeps the document readable by earlier versions of this site, which require a site.
@@ -125,11 +142,16 @@ export function addRobot(ws: ConvoyWorkspace, input: NewRobot, now: number | Dat
   return { workspace, robot };
 }
 
-/** Sets the offline evaluations a robot shows as evals; an empty list removes the link. */
+/**
+ * Sets the offline evaluations a robot shows as evals; an empty list removes the link. A new
+ * link to one that another configuration's robots link is refused; links the robot has stay.
+ */
 export function linkOfflineEvaluations(ws: ConvoyWorkspace, robotId: string, ids: readonly string[], now: number | Date): ConvoyWorkspace {
   const robot = ws.robots.find(item => item.id === robotId);
   if (!robot) throw new Error(`Unknown robot "${robotId}".`);
-  const next: Robot = { ...robot, offlineEvaluationIds: [...new Set(ids)] };
+  const links = [...new Set(ids)];
+  refuseLinkedElsewhere(ws, robot.configId, links.filter(id => !robot.offlineEvaluationIds?.includes(id)));
+  const next: Robot = { ...robot, offlineEvaluationIds: links };
   if (!next.offlineEvaluationIds?.length) delete next.offlineEvaluationIds;
   return {
     ...ws,

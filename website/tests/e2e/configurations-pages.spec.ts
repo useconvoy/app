@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+import { addRobot } from "../../src/lib/configurations/mutations";
 import { createSampleWorkspace } from "../../src/lib/configurations/sample";
 import {
   demoDocument, h1, mockApi, noOverflow, OFFLINE_EPISODES, OFFLINE_EVAL, OFFLINE_LABELS, OFFLINE_OTHER, offlineDocument, PLATFORM_ROBOT, PROJECT, tile,
@@ -309,6 +310,8 @@ test.describe("eval", () => {
 
 test.describe("offline evals", () => {
   const OFFLINE_ROBOT = `${VLA}/robots/offline-runner`;
+  /** The names of the offline evals a dialog offers. */
+  const offered = (dialog: Locator) => dialog.locator(".cv-check__name");
 
   test("a robot's offline evaluations are its evals, each tagged Offline sim", async ({ page }) => {
     const { platform } = await mockApi(page, { document: offlineDocument() });
@@ -387,6 +390,58 @@ test.describe("offline evals", () => {
     await expect(links).toBeHidden();
     expect(documents.writes.at(-1)!.body.robots.find(robot => robot.id === saved.id)!.offlineEvaluationIds).toEqual([OFFLINE_EVAL, OFFLINE_OTHER]);
     await expect(page.locator(".cv-facts")).toContainText("2 linked");
+  });
+
+  test("Add robot and Edit offer this configuration's and unassigned offline evals, never another configuration's", async ({ page }) => {
+    const document = offlineDocument();
+    // Edge VLA's runner links the nominal eval; the outage eval is linked nowhere.
+    document.robots = document.robots.map(robot => robot.name === "Offline runner" ? { ...robot, offlineEvaluationIds: [OFFLINE_EVAL] } : robot);
+    const { documents } = await mockApi(page, { document });
+    await page.goto("/app/configurations/arm-cloud");
+    await page.getByRole("button", { name: "Add robot" }).click();
+    const dialog = page.getByRole("dialog", { name: "Add robot" });
+    await dialog.getByLabel("Name").fill("Offline 02");
+    await dialog.getByText("Simulator · offline", { exact: true }).click();
+    await expect(offered(dialog), "Edge VLA's eval is not offered in another configuration").toHaveText(["Bimanual · outage"]);
+    await dialog.getByRole("checkbox", { name: /Bimanual · outage/ }).check();
+    await dialog.getByRole("button", { name: "Add robot" }).click();
+    await expect(dialog).toBeHidden();
+    expect(documents.writes.at(-1)!.body.robots.find(robot => robot.name === "Offline 02")!.offlineEvaluationIds).toEqual([OFFLINE_OTHER]);
+
+    // The outage eval now belongs to Cloud: Edge VLA's runner is offered its own eval only.
+    await page.goto(`${OFFLINE_ROBOT}?tab=details`);
+    await page.locator(".cv-facts").getByRole("button", { name: "Edit" }).click();
+    const links = page.getByRole("dialog", { name: "Offline evals" });
+    await expect(offered(links)).toHaveText(["Bimanual · nominal"]);
+    await expect(links.getByRole("checkbox", { name: /Bimanual · nominal/ })).toBeChecked();
+    await links.getByRole("button", { name: "Cancel" }).click();
+
+    // A configuration whose robots link none has nothing left to offer.
+    await page.goto("/app/configurations/arm-edge-planner");
+    await page.getByRole("button", { name: "Add robot" }).click();
+    await dialog.getByText("Simulator · offline", { exact: true }).click();
+    await expect(dialog.getByText("No offline evals for this configuration.")).toBeVisible();
+    await expect(dialog.getByRole("checkbox")).toHaveCount(0);
+  });
+
+  test("a stale form cannot link an offline eval that another configuration linked meanwhile", async ({ page }) => {
+    const { documents } = await mockApi(page, { document: demoDocument() });
+    await page.goto("/app/configurations/arm-cloud");
+    await page.getByRole("button", { name: "Add robot" }).click();
+    const dialog = page.getByRole("dialog", { name: "Add robot" });
+    await dialog.getByLabel("Name").fill("Offline 03");
+    await dialog.getByText("Simulator · offline", { exact: true }).click();
+    await dialog.getByRole("checkbox", { name: /Bimanual · nominal/ }).check();
+    // Another tab links the nominal eval in Edge VLA before this form is sent.
+    documents.changeElsewhere(current => addRobot(current, { configId: "arm-edge-vla", name: "Elsewhere", offlineEvaluationIds: [OFFLINE_EVAL] }, Date.now()).workspace);
+    await dialog.getByRole("button", { name: "Add robot" }).click();
+    await expect(dialog.getByRole("alert")).toHaveText("An offline eval you chose belongs to Arm · Edge VLA.");
+    expect(documents.writes.map(write => write.status), "the stale write is refused, and the change is not re-sent with the eval").toEqual([412]);
+    await expect(offered(dialog)).toHaveText(["Bimanual · outage"]);
+    await dialog.getByRole("checkbox", { name: /Bimanual · outage/ }).check();
+    await dialog.getByRole("button", { name: "Add robot" }).click();
+    await expect(dialog).toBeHidden();
+    expect(documents.writes.at(-1)!.body.robots.find(robot => robot.name === "Offline 03")!.offlineEvaluationIds).toEqual([OFFLINE_OTHER]);
   });
 
   test("an offline evaluation the robot does not link is not its eval", async ({ page }) => {
