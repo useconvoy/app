@@ -672,6 +672,30 @@ def test_two_arms_holding_pills_do_not_deadlock_on_the_bottle_zone():
     assert nexts.count("delivered") == 4 and sum(n.startswith("asked_again") for n in nexts) == 2
 
 
+def test_a_pick_counts_as_placed_only_when_a_pill_it_lifted_ends_in_the_bottle():
+    """The other arm may drop a pill into the bottle while this arm's pick is under way: that pill is not this
+    pick's. Only when the gripper held something no pill was measured lifted for does a pill entering count."""
+    from types import SimpleNamespace
+
+    from convoy_sim.bimanual_pill_task.point_skills import PickAtPoint
+
+    def view(index, in_bottle, lost=False):
+        return SimpleNamespace(index=index, in_bottle=in_bottle, lost=lost)
+
+    def outcome(lifted, pills):
+        skill = object.__new__(PickAtPoint)  # the retreat's bookkeeping only: no world, arm or grasp needed
+        skill.world, skill.arm = SimpleNamespace(pills=lambda: pills), SimpleNamespace(side="left")
+        skill.space, skill.t0, skill.phase, skill.result = SimpleNamespace(leave=lambda side: None), 0.0, "retreat", None
+        skill.lifted, skill.in_bottle_before = lifted, frozenset({1})
+        skill._advance(1.0)
+        return skill.result.status
+
+    assert outcome([3], [view(1, True), view(3, False), view(5, True)]) == "missed"  # pill 5 was the other arm's
+    assert outcome([3], [view(1, True), view(3, True), view(5, True)]) == "placed"
+    assert outcome([3], [view(1, True), view(3, False, lost=True)]) == "lost"
+    assert outcome([], [view(1, True), view(5, True)]) == "placed"  # held, nothing measured lifted: pill 5 counts
+
+
 def test_evaluate_runs_vision_episodes_records_every_call_and_stops_at_the_spend_cap(tmp_path):
     from convoy_sim.bimanual_pill_task.evaluate import evaluate
 

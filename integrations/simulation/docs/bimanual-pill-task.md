@@ -605,11 +605,13 @@ parse result and the refusal reason, the target (pixel, table point, finger yaw,
 whether an axis was seen, the obstruction count), what followed, and the simulated
 start and end. `summary.json` lists every pick with its outcome.
 
-**Measured first call.** One call on a real rendered frame (dev seed 1000, t = 0)
-came before anything else. It used 599 input tokens: 231 for the 512 × 384 image
-and 368 for the text, as the API's input-token counter splits them. It used 138
-output tokens, 111 of them reasoning, and took 4.48 s end to end (3.2 s on the
-API side) for $0.000129. The reply pointed within 1 px of a pill's centre.
+**Measured first call.** One call on a real rendered frame (dev seed 1000, t = 0,
+the first prompt version) came before anything else. It used 599 input tokens: 231
+for the 512 × 384 image and 368 for the text and schema, as the API's input-token
+counter splits them. It used 138 output tokens, 111 of them reasoning, and took
+4.48 s end to end (3.2 s on the API side) for $0.000129. The reply pointed within
+1 px of a pill's centre. The frozen prompt is longer: about 710–750 input tokens
+per call, the image still 231 of them.
 
 ## Evaluation (`evaluate.py`)
 
@@ -622,6 +624,123 @@ Episodes go to `OUTPUT/<config>/<seed>-<slice>/`. With `--seed-stride N` the i-t
 slice runs seeds `i·N + seed`, so every episode of a configuration has its own
 seed (Convoy groups an offline evaluation's rollouts by seed), and every
 configuration runs the same layouts: a layout depends only on the slice and seed.
+
+### Cloud GPT-6 Luna (vision): real calls from pixels
+
+2026-10-02, 73 min of wall time on a Linux cloud container. Every decision was a real
+call to `gpt-6-luna` (the API reported this model for every call) through the OpenAI
+Responses API at low reasoning effort, measured from the container. The run used
+commit `113e19b` (clean tree): prompt `luna-vision-v3`, the failure policy and
+the settings above, frozen and committed before the run. Physics as above (2 ms,
+noslip 4), 150 s horizon. The seeds were the Jetson run's: nominal 0–4 and 30-pill
+200–204 (`--seed-stride 200`). Prompt and executive work used only the development
+seeds 1000, 1001 and 1100. Imported as the offline evaluation "Pills to bottle ·
+Cloud GPT-6 Luna (vision) · gpt-6-luna · openai-responses from cloud container".
+
+| Slice | Seed | Pills placed | Outcome | Calls | Refused | Failed decisions | Picks | Empty grasps | Blocked descents | e2e p50 / p95 (ms) | Tokens in / out | Cost (USD) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| nominal | 0 | 21/24 | both arms done at 141.3 s | 31 | 1 | 0 | 23 | 0 | 2 | 3,872 / 7,289 | 22,369 / 7,831 | 0.0062 |
+| nominal | 1 | 24/24 | all in at 125.6 s | 29 | 0 | 0 | 23 | 0 | 0 | 3,497 / 6,277 | 20,673 / 7,072 | 0.0056 |
+| nominal | 2 | 23/24 | both arms done at 130.4 s | 32 | 0 | 0 | 23 | 0 | 0 | 3,532 / 6,011 | 22,871 / 7,328 | 0.0060 |
+| nominal | 3 | 20/24 | horizon | 33 | 3 | 0 | 22 | 0 | 2 | 4,159 / 9,362 | 23,786 / 10,962 | 0.0079 |
+| nominal | 4 | 21/24 | horizon | 33 | 3 | 0 | 25 | 0 | 4 | 3,843 / 8,410 | 23,864 / 10,056 | 0.0074 |
+| 30 pills | 200 | 26/30 | horizon | 30 | 0 | 0 | 26 | 0 | 0 | 4,149 / 6,114 | 21,371 / 8,532 | 0.0064 |
+| 30 pills | 201 | 27/30 | horizon | 32 | 0 | 0 | 27 | 0 | 0 | 3,812 / 7,309 | 22,770 / 8,999 | 0.0068 |
+| 30 pills | 202 | 24/30 | horizon | 31 | 0 | 0 | 28 | 0 | 4 | 4,081 / 7,664 | 22,170 / 9,355 | 0.0069 |
+| 30 pills | 203 | 24/30 | horizon | 30 | 1 | 0 | 25 | 0 | 1 | 3,895 / 6,081 | 21,388 / 8,916 | 0.0066 |
+| 30 pills | 204 | 26/30 | horizon | 33 | 0 | 0 | 28 | 0 | 0 | 4,141 / 8,061 | 23,786 / 10,908 | 0.0078 |
+
+**Nominal (seeds 0–4).**
+
+- **Pills.** 1 of 5 episodes put every pill in, and 109 of 120 pills were placed
+  (91%).
+- **Decisions.** 158 calls made 151 decisions: 144 accepted on the first call (95%)
+  and 0 failed decisions.
+- **Refused replies.** 7, all on the pixel check: next to the other arm 4, given up
+  2, out of reach 1. No reply was malformed, no call failed and none was refused by
+  the model.
+- **Grasps.** 116 picks: 0 grasps on empty space and 8 descents stopped on a
+  neighbouring pill. 108 pills were lifted; the 109th was still in the arm's retreat
+  when seed 1 ended as a success.
+- **Latency.** End to end p50 3,827 ms and p95 7,772 ms over the slice's 158
+  answered calls; the median of the episodes' own p50 and p95 is 3,843 and 7,289 ms.
+- **Tokens and cost.** 113,563 in and 43,249 out (reasoning included), $0.0330, or
+  $0.0066 per episode.
+
+**30 pills (seeds 200–204).**
+
+- **Pills.** 0 of 5 episodes put every pill in, and 127 of 150 pills were placed
+  (85%). Every episode reached the 150 s horizon.
+- **Decisions.** 156 calls made 155 decisions: 154 accepted on the first call (99%)
+  and 0 failed decisions.
+- **Refused replies.** 1 (next to the other arm).
+- **Grasps.** 134 picks: 0 grasps on empty space, 5 blocked descents and 2 picks
+  with no clear grasp beside the bottle. 127 pills were lifted.
+- **Latency.** End to end p50 4,064 ms and p95 7,283 ms over 156 answered calls.
+- **Tokens and cost.** 111,485 in and 46,710 out, $0.0345, or $0.0069 per episode.
+
+**Both slices.**
+
+- **Calls.** All 314 calls returned `completed` within the 2,048-token output cap:
+  no HTTP or transport errors and no timeouts. The longest round trip was 10.8 s.
+- **Tokens per call.** About 710–750 input tokens: 231 for the image and the rest
+  for the instruction and schema. About 230 output tokens at p50, roughly 90% of
+  them reasoning.
+- **Safety.** No arm–arm contact, no protective stop and no pill lost. The peak
+  bottle tilt was 0.19°, and no step was unstable.
+- **Why episodes ended short.**
+  - Every closed grasp lifted a pill, and every lifted pill went into the bottle.
+    The pills left behind were either out of time (the horizon) or ones the
+    executive gave up after two blocked picks: pills touching each other, or
+    standing against the bottle.
+  - In nominal seed 2 the last pill lay 6.3 cm behind the bottle, where the
+    bottle itself hides it from the head camera. Both arms said done from rest.
+    Replaying the recorded calls reproduces the episode exactly and puts the pill
+    there.
+- **Compared with the Jetson run.** On the same layouts, the Jetson run below
+  placed 114/120 (nominal) and 119/150 (30 pills) from a text scene computed from
+  the simulator state. That is a different condition (privileged state, serial
+  device calls through the legacy relay), so the runs are not compared one to one.
+- **Spend.** The whole task cost $0.1482 for 676 calls: the measured first call,
+  361 development calls and the evaluation's 314 calls ($0.0675). The cap was
+  $3.00.
+
+In Configurations, the demo workspace's "Cloud GPT-6 Luna (vision)" configuration
+(status Testing) shows this evaluation through its "Pill-task sim" simulator robot:
+
+- Edge: none, with the Jetson Orin Nano Super as a thin edge. Cloud: GPT-6 Luna as
+  the planner, served through the OpenAI Responses API.
+- The robot spec is the other configurations' with the `bimanual-station` preview.
+- The declared provenance reads: MuJoCo planner run · Head camera RGB-D → model
+  points in pixels · Scripted IK to the pointed location · GPT-6 Luna (OpenAI, low
+  effort), real calls · Runner: Linux cloud container · Transport: OpenAI Responses
+  API.
+- The eval page's call-result panel shows refused and failed calls as Not reported.
+  The website still reads the older per-result metric names, not the merged
+  `planner_invalid_format` and `planner_call_failures` (also true of device-planner
+  evals since `platform-chat-v1`).
+
+Development, on the development seeds only (prompt and executive changes, each
+round on seeds 1000, 1001 and 1100):
+
+- `luna-vision-v1`, seed 1000: 19/24. All 19 closed grasps placed. 7 descents
+  were blocked, 5 of them at one spot the model kept choosing while its own arm hid
+  it.
+- `v2` added the depth-based finger yaw, the given-up rule and parking after a
+  failed pick: 18/24, 20/24, 19/30. Blocked descents fell to 0–3 per episode, but
+  the model answered wait for pills next to the bottle.
+- `v3` changed the wait and done wording: 21/24 and 23/30. Seed 1000 deadlocked on
+  the bottle zone (fixed, with a regression test).
+- Retreating to rest after every pick gave 20/24 (that run ended at 114.7 s on a
+  MuJoCo divergence after a blocked descent), 22/24 and 22/30. It cost about 23 s
+  per episode in an oracle check, so it was replaced by asking wait and done again
+  from rest.
+- That frozen version placed 24/24, 22/24 and 22/30.
+
+After the run, a pick's `placed` outcome was tightened to the pills it lifted. The
+frozen code counted any pill that entered the bottle during the pick. In this
+evaluation every pick reported as placed had lifted exactly one pill, and those
+pills account for every placed pill, so no reported number changes.
 
 ### Earlier real run on a Jetson (legacy portal relay)
 

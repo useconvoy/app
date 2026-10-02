@@ -257,11 +257,16 @@ class PickAtPoint:
             self._start("retreat", transit(self.probe, arm.pos, target, t, arm.yaw, arm.yaw + wrap(yaw - arm.yaw),
                                            RELEASE_OPEN, REST_OPENING, lift=arm.pos[2] + 0.02, minimum=0.35))
         elif self.phase == "retreat":
+            # The pills this pick lifted decide its outcome, not every pill that entered the bottle meanwhile (the
+            # other arm may have dropped one). Only when the gripper held something no pill was measured lifted for
+            # does a pill entering during the pick count.
             pills = world.pills()
+            mine = [p for p in pills if p.index in self.lifted]
             entered = [p.index for p in pills if p.in_bottle and p.index not in self.in_bottle_before]
-            lost = any(p.lost for p in pills if p.index in self.lifted)
-            status = "placed" if entered else "lost" if lost else "missed"
-            self._finish(status, t, f"pills now in the bottle: {len(entered)}" if entered else "")
+            placed = [p.index for p in mine if p.in_bottle] if mine else entered
+            lost = any(p.lost for p in mine)
+            status = "placed" if placed else "lost" if lost else "missed"
+            self._finish(status, t, f"pills it put in the bottle: {len(placed)}" if placed else "")
         elif self.phase == "abort":
             self._finish(self.pending[0], t, self.pending[1])
 
