@@ -232,6 +232,8 @@ def write(
     images: Iterable[tuple[int, str, bytes]],
     account_used: int,
     estimate: int,
+    *,
+    metadata: Iterable[tuple[int, dict]] = (),
 ) -> int:
     """Writes `<id>.partial` within both quotas and returns its size. The caller holds the store lock."""
     partial, _, _ = _files(root, episode_id)
@@ -259,6 +261,14 @@ def write(
                      for index, action, reward, success, policy_ms in frames),
                 )
                 db.executemany("INSERT INTO images VALUES (?,?,?)", images)
+                # Only new imports with a trace need this table. Earlier recording
+                # files retain their original shape and remain readable below.
+                metadata_rows = list(metadata)
+                if metadata_rows:
+                    db.execute("CREATE TABLE frame_metadata(idx INTEGER PRIMARY KEY, metadata_json TEXT NOT NULL)")
+                    db.executemany("INSERT INTO frame_metadata VALUES (?,?)",
+                                   ((index, json.dumps(value, separators=(",", ":")))
+                                    for index, value in metadata_rows))
         finally:
             db.close()
         os.chmod(partial, 0o600)
@@ -365,7 +375,7 @@ def frame(connection: sqlite3.Connection, index: int) -> dict:
         ).fetchone()
         if step is None:
             raise ValueError("missing step")
-    return {
+    result = {
         "index": index,
         # The replay field keeps its name; image_media_type says whether these bytes are PNG or JPEG.
         "image_png_base64": base64.b64encode(shown[2]).decode(),
@@ -377,3 +387,8 @@ def frame(connection: sqlite3.Connection, index: int) -> dict:
         # The step whose camera image this is: an episode may store fewer images than steps.
         "image_index": shown[0],
     }
+    if connection.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'frame_metadata'").fetchone():
+        metadata = connection.execute("SELECT metadata_json FROM frame_metadata WHERE idx = ?", (index,)).fetchone()
+        if metadata:
+            result.update(json.loads(metadata[0]))
+    return result

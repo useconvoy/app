@@ -154,6 +154,7 @@ export function EvalRunPage({ configId, robotId, runId }: { configId: string; ro
           { label: "Task", value: data.task },
           { label: "Configuration", value: data.config_label },
           { label: "Policy", value: data.policy_label },
+          { label: "Measurement source", value: [...new Set(data.episodes.flatMap(item => typeof item.metrics.measurement_source === "string" ? [item.metrics.measurement_source] : []))].join("; ") || null },
           { label: "Source", value: <span title={data.scope}>Offline import · unsigned</span> },
           { label: "Offline evaluation", value: <span className="cv-mono">{data.id}</span> },
           { label: "Imported", value: `${fmtWhen(data.created_at)} UTC` },
@@ -219,7 +220,7 @@ function EvalRun({ crumbs, model, robot }: { crumbs: Crumb[]; model: RunModel; r
     <Tabs tabs={TABS} value={tab} onChange={setTab} label="Eval views" idPrefix="ev" />
     <TabPanel idPrefix="ev" tabId="overview" selected={tab === "overview"}>
       {slices.length > 0 && <Card title="Slices" flush><SliceTable rows={slices} /></Card>}
-      {!!metrics?.length && <Card title="Metrics" flush><MetricTable rows={metrics} /></Card>}
+      {!!metrics?.length && <Card title="Metrics" flush>{view.source === "offline" && <p className="cv-muted">Reported simulator measurements, averaged per episode. Imported results do not qualify robot or cloud timing.</p>}<MetricTable rows={metrics} /></Card>}
       <Card title="Rollouts" flush>
         {rollouts.length ? <DataTable label="Rollouts" columns={columns} rows={rollouts} rowKey={row => row.id} rowClass={row => row.id === rolloutId ? "cv-tr-current" : undefined} />
           : <EmptyState title={view.result === "queued" ? "Not started." : "No rollouts yet."} />}
@@ -240,11 +241,29 @@ function EvalRun({ crumbs, model, robot }: { crumbs: Crumb[]; model: RunModel; r
 /** Mean per episode of each reported metric, with how many episodes reported it. */
 function MetricTable({ rows }: { rows: readonly MetricView[] }) {
   const columns: Array<Column<MetricView>> = [
-    { key: "metric", header: "Metric", cell: row => <span className="cv-mono">{row.name}</span> },
-    { key: "mean", header: "Mean", numeric: true, cell: row => fmtNumber(row.mean, Math.abs(row.mean) >= 100 ? 0 : 2) },
+    { key: "metric", header: "Metric", cell: row => <span title={row.name}>{reportedMetricLabel(row.name)}</span> },
+    { key: "mean", header: "Mean", numeric: true, cell: row => fmtNumber(row.mean, /_(ms|s|m)$/.test(row.name) ? 3 : Math.abs(row.mean) >= 100 ? 0 : 2) },
     { key: "n", header: "Episodes", numeric: true, cell: row => fmtCount(row.episodes) },
   ];
   return <DataTable label="Metrics" columns={columns} rows={rows} rowKey={row => row.name} />;
+}
+
+const REPORTED_METRIC_LABELS: Record<string, string> = {
+  physics_steps: "Physics steps", wall_duration_s: "Wall duration (s)", simulated_duration_s: "Simulated duration (s)",
+  simulation_wall_lag_s: "Simulation lag behind wall clock (s)", dropped_scheduler_slots: "Dropped scheduler slots",
+  hold_ticks: "Hold ticks", fallback_ticks: "Fallback ticks", final_target_distance_m: "Final target distance (m)",
+  planner_requests: "Planner requests", accepted_plans: "Accepted plans", rejected_plans: "Rejected plans",
+  planner_timeouts: "Planner timeouts", cancelled_inflight_requests: "Cancelled planner requests",
+  max_planner_inflight: "Maximum planner requests in flight",
+};
+const REPORTED_TIMING_LABELS: Record<string, string> = {
+  physics_dispatch_lag: "Physics dispatch lag", physics_completion_lag: "Physics completion lag",
+  observation_to_action: "Observation to action", controller_gap: "Controller interval", planner_latency: "Planner latency",
+};
+function reportedMetricLabel(name: string) {
+  const timing = /^(.*)_(p95|max)_ms$/.exec(name);
+  if (timing && REPORTED_TIMING_LABELS[timing[1]]) return `${REPORTED_TIMING_LABELS[timing[1]]} · ${timing[2] === "max" ? "maximum" : "p95"} (ms)`;
+  return REPORTED_METRIC_LABELS[name] ?? name;
 }
 
 /** Success per slice: a bar and the rate, one line each. */
