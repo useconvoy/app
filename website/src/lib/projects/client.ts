@@ -10,9 +10,11 @@ export interface RobotProfile {
 export interface Fleet { id: string; project_id: string; name: string; robot_ids: string[] }
 
 /** Resource changes clear old results; a response from a previous project cannot overwrite this one. */
-export function useProjectResource<T>(path: string, revision = 0, poll = false) {
-  const [result, setResult] = useState<{ path: string; data?: T; error?: string }>();
+export function useProjectResource<T>(path: string | null, revision = 0, poll = false) {
+  const [result, setResult] = useState<{ path: string | null; data?: T; error?: string }>();
   useEffect(() => {
+    if (path === null) return;
+    const resourcePath = path;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     function tick() {
@@ -22,7 +24,7 @@ export function useProjectResource<T>(path: string, revision = 0, poll = false) 
     }
     async function read() {
       try {
-        const data = await api<T>(path);
+        const data = await api<T>(resourcePath);
         if (active) setResult({ path, data });
       } catch (error) {
         if (!active) return;

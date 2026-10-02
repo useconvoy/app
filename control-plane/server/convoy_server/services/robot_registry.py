@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from convoy_contracts.execution import canonical_digest
+from convoy_contracts.registered import REGISTERED_PROFILE
 from fastapi import HTTPException
 from sqlalchemy import select
 
@@ -80,8 +81,9 @@ def register_robot(db, principal, data):
         fleet = platform.resource_for(db, Fleet, fleet_id, principal)
         if fleet.project_id != profile.project_id:
             raise HTTPException(404, "fleet not found in project")
+    default_profile = REGISTERED_PROFILE if profile.spec["command_interface"] == "joint-position" else "custom-unqualified"
     row = Robot(id=new_id("rob"), project_id=profile.project_id, device_id=device.id,
-                name=data["name"], profile=profile.spec["execution_profile"] or "custom-unqualified")
+                name=data["name"], profile=profile.spec["execution_profile"] or default_profile)
     db.add(row)
     db.flush()
     db.add(RobotRegistration(robot_id=row.id, profile_id=profile.id, kind=data["kind"],

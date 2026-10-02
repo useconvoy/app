@@ -37,6 +37,7 @@ from convoy_contracts.pairing import (
     validate_planner_identity,
     validate_release_manifest,
 )
+from convoy_contracts.registered import REGISTERED_PROFILE
 
 from .binding import BindingObservation, BundleOwner, PreparedBinding
 from .diagnostics import failure_detail, failure_record
@@ -93,8 +94,10 @@ class Coordinator:
             raise ValueError("clock uncertainty must be nonnegative and finite")
         if profile not in release_profiles():
             raise ValueError("unsupported adapter profile")
-        if bundle_owner is not None and profile != PAIRED_PROFILE:
-            raise ValueError("local bundle ownership currently supports paired execution only")
+        if bundle_owner is not None and profile not in {PAIRED_PROFILE, REGISTERED_PROFILE}:
+            raise ValueError("local bundle ownership requires a paired or registered profile")
+        if profile == REGISTERED_PROFILE and bundle_owner is None:
+            raise ValueError("registered execution requires a profile-bound bundle owner")
         if profile == PAIRED_PROFILE and planner is None and bundle_owner is None:
             raise ValueError("paired execution requires a configured planner")
         self.profile = profile
@@ -238,11 +241,13 @@ class Coordinator:
         if (probe.get("release_digest") != release["digest"] or probe.get("profile") != self.profile
                 or (self.bundle_owner is not None and probe.get("ready") is not True)):
             raise ValueError("worker readiness identity mismatch")
-        if self.profile != PAIRED_PROFILE:
+        if self.profile not in {PAIRED_PROFILE, REGISTERED_PROFILE}:
             return None
         policy = action_manifest(manifest)["policy"]
         if probe.get("runtime") != policy["runtime"] or probe.get("artifact_sha256") != policy["artifact_sha256"]:
             raise ValueError("loaded action policy does not match the paired release")
+        if self.profile == REGISTERED_PROFILE:
+            return None
         probe = planner.probe(release["digest"], self.profile)
         if (probe.get("ready") is not True or probe.get("release_digest") != release["digest"]
                 or probe.get("profile") != self.profile
@@ -273,13 +278,15 @@ class Coordinator:
                     or not isinstance(candidate.binding_id, str) or not 1 <= len(candidate.binding_id) <= 128
                     or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-"
                            for c in candidate.binding_id)
-                    or candidate.worker is None or candidate.planner is None):
+                    or candidate.worker is None
+                    or (self.profile == PAIRED_PROFILE and candidate.planner is None)
+                    or (self.profile == REGISTERED_PROFILE and not callable(candidate.adapter_factory))):
                 raise ValueError("invalid local bundle binding")
             observation = asdict(candidate.observation)
             if observation != {
                 "release_digest": deployment["release"]["digest"], "profile": self.profile,
                 "action_artifact_sha256": action_manifest(manifest)["policy"]["artifact_sha256"],
-                "planner_artifact_sha256": manifest["planner"]["artifact_sha256"],
+                "planner_artifact_sha256": manifest["planner"]["artifact_sha256"] if self.profile == PAIRED_PROFILE else None,
             }:
                 raise ValueError("local bundle observation differs from the immutable release")
             was_ready = was_ready and self._binding_id == candidate.binding_id
@@ -300,6 +307,8 @@ class Coordinator:
                     binding_id=candidate.binding_id, observation=observation, planner_readiness=planner_readiness,
                 )
                 self.worker, self.planner = candidate.worker, candidate.planner
+                if self.profile == REGISTERED_PROFILE:
+                    self.adapter_factory = candidate.adapter_factory
                 self._planner_readiness = planner_readiness
                 self._binding_id = candidate.binding_id
             if not was_ready or fresh["deployment"].get("state") != "ready":
@@ -504,9 +513,9 @@ class Coordinator:
             if not accepted:
                 raise PlannerDeclined("planner declined the fixed supported task")
 
-    def _apply(self, adapter: Adapter, request: dict, raw_result: dict) -> StepResult:
+    def _apply(self, adapter: Adapter, request: dict, raw_result: dict, manifest: dict | None = None) -> StepResult:
         self._phase("action_admission", request)
-        result = validate_result(raw_result)
+        result = validate_result(raw_result, manifest)
         with self._submission:
             if self._outstanding != request:
                 raise ValueError("request was already consumed or is not outstanding")
@@ -524,7 +533,7 @@ class Coordinator:
             try:
                 self._phase("adapter_step", request)
                 outcome = adapter.step(result["action"], request["request_id"])
-                validate_observation(outcome.observation, self.action_profile)
+                validate_observation(outcome.observation, self.action_profile, manifest)
                 if not math.isfinite(outcome.reward):
                     raise ValueError("adapter returned an invalid physical state")
                 self.journal.command_outcome(request, "applied", asdict(outcome))
@@ -542,7 +551,7 @@ class Coordinator:
         of abandoned cleanup calls. Original grants are never extended.
         """
         def close() -> None:
-            endpoints = [(self.worker, claim["grant"])] if self.action_profile == VISUAL_PROFILE else []
+            endpoints = [(self.worker, claim["grant"])] if self.action_profile in {VISUAL_PROFILE, REGISTERED_PROFILE} else []
             if self.profile == PAIRED_PROFILE:
                 endpoints.append((self.planner, claim["planner_grant"]))
             for endpoint, grant in endpoints:
@@ -574,6 +583,10 @@ class Coordinator:
             "seed": mission["seed"], "steps": 0, "ever_success": False, "final_success": False,
             "reward_sum": 0.0, "simulated_duration_s": 0.0, "policy_runtime": policy["policy"]["runtime"],
         }
+        if self.profile == REGISTERED_PROFILE:
+            summary.update(evidence_scope="registered_simulated_joint_state", robot_profile_sha256=manifest["environment"]["robot_profile_sha256"],
+                           model_asset_sha256=manifest["environment"]["asset_sha256"], task=manifest["task"],
+                           policy_artifact_sha256=manifest["policy"]["artifact_sha256"])
         if self.profile == PAIRED_PROFILE:
             controlled = manifest["planner"]["runtime"] == CONTROLLED_PLANNER_RUNTIME
             summary.update(
@@ -608,7 +621,7 @@ class Coordinator:
             monitor.start()
             if self.profile == PAIRED_PROFILE:
                 self._plan(mission, manifest, identity, claim["planner_grant"], deadline_ns, summary)
-            if self.action_profile == VISUAL_PROFILE:
+            if self.action_profile in {VISUAL_PROFILE, REGISTERED_PROFILE}:
                 self._phase("policy_session")
                 session = self._call_bounded(deadline_ns, lambda: self.worker.start_session(identity, claim["grant"]))
                 if session != {"identity": identity, "next_sequence": 0}:
@@ -629,11 +642,11 @@ class Coordinator:
                     "budget_ms": max(0.001, (request_deadline - time.monotonic_ns()) / 1e6),
                 }
                 self._phase("action_admission", request)
-                validate_request(request, self.action_profile)
+                validate_request(request, self.action_profile, policy)
                 with self._submission:
                     self._check_live(request_deadline)
                     self._outstanding = request
-                outcome = self._apply(adapter, request, self._decide(request, claim["grant"]))
+                outcome = self._apply(adapter, request, self._decide(request, claim["grant"]), policy)
                 observation = outcome.observation
                 summary["steps"] = sequence + 1
                 summary["reward_sum"] += outcome.reward
@@ -641,11 +654,13 @@ class Coordinator:
                 summary["ever_success"] |= outcome.success
                 summary["simulated_duration_s"] = (sequence + 1) * adapter.control_period_s
                 if (outcome.terminated or outcome.truncated or
-                        (self.action_profile == VISUAL_PROFILE and outcome.success)):
+                        (self.action_profile in {VISUAL_PROFILE, REGISTERED_PROFILE} and outcome.success)):
                     break
             state = "completed"
             detail = ("benchmark success reached" if self.action_profile == VISUAL_PROFILE and summary["final_success"]
                       else "simulation horizon completed")
+            if self.profile == REGISTERED_PROFILE and summary["final_success"]:
+                detail = "joint target reached within position and velocity tolerances"
         except Cancelled as error:
             state, detail = "cancelled", str(error)
             summary["failure"] = self._failure(error, mission, "cancelled")
@@ -701,6 +716,6 @@ class Coordinator:
         self.journal.finish(mission["id"], {
             "identity": report_identity, "state": state, "detail": detail[:1000], "summary": summary,
         })
-        if claimed and self.action_profile == VISUAL_PROFILE:
+        if claimed and self.action_profile in {VISUAL_PROFILE, REGISTERED_PROFILE}:
             self._close_sessions(identity, claim)
         self._flush_reports({"mission": mission})

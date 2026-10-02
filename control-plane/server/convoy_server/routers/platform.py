@@ -226,12 +226,15 @@ def get_mission(mission_id: str, p: PrincipalRead, db: Database):
 
 @router.get("/api/v1/missions")
 def list_missions(
-    project_id: Id, p: PrincipalRead, db: Database, limit: int = Query(default=100, ge=1, le=200)
+    project_id: Id, p: PrincipalRead, db: Database, limit: int = Query(default=100, ge=1, le=200), robot_id: Id | None = None
 ):
     service.project_for(db, project_id, p)
+    if robot_id and service.resource_for(db, Robot, robot_id, p).project_id != project_id:
+        raise HTTPException(404, "robot not found in project")
     rows = db.scalars(
         select(Mission)
         .where(Mission.project_id == project_id)
+        .where(Mission.robot_id == robot_id if robot_id else True)
         .order_by(Mission.created_at.desc())
         .limit(limit)
     )

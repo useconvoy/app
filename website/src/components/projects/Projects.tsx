@@ -15,7 +15,7 @@ export function ProjectsRoot({ children }: { children: ReactNode }) {
   return <WorkspaceSession>{children}</WorkspaceSession>;
 }
 
-function Shell({ project, children }: { project?: string; children: ReactNode }) {
+export function Shell({ project, children }: { project?: string; children: ReactNode }) {
   const session = useSession();
   return <div className="cv-app">
     <a className="cv-skip" href="#main">Skip to content</a>
@@ -32,7 +32,7 @@ function Shell({ project, children }: { project?: string; children: ReactNode })
   </div>;
 }
 
-function useMutation(refresh: () => void) {
+export function useMutation(refresh: () => void) {
   const attempts = useRef(new MutationAttempts());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -114,7 +114,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
             const profile = profiles.data?.find(p => p.id === robot.profile_id);
             return <tr key={robot.id}>
               <td><input type="checkbox" aria-label={`Select ${robot.name}`} checked={selected.includes(robot.id)} disabled={!session.operator} onChange={e => setSelected(s => e.target.checked ? [...s, robot.id] : s.filter(id => id !== robot.id))} /></td>
-              <th scope="row">{robot.name}</th><td>{robot.simulated === false ? "Physical" : "Simulated"}</td>
+              <th scope="row"><Link href={`/app/projects/${projectId}/robots/${robot.id}`}>{robot.name}</Link></th><td>{robot.simulated === false ? "Physical" : "Simulated"}</td>
               <td>{profile ? `${profile.name} · revision ${profile.revision}` : "Legacy runner profile"}</td>
               <td>{fleets.data?.find(f => f.id === robot.fleet_id)?.name ?? "Unassigned"}</td>
               <td>{robot.simulated === false && profile ? <button className="cv-link" disabled={!session.operator || !profile.simulation.engines.length} onClick={() => { setSource(robot); setAdding(true); }}>Create simulated instance</button> : <>

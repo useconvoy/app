@@ -16,8 +16,9 @@ selected robots afterwards. Existing Configurations and application/episode URLs
 The first registry slice does not yet install an agent, run imported models, or authorize motion.
 A declared simulation asset is labelled **assets-declared**, not executable or physically validated.
 The simulator verification flow below loads and hashes the selected asset and checks its interfaces.
-Deployment and task execution for new registrations still require the next runtime/configuration
-integration. Existing qualified simulator records continue using their existing execution path.
+Verified joint-position registrations can execute matching releases through the
+[registered execution adapter](registered-execution.md). Configuration editing and automatic
+installation still need integration. Existing qualified simulator records retain their execution path.
 This is a staged implementation, not the final workflow.
 
 ## Profile import

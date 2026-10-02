@@ -450,6 +450,8 @@ test("registry reads require project scope and only explicit mutations are expos
   }
   assert.equal(allowedPlatformPath(["robots", "rob_one"], "GET", new URLSearchParams()), "/api/v1/robots/rob_one");
   assert.equal(allowedPlatformPath(["robots", "rob_one", "qualification"], "GET", new URLSearchParams()), "/api/v1/robots/rob_one/qualification");
+  assert.equal(allowedPlatformPath(["missions"], "GET", new URLSearchParams("project_id=prj_one&robot_id=rob_one")), "/api/v1/missions?project_id=prj_one&robot_id=rob_one");
+  assert.equal(allowedPlatformPath(["missions"], "GET", new URLSearchParams("robot_id=rob_one")), null);
   assert.equal(allowedPlatformPath(["qualifications", "rqc_one", "report"], "POST", new URLSearchParams()), null);
   assert.equal(allowedPlatformPath(["robot-profiles", "rpf_one"], "DELETE", new URLSearchParams()), null);
 });

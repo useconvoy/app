@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Callable, Protocol
 
 
 @dataclass(frozen=True)
@@ -20,6 +20,7 @@ class PreparedBinding:
     worker: object
     planner: object | None
     observation: BindingObservation
+    adapter_factory: Callable | None = None
 
 
 class BundleOwner(Protocol):
@@ -29,6 +30,7 @@ class BundleOwner(Protocol):
         Called only while locally idle and with no admitted/unresolved mission.
         Arguments are snapshots. The owner must not mutate immutable release data.
         Returned candidates gain execution authority only after coordinator fences,
-        probes, and durable observation. This hook supports the paired profile only.
+        probes, and durable observation. Registered profiles also supply an adapter
+        factory bound to their verified immutable model bytes.
         """
         ...

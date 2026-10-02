@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 import threading
 import time
+import uuid
 from typing import Protocol
 
 from convoy_contracts.execution import (
@@ -17,6 +18,7 @@ from convoy_contracts.execution import (
 )
 from convoy_contracts.grants import GrantVerifier
 from convoy_contracts.pairing import action_manifest, validate_release_manifest
+from convoy_contracts.registered import REGISTERED_PROFILE
 from fastapi import FastAPI, Header, HTTPException, Request
 
 from .sessions import Sessions
@@ -45,11 +47,13 @@ def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str | None
     if policy_manifest["policy"] != {"runtime": runtime.runtime, "artifact_sha256": runtime.artifact_sha256}:
         raise ValueError("loaded runtime/artifact does not match the release manifest")
     visual = policy_manifest["profile"] == VISUAL_PROFILE
-    if visual and (getattr(runtime, "profile", None) != VISUAL_PROFILE or
+    stateful = visual or policy_manifest["profile"] == REGISTERED_PROFILE
+    if stateful and (getattr(runtime, "profile", None) != policy_manifest["profile"] or
                    not callable(getattr(runtime, "reset_session", None))):
-        raise ValueError("visual runtime must declare its profile and implement per-mission reset")
+        raise ValueError("stateful runtime must declare its profile and implement per-mission reset")
     sessions = Sessions()
     digest = canonical_digest(manifest)
+    incarnation = str(uuid.uuid4())
     admitted = threading.BoundedSemaphore(1)
     app = FastAPI(title="Convoy inference worker", version="1", docs_url=None, redoc_url=None)
 
@@ -69,7 +73,8 @@ def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str | None
     @app.get("/health")
     def health():
         return {"ready": True, "release_digest": digest, "profile": manifest["profile"],
-                "runtime": runtime.runtime, "artifact_sha256": runtime.artifact_sha256}
+                "runtime": runtime.runtime, "artifact_sha256": runtime.artifact_sha256,
+                "worker_incarnation": incarnation}
 
     @app.post("/v1/probe")
     def probe(body: dict, authorization: str = Header(default="")):
@@ -92,7 +97,7 @@ def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str | None
             raise HTTPException(401, str(error)) from error
         try:
             if decision:
-                validate_request(body, policy_manifest["profile"])
+                validate_request(body, policy_manifest["profile"], policy_manifest)
             else:
                 if set(body) != {"identity"}:
                     raise ValueError("session requires exactly identity")
@@ -113,7 +118,7 @@ def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str | None
 
     @app.post("/v1/sessions/start")
     def start_session(body: dict, authorization: str = Header(default="")):
-        if not visual:
+        if not stateful:
             raise HTTPException(404, "this profile is stateless")
         authorize(body, authorization)
         if not admitted.acquire(blocking=False):
@@ -136,7 +141,7 @@ def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str | None
 
     @app.post("/v1/sessions/end")
     def end_session(body: dict, authorization: str = Header(default="")):
-        if not visual:
+        if not stateful:
             raise HTTPException(404, "this profile is stateless")
         grant = authorize(body, authorization)
         sessions.close(grant)
@@ -153,7 +158,7 @@ def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str | None
         session = None
         try:
             grant = recheck_grant(authorization)
-            if visual:
+            if stateful:
                 session = sessions.reserve(grant, body, policy_manifest["execution"]["max_steps"])
             action = runtime.get_action(body["observation"])
             duration_ms = (time.monotonic() - started) * 1000
@@ -167,7 +172,7 @@ def create_app(manifest: dict, runtime: Runtime, *, execution_secret: str | None
                 "identity", "request_id", "observation_id", "sequence", "deadline_monotonic_ns",
             )}
             result.update(action=action, policy_duration_ms=duration_ms)
-            validate_result(result)
+            validate_result(result, policy_manifest)
             recheck_grant(authorization)
             return result
         except HTTPException:

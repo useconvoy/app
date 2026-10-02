@@ -78,6 +78,14 @@ const registryConflicts: [string, string][] = [
   ["robot fleet membership changed", "A robot’s fleet assignment changed. Refresh before assigning it."],
   ["robot is no longer", "This robot is no longer in the selected fleet. Refresh to see its assignment."],
 ];
+const executionConflicts: [string, string][] = [
+  ["registered robot requires current", "Verify this simulator and its supported controller before deploying or starting a task."],
+  ["release does not match the registered", "This release uses a different robot profile or simulation model."],
+  ["release joint interface does not match", "This release has different joints, limits, or control timing from the robot."],
+  ["robot has an active or unresolved mission", "Finish or reconcile the robot’s current task before starting another."],
+  ["current deployment is not ready", "Wait for the robot to acknowledge the current deployment."],
+  ["simulator verification is already requested", "A verification request is already waiting for this runner."],
+];
 
 export function platformOrigin(value = process.env.CONVOY_API_URL ?? "http://127.0.0.1:8080"): string {
   const url = new URL(value);
@@ -107,6 +115,7 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
       || new RegExp(`^${DOCUMENT}$`).test(path);
     if (["robots", "robot-profiles", "fleets", "applications", "missions", "evaluations"].includes(path)) { allowed = true; keys = ["project_id"]; required = keys; }
     if (path === "deployments") { allowed = true; keys = ["project_id", "robot_id"]; required = ["project_id"]; }
+    if (path === "missions") { keys = ["project_id", "robot_id"]; required = ["project_id"]; }
     if (path === "episodes") { allowed = true; keys = ["mission_id"]; required = keys; }
     if (new RegExp(`^evaluations/${ID}$`).test(path)) { allowed = true; keys = ["baseline_id"]; }
     if (new RegExp(`^applications/${ID}/qualification$`).test(path)) { allowed = true; keys = ["release_id"]; required = keys; }
@@ -222,6 +231,7 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
     const document = parts[0] === "workspace-documents";
     const offline = parts[0] === OFFLINE;
     const registry = ["robot-profiles", "robot-registrations", "fleets"].includes(parts[0]);
+    const execution = ["robots", "deployments", "missions"].includes(parts[0]);
     // An episode upload: up to 16 MiB of frames, passed through as received.
     const upload = offline && request.method === "POST" && parts.length === 3;
     const text = document ? documentMessages : offline ? offlineMessages : messages;
@@ -281,6 +291,7 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
       if (document && status === 409) message = await apiMessage(upstream, reason(documentConflicts)) ?? message;
       else if (offline && status === 409) message = await apiMessage(upstream, reason(offlineConflicts)) ?? message;
       else if (registry && status === 409) message = await apiMessage(upstream, reason(registryConflicts)) ?? message;
+      else if (execution && status === 409) message = await apiMessage(upstream, reason(executionConflicts)) ?? message;
       else if ((offline || registry) && mutation && status === 422) message = await apiMessage(upstream, validation, 8 * ERROR_LIMIT) ?? message;
       else await upstream.body?.cancel();
       const retry = upstream.headers.get("retry-after");

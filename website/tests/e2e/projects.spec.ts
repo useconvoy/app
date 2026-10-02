@@ -109,3 +109,66 @@ test("project onboarding registers a physical robot and its simulated instance, 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
   await page.screenshot({ path: testInfo.outputPath("project-mobile.png"), fullPage: true });
 });
+
+test("registered robot tasks wait for deployment and stop acknowledgements", async ({ page }, testInfo) => {
+  const robot = { id: "rob_sim", project_id: "prj_lab", name: "Arm simulation", simulated: true, profile_id: "rpf_arm",
+    profile: "registered-joint-policy-v1", simulation_engine: "mujoco", generation: 0, qualification: { state: "passed", report: null }, evaluation_id: null };
+  const deployment = { id: "dep_one", robot_id: robot.id, generation: 1, state: "requested", detail: "", release_id: "apr_one" };
+  const task = { id: "mis_one", robot_id: robot.id, state: "requested", detail: "", updated_at: new Date().toISOString(), episode_id: null as string | null };
+  let deployed = false, started = false;
+  const manifest = { schema_version: 3, profile: robot.profile, environment: { robot_profile_sha256: "a".repeat(64) },
+    policy: { runtime: "convoy-joint-target-reference-v1" }, task: { instruction: "Reach the shoulder target" } };
+  await page.route("**/api/platform/**", async route => {
+    const path = new URL(route.request().url()).pathname.replace("/api/platform/", "");
+    if (route.request().method() === "GET") {
+      const resources: Record<string, unknown> = {
+        "auth/me": { user: { email: "operator@example.test", role: "operator" }, installation: { simulator: true } },
+        "robots/rob_sim": robot, "robot-profiles/rpf_arm": { name: "Custom arm", revision: 1, digest: "a".repeat(64) },
+        applications: [{ id: "app_one", name: "Reach target" }],
+        "applications/app_one/releases": [{ id: "apr_one", digest: "b".repeat(64), manifest }, { id: "apr_two", digest: "c".repeat(64), manifest }],
+        deployments: deployed ? [deployment] : [], missions: started ? [task] : [],
+        "episodes/epi_one": { summary: { final_success: false, steps: 3, execution_mode: "lockstep_offline", simulated_duration_s: 0.06, wall_duration_s: 1.2 } },
+      };
+      return route.fulfill({ status: path in resources ? 200 : 404, json: resources[path] ?? {} });
+    }
+    expect(route.request().headers()["idempotency-key"]).toBeTruthy();
+    if (path === "deployments") {
+      expect(route.request().postDataJSON()).toEqual({ robot_id: robot.id, release_id: "apr_one", expected_generation: 0 });
+      deployed = true; robot.generation = 1;
+      return route.fulfill({ status: 201, json: deployment });
+    }
+    if (path === "robots/rob_sim/missions") { started = true; return route.fulfill({ status: 201, json: task }); }
+    if (path === "missions/mis_one/cancel") { task.state = "cancel_requested"; return route.fulfill({ json: task }); }
+    return route.fulfill({ status: 404, json: { error: "Unexpected request" } });
+  });
+  await page.goto("/app/projects/prj_lab/robots/rob_sim");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Arm simulation");
+  await expect(page.getByRole("button", { name: "Start task", exact: true })).toBeDisabled();
+  await page.getByRole("combobox", { name: "Release", exact: true }).selectOption("apr_one");
+  await expect(page.getByText("Joint-position reference controller · no learned model inference.")).toBeVisible();
+  await page.getByRole("button", { name: "Deploy selected release" }).click();
+  await expect(page.getByText("Deployment 1 · requested")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start task", exact: true })).toBeDisabled();
+  deployment.state = "ready";
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await page.getByRole("combobox", { name: "Release", exact: true }).selectOption("apr_two");
+  await expect(page.getByRole("button", { name: "Start task", exact: true })).toBeDisabled();
+  await page.getByRole("combobox", { name: "Release", exact: true }).selectOption("apr_one");
+  await page.getByRole("button", { name: "Start task", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Start task", exact: true })).toBeDisabled();
+  task.state = "running";
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await page.getByRole("button", { name: "Stop task", exact: true }).click();
+  await expect(page.getByText("Stop requested — waiting for robot")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start task", exact: true })).toBeDisabled();
+  task.state = "cancelled"; task.episode_id = "epi_one";
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Start task", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "View task result" }).click();
+  await expect(page.getByText("3 control steps")).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath("robot-tasks-desktop.png"), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
+  await page.screenshot({ path: testInfo.outputPath("robot-tasks-mobile.png"), fullPage: true });
+});

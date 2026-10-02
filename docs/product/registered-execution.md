@@ -1,0 +1,107 @@
+# Registered robot execution
+
+This extends the existing deployment, worker, coordinator, mission, cancellation and execution
+journal system to a robot's imported MuJoCo model. It does not replace the existing Sawyer paths.
+The initial adapter accepts joint-position commands in SI units for 1–128 named actuated joints.
+It executes functional lockstep simulation; it does not qualify real-time behavior or command
+physical motors. The physical robot and simulated instance retain the same immutable profile.
+
+## User flow and current boundary
+
+Open a project and click its simulated robot. The robot page shows simulator verification, available
+application releases, the acknowledged deployment, Start/Stop, and persisted task outcomes. Start
+requires the selected release to match the acknowledged deployment. Stop remains pending until the
+coordinator acknowledges cancellation. Unknown execution prevents new tasks. Task history is queried
+for that robot before the server applies its result limit.
+
+Application/release creation still uses the existing management API. The configuration document UI
+is not yet an installer or an authoritative release editor. Linking its revisions to these actual
+applications/releases, automatic model installation, and project onboarding remain the next slice.
+Task result summaries are available here; uploaded visual replay for this new joint interface is not
+implemented yet. Existing Sawyer recordings keep their existing viewer.
+
+## Release contract
+
+Use the existing `POST /api/v1/applications` and `POST /api/v1/applications/{id}/releases` routes.
+The release's `manifest` has this shape (replace digests and robot fields with the actual registered
+profile and installed artifacts):
+
+```json
+{
+  "schema_version": 3,
+  "profile": "registered-joint-policy-v1",
+  "policy": {"runtime": "convoy-joint-target-reference-v1", "artifact_sha256": "<canonical reference-policy digest>"},
+  "environment": {
+    "engine": "mujoco", "version": "3.3.0",
+    "robot_profile_sha256": "<registered profile digest>",
+    "asset_sha256": "<installed model digest>"
+  },
+  "interface": {
+    "joint_names": ["shoulder"], "command_interface": "joint-position",
+    "action_bounds": [[-1, 1]], "control_rate_hz": 50
+  },
+  "task": {
+    "instruction": "Reach the shoulder target", "target_joint_positions": [0.25],
+    "position_tolerance": 0.01, "velocity_tolerance": 0.02
+  },
+  "execution": {"max_steps": 200, "decision_timeout_ms": 1000, "mission_timeout_s": 60}
+}
+```
+
+The server compares the model, profile digest, joint order, bounds and cadence against the registered
+profile. Verification must still be current at deployment, ready acknowledgment, task creation and
+claim. An earlier registry-only `custom-unqualified` record with an implicit joint-position execution
+profile can be upgraded by an explicitly requested matching deployment; unrelated profiles cannot.
+Ordinary ownership, generation, evaluation reservation, promotion and unresolved-task rules still apply.
+
+Observations contain ordered `positions`, `velocities` and `simulation_time_s`. Actions contain one
+position per declared joint and must satisfy the declared bounds. This adapter exposes joint state,
+not rendered images, to the policy. Task success requires every joint to reach its target within the
+position tolerance and settle below the velocity tolerance. The initial state is the pinned model's
+default state; different seed labels do not imply randomized scenarios in this adapter.
+
+## Runtime
+
+Use the existing `convoy-worker` with a trusted installed runtime factory. The runtime declares the
+registered profile, reports its artifact identity, implements `reset_session(identity)`, and returns
+joint positions from `get_action(observation)`. The worker and coordinator both validate action
+shape/bounds. Worker sessions fence repeated observations and reset per mission. Each worker reports
+a process incarnation; a restart creates a new locally observed deployment binding.
+
+The included `convoy_sim.joint_reference:from_file` is a controlled reference, **not a learned model**.
+Its JSON artifact is `{"target_joint_positions": [0.25]}`. Its artifact identity is the contracts
+package's `canonical_digest` of that document. Set `CONVOY_JOINT_REFERENCE_FILE` to the artifact path.
+Configure the worker's existing action verification keys (or explicit local HMAC test setup) and
+`CONVOY_WORKER_PROBE_TOKEN`; never put signing keys in the coordinator. From `integrations/simulation`:
+
+```sh
+uv sync --frozen --extra managed
+uv run --frozen --extra managed python -m convoy_worker.cli \
+  --release /path/to/release-manifest.json --factory convoy_sim.joint_reference:from_file
+
+uv run --frozen --extra managed python -m convoy_sim.registered \
+  --data-dir /path/to/simulator-enrollment --assets /path/to/robot-assets \
+  --worker-url http://127.0.0.1:8091
+```
+
+The coordinator uses its enrolled device identity and a dedicated journal. Its bundle owner reloads
+and hashes the installed model, validates profile compatibility and native model readiness, and probes
+the worker before acknowledging a deployment. The adapter captures the verified bytes; changing a
+file cannot replace the model underneath an admitted task. The worker endpoint is configured by the
+operator, not taken from a model response. Remote endpoints require HTTPS and can use
+`--worker-ca-file`. SIGINT/SIGTERM use the existing coordinator stop/reconciliation path.
+
+## Evidence and remaining work
+
+The managed acceptance uses real HTTP APIs, enrollment, a real worker, a coordinator subprocess and
+native MuJoCo. It verifies successful movement, cancellation during deliberately slow inference, and
+an out-of-range policy action that fails before a control step. Simulator asset corruption still
+produces a failed verification. Server tests also reject incompatible assets/interfaces and a claim
+whose verification was superseded. Existing legacy coordinator, worker/session and lifecycle tests
+continue to run, including PostgreSQL cases and browser start/stop acknowledgment checks.
+
+Remaining: learned policies for registered joint interfaces; camera-conditioned contracts; model
+installation and configuration revision links; cloud planning and chat tasking; independent real-time
+physics/timing; visual replay for these models; other controller adapters; Isaac, scenarios, fleet
+rollout, and dynamics characterization. Do not label this reference-controller result as evidence of
+learned manipulation, calibrated physical fidelity, or Jetson timing performance.

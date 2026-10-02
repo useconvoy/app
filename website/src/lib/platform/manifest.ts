@@ -23,7 +23,17 @@ export interface PairedManifest {
   placement: { policy: "development-local-cpu"; planner: "development-local" | "development-jetson-lan" | "development-remote-cpu" | "development-local-controlled" };
 }
 
-export type ReleaseManifest = ActionManifest | PairedManifest;
+export interface RegisteredManifest {
+  schema_version: 3;
+  profile: "registered-joint-policy-v1";
+  policy: Artifact;
+  environment: { engine: "mujoco"; version: string; robot_profile_sha256: string; asset_sha256: string };
+  interface: { joint_names: string[]; command_interface: "joint-position"; action_bounds: number[][]; control_rate_hz: number };
+  task: { instruction: string; target_joint_positions: number[]; position_tolerance: number; velocity_tolerance: number };
+  execution: { max_steps: number; decision_timeout_ms: number; mission_timeout_s: number };
+}
+
+export type ReleaseManifest = ActionManifest | PairedManifest | RegisteredManifest;
 
 export function releaseComponents(manifest: ReleaseManifest) {
   // Robot and evaluation compatibility uses the composition's top-level profile,

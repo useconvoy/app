@@ -301,3 +301,7 @@ body.cv-locked { overflow: hidden; }
 .project-create { margin-top: 24px; }
 .project-actions { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; margin-top: 20px; }
 .project-spec { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .75rem; }
+.robot-execution-content { display: grid; gap: 12px; }
+.robot-execution-content .project-actions { margin-top: 0; margin-bottom: 12px; }
+.robot-task { display: grid; justify-items: start; gap: 8px; }
+.robot-task + .robot-task { border-top: 1px solid var(--border-subtle); padding-top: 12px; }

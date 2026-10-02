@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import secrets
 import socket
 import subprocess
@@ -19,13 +20,18 @@ from convoy_agent.agent import AgentConfig, enroll  # noqa: E402
 from convoy_server import db  # noqa: E402
 from convoy_server.app import create_app  # noqa: E402
 from convoy_server.config import Settings  # noqa: E402
+from convoy_worker.app import create_app as create_worker  # noqa: E402
 from test_robot_qualification import fixture as model_fixture  # noqa: E402
+
+from convoy_sim.joint_reference import JointTargetRuntime  # noqa: E402
 
 
 def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
     password = secrets.token_urlsafe(24)
+    execution_secret, probe_token = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
     settings = Settings(data_dir=tmp_path / "server", simulator=True, scheduler_inprocess=False,
-                        bootstrap_admin_email="qualification@example.test", bootstrap_admin_password=password)
+                        bootstrap_admin_email="qualification@example.test", bootstrap_admin_password=password,
+                        execution_secret=execution_secret)
     db.reset_engine()
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
@@ -33,6 +39,7 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
     server = uvicorn.Server(uvicorn.Config(create_app(settings, start_scheduler=False), log_level="error"))
     thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
     thread.start()
+    worker_server = worker_thread = worker_socket = coordinator = None
     try:
         deadline = time.monotonic() + 10
         while not server.started and thread.is_alive() and time.monotonic() < deadline:
@@ -88,6 +95,88 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
             # Restarting a runner does not repeat a terminal request.
             restart = subprocess.run(command, capture_output=True, text=True, timeout=15, check=True)
             assert json.loads(restart.stdout)["state"] == "idle"
+
+            class DelayedReference(JointTargetRuntime):
+                delay = 0
+                override = None
+
+                def get_action(self, observation):
+                    time.sleep(self.delay)
+                    return self.override if self.override is not None else super().get_action(observation)
+
+            runtime = DelayedReference({"target_joint_positions": [0.25]})
+            manifest = {
+                "schema_version": 3, "profile": runtime.profile,
+                "policy": {"runtime": runtime.runtime, "artifact_sha256": runtime.artifact_sha256},
+                "environment": {"engine": "mujoco", "version": "3.3.0", "robot_profile_sha256": profile["digest"],
+                                "asset_sha256": model["asset"]["sha256"]},
+                "interface": {"joint_names": ["shoulder"], "command_interface": "joint-position",
+                              "action_bounds": [[-1, 1]], "control_rate_hz": 50},
+                "task": {"instruction": "Reach the shoulder target", "target_joint_positions": [0.25],
+                         "position_tolerance": 0.01, "velocity_tolerance": 0.02},
+                "execution": {"max_steps": 200, "decision_timeout_ms": 1000, "mission_timeout_s": 60},
+            }
+            application = post("applications", {"project_id": project["id"], "name": "Joint target"})
+            release = post(f"applications/{application['id']}/releases", {"manifest": manifest})
+            deployment = post("deployments", {"robot_id": robot["id"], "release_id": release["id"], "expected_generation": 0})
+            worker_socket = socket.socket()
+            worker_socket.bind(("127.0.0.1", 0))
+            worker_origin = f"http://127.0.0.1:{worker_socket.getsockname()[1]}"
+            worker_server = uvicorn.Server(uvicorn.Config(create_worker(manifest, runtime, execution_secret=execution_secret,
+                                                                      probe_token=probe_token), log_level="error"))
+            worker_thread = threading.Thread(target=worker_server.run, kwargs={"sockets": [worker_socket]}, daemon=True)
+            worker_thread.start()
+            deadline = time.monotonic() + 10
+            while not worker_server.started and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert worker_server.started
+            with (tmp_path / "coordinator.log").open("w") as log:
+                coordinator = subprocess.Popen([sys.executable, "-m", "convoy_sim.registered", "--data-dir", str(state),
+                                                "--assets", str(assets), "--worker-url", worker_origin],
+                                               env={**os.environ, "CONVOY_WORKER_PROBE_TOKEN": probe_token},
+                                               stdout=log, stderr=log)
+
+                def wait(path, states):
+                    deadline = time.monotonic() + 25
+                    while time.monotonic() < deadline:
+                        response = client.get(f"/api/v1/{path}")
+                        assert response.is_success, response.text
+                        value = response.json()
+                        if value["state"] in states:
+                            return value
+                        assert coordinator.poll() is None, (tmp_path / "coordinator.log").read_text()
+                        time.sleep(0.03)
+                    pytest.fail(f"execution did not reach {states}: {value}; {(tmp_path / 'coordinator.log').read_text()}")
+
+                assert wait(f"deployments/{deployment['id']}", {"ready", "blocked"})["state"] == "ready"
+                mission_body = {"deployment_id": deployment["id"], "expected_generation": 1, "seed": 0, "ttl_s": 60}
+                mission = post(f"robots/{robot['id']}/missions", mission_body)
+                result = wait(f"missions/{mission['id']}", {"completed", "failed", "unknown"})
+                assert result["state"] == "completed", result
+                episode = client.get(f"/api/v1/episodes/{result['episode_id']}").json()
+                assert episode["summary"]["final_success"], episode
+                assert episode["summary"]["model_asset_sha256"] == model["asset"]["sha256"]
+                assert episode["summary"]["steps"] > 1
+                assert episode["summary"]["execution_mode"] == "lockstep_offline"
+
+                # A real slow worker makes cancellation race with actual in-flight inference.
+                runtime.delay = 0.15
+                mission = post(f"robots/{robot['id']}/missions", mission_body)
+                wait(f"missions/{mission['id']}", {"running"})
+                cancelled = post(f"missions/{mission['id']}/cancel", {"reason": "operator stopped task"})
+                assert cancelled["state"] == "cancel_requested"
+                result = wait(f"missions/{mission['id']}", {"cancelled", "completed", "failed", "unknown"})
+                assert result["state"] == "cancelled", result
+                runtime.delay, runtime.override = 0, [1.5]
+                mission = post(f"robots/{robot['id']}/missions", mission_body)
+                result = wait(f"missions/{mission['id']}", {"completed", "failed", "unknown"})
+                assert result["state"] == "failed", result
+                episode = client.get(f"/api/v1/episodes/{result['episode_id']}").json()
+                assert episode["summary"]["steps"] == 0
+                coordinator.terminate()
+                coordinator.wait(timeout=10)
+                coordinator = None
+
             # The next request really rereads the installed bytes and persists a failure.
             (assets / model["asset"]["sha256"]).write_bytes(b"changed asset")
             post(f"robots/{robot['id']}/qualification", {})
@@ -97,6 +186,18 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
             assert observed["state"] == "failed"
             assert "digest" in observed["report"]["detail"]
     finally:
+        if coordinator is not None:
+            coordinator.terminate()
+            try:
+                coordinator.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                coordinator.kill()
+                coordinator.wait(timeout=5)
+        if worker_server:
+            worker_server.should_exit = True
+            worker_thread.join(timeout=10)
+            worker_socket.close()
+            assert not worker_thread.is_alive()
         server.should_exit = True
         thread.join(timeout=10)
         sock.close()

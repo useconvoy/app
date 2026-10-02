@@ -292,13 +292,11 @@ def unresolved_mission(db: Session, robot: Robot) -> Mission | None:
 
 def create_deployment(db: Session, p: Principal, data: dict, *, evaluation_id: str | None = None) -> dict:
     from .evaluations import require_available, require_promotion
+    from .robot_qualification import require_execution
 
     dispatch_allowed(db)
     robot = resource_for(db, Robot, data["robot_id"], p)
-    from ..robot_registry_models import RobotRegistration
-
-    if db.get(RobotRegistration, robot.id):
-        raise HTTPException(409, "registered robot requires runner profile qualification before execution")
+    require_execution(db, robot)
     require_available(db, robot.id, evaluation_id)
     if robot.generation != data["expected_generation"]:
         raise HTTPException(409, "robot generation changed")
@@ -308,6 +306,12 @@ def create_deployment(db: Session, p: Principal, data: dict, *, evaluation_id: s
     app = db.get(Application, release.application_id) if release else None
     if app is None or app.project_id != robot.project_id:
         raise HTTPException(404, "release not found in robot project")
+    if require_execution(db, robot, release) and robot.profile == "custom-unqualified":
+        # Upgrade an earlier registry-only record only after an explicitly requested
+        # deployment proves its exact profile/asset/interface and current verification.
+        from convoy_contracts.registered import REGISTERED_PROFILE
+
+        robot.profile = REGISTERED_PROFILE
     if release.manifest["profile"] != robot.profile:
         raise HTTPException(409, "release profile does not match robot")
     if robot.profile == PAIRED_PROFILE and evaluation_id is None:
@@ -331,13 +335,11 @@ def create_deployment(db: Session, p: Principal, data: dict, *, evaluation_id: s
 
 def create_mission(db: Session, p: Principal, robot_id: str, data: dict, *, evaluation_id: str | None = None) -> dict:
     from .evaluations import require_available, require_promotion
+    from .robot_qualification import require_execution
 
     dispatch_allowed(db)
     robot = resource_for(db, Robot, robot_id, p)
-    from ..robot_registry_models import RobotRegistration
-
-    if db.get(RobotRegistration, robot.id):
-        raise HTTPException(409, "registered robot requires runner profile qualification before execution")
+    require_execution(db, robot)
     require_available(db, robot.id, evaluation_id)
     if robot.generation != data["expected_generation"]:
         raise HTTPException(409, "robot generation changed")
@@ -349,6 +351,7 @@ def create_mission(db: Session, p: Principal, robot_id: str, data: dict, *, eval
     if deployment.generation != robot.generation or deployment.state != "ready":
         raise HTTPException(409, "current deployment is not ready")
     release = db.get(ApplicationRelease, deployment.release_id)
+    require_execution(db, robot, release)
     if evaluation_id is None:
         require_promotion(db, release)
     ttl = min(data["ttl_s"], action_manifest(release.manifest)["execution"]["mission_timeout_s"])
@@ -421,10 +424,14 @@ def desired(db: Session, robot: Robot) -> dict:
 
 
 def report_deployment(db: Session, robot: Robot, deployment_id: str, data: dict) -> dict:
+    from .robot_qualification import require_execution
+
     row = db.get(Deployment, deployment_id)
     if row is None or row.robot_id != robot.id:
         raise HTTPException(404, "deployment not found")
     release = db.get(ApplicationRelease, row.release_id)
+    if data["state"] == "ready":
+        require_execution(db, robot, release)
     if (
         row.generation != robot.generation
         or data["generation"] != row.generation
@@ -479,6 +486,8 @@ def finish(db: Session, mission: Mission, data: dict) -> Episode:
 
 
 def claim(db: Session, robot: Robot, device: Device, mission_id: str, data: dict) -> dict:
+    from .robot_qualification import require_execution
+
     dispatch_allowed(db)
     mission = mission_for_robot(db, robot, mission_id)
     if mission.state in TERMINAL or mission.state == "cancel_requested":
@@ -491,6 +500,7 @@ def claim(db: Session, robot: Robot, device: Device, mission_id: str, data: dict
         )
     deployment = db.get(Deployment, mission.deployment_id)
     release = db.get(ApplicationRelease, mission.release_id)
+    require_execution(db, robot, release)
     if (
         robot.generation != mission.generation
         or deployment.generation != robot.generation

@@ -2,6 +2,7 @@
 from datetime import timedelta
 
 from convoy_contracts.execution import canonical_digest
+from convoy_contracts.registered import REGISTERED_PROFILE, validate_robot_binding
 from fastapi import HTTPException
 from sqlalchemy import select
 
@@ -15,6 +16,32 @@ from . import platform
 def latest(db, robot_id):
     return db.scalar(select(RobotQualification).where(RobotQualification.robot_id == robot_id)
                      .order_by(RobotQualification.generation.desc()).limit(1))
+
+
+def require_execution(db, robot, release=None):
+    registration = db.get(RobotRegistration, robot.id)
+    if not registration:
+        if release and release.manifest["profile"] == REGISTERED_PROFILE:
+            raise HTTPException(409, "registered execution requires a physical profile")
+        return
+    result = latest(db, robot.id)
+    if (registration.kind != "simulated" or result is None
+            or out(db, result)["state"] != "passed" or result.profile_id != registration.profile_id):
+        raise HTTPException(409, "registered robot requires current simulator verification and a supported execution interface")
+    profile = db.get(RobotProfile, registration.profile_id)
+    if robot.profile != REGISTERED_PROFILE and not (
+        robot.profile == "custom-unqualified" and profile.spec.get("execution_profile") is None
+        and profile.spec["command_interface"] == "joint-position"
+    ):
+        raise HTTPException(409, "registered robot requires a supported execution interface")
+    if result.profile_digest != profile.digest:
+        raise HTTPException(409, "verification does not match the registered profile")
+    if release:
+        try:
+            validate_robot_binding(release.manifest, profile.digest, profile.spec, registration.simulation_engine)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+    return True
 
 
 def out(db, row):

@@ -91,3 +91,33 @@ reconciliation; model deployment and task execution for newly registered robots;
 real-time timing qualification; Isaac execution; scenario/task language; staged fleets and physical
 characterization. Simulator-readiness success does not bypass these unfinished execution requirements.
 No hosted rollout, AWS resource provisioning or physical movement was performed in this slice.
+
+## Registered model execution slice
+
+Branch: `codex/registered-robot-execution`, stacked on simulator verification. A schema-3 release pins
+the robot profile/model, joint names/order/bounds/cadence, policy artifact and a joint-target task.
+The existing coordinator, inference worker, session protocol, deployment/mission APIs and durable
+journal now support that interface alongside the legacy Sawyer profiles. Registration no longer
+ends in an unconditional execution block: matching verified simulated joint-position robots can run.
+
+Project robot rows open a detail page with deployment selection, acknowledged readiness, task
+start/stop, and result summaries. A pending stop is distinct from an acknowledged cancellation.
+The selected release must match the deployed release before Start is enabled. Execution APIs retain
+the final admission checks, including current verification at claim.
+
+Actual acceptance: HTTP enrollment → shared physical/simulation profile → native verification →
+release deployment → real worker and coordinator → target reached in MuJoCo. Further tasks exercise
+in-flight cancellation and rejection of an out-of-range action before movement. The initial runtime
+is explicitly a controlled joint-position reference, not a learned policy. The execution mode remains
+functional lockstep. See [setup, contract and remaining work](registered-execution.md).
+
+This advances deployment and task execution but leaves the overall objective active. Configuration
+document/release linking, automatic installation/onboarding, learned edge/cloud pairing for registered
+robots, natural-language task/scenario creation, real-time timing, Isaac, fleet rollout and physical
+characterization remain outstanding. No production deployment or new cloud resources were created.
+
+Verification: 166 selected contract/worker/coordinator/API tests, 32 PostgreSQL lifecycle tests,
+12 native simulator/managed-pipeline tests, 18 frontend platform tests, and both project browser
+journeys pass. Frontend type checks, lint and production build pass; browser checks cover accessibility
+and mobile overflow. The preceding registry and qualification PRs (#113/#114) also have all CI checks
+passing. This slice still needs its own remote CI before merge.
