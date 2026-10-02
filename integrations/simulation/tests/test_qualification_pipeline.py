@@ -83,6 +83,15 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
                 assert connected["device"]["id"] == cfg.data["device_id"]
                 assert connected["device"]["hardware"]["arch"] == platform.machine()
                 assert connected["device"]["hardware"]["synthetic"] is False
+                if simulated:
+                    start = shlex.split(connection["run_command"])
+                    heartbeat = subprocess.run([sys.executable, "-m", "convoy_agent.cli", *start[1:], "--once"],
+                                               cwd=tmp_path, capture_output=True, text=True, timeout=40, check=False)
+                    assert heartbeat.returncode == 0, heartbeat.stderr
+                    live = client.get(f"/api/v1/robot-connections/{cfg.data['device_id']}").json()
+                    assert live["status"] == "online"
+                    assert live["hardware"]["synthetic"] is False
+                    assert live["time_confidence"] != "simulated"
                 body = {"project_id": project["id"], "name": state.name, "profile_id": profile["id"],
                         "device_id": cfg.data["device_id"], "kind": "simulated" if simulated else "physical"}
                 if simulated:

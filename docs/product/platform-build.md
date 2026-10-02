@@ -277,3 +277,13 @@ installation and edge/cloud pairing; repeated timing evaluation and registered-m
 scenario/chat tasking; Isaac execution; staged fleet rollout and physical characterization. This setup
 does not scan mechanics or command a physical robot. No hosted rollout, new cloud resources or changes
 to the Jetson's running agent were made.
+
+Follow-up hardware acceptance: the actual Jetson passed the generated enrollment-command pipeline
+in 53.52 seconds, then the extended version in 41.90 seconds. The latter also executes the displayed
+agent startup command with `--once` and verifies that the simulator connection becomes online, retains
+real host inventory, and reports non-synthetic clock provenance before model verification and tasks.
+The existing long-running agent remained at PID 1047. Tests used isolated loopback endpoints and a
+separate directory, with no public application records. Runtime source is commit `061f0ef`; the added
+heartbeat test's SHA-256 is `8039201abc8400d096d158c22ab34186d96bc8e74395fcb05dd13b95264c09cd`,
+verified against the local file after transfer. Full pipeline elapsed time is a test duration, not
+a policy-latency measurement. These checks still use a reference controller rather than a learned policy.
