@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { ProjectNavigation, projectHref } from "@/components/projects/ProjectNavigation";
+import { useProjectResource } from "@/lib/projects/client";
+import type { Project } from "@/lib/platform/client";
 import type { ReactNode } from "react";
 import { useWorkspace } from "@/lib/configurations/client";
-import { routes } from "@/lib/configurations/routes";
 import { ConvoyMark } from "./Icons";
 import { useSession } from "./Session";
 
@@ -22,17 +25,26 @@ export function Breadcrumbs({ crumbs }: { crumbs: readonly Crumb[] }) {
  * The page frame: a slim top bar (wordmark, breadcrumbs, account, sign out) and
  * `main#main`. Configurations is the only area, so there is no other navigation.
  */
-export function AppShell({ crumbs, children }: { crumbs: readonly Crumb[]; children: ReactNode }) {
+export function AppShell({ crumbs, children, projectId: explicitProject, section, navigation = true }: { crumbs: readonly Crumb[]; children: ReactNode; projectId?: string; section?: string; navigation?: boolean }) {
   const session = useSession();
   const ws = useWorkspace();
-  const sample = ws.status === "ready" && ws.source === "sample";
+  const pathname = usePathname();
+  const configurationId = pathname.match(/^\/app\/configurations\/([^/]+)/)?.[1];
+  const projectId = explicitProject ?? pathname.match(/^\/app\/projects\/([^/]+)/)?.[1] ?? ws.workspace?.configurations.find(c => c.id === configurationId)?.projectId ?? undefined;
+  const projects = useProjectResource<Project[]>(projectId ? "projects" : null);
+  const project = projects.data?.find(p => p.id === projectId);
+  const contextualCrumbs: readonly Crumb[] = projectId ? [
+    { label: "Projects", href: "/app/projects" }, { label: project?.name ?? "Project", href: projectHref(projectId) },
+    ...crumbs.filter(c => c.label !== project?.name && c.label !== "Projects").map(c => c.label === "Configurations" ? { ...c, href: projectHref(projectId, "Configurations") } : c),
+  ] : crumbs;
+  const sample = !projectId && pathname.startsWith("/app/configurations") && ws.status === "ready" && ws.source === "sample";
   return <div className="cv-app">
     <a className="cv-skip" href="#main">Skip to content</a>
     <header className="cv-bar">
       <div className="cv-bar__in">
-        <Link className="cv-brand" href={routes.index()}><ConvoyMark />Convoy</Link>
-        <Breadcrumbs crumbs={crumbs} />
-        <Link className="cv-link" href="/app/projects">Projects</Link>
+        <Link className="cv-brand" href="/app/projects"><ConvoyMark />Convoy</Link>
+        <Breadcrumbs crumbs={contextualCrumbs} />
+
         {sample && <span className="cv-sample" title="Sample data: no workspace is saved for this account yet">Sample</span>}
         <div className="cv-account">
           <span className="cv-account__email">{session.email}</span>
@@ -42,6 +54,7 @@ export function AppShell({ crumbs, children }: { crumbs: readonly Crumb[]; child
     </header>
     <main id="main" className="cv-main" tabIndex={-1}>
       {session.signOutError && <p className="cv-notice cv-notice--error" role="alert">{session.signOutError}</p>}
+      {navigation && projectId && <ProjectNavigation projectId={projectId} selected={section ?? (configurationId ? "Configurations" : undefined)} />}
       {children}
     </main>
   </div>;

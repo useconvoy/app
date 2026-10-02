@@ -213,6 +213,7 @@ const production = obj({
   latency: req(obj({ edge: req(nullable(latencySeries)), cloud: req(nullable(latencySeries)) })),
 }, (v, p, ctx) => { if (typeof v.reporting === "number" && typeof v.robots === "number" && v.reporting > v.robots) ctx.issue(join(p, "reporting"), "must not exceed robots"); });
 const configuration = obj({
+  projectId: opt(nullableId),
   id: req((v, p, ctx) => { id(v, p, ctx); if (v === "new") ctx.issue(p, "\"new\" is reserved for the new-configuration route"); }),
   name: req(str), purpose: req(text), status: req(oneOf(["draft", "testing", "production"])), recommended: req(bool),
   productionRev: req(nullableId), candidateRev: req(nullableId), revisions: req(arr(revision, { min: 1 })),

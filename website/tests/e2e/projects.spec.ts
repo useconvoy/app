@@ -87,7 +87,7 @@ test("project onboarding registers a physical robot and its simulated instance, 
   await page.getByLabel("Project name").fill("Manipulation lab");
   await page.getByRole("button", { name: "Create project" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Manipulation lab");
-  await page.getByRole("button", { name: "Add a profile" }).click();
+  await page.getByRole("link", { name: "Continue setup" }).click();
   await page.getByLabel("Profile name").fill("Custom arm");
   const spec = { embodiment: "arm", adapter: "ros2", command_interface: "joint-position", control_rate_hz: 50,
     joints: [{ name: "shoulder", kind: "revolute", lower: -1, upper: 1, evidence: { source: "imported" } }], sensors: [],
@@ -107,7 +107,7 @@ test("project onboarding registers a physical robot and its simulated instance, 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
   await page.screenshot({ path: testInfo.outputPath("profile-assets-mobile.png"), fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.getByRole("tab", { name: "Robots", exact: true }).click();
+  await page.getByRole("navigation", { name: "Project sections" }).getByRole("link", { name: "Robots", exact: true }).click();
   await page.getByRole("button", { name: "Add robot", exact: true }).click();
   await page.getByLabel("Robot name", { exact: true }).fill("Arm 1");
   await page.getByLabel("Robot profile", { exact: true }).selectOption("rpf_arm");
@@ -162,11 +162,11 @@ test("project onboarding registers a physical robot and its simulated instance, 
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect(page.getByText("Connection changed — verify again", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Verify again", exact: true })).toBeEnabled();
-  await page.getByRole("tab", { name: "Fleets", exact: true }).click();
+  await page.getByRole("navigation", { name: "Project sections" }).getByRole("link", { name: "Fleets", exact: true }).click();
   await page.getByLabel("Fleet name").fill("Line 1");
   await page.getByRole("button", { name: "Create fleet" }).click();
   await expect(page.getByRole("heading", { name: "Line 1" })).toBeVisible();
-  await page.getByRole("tab", { name: "Robots", exact: true }).click();
+  await page.getByRole("navigation", { name: "Project sections" }).getByRole("link", { name: "Robots", exact: true }).click();
   await page.getByRole("checkbox", { name: "Select Arm 1", exact: true }).check();
   await page.getByLabel("Assign selected robots to fleet").selectOption("flt_line");
   await page.getByRole("button", { name: "Assign 1 robots" }).click();

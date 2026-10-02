@@ -73,7 +73,7 @@ function Dashboard({ config, views }: { config: Configuration; views: RobotView[
     setBusy(true); setError(null);
     const result = await ws.save(current => deleteConfiguration(current, config.id, Date.now()));
     setBusy(false);
-    if (result.ok) router.push(routes.index()); else setError(result.error);
+    if (result.ok) router.push(config.projectId ? `/app/projects/${config.projectId}?section=configurations` : routes.index()); else setError(result.error);
   }
 
   const columns: Array<Column<RobotView>> = [

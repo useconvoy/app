@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
-import { WorkspaceSession, useSession } from "@/components/configurations/Session";
-import { Breadcrumbs, PageHeader } from "@/components/configurations/AppShell";
-import { ConvoyMark } from "@/components/configurations/Icons";
+import { ConfigurationsRoot, useSession } from "@/components/configurations/Session";
+import { AppShell, PageHeader } from "@/components/configurations/AppShell";
+import { useSearchParams } from "next/navigation";
+import { sections, projectHref } from "./ProjectNavigation";
+import { ProjectOverview, ProjectRuns, ProjectSimulations, ProjectConnectionTools } from "./ProjectWorkspace";
+import { SavedProjectConfigurations } from "./SavedProjectConfigurations";
 import { ProjectConfigurations } from "./ProjectConfigurations";
 import { SimulatorReadiness } from "./SimulatorReadiness";
 import { SimulationAssets } from "./SimulationAssets";
@@ -15,24 +18,11 @@ import { notifySessionExpired } from "@/lib/configurations/session-events";
 import { useProjectResource, type Fleet, type RobotProfile } from "@/lib/projects/client";
 
 export function ProjectsRoot({ children }: { children: ReactNode }) {
-  return <WorkspaceSession>{children}</WorkspaceSession>;
+  return <ConfigurationsRoot>{children}</ConfigurationsRoot>;
 }
 
-export function Shell({ project, children }: { project?: string; children: ReactNode }) {
-  const session = useSession();
-  return <div className="cv-app">
-    <a className="cv-skip" href="#main">Skip to content</a>
-    <header className="cv-bar"><div className="cv-bar__in">
-      <Link href="/app/projects" className="cv-brand"><ConvoyMark />Convoy</Link>
-      <Breadcrumbs crumbs={[{ label: "Projects", href: project ? "/app/projects" : undefined }, ...(project ? [{ label: project }] : [])]} />
-      <div className="cv-account"><span className="cv-account__email">{session.email}</span>
-        <button type="button" className="cv-link" disabled={session.signingOut} onClick={() => void session.signOut()}>Sign out</button></div>
-    </div></header>
-    <main id="main" className="cv-main" tabIndex={-1}>
-      {session.signOutError && <p role="alert" className="cv-notice cv-notice--error">{session.signOutError}</p>}
-      {children}
-    </main>
-  </div>;
+export function Shell({ project, projectId, section, navigation = true, children }: { project?: string; projectId?: string; section?: string; navigation?: boolean; children: ReactNode }) {
+  return <AppShell crumbs={[{ label: project ?? "Projects" }]} projectId={projectId} section={section} navigation={navigation}>{children}</AppShell>;
 }
 
 export function useMutation(refresh: () => void) {
@@ -67,7 +57,7 @@ export function ProjectsIndex() {
     if (project) router.push(`/app/projects/${project.id}`);
   }
   return <Shell>
-    <PageHeader title="Projects" actions={<Link className="cv-btn cv-btn--secondary" href="/app/configurations">Existing configurations</Link>} />
+    <PageHeader title="Projects" actions={<Link className="cv-btn cv-btn--secondary" href="/app/configurations">Organize saved configurations</Link>} />
     <p>Organize your robots, their physical profiles, and simulation instances in one project.</p>
     {projects.error && <p role="alert">{projects.error}</p>}
     {!projects.data && !projects.error && <p role="status">Loading projects…</p>}
@@ -91,7 +81,10 @@ export function ProjectPage({ projectId }: { projectId: string }) {
   const fleets = useProjectResource<Fleet[]>(`fleets?project_id=${projectId}`, revision);
   const devices = useProjectResource<Device[]>("robot-connections", revision);
   const project = projects.data?.find(p => p.id === projectId);
-  const [tab, setTab] = useState("Robots");
+  const query = useSearchParams();
+  const router = useRouter();
+  const tab = sections.find(s => s.toLowerCase() === query.get("section")) ?? "Overview";
+  const setTab = (value: string) => router.push(projectHref(projectId, value));
   const [source, setSource] = useState<Robot>();
   const [adding, setAdding] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
@@ -103,12 +96,14 @@ export function ProjectPage({ projectId }: { projectId: string }) {
     const result = await mutation.submit(`fleets/${fleetId}/members`, { assignments: selected.map(id => ({ robot_id: id, expected_fleet_id: robots.data!.find(r => r.id === id)?.fleet_id ?? null })) });
     if (result) setSelected([]);
   }
-  return <Shell project={project?.name ?? "Project"}>
+  return <Shell project={project?.name ?? "Project"} projectId={projectId} section={tab}>
     <PageHeader title={project?.name ?? "Project"} actions={<><button type="button" className="cv-btn cv-btn--secondary" onClick={refresh}>Refresh</button>{session.operator && <button type="button" className="cv-btn cv-btn--primary" onClick={() => { setTab("Robots"); setSource(undefined); setAdding(true); }}>Add robot</button>}</>} />
     {projects.data && !project && <p role="alert">This project is unavailable.</p>}
     {errors.map((error, i) => <p role="alert" key={i}>{error}</p>)}
     {project && <>
-      <div className="cv-tabs" role="tablist" aria-label="Project sections">{["Robots", "Profiles", "Fleets", "Configurations"].map(label => <button key={label} type="button" role="tab" aria-selected={tab === label} onClick={() => setTab(label)}>{label}</button>)}</div>
+      {tab === "Overview" && <ProjectOverview projectId={projectId} robots={robots.data} profiles={profiles.data} fleets={fleets.data} />}
+      {tab === "Simulations" && <ProjectSimulations projectId={projectId} robots={robots.data} />}
+      {tab === "Runs" && <ProjectRuns projectId={projectId} robots={robots.data} />}
       {tab === "Robots" && <section aria-label="Robots">
         <p>Physical robots and simulated instances keep separate connections and share a versioned physical profile.</p>
         {robots.data?.length === 0 && !adding && <div className="cv-empty"><h2>No robots yet</h2><p>Import a robot profile, then connect an enrolled device to it.</p><button className="cv-btn cv-btn--primary" onClick={() => setTab("Profiles")}>Add a profile</button></div>}
@@ -134,7 +129,8 @@ export function ProjectPage({ projectId }: { projectId: string }) {
         {mutation.error && <p role="alert">{mutation.error}</p>}
         {session.operator && adding && profiles.data && devices.data && <RegistrationForm key={source?.id ?? "new"} projectId={projectId} profiles={profiles.data} fleets={fleets.data ?? []} devices={devices.data.filter(d => !robots.data?.some(r => r.device_id === d.id))} source={source} onCancel={() => { setSource(undefined); setAdding(false); }} onSaved={() => { setSource(undefined); setAdding(false); refresh(); }} />}
       </section>}
-      {tab === "Configurations" && <ProjectConfigurations projectId={projectId} />}
+      {tab === "Robots" && <ProjectConnectionTools />}
+      {tab === "Configurations" && <><ProjectConfigurations projectId={projectId} /><SavedProjectConfigurations projectId={projectId} /></>}
       {tab === "Profiles" && <section aria-label="Robot profiles">
         <p>Each revision pins the robot interfaces and simulation assets. Asset declarations still require runner verification and calibration.</p>
         {profiles.data?.map(profile => <article className="cv-card" key={profile.id}><div><h2>{profile.name} · revision {profile.revision}</h2><p>{profile.spec.embodiment} · {profile.spec.joints.length} joints · {profile.spec.sensors.length} sensors</p><p>{profile.simulation.engines.length ? `Simulation assets: ${profile.simulation.engines.join(", ")}` : "Simulation assets missing"} · Dynamics: {profile.simulation.dynamics_source}</p><p>{profile.simulation.detail}</p><SimulationAssets profile={profile} /><details><summary>Profile specification</summary><pre className="project-spec">{JSON.stringify(profile.spec, null, 2)}</pre></details></div></article>)}

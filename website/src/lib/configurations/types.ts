@@ -87,6 +87,8 @@ export type ConfigStatus = "draft" | "testing" | "production";
 
 export interface Configuration {
   id: string;
+  /** Project association; absent on older documents until explicitly assigned. */
+  projectId?: string | null;
   name: string;
   purpose: string;
   status: ConfigStatus;

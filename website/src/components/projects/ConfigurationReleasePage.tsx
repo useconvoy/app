@@ -33,7 +33,7 @@ export function ConfigurationReleasePage({ configurationId }: { configurationId:
   const matching = robots.data?.filter(robot => robot.simulated && robot.profile_id && registered && robot.qualification?.state === "passed" && robot.qualification.profile_digest === registered.environment.robot_profile_sha256);
   const setup = useProjectResource<{ release_id: string; manifest_json: string; reference_policy_json: string | null }>(setupOpen && release ? `applications/${configurationId}/releases/${release.id}/setup` : null);
   const reads = [application, releases, robots, deployments, setup];
-  return <Shell project={application.data?.name ?? "Configuration"}>
+  return <Shell project={application.data?.name ?? "Configuration"} projectId={projectId} section="Configurations">
     {projectId && <Link className="cv-link" href={`/app/projects/${projectId}`}>← Back to project</Link>}
     <PageHeader title={application.data?.name ?? "Configuration"} actions={operator && projectId ? <button className="cv-btn cv-btn--secondary" onClick={() => setEditing(value => !value)}>{editing ? "Close editor" : "Create new release"}</button> : undefined} />
     {reads.map((read, i) => read.error && <p role="alert" key={i}>{read.error}</p>)}

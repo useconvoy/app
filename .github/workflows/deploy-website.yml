@@ -150,7 +150,7 @@ jobs:
           check "legacy portal redirect" "307 /app/applications?section=device&view=device" "$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "$SITE/portal/" | sed "s#${SITE}##")"
           check "portal session" 200 "$(curl -sS -o /tmp/portal-session.json -w '%{http_code}' --max-time 20 "$SITE/api/portal/session")"
           check "anonymous snapshot protected" 401 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/api/portal/snapshot")"
-          check "workspace entry" "307 /app/configurations" "$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "$SITE/app" | sed "s#${SITE}##")"
+          check "workspace entry" "307 /app/projects" "$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "$SITE/app" | sed "s#${SITE}##")"
           check "configurations" 200 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/app/configurations")"
           check "robot applications" 200 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/app/applications")"
           check "legacy device redirect" "307 /app/applications?section=device&view=device" "$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "$SITE/app/device" | sed "s#${SITE}##")"

@@ -96,3 +96,17 @@ def test_link_rejects_ambiguous_or_unsupported_source_without_replacing_link(app
     assert put(admin, "configurations", {**DOC, "schemaVersion": 2}, "unsupported", revision=2).status_code == 200
     post(admin, ROOT, {**body, "document_revision": 3, "expected_link_id": linked["id"]}, key="unsupported", expected=422)
     assert admin.get(ROOT + "?configuration_id=arm-config").json()[0]["id"] == linked["id"]
+
+
+def test_project_assignment_preserves_link_fingerprint_and_rejects_cross_project_link(app, admin):
+    project, result, body = setup(admin)
+    linked = post(admin, ROOT, body)
+    updated = deepcopy(DOC)
+    updated["configurations"][0]["projectId"] = project["id"]
+    assert put(admin, "configurations", updated, "assigned", revision=1).status_code == 200
+    assert admin.get(ROOT + "?configuration_id=arm-config").json()[0]["source_state"] == "unchanged"
+    other = post(admin, "/api/v1/projects", {"name": "Other project"}, key="other-project")
+    other_app = post(admin, "/api/v1/applications", {"project_id": other["id"], "name": "Other setup"})
+    post(admin, ROOT, {**body, "application_id": other_app["id"], "document_revision": 2,
+                      "expected_link_id": linked["id"]}, key="wrong-project", expected=409)
+    assert admin.get(ROOT + "?configuration_id=arm-config").json()[0]["application"] == result["application"]

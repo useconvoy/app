@@ -394,3 +394,35 @@ Next required integration: upload completed recordings independently of control 
 the registered trajectory in the existing robot task-result player, preserving timing/action provenance.
 The full product scope, including learned edge/cloud models, task/scenario language, Isaac, staged fleets
 and characterization, remains active and incomplete.
+
+## Integrated project workspace and release
+
+Branch: `codex/unified-project-workspace`. Reconciles the verified execution stack with
+main's Jetson planner and robot-preview work. Projects now provide persistent Overview,
+Robots, Profiles, Fleets, Configurations, Simulations and Runs navigation. Registered
+robots expose computer details and execution controls; existing simulator profiles keep
+their existing policy/evaluation controls. Workspace device diagnostics are accessible
+from Robots and explicitly identify the configured device rather than pretending it is
+an arbitrary registered robot.
+
+Saved model setups can be explicitly assigned to a project without replacing their
+robots, evaluations, traces or replay references. Existing URLs still resolve. Project
+context follows assigned setups into robot and evaluation pages. New model selections
+remain drafts; executable releases still require the supported profile/policy contract.
+Project placement is excluded from the execution-link specification fingerprint, while
+cross-project link creation is rejected. Unassigned older setups remain accessible and
+can be organized from a project's Configurations section.
+
+Simulations lists the project's runners; Runs exposes task results, timing evidence and
+available existing episode replay, plus the assigned setups' evaluation history. Local
+registered trajectory files still require a future hosted upload/player integration.
+Isaac, natural-language scenarios, automatic learned-policy installation/pairing, staged
+fleet rollout and physical characterization are not enabled by this UI integration.
+
+Validation before release includes the existing registration/deployment/cancellation,
+configuration, evaluation and replay browser journeys; a new assignment-preservation
+journey with mobile/accessibility checks; a draft-creation/no-dispatch journey; and an API
+regression for project placement and execution-link isolation. The deployment smoke check
+now expects `/app/projects`, fixing the stale redirect expectation that rolled back #113.
+Deployment uses the existing Lightsail host and existing runtime data, with no new AWS
+resources. Release CI and public verification are recorded in the integration PR.

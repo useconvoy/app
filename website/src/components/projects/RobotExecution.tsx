@@ -11,12 +11,15 @@ import type { Application, Deployment, Episode, Mission, Release, Robot } from "
 import { useProjectResource, type RobotProfile } from "@/lib/projects/client";
 import { Shell, useMutation } from "./Projects";
 import { TimingResult } from "./TimingResult";
+import { ComputerDetails } from "./ConnectionSetup";
+import { ProjectWorkspace } from "@/components/console/Console";
+import { notifySessionExpired } from "@/lib/configurations/session-events";
 import { SimulatorReadiness } from "./SimulatorReadiness";
 
 const finished = (state: string) => ["completed", "failed", "cancelled"].includes(state);
 
 export function RobotExecution({ projectId, robotId }: { projectId: string; robotId: string }) {
-  const { operator } = useSession();
+  const { operator, account } = useSession();
   const [revision, setRevision] = useState(0);
   const query = useSearchParams();
   const [applicationId, setApplicationId] = useState(query.get("application_id") ?? "");
@@ -45,7 +48,7 @@ export function RobotExecution({ projectId, robotId }: { projectId: string; robo
   // A stale poll can still display the previous state, but it must not enable a new command.
   const fresh = reads.every(read => !read.error) && !!robot && !!deployments.data && !!missions.data;
   const canStart = operator && fresh && supported && qualified && !active && !robot.evaluation_id && deployment?.state === "ready" && selectedReleaseId === deployment.release_id;
-  return <Shell project={robot?.name ?? "Robot"}>
+  return <Shell project={robot?.name ?? "Robot"} projectId={projectId} section="Robots">
     <Link className="cv-link" href={`/app/projects/${projectId}`}>← Back to project</Link>
     <PageHeader title={robot?.name ?? "Robot"} actions={<button className="cv-btn cv-btn--secondary" onClick={refresh}>Refresh</button>} />
     {reads.map((read, index) => read.error ? <p key={index} role="alert">{read.error}</p> : null)}
@@ -53,7 +56,9 @@ export function RobotExecution({ projectId, robotId }: { projectId: string; robo
     {robotRead.data && !robot && <p role="alert">This robot does not belong to this project.</p>}
     {robot && <>
       <p>{robot.simulated ? "Simulated robot" : "Physical robot"} · {profile.data ? `${profile.data.name} · revision ${profile.data.revision}` : "Profile unavailable"}</p>
-      {!supported && <p>Task execution is not available for this robot interface yet.</p>}
+      <ComputerDetails deviceId={robot.device_id} />
+      {!supported && robot.simulated && !robot.profile_id && <section className="console-shell" aria-label="Existing policy runtime"><ProjectWorkspace project={{ id: projectId, name: robot.name }} initialRobotId={robot.id} writable={operator} canDispatch={account.installation.simulator && !account.installation.dispatch_paused_at && !account.installation.quarantined_at} executionProfiles={account.installation.execution_profiles ?? []} onSessionEnd={notifySessionExpired} /></section>}
+      {!supported && (!robot.simulated || robot.profile_id) && <p>Task execution is not available for this robot interface yet.</p>}
       {supported && <>
         <Card title="Simulator readiness"><div className="robot-execution-content"><SimulatorReadiness robot={robot} busy={mutation.busy} canWrite={operator} verify={() => void mutation.submit(`robots/${robot.id}/qualification`, {})} /></div></Card>
         <Card title="Deployment"><div className="robot-execution-content">

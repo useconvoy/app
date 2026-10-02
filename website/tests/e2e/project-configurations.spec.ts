@@ -56,7 +56,7 @@ test("project configuration creates an executable release, revises it and opens 
     return route.fulfill({ status: 404, json: { error: "Unexpected mutation" } });
   });
   await page.goto("/app/projects/prj_lab");
-  await page.getByRole("tab", { name: "Configurations", exact: true }).click();
+  await page.getByRole("navigation", { name: "Project sections" }).getByRole("link", { name: "Configurations", exact: true }).click();
   await page.getByRole("link", { name: "Create runnable configuration" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Create runnable configuration");
   await page.getByLabel("Configuration name", { exact: true }).fill("Arm target experiment");

@@ -20,7 +20,7 @@ function supported(profile: RobotProfile) {
 }
 
 export function NewProjectConfiguration({ projectId, profileId }: { projectId: string; profileId?: string }) {
-  return <Shell project="New configuration"><Link className="cv-link" href={`/app/projects/${projectId}`}>← Back to project</Link>
+  return <Shell project="New configuration" projectId={projectId} section="Configurations"><Link className="cv-link" href={`/app/projects/${projectId}`}>← Back to project</Link>
     <PageHeader title="Create runnable configuration" />
     <ConfigurationEditor projectId={projectId} preferredProfileId={profileId} />
   </Shell>;

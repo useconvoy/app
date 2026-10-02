@@ -71,10 +71,11 @@ function refuseLinkedElsewhere(ws: ConvoyWorkspace, configId: string | null, ids
 }
 
 /** Adds a configuration with its first revision, under test unless a status is given. */
-export function createConfiguration(ws: ConvoyWorkspace, input: { name: string; purpose?: string; revision: ConfigRevision; status?: Configuration["status"]; suiteId?: string | null; id?: string }, now: number | Date): { workspace: ConvoyWorkspace; configuration: Configuration } {
+export function createConfiguration(ws: ConvoyWorkspace, input: { name: string; projectId?: string; purpose?: string; revision: ConfigRevision; status?: Configuration["status"]; suiteId?: string | null; id?: string }, now: number | Date): { workspace: ConvoyWorkspace; configuration: Configuration } {
   const at = iso(now);
   const configuration: Configuration = {
     id: uniqueId(input.id ?? input.name, ws.configurations.map(config => config.id)), name: input.name.trim(), purpose: input.purpose ?? "",
+    ...(input.projectId ? { projectId: input.projectId } : {}),
     status: input.status ?? "testing", recommended: false, productionRev: null, candidateRev: input.revision.rev,
     revisions: [{ ...input.revision, createdAt: input.revision.createdAt || at }], suiteId: input.suiteId ?? null, createdAt: at, updatedAt: at,
   };

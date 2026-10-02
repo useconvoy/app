@@ -33,13 +33,18 @@ def configuration(document: WorkspaceDocument, config_id: str) -> dict:
     return matches[0]
 
 
+def specification_digest(source: dict) -> str:
+    # Project placement is navigation metadata, not a change to the model specification.
+    return canonical_digest({key: value for key, value in source.items() if key != "projectId"})
+
+
 def out(db: Session, p: Principal, row: Link, document: WorkspaceDocument) -> dict:
     app = platform.resource_for(db, Application, row.application_id, p)
     project = platform.project_for(db, app.project_id, p)
     state = "unchanged"
     try:
         current = configuration(document, row.configuration_id)
-        if canonical_digest(current) != row.source_digest:
+        if specification_digest(current) != row.source_digest or current.get("projectId") not in (None, app.project_id):
             state = "changed"
     except HTTPException as error:
         state = "missing" if error.status_code == 404 else "unsupported"
@@ -61,13 +66,15 @@ def list_links(db: Session, p: Principal, config_id: str | None, application_id:
 
 
 def save(db: Session, p: Principal, data: dict) -> dict:
-    platform.resource_for(db, Application, data["application_id"], p)
+    app = platform.resource_for(db, Application, data["application_id"], p)
     document = document_for(db, p)
     if document is None:
         raise HTTPException(404, "save a workspace configuration before linking it")
     if document.revision != data["document_revision"]:
         raise HTTPException(409, "workspace changed; reload and review it before linking")
     source = configuration(document, data["configuration_id"])
+    if source.get("projectId") not in (None, app.project_id):
+        raise HTTPException(409, "saved configuration belongs to another project")
     old = db.scalar(select(Link).where(Link.document_id == document.id, Link.configuration_id == data["configuration_id"]))
     if (old.id if old else None) != data["expected_link_id"]:
         raise HTTPException(409, "configuration link changed; reload before replacing it")
@@ -76,7 +83,7 @@ def save(db: Session, p: Principal, data: dict) -> dict:
         db.flush()
     row = Link(id=new_id("wcl"), document_id=document.id, configuration_id=data["configuration_id"],
                application_id=data["application_id"], source_revision=document.revision,
-               source_digest=canonical_digest(source), source_name=source["name"].strip())
+               source_digest=specification_digest(source), source_name=source["name"].strip())
     db.add(row)
     db.flush()
     return out(db, p, row, document)
