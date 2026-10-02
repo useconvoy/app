@@ -7,7 +7,7 @@
  * Unknown keys are reported as warnings and kept.
  */
 import { isInternalHref } from "./routes";
-import { CONFIGURED_DEVICE, ID_PATTERN, WORKSPACE_SCHEMA_VERSION } from "./types";
+import { CONFIGURED_DEVICE, ID_PATTERN, ROBOT_PREVIEW_IDS, WORKSPACE_SCHEMA_VERSION } from "./types";
 import type { ConvoyWorkspace } from "./types";
 
 export interface ValidationIssue { path: string; message: string }
@@ -150,6 +150,8 @@ const robotSpec = obj({
   name: req(str), summary: req(text), details: opt(str), cameras: req(arr(str)), controlRateHz: req(nullable(nonNegative)),
   actionSpace: req(text), safetyController: opt(str),
   simTwin: req(nullable(obj({ name: req(str), engine: req(str), note: opt(str) }))),
+  // A preview this website ships, by id: never a URL or a path.
+  preview: opt(nullable(oneOf(ROBOT_PREVIEW_IDS), `expected one of ${ROBOT_PREVIEW_IDS.map(id => `"${id}"`).join(", ")}`)),
   provenance: req(provenance),
 });
 const edgeHardware = obj({

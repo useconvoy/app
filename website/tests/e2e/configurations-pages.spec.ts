@@ -1,3 +1,4 @@
+import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { addRobot } from "../../src/lib/configurations/mutations";
 import { createSampleWorkspace } from "../../src/lib/configurations/sample";
@@ -19,7 +20,7 @@ test.describe("configurations", () => {
     const cards = page.locator(".cv-config");
     await expect(cards.locator("h2")).toHaveText(["Edge planner", "Cloud planner", "Edge VLA"]);
     const edge = cards.filter({ hasText: "Edge planner" });
-    await expect(edge.locator("dd")).toHaveText(["Tabletop arm", "Jetson Orin Nano Super 8 GB", "Qwen2.5-1.5B", "–"]);
+    await expect(edge.locator("dd")).toHaveText(["Bimanual station", "Jetson Orin Nano Super 8 GB", "Qwen2.5-1.5B", "–"]);
     await expect(edge.locator(".cv-config__foot")).toContainText("1 robot");
     await expect(edge.locator(".cv-config__foot")).toContainText("1 online");
     await expect(edge.locator(".cv-config__foot")).toContainText("No evals");
@@ -97,10 +98,58 @@ test.describe("config dashboard", () => {
     expect(new Set(heights).size, "tiles are equal").toBe(1);
     await page.getByRole("tab", { name: "Details" }).click();
     await expect(page).toHaveURL(/\?tab=details$/);
-    await expect(page.locator(".cv-facts dt")).toHaveText(["Robot", "Edge hardware", "Power mode", "Edge model", "Cloud model", "Route", "Revision", "Created"]);
+    await expect(page.getByRole("tabpanel", { name: "Details" }).locator(".cv-facts dt")).toHaveText(["Robot", "Edge hardware", "Power mode", "Edge model", "Cloud model", "Route", "Revision", "Created"]);
     await page.getByRole("tab", { name: /Robots/ }).click();
     await rows(page, "Robots").getByRole("link", { name: "Bench 01" }).click();
     await expect(h1(page)).toHaveText("Bench 01");
+  });
+
+  test("the robot: its turntable beside the configuration's facts, equal in height; still under reduced motion; none without a preview", async ({ page }) => {
+    await mockApi(page);
+    await page.goto("/app/configurations/edge-planner");
+    const section = page.getByRole("region", { name: "Robot", exact: true });
+    const video = section.locator("video");
+    await expect(video).toHaveAttribute("poster", "/sim/bimanual-station/poster.webp");
+    await expect(video).toHaveAccessibleName("Simulated two-arm robot on a wheeled base");
+    for (const attribute of ["autoplay", "loop", "playsinline"]) await expect(video).toHaveAttribute(attribute, "");
+    await expect(video).toHaveJSProperty("muted", true);
+    await expect(video.locator("source")).toHaveCount(2);
+    await expect(section.locator(".cv-facts dt")).toHaveText(["Robot", "Body", "Cameras", "Edge hardware", "Edge model", "Cloud model", "Status"]);
+    await expect(section.locator(".cv-facts dd")).toHaveText([
+      "Bimanual station", "2 × 6-DOF arms · wheeled base", "Head RGB-D, 2 × wrist RGB", "Jetson Orin Nano Super 8 GB", "Qwen2.5-1.5B (planner)", "–Not reported", "Testing",
+    ]);
+    // It turns (VP9 in Chromium) until paused.
+    await expect.poll(() => video.evaluate((element: HTMLVideoElement) => !element.paused && element.currentTime > 0)).toBe(true);
+    await section.getByRole("button", { name: "Pause rotation" }).click();
+    await expect(section.getByRole("button", { name: "Play rotation" })).toBeVisible();
+    expect(await video.evaluate((element: HTMLVideoElement) => element.paused)).toBe(true);
+    // Below the tab content; the stage is the wider of two equal-height cards.
+    const [panel, stage, facts] = await Promise.all([page.locator("#cd-panel-robots").boundingBox(), section.locator(".cv-stage").boundingBox(), section.locator(".cv-card").boundingBox()]);
+    expect(stage!.y).toBeGreaterThan(panel!.y + panel!.height);
+    expect(Math.abs(stage!.height - facts!.height), `stage ${stage!.height}px, facts ${facts!.height}px`).toBeLessThanOrEqual(1);
+    expect(stage!.width).toBeGreaterThan(facts!.width);
+    expect((await new AxeBuilder({ page }).analyze()).violations.map(violation => `${violation.id} ${violation.nodes.map(node => node.target.join(" ")).join(", ")}`)).toEqual([]);
+
+    // Phone width: stacked, the stage first; no sideways scroll.
+    await page.setViewportSize({ width: 390, height: 844 });
+    const [top, below] = await Promise.all([section.locator(".cv-stage").boundingBox(), section.locator(".cv-card").boundingBox()]);
+    expect(below!.y).toBeGreaterThanOrEqual(top!.y + top!.height);
+    expect(Math.round(top!.width)).toBe(Math.round(below!.width));
+    await noOverflow(page);
+
+    // Reduced motion: the first frame only, with the same text alternative.
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.reload();
+    await expect(section.getByRole("img", { name: "Simulated two-arm robot on a wheeled base" })).toHaveAttribute("src", "/sim/bimanual-station/poster.webp");
+    await expect(section.locator("video")).toHaveCount(0);
+    await expect(section.getByRole("button")).toHaveCount(0);
+
+    // A configuration whose robot names no preview has no robot section.
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await mockApi(page, { document: demoDocument() });
+    await page.goto("/app/configurations/arm-edge-vla");
+    await expect(h1(page)).toHaveText("Arm · Edge VLA");
+    await expect(page.getByRole("region", { name: "Robot", exact: true })).toHaveCount(0);
   });
 
   test("a simulator's evals feed the tiles; an unreachable device says No data, never zero", async ({ page }) => {
