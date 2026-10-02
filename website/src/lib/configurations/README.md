@@ -75,6 +75,15 @@ Change, Unlink in a dialog); it is hidden when there is nothing to link to.
     configuration's and unassigned ones (`offlineEvaluationsFor` in `selectors.ts`), a
     robot keeps its own links, and `addRobot` and `linkOfflineEvaluations` refuse one
     that another configuration's robot links, so a stale form cannot take it.
+  - `Robot.offlineEvaluationProvenance` (`{ "oev_…": EvalProvenance }`, optional): how each
+    linked offline evaluation ran, as the account declares it, since an import's labels need not
+    say. Fields `run`, `perception`, `control`, `planner`, `runner`, `transport`, each optional,
+    one line of at most 80 characters. The eval shows them as one line under its title
+    ("MuJoCo planner run · Simulator-state perception · Scripted IK · Qwen on Jetson (real calls)
+    · Runner: Mac · Transport: …") and under Details, the dashboard's evidence row shows its
+    eval's, and the robot's evals list shows each runner. Declared, never checked by Convoy.
+    Keys must be offline evaluation ids; an entry for one the robot does not link is a warning
+    and is ignored, and `linkOfflineEvaluations` drops the entries of the links it removes.
   - `EvalRun.recordedEvaluationId` (`eva_…`): a stored run whose metrics and rollouts
     come from that evaluation. `EvalRun.recordedEpisodeId` (`epi_…`): a one-episode run.
   - `Rollout.episodeId` (`epi_…`): a stored rollout backed by a real episode.
@@ -154,10 +163,38 @@ device's latest requests). The metric names are the simulator's
   with a reported intervention is not autonomous whatever else is missing. Definitions are behind
   each panel's info toggle. End-to-end tests: `tests/e2e/configurations-evidence.spec.ts`.
 
+## Slices and planner calls
+
+An offline eval's episodes form slices when they report two or more `slice` texts (`slices.ts`,
+pure, unit-tested). A slice is the simulator's eval slice, e.g. `nominal` or `pill_count_30`, shown
+"Nominal" and "Pill count 30". Slices ran under different conditions, so their results are never
+pooled into one rate:
+
+- **Eval page.** One success tile per slice ("Success · Nominal", 3/5), then Episodes and Median
+  time, labelled "all slices". The Slices table puts the slices side by side: success, seeds, pills
+  placed, failed decisions, planner calls by result, on-device and end-to-end p50 and p95 per
+  decision, median steps and time. Metrics has one mean per slice, and Rollouts a Slice column. The
+  evidence panels show one slice at a time, chosen in a segmented control (`?slice=`, the first
+  slice by default) and named in each panel's scope line.
+- **Dashboard, configuration card, robot page.** The newest scored eval's success per slice
+  ("Nominal 3/5 · Pill count 30 0/5"). An offline eval's slices need its episodes, so these wait
+  for them rather than show a pooled rate first. The robot page's tiles describe its newest eval
+  only, since one robot's evals may have run differently; its evals list names each import, its
+  declared runner and its date.
+- **Planner calls by result** (Autonomy panel, Slices table, Metrics): a valid reply; a reply the
+  executive refused (`planner_invalid_choice`, `planner_invalid_json`, `planner_invalid_schema`:
+  the model answered and the answer was not usable); a device or transport failure
+  (`planner_device_errors`, `planner_http_errors`, `planner_timeouts`: no answer came back). Both
+  unusable kinds are always shown, a 0 as 0; a part an episode does not report makes its total
+  Not reported.
+
+End-to-end tests: `tests/e2e/configurations-slices.spec.ts` (two evals of one simulator, the same
+task run from two machines).
+
 ## Tests
 
 - Unit: `npm run test:configurations` (selectors, runs, create, mutations, client
-  contract, validation, live poller, sample).
+  contract, validation, live poller, sample, evidence, slices).
 - End to end: `tests/e2e/configurations*.spec.ts`, every API mocked
   (`tests/e2e/support/configurations.ts`, documents API in `support/documents.ts`).
   `configurations-journeys.spec.ts` records video, a trace and milestone screenshots of

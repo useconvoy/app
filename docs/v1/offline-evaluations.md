@@ -93,3 +93,7 @@ printed: `CONVOY_SERVER`, then `CONVOY_API_TOKEN` (the API, `/api/v1`) or `CONVO
 `--dry-run` checks sizes without uploading; `--write-example DIR` writes generic frames to try it.
 
 In Configurations: Add robot → **Simulator · offline**, or a simulator's Details → Offline evals.
+Episodes that report different `metrics.slice` values are shown per slice, never as one pooled
+rate. How an import ran (simulator, perception, control, planner, runner, transport) is declared
+on the robot that links it (`Robot.offlineEvaluationProvenance`, see
+`website/src/lib/configurations/README.md`); the import's labels need not say.

@@ -6,7 +6,7 @@ import { platformPaths, standaloneMissions } from "@/lib/configurations/runs";
 import type { PlatformEvaluation, PlatformMission, PlatformProject } from "@/lib/configurations/runs";
 import { notifySessionExpired } from "@/lib/configurations/session-events";
 import { api, ApiError, errorText } from "@/lib/platform/client";
-import type { Episode, OfflineEvaluation } from "@/lib/platform/client";
+import type { Episode, OfflineEvaluation, OfflineEvaluationDetail } from "@/lib/platform/client";
 
 export type Remote<T> =
   | { status: "idle" }
@@ -93,6 +93,14 @@ export function useOfflineEvaluations(enabled: boolean): { state: Remote<Offline
     ? { status: "ready", data: Array.isArray(state.data?.items) ? state.data.items as OfflineEvaluation[] : [] }
     : state, [state]);
   return { state: mapped, retry };
+}
+
+/** Offline evaluations with their episodes (`offline-evaluations/{id}`), keyed by id; empty ids are skipped. Reads are shared with every page. */
+export function useOfflineDetails(ids: ReadonlyArray<string | null | undefined>): ReadonlyMap<string, Remote<OfflineEvaluationDetail>> {
+  const key = [...new Set(ids.filter((id): id is string => !!id))].join("\n");
+  const list = useMemo(() => key ? key.split("\n") : [], [key]);
+  const { reads } = usePlatformReads(list.map(platformPaths.offlineEvaluation));
+  return useMemo(() => new Map(list.map(id => [id, (reads.get(platformPaths.offlineEvaluation(id)) ?? { status: "loading" }) as Remote<OfflineEvaluationDetail>])), [list, reads]);
 }
 
 /**

@@ -169,13 +169,15 @@ test("L1 · live, read-only: configurations, a robot's evals, an eval's rollouts
       await page.getByRole("tab", { name: /^Evals/ }).click();
       const evals = rows(page, "Evals");
       await expect(evals.first()).toBeVisible({ timeout: 30_000 });
-      const links = await evals.locator("a.cv-row-link").evaluateAll(nodes => nodes.slice(0, 6).map(node => ({ label: node.textContent?.trim() ?? "", path: node.getAttribute("href") ?? "" })));
+      // The eval's own label ("Eval 3"), without its tags or the runner and date shown under it on a phone.
+      const links = await evals.locator("a.cv-row-link").evaluateAll(nodes => nodes.slice(0, 6).map(node => ({ label: /^Eval \d+/.exec(node.textContent?.trim() ?? "")?.[0] ?? node.textContent?.trim() ?? "", path: node.getAttribute("href") ?? "" })));
       if (!links.length) continue;
       if (!opened) await milestone(page, testInfo, "L1-03-robot-evals");
       for (const run of links) {
         await page.goto(run.path);
         await expect(h1(page)).toHaveText(run.label);
-        await expect(page.getByRole("group", { name: "Success rate", exact: true })).toBeVisible();
+        // One success rate, or one per slice when the eval's episodes form slices.
+        await expect(page.getByRole("group", { name: /^Success( rate$| · )/ }).first()).toBeVisible();
         if (!opened) { await milestone(page, testInfo, "L1-04-eval"); opened = true; }
         const replay = page.getByRole("button", { name: /^Replay / });
         if (!(await replay.count())) continue;

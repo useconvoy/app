@@ -237,7 +237,8 @@ test.describe("robot", () => {
     await expect(rows(page, "Evals")).toHaveCount(3);
     await expect(rows(page, "Evals").locator("th")).toHaveText(["Eval 3", "Eval 2", "Eval 1"]);
     await expect(rows(page, "Evals").locator(".cv-badge")).toHaveText(["Passed", "Passed", "Below gate"]);
-    await expect(tile(page, "Episodes")).toContainText("180");
+    // The tiles describe the newest eval: evals are never pooled.
+    await expect(tile(page, "Episodes")).toContainText("60Eval 3");
     await rows(page, "Evals").first().click();
     await expect(h1(page)).toHaveText("Eval 3");
   });
@@ -370,7 +371,7 @@ test.describe("offline evals", () => {
     await expect(rows(page, "Evals")).toHaveCount(2);
     await expect(rows(page, "Evals").locator("th")).toHaveText(["Eval 2Offline sim", "Eval 1Offline sim"]);
     await expect(rows(page, "Evals").locator(".cv-badge")).toHaveText(["Completed", "Completed"]);
-    await expect(tile(page, "Episodes")).toContainText("3");
+    await expect(tile(page, "Episodes")).toContainText("1Eval 2");
     expect(platform.paths).toContain("offline-evaluations");
     await page.getByRole("tab", { name: "Details" }).click();
     await expect(page.locator(".cv-facts")).toContainText("2 linked");

@@ -109,12 +109,17 @@ test.describe("evidence panels", () => {
       "Autonomous episodes0 / 100 %", "Interventions per episode2.929 in 10 episodes", "Per 100 decisions9.429 in 308",
       "Decisions between10.6interventions, mean", "Accepted on first call–Not reported", "Decisions308valid + failed",
     ]);
-    await expect(card.locator("thead th")).toHaveText(["Intervention", "Events", "Episodes"]);
-    await expect(card.locator("tbody tr")).toHaveText(["Failed decision157", "Protective stop81", "Unfinished episode66", "Arm–arm contactNot counted1401"]);
-    await expect(card.locator("tbody tr").last(), "shown, not counted").toHaveClass("cv-au__uncounted");
+    const interventions = card.getByRole("table", { name: "Interventions by type" });
+    await expect(interventions.locator("thead th")).toHaveText(["Intervention", "Events", "Episodes"]);
+    await expect(interventions.locator("tbody tr")).toHaveText(["Failed decision157", "Protective stop81", "Unfinished episode66", "Arm–arm contactNot counted1401"]);
+    await expect(interventions.locator("tbody tr").last(), "shown, not counted").toHaveClass("cv-au__uncounted");
+    // This fixture records invalid choices only: the other refusal and failure counts are Not reported, never 0.
+    await expect(card.getByRole("table", { name: "Planner calls by result" }).locator("tbody tr")).toHaveText([
+      "Valid reply29310", "Refused by the executive–Not reported–Not reported", "Device or transport failure–Not reported–Not reported",
+    ]);
     await expect(card.locator(".cv-ev__facts > div")).toHaveText(["Planner calls378 · 78 % valid", "Counts reported10 of 10 episodes"]);
     await card.getByRole("button", { name: "Autonomy: definitions" }).click();
-    await expect(card.locator(".cv-ev__definitions dt")).toHaveText(["Intervention", "Autonomous episode", "Decisions", "Failed decision", "Protective stop", "Unfinished episode", "Arm–arm contact", "First call"]);
+    await expect(card.locator(".cv-ev__definitions dt")).toHaveText(["Intervention", "Autonomous episode", "Decisions", "Refused", "Device or transport failure", "Failed decision", "Protective stop", "Unfinished episode", "Arm–arm contact", "First call"]);
     await axe(page);
     await card.getByRole("button", { name: "Autonomy: definitions" }).click();
 

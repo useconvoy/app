@@ -7,7 +7,7 @@
  * Unknown keys are reported as warnings and kept.
  */
 import { isInternalHref } from "./routes";
-import { CONFIGURED_DEVICE, ID_PATTERN, ROBOT_PREVIEW_IDS, WORKSPACE_SCHEMA_VERSION } from "./types";
+import { CONFIGURED_DEVICE, EVAL_PROVENANCE_FIELDS, ID_PATTERN, ROBOT_PREVIEW_IDS, WORKSPACE_SCHEMA_VERSION } from "./types";
 import type { ConvoyWorkspace } from "./types";
 
 export interface ValidationIssue { path: string; message: string }
@@ -270,7 +270,27 @@ const metrics = ["cpuPct", "gpuPct", "memAvailableMiB", "socTempC", "boardPowerW
 /** At most this many offline evaluations per robot (an account keeps at most 100). */
 export const MAX_OFFLINE_LINKS = 100;
 /** An offline evaluation id as the control plane issues it. */
-const offlineEvaluationId: Check = (v, p, ctx) => { if (typeof v !== "string" || !/^oev_[a-z0-9]{12}$/.test(v)) ctx.issue(p, "expected an offline evaluation id (oev_ and 12 letters or digits)"); };
+const OFFLINE_EVALUATION_ID = /^oev_[a-z0-9]{12}$/;
+const offlineEvaluationId: Check = (v, p, ctx) => { if (typeof v !== "string" || !OFFLINE_EVALUATION_ID.test(v)) ctx.issue(p, "expected an offline evaluation id (oev_ and 12 letters or digits)"); };
+/** Longest provenance text (`EvalProvenance`): one short line. */
+export const MAX_PROVENANCE_TEXT = 80;
+const provenanceText: Check = (v, p, ctx) => {
+  if (typeof v !== "string" || !v.trim()) return ctx.issue(p, "expected a non-empty string");
+  if (v.length > MAX_PROVENANCE_TEXT) return ctx.issue(p, `expected at most ${MAX_PROVENANCE_TEXT} characters`);
+  if ([...v].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) ctx.issue(p, "expected one line of text");
+};
+const evalProvenance = obj(Object.fromEntries(EVAL_PROVENANCE_FIELDS.map(field => [field, opt(provenanceText)])));
+/** `Robot.offlineEvaluationProvenance`: declared provenance keyed by offline evaluation id. */
+const offlineEvaluationProvenance: Check = (v, p, ctx) => {
+  if (!isRecord(v)) return ctx.issue(p, "expected an object keyed by offline evaluation id");
+  const keys = Object.keys(v);
+  if (keys.length > MAX_OFFLINE_LINKS) ctx.issue(p, `expected at most ${MAX_OFFLINE_LINKS} offline evaluations`);
+  for (const key of keys) {
+    if (RESERVED_KEYS.has(key)) ctx.issue(join(p, key), "is a reserved key and is not allowed");
+    else if (!OFFLINE_EVALUATION_ID.test(key)) ctx.issue(join(p, key), "expected an offline evaluation id (oev_ and 12 letters or digits) as the key");
+    else evalProvenance(v[key], join(p, key), ctx);
+  }
+};
 const flag = obj({
   id: req(id), rule: req(oneOf(["soc-temp", "board-power", "memory", "edge-p95", "cloud-timeouts", "fallback", "no-report", "safety-stop", "manual"])),
   severity: req(oneOf(["warning", "attention"])), label: req(str), detail: req(str), at: req(time), note: opt(str), by: opt(str), provenance: req(provenance),
@@ -279,6 +299,7 @@ const robot = obj({
   id: req(id), name: req(str), configId: req(nullableId), role: req(oneOf(["test", "production"])), site: req(text), rev: req(nullableId),
   deviceId: opt((v, p, ctx) => { if (v !== CONFIGURED_DEVICE) id(v, p, ctx); }),
   projectId: opt(nullableId), platformRobotId: opt(nullableId), offlineEvaluationIds: opt(arr(offlineEvaluationId, { max: MAX_OFFLINE_LINKS })),
+  offlineEvaluationProvenance: opt(offlineEvaluationProvenance),
   kind: req(oneOf(["robot", "bench", "simulator"])), description: opt(str),
   health: req(oneOf(["healthy", "degraded", "attention", "offline", "not-reported"])), healthReason: opt(nullable(text)),
   flags: req(arr(flag)),
@@ -296,6 +317,12 @@ const robot = obj({
   if (v.deviceId !== undefined && v.telemetry !== undefined) ctx.issue(join(p, "telemetry"), "a robot with a live device binding gets telemetry from the device and must not store it");
   if (typeof v.platformRobotId === "string" && typeof v.projectId !== "string") ctx.issue(join(p, "platformRobotId"), "needs the projectId it belongs to");
   if (Array.isArray(v.offlineEvaluationIds) && new Set(v.offlineEvaluationIds).size !== v.offlineEvaluationIds.length) ctx.issue(join(p, "offlineEvaluationIds"), "lists an offline evaluation twice");
+  if (isRecord(v.offlineEvaluationProvenance)) {
+    const linked = new Set(Array.isArray(v.offlineEvaluationIds) ? v.offlineEvaluationIds : []);
+    for (const key of Object.keys(v.offlineEvaluationProvenance)) {
+      if (OFFLINE_EVALUATION_ID.test(key) && !linked.has(key)) ctx.warn(join(join(p, "offlineEvaluationProvenance"), key), "describes an offline evaluation this robot does not link and is ignored");
+    }
+  }
   if (v.configId === null && v.rev !== null) ctx.issue(join(p, "rev"), "an unattached robot has no revision");
   if (typeof v.configId === "string" && v.rev === null) ctx.issue(join(p, "rev"), "an attached robot needs the revision it runs");
 });

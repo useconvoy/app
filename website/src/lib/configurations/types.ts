@@ -361,6 +361,12 @@ export interface Robot {
    * (`offlineEvaluationsFor`).
    */
   offlineEvaluationIds?: string[];
+  /**
+   * How each linked offline evaluation was run, keyed by its id (`oev_…`): declared by the account,
+   * since an import's labels need not say, and never checked by Convoy. An entry for an evaluation the
+   * robot does not link is ignored.
+   */
+  offlineEvaluationProvenance?: Record<string, EvalProvenance>;
   kind: RobotKind;
   description?: string;
   /** Declared or sample health; a bound robot's health is derived from live data. */
@@ -375,6 +381,17 @@ export interface Robot {
   registeredAt: string;
   agentVersion?: string | null;
 }
+
+/** The fields of an `EvalProvenance`, in the order an eval shows them. */
+export const EVAL_PROVENANCE_FIELDS = ["run", "perception", "control", "planner", "runner", "transport"] as const;
+export type EvalProvenanceField = (typeof EVAL_PROVENANCE_FIELDS)[number];
+/**
+ * How an offline evaluation's episodes were produced, in short text the eval shows as one line, e.g.
+ * "MuJoCo planner run · Simulator-state perception · Scripted IK · Qwen on Jetson (real calls) ·
+ * Runner: Mac · Transport: Legacy portal chat relay". Every field is optional; at most
+ * `MAX_PROVENANCE_TEXT` characters (validate.ts).
+ */
+export type EvalProvenance = Partial<Record<EvalProvenanceField, string>>;
 
 /* ---------- Evaluations ---------- */
 

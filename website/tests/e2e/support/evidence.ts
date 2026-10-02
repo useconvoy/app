@@ -40,10 +40,13 @@ export function evidenceDocument(targets: LatencyTarget[] | null = TARGETS): Con
 /**
  * Serves the planner eval beside the contract offline evaluations (registered after `mockApi`, so it
  * answers first); `change` edits its episodes' metrics, e.g. to drop a field. Other paths fall through.
+ * The episodes' slices are left out: these panels' tests read an eval as a whole, and a sliced eval
+ * shows one slice at a time (tests/e2e/configurations-slices.spec.ts).
  */
 export async function mockPlannerEval(page: Page, change?: (metrics: Record<string, unknown>, index: number) => void) {
   const episodes = PLANNER_EPISODES.map((episode, i) => {
     const metrics: Record<string, number | string> = { ...episode.metrics };
+    delete metrics.slice;
     change?.(metrics, i);
     return { ...episode, metrics };
   });

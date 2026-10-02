@@ -6,9 +6,18 @@
 
 /* ---------- the row: two cards side by side, equal in height, feet aligned ---------- */
 .cv-ev-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
-.cv-ev-row > .cv-ev:only-child { grid-column: 1 / -1; }
+/* A card alone spans the row (the bar above it is a div). */
+.cv-ev-row > .cv-ev:only-of-type { grid-column: 1 / -1; }
 .cv-ev-row--dashboard { margin: 24px 0; }
 .cv-tabpanel > .cv-ev-row + .cv-card { margin-top: 16px; }
+/* Above the cards, the width of the row: how the eval ran (dashboard) and which slice the cards show. */
+.cv-ev-bar { display: flex; flex-wrap: wrap; grid-column: 1 / -1; align-items: center; justify-content: space-between; gap: 8px 24px; margin-bottom: 12px; }
+.cv-ev-bar > .cv-provenance { flex: 1 1 360px; margin: 0; }
+.cv-ev-slices { display: inline-flex; flex: none; align-items: center; gap: 10px; }
+.cv-ev-slices__label { color: var(--text-secondary); font-size: .75rem; font-weight: 500; }
+.cv-segment--inline { display: inline-grid; background: var(--surface); }
+.cv-segment--inline .cv-segment__item { min-height: 32px; padding: 0 14px; font-size: .8125rem; white-space: nowrap; }
+.cv-ev-none { grid-column: 1 / -1; margin: 0; padding: 14px 20px; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: var(--radius); color: var(--text-secondary); font-size: .8125rem; }
 
 /* ---------- card: head, body and foot are three rows of the row's grid, shared by the cards beside it ---------- */
 .cv-card.cv-ev { display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 0; min-width: 0; margin-top: 0; }
@@ -82,17 +91,25 @@
 .cv-au__value { font-size: 1.25rem; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; white-space: nowrap; }
 .cv-au__sub { overflow: hidden; color: var(--text-secondary); font-size: .75rem; white-space: nowrap; text-overflow: ellipsis; }
 .cv-au__table .cv-tag { margin-left: 8px; }
+/* Equal number columns, so the interventions and the planner calls below them line up. */
+.cv-au__table :is(th, td):not(:first-child) { width: 76px; }
+.cv-au__table + .cv-au__table { margin-top: 4px; }
 .cv-au__table tbody .cv-au__uncounted > * { color: var(--text-secondary); }
 .cv-au__line { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; color: var(--text-secondary); font-size: .75rem; list-style: none; }
 .cv-au__line li { white-space: nowrap; }
 .cv-au__line b { margin-left: 6px; color: var(--text-primary); font-weight: 500; font-variant-numeric: tabular-nums; }
 .cv-au__line .cv-au__uncounted b { color: var(--text-secondary); font-weight: 400; }
 .cv-au__note { margin-left: 6px; }
+/* The compact tile's planner calls by result, on the line below the interventions. */
+.cv-au__calls { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: -6px 0 0; padding: 0; color: var(--text-secondary); font-size: .75rem; list-style: none; }
+.cv-au__calls li { white-space: nowrap; }
+.cv-au__calls b { margin-left: 6px; color: var(--text-primary); font-weight: 500; font-variant-numeric: tabular-nums; }
 
 /* ---------- smaller screens ---------- */
 @media (max-width: 899px) {
   /* Stacked: each card sizes to its own content. */
   .cv-ev-row { grid-template-columns: minmax(0, 1fr); row-gap: 16px; }
+  .cv-ev-bar { margin-bottom: 0; }
   .cv-card.cv-ev { display: flex; flex-direction: column; grid-row: auto; }
 }
 @media (max-width: 639px) {
@@ -108,6 +125,9 @@
   .cv-au__kpis--compact .cv-au__kpi { flex-direction: row; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 12px; }
   .cv-au__kpis--compact .cv-au__kpi dd { display: flex; align-items: baseline; gap: 8px; margin: 0; padding: 0; }
   .cv-au__kpis--compact .cv-au__value { font-size: 1rem; }
+}
+@media (pointer: coarse) {
+  .cv-segment--inline .cv-segment__item { min-height: 40px; }
 }
 @media (forced-colors: active) {
   .cv-lb__seg, .cv-lb__swatch, .cv-lb__ref, .cv-lb__ref::after { forced-color-adjust: none; }

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import { EpisodeReplay } from "../EpisodeReplay";
-import { getSuite, resolveRobotRoute, useWorkspace } from "@/lib/configurations/client";
+import { getSuite, offlineProvenance, provenanceItems, resolveRobotRoute, useWorkspace } from "@/lib/configurations/client";
 import { fmtCount, fmtFixed, fmtNumber, fmtSeconds, fmtWhen } from "@/lib/configurations/format";
 import { emptyWorkspace } from "@/lib/configurations/mutations";
 import { routes } from "@/lib/configurations/routes";
@@ -12,7 +12,9 @@ import {
   runShare, seedSlices, sliceViews, storedRunRollouts, storedRunView,
 } from "@/lib/configurations/runs";
 import type { MetricView, PlatformEvaluation, PlatformMission, RolloutView, RunView, SliceView } from "@/lib/configurations/runs";
-import type { Robot } from "@/lib/configurations/types";
+import { evalSlices, FAILED_METRICS, isSliced, REFUSED_METRICS, seedText, sliceSummary } from "@/lib/configurations/slices";
+import type { SliceSummary } from "@/lib/configurations/slices";
+import type { EvalProvenance, Robot } from "@/lib/configurations/types";
 import type { Episode, OfflineEvaluationDetail } from "@/lib/platform/client";
 import { AppShell, PageHeader, type Crumb } from "../AppShell";
 import { Missing, ResultBadge, RolloutBadge, Tag } from "../Badges";
@@ -25,8 +27,10 @@ import { usePlatform } from "../platform";
 import { EmptyState, LoadingState, NotFoundState } from "../States";
 import { TabPanel, Tabs, useQueryTab, type TabItem } from "../Tabs";
 import { Card, Facts, Tile, Tiles } from "../Tiles";
+import { ProvenanceLine } from "../SliceResults";
 import { useRobotViews } from "../useRobots";
 import { EvalEvidence } from "../evidence/EvidenceRow";
+import { SliceComparison } from "./EvalSlices";
 
 const EMPTY = emptyWorkspace(0);
 /** "Seed 0" or "Seeds 0–9". */
@@ -47,7 +51,16 @@ interface RunModel {
   details: Array<{ label: string; value: ReactNode | null }>;
   /** Offline evaluations: the mean of each numeric metric the episodes report. */
   metrics?: MetricView[];
+  /** A sliced offline evaluation: each slice's results, shown side by side and never pooled. */
+  sliced?: SliceSummary[];
+  /** A sliced offline evaluation: each episode's slice, by episode id. */
+  sliceOf?: ReadonlyMap<string, string>;
+  /** A sliced offline evaluation: each slice's metric means. */
+  sliceMetrics?: SliceMetrics[];
+  /** Offline evaluations: how the eval ran, as the robot declares it. */
+  provenance?: EvalProvenance | null;
 }
+interface SliceMetrics { key: string; label: string; episodes: number; metrics: MetricView[] }
 
 /**
  * Eval page (`…/evals/[runId]`): result, metric tiles, slices and rollouts; the ids
@@ -147,14 +160,25 @@ export function EvalRunPage({ configId, robotId, runId }: { configId: string; ro
       const data = offline.state.data;
       const rollouts = offlineRollouts(data);
       const summary = data.summary;
+      const groups = evalSlices(data.episodes);
+      const sliced = isSliced(groups);
+      const provenance = offlineProvenance(robot, data.id);
       model = {
-        view: offlineView(data, number ?? 0), rollouts, slices: seedSlices(rollouts), scope: seeds(rollouts), metrics: offlineMetrics(data.episodes),
+        view: offlineView(data, number ?? 0), rollouts, slices: sliced ? [] : seedSlices(rollouts), scope: seeds(rollouts), metrics: offlineMetrics(data.episodes),
         clock: summary.median_wall_seconds !== null ? "Wall clock" : summary.median_sim_seconds !== null ? "Simulated" : null,
+        ...(sliced ? {
+          sliced: groups.map(sliceSummary),
+          sliceOf: new Map(groups.flatMap(group => group.episodes.map(episode => [episode.id, group.label] as const))),
+          sliceMetrics: groups.map(group => ({ key: group.key, label: group.label, episodes: group.episodes.length, metrics: offlineMetrics(group.episodes) })),
+        } : {}),
+        provenance,
         details: [
           { label: "Name", value: data.name },
           { label: "Task", value: data.task },
           { label: "Configuration", value: data.config_label },
           { label: "Policy", value: data.policy_label },
+          ...provenanceItems(provenance).map(item => ({ label: item.label, value: <span title="Declared on the robot, not checked by Convoy">{item.value}</span> })),
+          ...(sliced ? [{ label: "Slices", value: groups.map(group => `${group.label}${group.seeds.length ? ` (seeds ${seedText(group.seeds)})` : ""}`).join(" · ") }] : []),
           { label: "Measurement source", value: [...new Set(data.episodes.flatMap(item => typeof item.metrics.measurement_source === "string" ? [item.metrics.measurement_source] : []))].join("; ") || null },
           { label: "Source", value: <span title={data.scope}>Offline import · unsigned</span> },
           { label: "Offline evaluation", value: <span className="cv-mono">{data.id}</span> },
@@ -198,8 +222,10 @@ function EvalRun({ crumbs, model, robot }: { crumbs: Crumb[]; model: RunModel; r
     document.querySelector<HTMLElement>(`[data-replay="${CSS.escape(previous)}"]`)?.focus({ preventScroll: true });
   }, [rolloutId]);
 
+  const { sliced, sliceOf } = model;
   const columns: Array<Column<RolloutView>> = [
     { key: "episode", header: rollouts.some(row => row.task) ? "Task" : "Episode", cell: row => row.task ?? <span className="cv-mono">{row.episodeId ?? row.id}</span> },
+    ...(sliceOf ? [{ key: "slice", header: "Slice", wide: true, cell: (row: RolloutView) => sliceOf.get(row.id) ?? <Missing /> }] : []),
     { key: "seed", header: "Seed", numeric: true, wide: true, cell: row => row.seed === null ? <Missing /> : String(row.seed) },
     { key: "steps", header: "Steps", numeric: true, wide: true, cell: row => row.steps === null ? <Missing /> : fmtCount(row.steps) },
     { key: "time", header: "Time", numeric: true, wide: true, cell: row => row.seconds === null ? <Missing /> : fmtSeconds(row.seconds) },
@@ -211,18 +237,32 @@ function EvalRun({ crumbs, model, robot }: { crumbs: Crumb[]; model: RunModel; r
 
   return <AppShell crumbs={crumbs}>
     <PageHeader title={view.label} badges={<><ResultBadge result={view.result} progress={view.progress} />{tag}</>} />
+    <ProvenanceLine provenance={model.provenance} />
     <WorkspaceNotice />
-    <Tiles label="Results">
+    {sliced ? <Tiles label="Results">
+      {/* A sliced eval: success per slice; the counts and time that span its slices say so. */}
+      {sliced.map(({ slice }) => {
+        const seeds = seedText(slice.seeds);
+        return <Tile key={slice.key} label={`Success · ${slice.label}`} value={`${slice.successes}/${slice.episodes.length}`}
+          sub={`${fmtFixed(slice.successes / slice.episodes.length * 100, 0)} %${seeds ? ` · ${slice.seeds.length === 1 ? "seed" : "seeds"} ${seeds}` : ""}`} />;
+      })}
+      <Tile label="Episodes" value={view.episodes === null ? null : fmtCount(view.episodes)} sub={`${sliced.length} slices`} />
+      {sliced.length < 3 && <Tile label="Median time" value={view.medianS === null ? null : fmtFixed(view.medianS, 1)} unit="s" sub={model.clock ? `${model.clock} · all slices` : "All slices"} />}
+    </Tiles> : <Tiles label="Results">
       <Tile label="Success rate" value={share === null ? null : fmtFixed(share * 100, 0)} unit="%" sub={view.successes !== null && view.episodes ? `${view.successes} of ${view.episodes}` : undefined} />
       <Tile label="Episodes" value={view.episodes === null ? null : fmtCount(view.episodes)} sub={view.progress ? `of ${view.progress.total}` : model.scope ?? undefined} />
       <Tile label="Median time" value={view.medianS === null ? null : fmtFixed(view.medianS, 1)} unit="s" sub={model.clock ?? undefined} />
       <Tile label="Median steps" value={steps === null ? null : fmtCount(Math.round(steps))} sub={rollouts.length ? `${rollouts.length} ${rollouts.length === 1 ? "rollout" : "rollouts"}` : undefined} />
-    </Tiles>
+    </Tiles>}
     <Tabs tabs={TABS} value={tab} onChange={setTab} label="Eval views" idPrefix="ev" />
     <TabPanel idPrefix="ev" tabId="overview" selected={tab === "overview"}>
       <EvalEvidence robot={robot} view={view} />
-      {slices.length > 0 && <Card title="Slices" flush><SliceTable rows={slices} /></Card>}
-      {!!metrics?.length && <Card title="Metrics" flush>{view.source === "offline" && <p className="cv-muted">Reported simulator measurements, averaged per episode. Imported results do not qualify robot or cloud timing.</p>}<MetricTable rows={metrics} /></Card>}
+      {sliced ? <Card title="Slices" flush><SliceComparison summaries={sliced} /></Card>
+        : slices.length > 0 && <Card title="Slices" flush><SliceTable rows={slices} /></Card>}
+      {!!metrics?.length && <Card title="Metrics" flush>
+        {view.source === "offline" && <p className="cv-muted">Reported simulator measurements, averaged per episode{sliced ? " within each slice" : ""}. Imported results do not qualify robot or cloud timing.</p>}
+        <MetricTable rows={metrics} bySlice={model.sliceMetrics} calls={metrics.some(row => (REFUSED_METRICS as readonly string[]).includes(row.name))} />
+      </Card>}
       <Card title="Rollouts" flush>
         {rollouts.length ? <DataTable label="Rollouts" columns={columns} rows={rollouts} rowKey={row => row.id} rowClass={row => row.id === rolloutId ? "cv-tr-current" : undefined} />
           : <EmptyState title={view.result === "queued" ? "Not started." : "No rollouts yet."} />}
@@ -240,14 +280,41 @@ function EvalRun({ crumbs, model, robot }: { crumbs: Crumb[]; model: RunModel; r
   </AppShell>;
 }
 
-/** Mean per episode of each reported metric, with how many episodes reported it. */
-function MetricTable({ rows }: { rows: readonly MetricView[] }) {
-  const columns: Array<Column<MetricView>> = [
-    { key: "metric", header: "Metric", cell: row => <span title={row.name}>{reportedMetricLabel(row.name)}</span> },
-    { key: "mean", header: "Mean", numeric: true, cell: row => fmtNumber(row.mean, /_(ms|s|m)$/.test(row.name) ? 3 : Math.abs(row.mean) >= 100 ? 0 : 2) },
+const mean = (row: MetricView) => fmtNumber(row.mean, /_(ms|s|m)$/.test(row.name) ? 3 : Math.abs(row.mean) >= 100 ? 0 : 2);
+/** The planner's call results last, refused apart from device or transport failures, each group in a fixed order. */
+const CALL_RESULTS: readonly string[] = [...REFUSED_METRICS, ...FAILED_METRICS];
+const CALL_RESULT_LABELS: Record<string, string> = {
+  planner_invalid_choice: "Refused · invalid choice", planner_invalid_json: "Refused · invalid JSON", planner_invalid_schema: "Refused · invalid schema",
+  planner_device_errors: "Device or transport failure · device error", planner_http_errors: "Device or transport failure · HTTP or transport error",
+  planner_timeouts: "Device or transport failure · timeout",
+};
+const ordered = (rows: readonly MetricView[]) => rows.toSorted((a, b) => CALL_RESULTS.indexOf(a.name) - CALL_RESULTS.indexOf(b.name) || a.name.localeCompare(b.name));
+
+/**
+ * Mean per episode of each reported metric, with how many episodes reported it; `bySlice`: one mean
+ * per slice instead (a slice's episodes only), so no mean pools slices. `calls`: the episodes report
+ * the planner's call results, which are then labelled as refused or as device or transport failures.
+ */
+function MetricTable({ rows, bySlice, calls }: { rows: readonly MetricView[]; bySlice?: readonly SliceMetrics[]; calls: boolean }) {
+  const label = (row: MetricView) => <span title={row.name}>{(calls ? CALL_RESULT_LABELS[row.name] : undefined) ?? reportedMetricLabel(row.name)}</span>;
+  const columns: Array<Column<MetricView>> = bySlice ? [
+    { key: "metric", header: "Metric", cell: label },
+    ...bySlice.map((slice): Column<MetricView> => ({
+      key: slice.key, header: slice.label, numeric: true,
+      cell: row => {
+        const found = slice.metrics.find(item => item.name === row.name);
+        if (!found) return <Missing />;
+        // A mean over fewer episodes than the slice has says so.
+        return found.episodes < slice.episodes ? <span title={`${found.episodes} of ${slice.episodes} episodes`}>{mean(found)}<span className="cv-muted"> ({found.episodes}/{slice.episodes})</span></span> : mean(found);
+      },
+    })),
+  ] : [
+    { key: "metric", header: "Metric", cell: label },
+    { key: "mean", header: "Mean", numeric: true, cell: mean },
     { key: "n", header: "Episodes", numeric: true, cell: row => fmtCount(row.episodes) },
   ];
-  return <DataTable label="Metrics" columns={columns} rows={rows} rowKey={row => row.name} />;
+  const table = <DataTable label="Metrics" columns={columns} rows={calls ? ordered(rows) : rows} rowKey={row => row.name} />;
+  return bySlice ? <div className="cv-compare">{table}</div> : table;
 }
 
 const REPORTED_METRIC_LABELS: Record<string, string> = {
