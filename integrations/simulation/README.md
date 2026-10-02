@@ -128,3 +128,24 @@ API and a separate action-policy worker. See the [managed manipulation
 reference](../../examples/manipulation/README.md) for the reproducible three-process
 acceptance run, including cancellation and restart recovery. Its baseline is
 still scripted and runs in offline lockstep.
+
+## Bimanual pill task
+
+`convoy_sim.bimanual_pill_task` (CLI `convoy-sim-pills`) is a second, separate
+scenario: a wheeled bimanual station robot (two 6-DOF arms with parallel
+grippers) putting 20–30 capsule pills into an open bottle, with four
+planner/policy deployment configurations (Edge Qwen, Edge Qwen + GPT Astra,
+GPT Astra, Edge SmolVLA + GPT Astra), seeds × slices evaluation, and recordings
+in the offline import format above (or the hosted journal format). Its skills
+read simulator state and its planner decisions come from a deterministic
+stand-in; the configurations differ by modeled planner latency and outage
+behaviour, and SmolVLA, which has no checkpoint for this robot, places no pills.
+See [docs/bimanual-pill-task.md](docs/bimanual-pill-task.md) for the model, the
+physics note, metrics, results and the format mappings.
+
+```sh
+uv sync --frozen --extra video --extra managed
+uv run --frozen pytest -q tests/test_bimanual_pill_task.py
+uv run --frozen convoy-sim-pills episode --config edge_qwen_edge_skills --slice nominal --seed 0 --output runs/pills
+scripts/pill_task_eval.sh runs/pill-demo     # demo matrix, one importable directory per configuration
+```

@@ -27,6 +27,7 @@ dev = ["pytest>=8,<9", "ruff>=0.12,<0.13"]
 
 [project.scripts]
 convoy-sim = "convoy_sim.cli:main"
+convoy-sim-pills = "convoy_sim.bimanual_pill_task.cli:main"
 
 [build-system]
 requires = ["hatchling>=1.26,<2"]
