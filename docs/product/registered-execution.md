@@ -26,10 +26,41 @@ It offers exact serialized setup files: browser re-serialization would change nu
 and invalidate artifact identity. Saving a release never changes a running robot; deployment can trigger managed reference-worker preparation.
 
 Existing workspace configuration documents remain readable/editable separately; their names are not
-assumed to identify backend applications. Explicit linking/migration of those documents, automatic model
-installation and project onboarding remain unfinished. Task result summaries are available here;
+assumed to identify backend applications. Explicit linking/migration of those documents and automatic model
+installation remain unfinished. Project connection setup is described below. Task result summaries are available here;
 uploaded visual replay for this joint interface is not implemented yet. Existing Sawyer recordings
 keep their existing viewer.
+
+## Project connection setup
+
+Project → Robots → Add robot now creates a one-use enrollment token and command in the registration
+form. Install this revision of `convoy-agent` on the intended computer first. Run the displayed command
+there; the form polls enrollment and selects the newly enrolled connection. Then run its displayed
+agent command to report heartbeats and hardware sensors. Choose a profile, optional fleet, and register.
+The registration API remains the authority for assigning an unassigned caller-owned connection.
+
+Tokens expire after 15 minutes and can be cancelled before use. The command is shell-quoted and each
+token gets a separate relative data directory, avoiding another agent's existing identity. Run both
+commands from the same working directory. The server stores the token hash; GET responses never recover
+the plaintext command. Reloading the page loses the command, and an unused token expires naturally.
+Consumed enrollment is not device revocation: cancellation returns a conflict once a device has claimed
+it. The enrollment's project group is informational; project ownership is checked when creating setup
+and registration enforces the final robot/project/profile/connection relationships.
+
+Set `CONVOY_PUBLIC_URL` to the API origin reachable from the target computer before using this flow
+across machines. Localhost is only appropriate for a same-host API and agent. A simulator enrollment
+uses `--simulate --host-inventory`: it retains simulated-device identity but reports the actual host's
+inventory, sensors and clock provenance, and does not start the older synthetic robot workload. Existing
+`--simulate` demo behavior remains unchanged. The displayed hardware is agent-reported; unavailable
+values remain unknown. This does not discover mechanics, calibrate dynamics or authorize physical motion.
+
+API: `POST /api/v1/robot-connections/enrollments` creates setup for an owned `project_id`, `name` and
+`simulated` flag; `GET /api/v1/robot-connections/enrollments/{id}` reports consumption;
+`POST /api/v1/robot-connections/enrollments/{id}/cancel` cancels unused setup;
+`GET /api/v1/robot-connections/{device-id}` returns caller-owned connection and bounded hardware details.
+Creation is deliberately not replayed through a plaintext idempotency receipt. No new database schema.
+Automatic agent installation and the combined qualification/execution service launcher remain future
+work; the simulator commands below are still required. Existing connections can still be selected.
 
 ## Robot model delivery
 

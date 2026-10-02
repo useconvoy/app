@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import secrets
+import shlex
 import socket
 import subprocess
 import sys
@@ -16,7 +18,7 @@ pytest.importorskip("convoy_server", reason="install the managed extra for the H
 
 import httpx  # noqa: E402
 import uvicorn  # noqa: E402
-from convoy_agent.agent import AgentConfig, enroll  # noqa: E402
+from convoy_agent.agent import AgentConfig  # noqa: E402
 from convoy_server import db  # noqa: E402
 from convoy_server.app import create_app  # noqa: E402
 from convoy_server.config import Settings  # noqa: E402
@@ -37,6 +39,7 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     origin = f"http://127.0.0.1:{sock.getsockname()[1]}"
+    settings.public_url = origin
     server = uvicorn.Server(uvicorn.Config(create_app(settings, start_scheduler=False), log_level="error"))
     thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
     thread.start()
@@ -68,10 +71,18 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
             assert uploaded.status_code == 201, uploaded.text
             source = None
             for simulated in (False, True):
-                token = post("enrollments", {"label": "acceptance", "simulated": simulated})["token"]
-                state = tmp_path / ("simulator" if simulated else "physical")
-                enroll(state, server=origin, token=token, name=state.name, simulate=simulated)
+                connection = post("robot-connections/enrollments", {"project_id": project["id"], "name": "acceptance", "simulated": simulated})
+                arguments = shlex.split(connection["command"])
+                state = tmp_path / connection["data_dir"]
+                claimed = subprocess.run([sys.executable, "-m", "convoy_agent.cli", *arguments[1:]],
+                                         cwd=tmp_path, capture_output=True, text=True, timeout=25, check=False)
+                assert claimed.returncode == 0, claimed.stderr
                 cfg = AgentConfig(state)
+                connected = client.get(f"/api/v1/robot-connections/enrollments/{connection['enrollment']['id']}").json()
+                assert connected["enrollment"]["status"] == "consumed"
+                assert connected["device"]["id"] == cfg.data["device_id"]
+                assert connected["device"]["hardware"]["arch"] == platform.machine()
+                assert connected["device"]["hardware"]["synthetic"] is False
                 body = {"project_id": project["id"], "name": state.name, "profile_id": profile["id"],
                         "device_id": cfg.data["device_id"], "kind": "simulated" if simulated else "physical"}
                 if simulated:

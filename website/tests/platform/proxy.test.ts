@@ -36,6 +36,11 @@ function request(path: string, options: RequestInit = {}) {
 }
 
 test("allowlist excludes controller/device writes, path traversal, unknown query keys and duplicate scope", () => {
+  for (const [path, method] of [["robot-connections/enrollments", "POST"], ["robot-connections/enrollments/enr_one", "GET"], ["robot-connections/enrollments/enr_one/cancel", "POST"], ["robot-connections/dev_one", "GET"]]) {
+    assert.equal(allowedPlatformPath(path.split("/"), method, new URLSearchParams()), `/api/v1/${path}`);
+    assert.equal(allowedPlatformPath(path.split("/"), method, new URLSearchParams("url=https://elsewhere.test")), null);
+  }
+  assert.equal(allowedPlatformPath(["robot-connections", "dev_one"], "POST", new URLSearchParams()), null);
   assert.equal(allowedPlatformPath(["robots"], "GET", new URLSearchParams("project_id=prj_one")), "/api/v1/robots?project_id=prj_one");
   assert.equal(allowedPlatformPath(["deployments"], "GET", new URLSearchParams("project_id=prj_one&robot_id=rob_one")), "/api/v1/deployments?project_id=prj_one&robot_id=rob_one");
   assert.equal(allowedPlatformPath(["applications", "app_one", "qualification"], "GET", new URLSearchParams("release_id=rel_one")), "/api/v1/applications/app_one/qualification?release_id=rel_one");

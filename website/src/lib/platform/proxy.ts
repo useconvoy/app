@@ -116,6 +116,7 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
       || new RegExp(`^(devices|robots|robot-profiles|applications|deployments|missions|episodes)/${ID}$`).test(path)
       || new RegExp(`^robots/${ID}/qualification$`).test(path)
       || new RegExp(`^robot-profiles/${ID}/simulation-assets$`).test(path)
+      || new RegExp(`^robot-connections/(?:${ID}|enrollments/${ID})$`).test(path)
       || new RegExp(`^applications/${ID}/releases/${ID}/setup$`).test(path)
       || new RegExp(`^applications/${ID}/(releases|evaluation-suites|evaluation-gate)$`).test(path)
       || new RegExp(`^evaluation-suites/${ID}$`).test(path)
@@ -134,6 +135,7 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
       || new RegExp(`^fleets/${ID}/members(?:/${ID}/remove)?$`).test(path)
       || new RegExp(`^robots/${ID}/(missions|qualification)$`).test(path)
       || new RegExp(`^robot-profiles/${ID}/simulation-assets/(mujoco|isaac)$`).test(path)
+      || new RegExp(`^robot-connections/enrollments(?:/${ID}/cancel)?$`).test(path)
       || new RegExp(`^missions/${ID}/cancel$`).test(path)
       || new RegExp(`^evaluations/${ID}/(cancel|promote)$`).test(path)
       || new RegExp(`^(${OFFLINE}|${OFFLINE_EVALUATION}/episodes)$`).test(path);

@@ -9,6 +9,7 @@ import { ConvoyMark } from "@/components/configurations/Icons";
 import { ProjectConfigurations } from "./ProjectConfigurations";
 import { SimulatorReadiness } from "./SimulatorReadiness";
 import { SimulationAssets } from "./SimulationAssets";
+import { ComputerDetails, ConnectionSetup } from "./ConnectionSetup";
 import { ApiError, errorText, MutationAttempts, type Project, type Robot, type Device } from "@/lib/platform/client";
 import { notifySessionExpired } from "@/lib/configurations/session-events";
 import { useProjectResource, type Fleet, type RobotProfile } from "@/lib/projects/client";
@@ -110,7 +111,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
       <div className="cv-tabs" role="tablist" aria-label="Project sections">{["Robots", "Profiles", "Fleets", "Configurations"].map(label => <button key={label} type="button" role="tab" aria-selected={tab === label} onClick={() => setTab(label)}>{label}</button>)}</div>
       {tab === "Robots" && <section aria-label="Robots">
         <p>Physical robots and simulated instances keep separate connections and share a versioned physical profile.</p>
-        {robots.data?.length === 0 && <div className="cv-empty"><h2>No robots yet</h2><p>Import a robot profile, then connect an enrolled device to it.</p><button className="cv-btn cv-btn--primary" onClick={() => setTab("Profiles")}>Add a profile</button></div>}
+        {robots.data?.length === 0 && !adding && <div className="cv-empty"><h2>No robots yet</h2><p>Import a robot profile, then connect an enrolled device to it.</p><button className="cv-btn cv-btn--primary" onClick={() => setTab("Profiles")}>Add a profile</button></div>}
         <div className="cv-table-wrap"><table className="cv-table"><thead><tr><th scope="col">Select</th><th scope="col">Robot</th><th scope="col">Type</th><th scope="col">Profile</th><th scope="col">Fleet</th><th scope="col">Simulation</th></tr></thead><tbody>
           {robots.data?.map(robot => {
             const profile = profiles.data?.find(p => p.id === robot.profile_id);
@@ -182,10 +183,11 @@ function RegistrationForm({ projectId, profiles, devices, fleets, source, onSave
   const [kind, setKind] = useState(source ? "simulated" : "physical");
   const [profileId, setProfileId] = useState(source?.profile_id ?? "");
   const [deviceId, setDeviceId] = useState("");
+  const [connected, setConnected] = useState<Device>();
   const [engine, setEngine] = useState("");
   const [fleetId, setFleetId] = useState("");
   const profile = profiles.find(p => p.id === profileId);
-  const available = devices.filter(d => d.simulated === (kind === "simulated"));
+  const available = [...devices, ...(connected && !devices.some(d => d.id === connected.id) ? [connected] : [])].filter(d => d.simulated === (kind === "simulated"));
   const mutation = useMutation(onSaved);
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -198,8 +200,10 @@ function RegistrationForm({ projectId, profiles, devices, fleets, source, onSave
     <label className="cv-field">Robot type<select aria-label="Robot type" className="cv-input" disabled={!!source} value={kind} onChange={e => { setKind(e.target.value); setDeviceId(""); setEngine(""); }}><option value="physical">Physical robot</option><option value="simulated">Simulated robot</option></select></label>
     <label className="cv-field">Robot profile<select aria-label="Robot profile" className="cv-input" required disabled={!!source} value={profileId} onChange={e => { setProfileId(e.target.value); setEngine(""); }}><option value="">Choose a profile revision</option>{profiles.map(p => <option key={p.id} value={p.id}>{p.name} · revision {p.revision}</option>)}</select></label>
     {kind === "simulated" && <label className="cv-field">Simulation engine<select aria-label="Simulation engine" className="cv-input" required value={engine} onChange={e => setEngine(e.target.value)}><option value="">Choose engine</option>{profile?.simulation.engines.map(e => <option key={e} value={e}>{e === "isaac" ? "NVIDIA Isaac Sim" : "MuJoCo"}</option>)}</select></label>}
-    <label className="cv-field">{kind === "simulated" ? "Enrolled simulator runner" : "Enrolled robot computer"}<select aria-label={kind === "simulated" ? "Enrolled simulator runner" : "Enrolled robot computer"} className="cv-input" required value={deviceId} onChange={e => setDeviceId(e.target.value)}><option value="">Choose a connection</option>{available.map(d => <option key={d.id} value={d.id}>{d.name} · {d.status}</option>)}</select></label>
-    {available.length === 0 && <p>No unassigned {kind === "simulated" ? "simulator runners" : "robot computers"} are enrolled. <Link className="cv-link" href="/app/applications?view=device">Open device connection tools</Link>.</p>}
+    <label className="cv-field">{kind === "simulated" ? "Enrolled simulator runner" : "Enrolled robot computer"}<select aria-label={kind === "simulated" ? "Enrolled simulator runner" : "Enrolled robot computer"} className="cv-input" required value={deviceId} onChange={e => setDeviceId(e.target.value)}><option value="">Choose a connection</option>{available.map(d => <option key={d.id} value={d.id}>{d.name} · {d.status === "never_seen" ? "awaiting heartbeat" : d.status}</option>)}</select></label>
+    {available.length === 0 && <p>No unassigned connections yet. Connect a computer below.</p>}
+    <ConnectionSetup key={kind} projectId={projectId} name={name.trim()} simulated={kind === "simulated"} onConnected={device => { setConnected(device); setDeviceId(device.id); }} />
+    <ComputerDetails deviceId={deviceId} />
     <label className="cv-field">Fleet (optional)<select aria-label="Fleet (optional)" className="cv-input" value={fleetId} onChange={e => setFleetId(e.target.value)}><option value="">Unassigned</option>{fleets.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
     <p>Registration saves identity and profile links. It does not start motion or verify the simulator assets.</p>
     {mutation.error && <p role="alert">{mutation.error}</p>}

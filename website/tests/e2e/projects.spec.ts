@@ -13,10 +13,25 @@ test("project onboarding registers a physical robot and its simulated instance, 
   let readiness: Record<string, unknown> | undefined;
   const model = Buffer.from('<mujoco model="custom-arm"/>');
   let assetStored = false;
+  let connected = false;
+  let connectionStatus = "open";
+  const computer = { id: "dev_physical", name: "Jetson", simulated: false, status: "never_seen",
+    hardware: { arch: "aarch64", mem_total_mb: 7619, cpu_count: 6, gpu_name: null, synthetic: false } };
+  const enrollment = () => ({ enrollment: { id: "enr_setup", status: connectionStatus, expires_at: new Date(Date.now() + 900000).toISOString() }, device: connected ? computer : null });
   await page.route("**/api/platform/**", async route => {
     const path = new URL(route.request().url()).pathname.replace("/api/platform/", "");
     const method = route.request().method();
     if (path === "auth/me") return route.fulfill({ json: { user: { email: "operator@example.test", role: "operator" }, installation: { simulator: true } } });
+    if (path === "robot-connections/enrollments" && method === "POST") {
+      expect(route.request().postDataJSON()).toEqual({ project_id: "prj_lab", name: "Arm 1", simulated: false });
+      connectionStatus = "open";
+      return route.fulfill({ status: 201, json: { ...enrollment(), command: "convoy-agent --data-dir ./convoy-connections/enr_setup enroll --token one-use-test-token",
+        run_command: "convoy-agent --data-dir ./convoy-connections/enr_setup run --no-robot-sim", data_dir: "./convoy-connections/enr_setup" } });
+    }
+    if (path === "robot-connections/enrollments/enr_setup/cancel" && method === "POST") {
+      connectionStatus = "revoked";
+      return route.fulfill({ json: enrollment() });
+    }
     if (path === "robot-profiles/rpf_arm/simulation-assets/mujoco" && method === "POST") {
       expect(route.request().headers()["content-type"]).toBe("application/octet-stream");
       expect(route.request().postDataBuffer()).toEqual(model);
@@ -26,9 +41,10 @@ test("project onboarding registers a physical robot and its simulated instance, 
     if (method === "GET") {
       const resources: Record<string, unknown> = { projects, "robot-profiles": profiles, robots, fleets,
         "robot-profiles/rpf_arm/simulation-assets": [{ engine: "mujoco", stored: assetStored, size_bytes: assetStored ? model.length : null }], "robot-connections": [
-        { id: "dev_physical", name: "Jetson", simulated: false, status: "online" },
+        ...(connected ? [computer] : []),
         { id: "dev_simulated", name: "MuJoCo runner", simulated: true, status: "online" },
-      ] };
+      ], "robot-connections/enrollments/enr_setup": enrollment(), "robot-connections/dev_physical": computer,
+        "robot-connections/dev_simulated": { id: "dev_simulated", name: "MuJoCo runner", simulated: true, status: "online", hardware: { arch: "arm64", synthetic: false } } };
       return route.fulfill({ status: path in resources ? 200 : 404, json: resources[path] ?? { error: "Not found" } });
     }
     const body = route.request().postDataJSON();
@@ -88,7 +104,28 @@ test("project onboarding registers a physical robot and its simulated instance, 
   await page.getByRole("button", { name: "Add robot", exact: true }).click();
   await page.getByLabel("Robot name", { exact: true }).fill("Arm 1");
   await page.getByLabel("Robot profile", { exact: true }).selectOption("rpf_arm");
-  await page.getByLabel("Enrolled robot computer").selectOption("dev_physical");
+  await expect(page.getByText("No unassigned connections yet. Connect a computer below.")).toBeVisible();
+  await page.getByRole("button", { name: "Create connection token" }).click();
+  await expect(page.getByLabel("Connection command")).toContainText("one-use-test-token");
+  await page.getByRole("button", { name: "Cancel connection token" }).click();
+  await expect(page.getByText("The token was cancelled.")).toBeVisible();
+  await expect(page.getByLabel("Connection command")).toHaveCount(0);
+  await page.getByRole("button", { name: "Create connection token" }).click();
+  await expect(page.getByLabel("Connection command")).toBeVisible();
+  connected = true; connectionStatus = "consumed";
+  await page.getByRole("button", { name: "Check connection" }).click();
+  await expect(page.getByLabel("Enrolled robot computer")).toHaveValue("dev_physical");
+  await expect(page.getByLabel("Connection command")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Computer details" })).toContainText("7619 MiB");
+  await expect(page.getByRole("region", { name: "Computer details" })).toContainText("Enrolled; waiting for the agent heartbeat");
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo({ top: 0, behavior: "instant" }); });
+  await page.screenshot({ path: testInfo.outputPath("connection-desktop.png"), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
+  await expect.poll(async () => (await page.getByRole("banner").boundingBox())?.y).toBe(0);
+  await page.screenshot({ path: testInfo.outputPath("connection-mobile.png"), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole("button", { name: "Register robot", exact: true }).click();
   await expect(page.getByRole("row", { name: /Arm 1 Physical/ })).toBeVisible();
   await page.getByRole("button", { name: "Create simulated instance" }).click();

@@ -250,3 +250,30 @@ bundles, external storage and self-service storage management remain unfinished.
 copying for supported uploads, not the remaining enrollment, device discovery, learned-model installation,
 cloud pairing, legacy migration, task/scenario language, Isaac execution, fleet rollout or calibration.
 The earlier timing PR (#118) now has all remote CI checks passing. No new cloud infrastructure was used.
+
+## Project connection setup slice
+
+Branch: `codex/project-connection-setup`, stacked on asset delivery. Add robot now creates a short-lived
+enrollment command, shows its status, supports cancellation and selects the claimed computer in the
+registration form. The form displays bounded agent-reported hardware and distinguishes enrollment from
+an actual heartbeat. Setup uses caller-owned project/enrollment records and the existing registration
+assignment checks. Each command uses a separate data directory and safely quotes user-entered names.
+No plaintext enrollment token is stored in a mutation receipt or returned by status reads.
+
+Simulated-device setup can report the real host's inventory and sensors through `--host-inventory`,
+while preserving simulator identity and legacy synthetic-demo defaults. The actual HTTP/native-MuJoCo
+pipeline executes the generated enrollment CLI commands before profile assignment, asset delivery,
+qualification, deployment and tasks. It verifies real host architecture and non-synthetic inventory.
+
+Verification: 12 SQLite/API setup/registry tests, 11 corresponding PostgreSQL tests, nine agent hardware/
+restart checks, the actual HTTP/native simulation pipeline, 19 frontend platform checks and three
+project browser journeys pass. Browser coverage includes cancellation, automatic connection selection,
+hardware details, accessibility and mobile overflow; desktop and mobile captures were inspected. Lint,
+frontend type checks, token checks and production build pass. The prior asset-delivery PR (#121) now has
+all nine remote CI checks passing. This slice still requires its own remote CI before merge.
+
+Remaining: agent installation and combined runner startup; legacy configuration links; learned-policy
+installation and edge/cloud pairing; repeated timing evaluation and registered-model visual replay;
+scenario/chat tasking; Isaac execution; staged fleet rollout and physical characterization. This setup
+does not scan mechanics or command a physical robot. No hosted rollout, new cloud resources or changes
+to the Jetson's running agent were made.

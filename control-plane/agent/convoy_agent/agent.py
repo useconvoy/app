@@ -143,6 +143,7 @@ def enroll(
     token: str,
     name: str,
     simulate: bool,
+    host_inventory: bool = False,
     seed: int = 1,
     ca_file: str | None = None,
     insecure: bool = False,
@@ -163,13 +164,17 @@ def enroll(
             "server": server.rstrip("/"),
             "name": name,
             "simulate": simulate,
+            "host_inventory": host_inventory,
             "seed": seed,
             "ca_file": ca_file,
             "insecure": insecure,
         }
     )
     cfg.save()  # persisted BEFORE the claim so a lost response can be retried with the same identity
-    inv = hardware.simulated_inventory(seed) if simulate else hardware.inventory()
+    if host_inventory:
+        cfg.data["robot_sim"] = False
+        cfg.save()
+    inv = hardware.simulated_inventory(seed) if simulate and not host_inventory else hardware.inventory()
     client = Client(server, None, ca_file=ca_file, insecure=insecure)
     body = {
         "enrollment_token": token,
@@ -202,6 +207,7 @@ class Agent:
             raise SystemExit("not enrolled: run `convoy-agent enroll` first")
         self.data_dir = Path(data_dir)
         self.simulate = bool(self.cfg.data.get("simulate"))
+        self.synthetic_host = self.simulate and not bool(self.cfg.data.get("host_inventory"))
         self.once = once
         self.device_id = self.cfg.data["device_id"]
         self.server = self.cfg.data["server"]
@@ -216,7 +222,7 @@ class Agent:
         seed = int(self.cfg.data.get("seed", 1))
         self.sensors = (
             hardware.SimulatedSensors(str(self.data_dir), seed)
-            if self.simulate
+            if self.synthetic_host
             else hardware.Sensors(str(self.data_dir))
         )
         env_faults = json.loads(os.environ.get("CONVOY_SIM_FAULTS", "{}") or "{}")
@@ -233,11 +239,11 @@ class Agent:
             deadline_s=float(self.cfg.data.get("request_deadline_s", 30)),
             on_request_done=self._on_request_done,
         )
-        self.boot_id = f"sim-{secrets.token_hex(4)}" if self.simulate else hardware.boot_id()
+        self.boot_id = f"sim-{secrets.token_hex(4)}" if self.synthetic_host else hardware.boot_id()
         # accounting is bound to THIS process incarnation, never to the kernel boot id: a process restart
         # on the same boot must still recover the previous process's durable checkpoint
         self.incarnation = secrets.token_hex(6)
-        self.inventory = hardware.simulated_inventory(seed) if self.simulate else hardware.inventory()
+        self.inventory = hardware.simulated_inventory(seed) if self.synthetic_host else hardware.inventory()
         from .compat import classify_local
 
         self.policy = classify_local(self.inventory)
@@ -253,7 +259,7 @@ class Agent:
             server_base=self.server,
             profile_policy=self.policy,
             inventory=self.inventory,
-            inventory_reader=None if self.simulate else hardware.inventory,
+            inventory_reader=None if self.synthetic_host else hardware.inventory,
             emit=self.emit,
         )
         self.live_nonce: str | None = None
@@ -593,7 +599,7 @@ class Agent:
         body = {
             "seq": seq, "boot_id": self.boot_id, "kind": kind, "source_ts": now_iso(), "agent_version": __version__,
             "observed": self.observed(), "hardware": self.inventory if seq % 20 == 1 else None, "telemetry": sample,
-            "time_confidence": "simulated" if self.simulate else ("server_offset" if self.client.server_offset_s is not None else "unknown"),
+            "time_confidence": "simulated" if self.synthetic_host else ("server_offset" if self.client.server_offset_s is not None else "unknown"),
             "live_nonce": self.live_nonce, "challenge": challenge,
         }  # fmt: skip
         self.emit(
