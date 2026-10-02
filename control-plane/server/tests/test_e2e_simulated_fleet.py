@@ -268,7 +268,9 @@ def test_full_deploy_eval_rollback_and_restart(live_server, tmp_path: Path):
             timeout=30,
         )
         usage = _wait(
-            lambda: (lambda u: u if u["totals"] else None)(admin.get("/api/v1/usage").json()), timeout=90
+            lambda: (lambda u: u if u["totals"].get("inference_requests", 0) >= 1 else None)(
+                admin.get("/api/v1/usage").json()
+            ), timeout=90
         )
         assert usage["totals"].get("inference_requests", 0) >= 1 and usage["devices"][0]["simulated"] is True
     finally:
