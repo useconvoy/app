@@ -28,7 +28,14 @@ episode directories.
   of the skill controller (skill update and IK of both arms) during the step.
 * Episode times are simulated: ``sim_seconds`` is set and ``wall_seconds`` is
   left out, so Convoy shows simulated time. ``planner_ms`` is the median
-  modeled latency of the episode's skill-planner calls.
+  modeled latency of the episode's skill-planner calls; for a planner on a
+  connected device it is the median measured end-to-end round trip of the calls
+  the model answered, ``skill`` lists the skills the model chose, and the
+  metrics are the device calls' measured counts and latencies.
+* The import's frame shape has no planner fields, so the calls that completed
+  during a step are kept in the local ``frames/NNNN.json`` under ``planner``
+  (with each arm's active skill under ``skills``). The import script reads only
+  the frame fields, so they stay local; ``summary.json`` has every call too.
 """
 
 from __future__ import annotations
@@ -61,12 +68,60 @@ def outcome(summary: dict) -> str:
     return TIMEOUT if summary.get("outcome") == "horizon" else FAILURE
 
 
+def _count(summary: dict, *names: str) -> int:
+    skills = summary.get("skills", {})
+    return int(sum(skills.get(name, 0) for name in names))
+
+
+def device_metrics(summary: dict) -> dict:
+    """The import's metrics for an episode planned by the model on a connected device: measured call
+    counts by result, end-to-end and on-device latency, tokens, and the task and safety outcomes.
+    Nothing here is modeled; a value that was not measured is null."""
+    d = summary["device_planner"]
+    by = d.get("by_result", {})
+    return {
+        "pills_total": summary["pills"],
+        "pills_placed": summary["placed"],
+        "fraction_placed": round(summary["fraction_placed"], 4),
+        "time_to_all_placed_s": summary.get("time_to_all_placed_s"),
+        "planner_calls": d["calls"],
+        "planner_valid_replies": by.get("valid", 0),
+        "planner_invalid_json": by.get("invalid_json", 0),
+        "planner_invalid_schema": by.get("invalid_schema", 0),
+        "planner_invalid_choice": by.get("invalid_choice", 0),
+        "planner_device_errors": by.get("device_error", 0),
+        "planner_http_errors": by.get("http_error", 0) + by.get("transport_error", 0),
+        "planner_timeouts": by.get("timeout", 0),
+        "planner_failed_decisions": d.get("failed_decisions", 0),
+        "planner_stale_rejections": d.get("stale_rejections", 0),
+        "planner_e2e_p50_ms": d.get("e2e_p50_ms"),
+        "planner_e2e_p95_ms": d.get("e2e_p95_ms"),
+        "planner_device_p50_ms": d.get("device_p50_ms"),
+        "planner_device_p95_ms": d.get("device_p95_ms"),
+        "planner_ttft_p50_ms": d.get("ttft_p50_ms"),
+        "planner_tokens_in_p50": d.get("tokens_in_p50"),
+        "planner_tokens_out_p50": d.get("tokens_out_p50"),
+        "planner_wait_s": summary.get("planner_wait_s"),
+        "skill_calls": summary.get("skill_attempts", 0),
+        "picks_placed": _count(summary, "placed"),
+        "grasp_failures": _count(summary, "grasp_failed", "pill_moved", "blocked", "timeout"),
+        "pushes": _count(summary, "pushed"),
+        "skills_refused": _count(summary, "no_clear_grasp", "no_clear_push", "unreachable", "policy_unavailable"),
+        "protective_stops": summary.get("protective_stops", 0),
+        "arm_arm_contacts": summary.get("arm_arm_contacts", 0),
+        "max_bottle_tilt_deg": summary.get("max_bottle_tilt_deg"),
+        "slice": summary["slice"],
+        "end_reason": str(summary.get("outcome", summary.get("error", "")))[:200],
+    }
+
+
 def episode_metrics(summary: dict) -> dict:
     """At most 32 lower_snake_case metrics (numbers, booleans, short text) for the import."""
-    skills = summary.get("skills", {})
+    if summary.get("device_planner"):
+        return device_metrics(summary)
 
     def count(*names: str) -> int:
-        return int(sum(skills.get(name, 0) for name in names))
+        return _count(summary, *names)
 
     return {
         "pills_total": summary["pills"],
@@ -98,6 +153,15 @@ def episode_metrics(summary: dict) -> dict:
         "slice": summary["slice"],
         "end_reason": str(summary.get("outcome", summary.get("error", "")))[:200],
     }
+
+
+def chosen_skills(summary: dict) -> str:
+    """The skills the device planner chose and the executive started, e.g. "pick_and_drop ×23, push_apart ×1"."""
+    counts: dict[str, int] = {}
+    for record in summary["device_planner"].get("delivered", []):
+        counts[record] = counts.get(record, 0) + 1
+    text = ", ".join(f"{name} ×{n}" for name, n in sorted(counts.items(), key=lambda kv: -kv[1]))
+    return (text or "no skill chosen")[:64]
 
 
 def write_evaluation(directory: Path, config, task: str, name: str | None = None) -> Path:
@@ -207,7 +271,8 @@ class OfflineReplayRecorder:
              success: bool, terminated: bool, truncated: bool, t: float) -> None:
         both = [float(min(1.0, max(-1.0, v))) for v in extension["left"] + extension["right"]]
         self.rows.append({"index": after, "action": [round(v, 4) for v in both], "reward": round(float(reward), 4),
-                          "success": bool(success), "policy_ms": round(float(trace.policy_ms), 2), "t": round(t, 3)})
+                          "success": bool(success), "policy_ms": round(float(trace.policy_ms), 2), "t": round(t, 3),
+                          "planner": list(trace.planner_calls), "skills": dict(extension.get("skills") or {})})
 
     # --- writing -------------------------------------------------------------------
     def finish(self, episode, summary: dict) -> None:
@@ -219,6 +284,10 @@ class OfflineReplayRecorder:
         for row in [first, *self.rows]:
             index = row["index"]
             frame = {key: row[key] for key in ("index", "action", "reward", "success", "policy_ms")}
+            if row.get("planner") or row.get("skills"):  # local only: the import reads the fields above
+                frame["t"] = row["t"]
+                frame["planner"] = row["planner"]
+                frame["skills"] = row["skills"]
             image = self.images[index]
             if image is None:
                 frame["image_png_base64"] = None  # the player shows the latest earlier image
@@ -229,7 +298,8 @@ class OfflineReplayRecorder:
         skill_planner = summary.get("skill_planner_p50_ms")
         manifest = {
             "steps": len(self.rows), "seed": int(self.seed), "outcome": outcome(summary),
-            "metrics": episode_metrics(summary), "action_labels": list(ACTION_LABELS), "skill": "pick_and_drop",
+            "metrics": episode_metrics(summary), "action_labels": list(ACTION_LABELS),
+            "skill": chosen_skills(summary) if summary.get("device_planner") else "pick_and_drop",
             "planner_ms": skill_planner, "sim_seconds": summary["simulated_duration_s"],
         }
         (self.output / "replay.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")

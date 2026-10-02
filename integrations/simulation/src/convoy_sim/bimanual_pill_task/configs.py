@@ -1,11 +1,17 @@
 """The four demo deployment configurations, motor-policy hooks, and eval slices.
 
-Latency numbers and their sources:
+"Edge Qwen" (``edge_qwen_edge_skills``) calls the real model: every skill decision
+is a request to Qwen2.5-1.5B-Instruct on a connected Jetson through Convoy's
+device chat API (``device_planner``), with no latency model and no stand-in.
+The other three configurations use the rule-based stand-in with modeled latency.
 
-* Edge planner: Qwen2.5-1.5B-Instruct Q4_K_M with llama.cpp CUDA on a Jetson Orin
-  Nano Super 8 GB, Convoy's own measurement (control-plane/docs/VERIFICATION.md):
-  completion p50 122 ms / p95 636 ms in a 1,666-request soak, p50 181 / p95 900 ms
-  in the deploy smoke test. Modeled as p50 150 ms, p95 700 ms.
+Latency numbers and their sources (modeled configurations):
+
+* Edge planner (the skill router of "Edge Qwen + GPT Astra"): Qwen2.5-1.5B-Instruct
+  Q4_K_M with llama.cpp CUDA on a Jetson Orin Nano Super 8 GB, Convoy's own
+  measurement (control-plane/docs/VERIFICATION.md): completion p50 122 ms / p95
+  636 ms in a 1,666-request soak, p50 181 / p95 900 ms in the deploy smoke test.
+  Modeled as p50 150 ms, p95 700 ms.
 * Cloud planner: GPT-6 Astra at low reasoning effort. Artificial Analysis (OpenAI
   API, read 2026-10-01) reports a median time to first answer token of 2.96 s and
   43.2 output tokens/s; a ~40-token skill call adds ~0.9 s, so p50 3.9 s. It
@@ -33,6 +39,16 @@ EDGE_QWEN = PlannerProfile(
     timeout_s=3.0,
     evidence="Convoy Jetson soak: p50 122 ms / p95 636 ms; deploy smoke p50 181 / p95 900 ms",
     concurrency=1,
+)
+EDGE_QWEN_DEVICE = PlannerProfile(
+    name="edge-qwen2.5-1.5b-device",
+    model="Qwen2.5-1.5B-Instruct Q4_K_M, llama.cpp CUDA, Jetson Orin Nano Super 8 GB (connected device)",
+    placement="edge",
+    latency=None,  # every call is measured; nothing is drawn from a model
+    timeout_s=45.0,  # the client's deadline for a terminal result (device_planner.FailurePolicy)
+    evidence="real calls through Convoy's device chat API; end-to-end round trip and on-device latency measured per call",
+    concurrency=1,
+    source="device",
 )
 CLOUD_ASTRA = PlannerProfile(
     name="cloud-gpt-astra",
@@ -93,13 +109,15 @@ class DeploymentConfig:
 
 
 SCRIPTED_POLICY = "Scripted IK skills on sim state; planner choices: rule-based stand-in, modeled latency"
+DEVICE_PLANNER_POLICY = "Scripted IK skills on sim state; planner: Qwen2.5-1.5B on the Jetson, real calls, measured latency"
 
 CONFIGS: dict[str, DeploymentConfig] = {
     c.id: c for c in (
         DeploymentConfig(
-            "edge_qwen_edge_skills", "Edge Qwen", EDGE_QWEN, SCRIPTED_SKILLS,
-            description="Qwen on the robot's Jetson routes every skill call; skills run on the robot.",
-            deployment="Edge: Qwen2.5-1.5B (Jetson Orin Nano) · Cloud: none", policy=SCRIPTED_POLICY),
+            "edge_qwen_edge_skills", "Edge Qwen", EDGE_QWEN_DEVICE, SCRIPTED_SKILLS,
+            description=("Qwen2.5-1.5B on a connected Jetson chooses every skill call from a text description "
+                         "of the simulator state (real calls, measured round trips); scripted skills execute it."),
+            deployment="Edge: Qwen2.5-1.5B (Jetson Orin Nano) · Cloud: none", policy=DEVICE_PLANNER_POLICY),
         DeploymentConfig(
             "edge_qwen_cloud_astra", "Edge Qwen + GPT Astra", EDGE_QWEN, SCRIPTED_SKILLS,
             task_planner=CLOUD_ASTRA,
@@ -178,9 +196,15 @@ def release_manifest(config: DeploymentConfig) -> dict:
     def planner(profile: PlannerProfile | None) -> dict | None:
         if profile is None:
             return None
-        return {"name": profile.name, "model": profile.model, "placement": profile.placement,
-                "latency_p50_s": profile.latency.p50_s, "latency_p95_s": profile.latency.p95_s,
-                "timeout_s": profile.timeout_s, "concurrency": profile.concurrency, "evidence": profile.evidence,
+        out = {"name": profile.name, "model": profile.model, "placement": profile.placement,
+               "timeout_s": profile.timeout_s, "concurrency": profile.concurrency, "evidence": profile.evidence}
+        if profile.source == "device":
+            from .device_planner import settings
+
+            return {**out, "latency": "measured per call (no latency model)",
+                    "decision_policy": "the model on the connected device, through the device chat API",
+                    "request": settings()}
+        return {**out, "latency_p50_s": profile.latency.p50_s, "latency_p95_s": profile.latency.p95_s,
                 "decision_policy": "deterministic rule-based stand-in (GreedyPillPlanner)"}
 
     return {

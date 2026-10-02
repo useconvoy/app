@@ -1,8 +1,11 @@
 """One pills_to_bottle episode: physics, both arms, planners, metrics, recording.
 
-Time is simulated time. A planner call's modeled latency elapses in simulation
-while the arms hold their pose, so planning delays and outages cost task time
-exactly as they would on a robot; this is not wall-clock real-time control.
+Time is simulated time. A planner call's latency elapses in simulation while the
+requesting arm holds its pose, so planning delays and outages cost task time
+exactly as they would on a robot; this is not wall-clock real-time control. The
+latency is modeled for the stand-in planner and measured for a real model on a
+connected device (``device_planner``), whose calls block the simulation in wall
+time and then elapse their measured round trip in simulated time.
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ import numpy as np
 from . import physics as P
 from .configs import EpisodeSpec
 from .control import segment_point_distance
+from .device_planner import DevicePlannerEndpoint
 from .planning import (
     ARM_SEPARATION_M,
     INSTRUCTION,
@@ -83,7 +87,10 @@ class StepTrace:
 
 
 class Episode:
-    def __init__(self, spec: EpisodeSpec, recorder=None):
+    def __init__(self, spec: EpisodeSpec, recorder=None, planner=None, planner_log=None):
+        """`planner` is the device transport (``device_planner.ChatTransport``) a configuration whose skill
+        planner runs on a connected device needs; without one such an episode refuses to start (there is
+        no stand-in for it)."""
         self.spec = spec
         self.recorder = recorder
         cfg, sl = spec.config, spec.slice
@@ -99,7 +106,17 @@ class Episode:
         self.space = Workspace(self.world, {side: slot.controller for side, slot in self.arms.items()})
         rng = np.random.default_rng(stable_hash("latency", cfg.id, sl.id, spec.seed))
         network = sl.network()
-        self.skill_planner = PlannerEndpoint(cfg.skill_planner, network, rng, GreedyPillPlanner(), "skill")
+        self.device = cfg.skill_planner.source == "device"
+        if self.device:
+            if planner is None:
+                raise ValueError(f"{cfg.id} asks the model on a connected device for every decision: pass a device "
+                                 "planner connection (there is no stand-in for this configuration)")
+            self.skill_planner = DevicePlannerEndpoint(
+                cfg.skill_planner, planner, self.observation, sl.pills, network=network,
+                on_record=lambda record: self.trace.planner_calls.append(record),
+                label=f"{sl.id}/{spec.seed}", log=planner_log)
+        else:
+            self.skill_planner = PlannerEndpoint(cfg.skill_planner, network, rng, GreedyPillPlanner(), "skill")
         self.policy_rng = np.random.default_rng(stable_hash("policy", cfg.id, sl.id, spec.seed))
         self.task_planner = (PlannerEndpoint(cfg.task_planner, network, rng, TaskPlanStandIn(), "task")
                              if cfg.task_planner else None)
@@ -112,6 +129,8 @@ class Episode:
         self.gate_open = self.task_planner is None
         self.completed_skills = 0
         self.declined: str | None = None
+        self.stopped: str | None = None  # the device planner stopped (offline, call budget...): see FailurePolicy
+        self.failed_decisions = 0
         self.idle_since: float | None = 0.0
         self.pages = 0
         self.stall_s = 0.0
@@ -160,7 +179,8 @@ class Episode:
     def _on_skill_call(self, call: PlannerCall, t: float) -> None:
         slot = self.arms[call.arm]
         slot.call = None
-        self.trace.planner_calls.append(call_record(call))
+        if not self.device:  # a device call's own records reach the trace as each call completes
+            self.trace.planner_calls.append(call_record(call))
         if call.status != "ok":
             backoff = self.spec.config.retry_backoff_s
             slot.next_request_s = t + backoff[min(slot.failures_in_row, len(backoff) - 1)]
@@ -178,6 +198,8 @@ class Episode:
             conflict = self._arm_conflict(call.arm, pill)
             if conflict is not None:
                 self.rejected_decisions += 1
+                if self.device:
+                    self.skill_planner.mark_stale(call, conflict)
                 self.events.append({"t": round(t, 3), "event": "decision_rejected", "arm": call.arm,
                                     "pill": f"pill_{pill:02d}", "reason": conflict})
                 slot.next_request_s = t  # ask again with a fresh observation
@@ -207,12 +229,19 @@ class Episode:
                 self.attempts[pill] = self.attempts.get(pill, 0) + 1
                 slot.skill = PickAndDrop(self.world, slot.controller, slot.probe, pill, self.space, t)
             self.trace.skill_events.append({"arm": call.arm, "skill": skill_id, "pill": f"pill_{pill:02d}", "event": "start"})
-        elif kind == "wait":
+        elif kind in ("wait", "failed"):
             # Ask again when the other arm finishes a skill (or after 10 s);
-            # meanwhile clear the shared space by returning to rest.
+            # meanwhile clear the shared space by returning to rest. "failed": the
+            # device planner gave no usable action within its calls (FailurePolicy).
+            if kind == "failed":
+                self.failed_decisions += 1
+                self.events.append({"t": round(t, 3), "event": "planner_failed_decision", "arm": call.arm})
             slot.next_request_s = t + 10.0
             slot.waiting = True
             self._park(slot, t)
+        elif kind == "stop":
+            self.stopped = decision.get("reason", "stopped")
+            self.events.append({"t": round(t, 3), "event": "planner_stopped", "reason": self.stopped})
         elif kind == "done":
             slot.finished = True
             self._park(slot, t)
@@ -301,7 +330,7 @@ class Episode:
             # 2. Idle arms ask for their next skill.
             for side, slot in self.arms.items():
                 if (self.gate_open and not slot.finished and slot.call is None and slot.skill is None
-                        and t >= slot.next_request_s and self.declined is None):
+                        and t >= slot.next_request_s and self.declined is None and self.stopped is None):
                     self.request(side, t)
             # 3. Skills and servo commands.
             before = time.perf_counter()
@@ -348,6 +377,8 @@ class Episode:
                 outcome, terminated = "all_pills_in_bottle", True
             elif self.declined is not None and all(s.skill is None for s in self.arms.values()):
                 outcome, terminated = f"planner_declined:{self.declined}", True
+            elif self.stopped is not None and all(s.skill is None for s in self.arms.values()):
+                outcome, terminated = f"planner_stopped:{self.stopped}", True
             elif all(s.finished for s in self.arms.values()) and all(s.skill is None for s in self.arms.values()):
                 outcome, terminated = "planner_done", True
             truncated = not terminated and t >= spec.horizon_s - 1e-9
@@ -388,7 +419,7 @@ class Episode:
 
     def _track_stall(self, t: float) -> None:
         busy = any(s.skill is not None for s in self.arms.values())
-        work_left = self.placed_at is None and self.declined is None
+        work_left = self.placed_at is None and self.declined is None and self.stopped is None
         if busy or not work_left:
             self.idle_since = None
             return
@@ -421,31 +452,24 @@ class Episode:
         return [round(v, 5) for v in per_arm[primary]], extension
 
     def _summary(self, t: float, outcome: str, placed: int, wall_s: float) -> dict:
-        calls = self.skill_planner.calls + (self.task_planner.calls if self.task_planner else [])
-        finished = [c for c in calls if c.status != "pending" and c.completes_s <= t + 1e-9]
-        ok = [c.latency_s for c in finished if c.status == "ok"]
         # Time arms spent waiting for skill decisions: from the request to its answer
         # (queueing included), or to the episode end for a call still out.
         waited = sum((t if c.status == "pending" else min(c.completes_s, t)) - c.submitted_s
                      for c in self.skill_planner.calls)
         outage = sum(max(0.0, min(b, t) - a) for a, b in self.spec.slice.outages if a < t)
-        skill_ok = [c.latency_s for c in finished if c.status == "ok" and c.role == "skill"]
         statuses: dict[str, int] = {}
         for r in self.results:
             statuses[r.status] = statuses.get(r.status, 0) + 1
         n = self.world.n_pills
         lost = int(sum(p.lost for p in self.world.pills()))
-        return {
+        summary = {
             "config": self.spec.config.id, "slice": self.spec.slice.id, "seed": self.spec.seed,
             "outcome": outcome, "pills": n, "placed": placed, "fraction_placed": placed / n,
             "success": placed == n, "lost_off_table": lost,
             "time_to_all_placed_s": None if self.placed_at is None else round(self.placed_at, 3), "simulated_duration_s": round(t, 3),
             "wall_duration_s": round(wall_s, 2), "horizon_s": self.spec.horizon_s,
             "skills": statuses, "skill_attempts": len(self.results),
-            "planner_calls": len(finished), "planner_failures": sum(c.status != "ok" for c in finished),
-            "planner_latency_p50_ms": round(float(np.percentile(ok, 50)) * 1000, 1) if ok else None,
-            "planner_latency_p95_ms": round(float(np.percentile(ok, 95)) * 1000, 1) if ok else None,
-            "skill_planner_p50_ms": round(float(np.percentile(skill_ok, 50)) * 1000, 1) if skill_ok else None,
+            **self._planner_summary(t),
             "planner_wait_s": round(waited, 2),
             "network_outage_s": round(outage, 2),
             "motor_policy_available": self.spec.config.motor.available,
@@ -461,6 +485,31 @@ class Episode:
             "settle": {k: round(v, 6) for k, v in self.settle_report.items()},
             "events": self.events[:50],
         }
+        if self.device:
+            summary["network_outage_s"] = None  # no cloud link in this configuration: not applicable
+        return summary
+
+    def _planner_summary(self, t: float) -> dict:
+        if self.device:
+            # Every real call counts; latency is the end-to-end round trip of the calls the model
+            # answered (on-device latency beside it in device_planner). Nothing is modeled.
+            device = self.skill_planner.stats(t)
+            valid = device["by_result"].get("valid", 0)
+            return {"planner_calls": device["calls"], "planner_failures": device["calls"] - valid,
+                    "planner_latency_p50_ms": device["e2e_p50_ms"], "planner_latency_p95_ms": device["e2e_p95_ms"],
+                    "skill_planner_p50_ms": device["e2e_p50_ms"], "failed_decisions": self.failed_decisions,
+                    "device_planner": device}
+        calls = self.skill_planner.calls + (self.task_planner.calls if self.task_planner else [])
+        finished = [c for c in calls if c.status != "pending" and c.completes_s <= t + 1e-9]
+        ok = [c.latency_s for c in finished if c.status == "ok"]
+        skill_ok = [c.latency_s for c in finished if c.status == "ok" and c.role == "skill"]
+
+        def ms(values: list[float], q: float) -> float | None:
+            return round(float(np.percentile(values, q)) * 1000, 1) if values else None
+
+        return {"planner_calls": len(finished), "planner_failures": sum(c.status != "ok" for c in finished),
+                "planner_latency_p50_ms": ms(ok, 50), "planner_latency_p95_ms": ms(ok, 95),
+                "skill_planner_p50_ms": ms(skill_ok, 50)}
 
 
 class TaskPlanStandIn:
@@ -485,5 +534,5 @@ def call_record(call: PlannerCall) -> dict:
             "stand_in_compute_ms": round(call.compute_ms, 3)}
 
 
-def run_episode(spec: EpisodeSpec, recorder=None) -> dict:
-    return Episode(spec, recorder).run()
+def run_episode(spec: EpisodeSpec, recorder=None, planner=None, planner_log=None) -> dict:
+    return Episode(spec, recorder, planner, planner_log).run()
