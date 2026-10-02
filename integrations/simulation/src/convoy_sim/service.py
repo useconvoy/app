@@ -104,7 +104,8 @@ class SimulatorService:
         journal = ExecutionJournal(self.directory / "coordinator", robot["id"], self.cfg.data["device_id"])
         resources.callback(journal.close)
         owner = resources.enter_context(ManagedWorker(self.directory / "managed-worker", verification_keys_file=self.keys))
-        bundle = RegisteredBundle(profile, robot["simulation_engine"], self.assets, worker_owner=owner, control=self.control)
+        bundle = RegisteredBundle(profile, robot["simulation_engine"], self.assets, worker_owner=owner, control=self.control,
+                                  recording_directory=self.directory / "trajectories")
         self.coordinator = Coordinator(robot_id=robot["id"], device_id=self.cfg.data["device_id"], journal=journal,
             control=self.control, worker=None, adapter_factory=None, bundle_owner=bundle, profile=REGISTERED_PROFILE, poll_s=1)
         self.binding = binding

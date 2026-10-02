@@ -45,6 +45,8 @@ jobs:
   managed-pipeline:
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    env:
+      MUJOCO_GL: osmesa
     defaults:
       run:
         working-directory: integrations/simulation
@@ -55,7 +57,8 @@ jobs:
           version: "0.8.22"
           python-version: "3.11"
       - run: uv sync --frozen --extra managed
-      - run: uv run --frozen --extra managed pytest -q tests/test_qualification_pipeline.py tests/test_managed_worker.py tests/test_realtime.py tests/test_service.py --basetemp=/tmp/convoy-managed-acceptance
+      - run: sudo apt-get update && sudo apt-get install -y libosmesa6
+      - run: uv run --frozen --extra managed pytest -q tests/test_qualification_pipeline.py tests/test_managed_worker.py tests/test_realtime.py tests/test_trajectory.py tests/test_service.py --basetemp=/tmp/convoy-managed-acceptance
       - uses: actions/upload-artifact@v4
         if: always()
         with:

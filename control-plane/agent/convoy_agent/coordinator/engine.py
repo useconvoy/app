@@ -777,6 +777,16 @@ class Coordinator:
             self._failure_request = None
             self._active_mission = None
         summary["wall_duration_s"] = time.monotonic() - started
+        if adapter is not None and self.profile == REGISTERED_PROFILE and hasattr(adapter, "export_recording"):
+            # Physics is already stopped and measured. Artifact I/O is diagnostic,
+            # never another action and never grounds to change the task outcome.
+            try:
+                recording = adapter.export_recording(identity)
+                if recording is not None:
+                    summary["recording"] = recording
+            except Exception as error:
+                summary["recording"] = {"state": "unavailable", "reason": "local-export-failed"}
+                log.warning("Local recording export failed (%s); execution outcome retained", type(error).__name__)
         self.journal.finish(mission["id"], {
             "identity": report_identity, "state": state, "detail": detail[:1000], "summary": summary,
         })

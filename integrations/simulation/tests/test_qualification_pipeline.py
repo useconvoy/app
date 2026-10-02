@@ -179,6 +179,30 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
                 assert episode["summary"]["model_asset_sha256"] == model["asset"]["sha256"]
                 assert episode["summary"]["steps"] > 1
                 assert episode["summary"]["execution_mode"] == "lockstep_offline"
+                from convoy_sim.trajectory import load_trace
+
+                recording = episode["summary"]["recording"]
+                assert recording["state"] == "recorded-locally"
+                trajectory = load_trace(state / "trajectories" / f"{mission['id']}.state.json", recording["sha256"])
+                assert trajectory["identity"] == episode["identity"]
+                assert recording["physics_ticks"] == episode["summary"]["steps"]
+
+                # A failed diagnostic disk write must not turn successful motion
+                # into an uncertain task or cause the policy to execute again.
+                trace_root = state / "trajectories"
+                saved_traces = state / "saved-trajectories"
+                trace_root.rename(saved_traces)
+                trace_root.write_text("deliberate local recording failure")
+                try:
+                    diagnostic_mission = post(f"robots/{robot['id']}/missions", mission_body)
+                    diagnostic = wait(f"missions/{diagnostic_mission['id']}", {"completed", "failed", "unknown"})
+                    assert diagnostic["state"] == "completed", diagnostic
+                    diagnostic_episode = client.get(f"/api/v1/episodes/{diagnostic['episode_id']}").json()
+                    assert diagnostic_episode["summary"]["final_success"]
+                    assert diagnostic_episode["summary"]["recording"] == {"state": "unavailable", "reason": "local-export-failed"}
+                finally:
+                    trace_root.unlink()
+                    saved_traces.rename(trace_root)
 
                 # A real slow worker makes cancellation race with actual in-flight inference.
                 runtime.delay = 0.15
@@ -262,6 +286,9 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
                 assert summary["physics_control_steps"] >= summary["steps"] > 0
                 assert summary["timing"]["observation_to_action_ms"]["max"] < 200
                 assert summary["timing"]["physics_wall_s"] >= summary["simulated_duration_s"]
+                trajectory = load_trace(state / "trajectories" / f"{mission['id']}.state.json", summary["recording"]["sha256"])
+                assert len(trajectory["samples"]) == summary["physics_control_steps"] + 1
+                assert sum(s["action_source"] == "policy" for s in trajectory["samples"]) == summary["steps"]
                 coordinator.terminate()
                 coordinator.wait(timeout=15)
                 assert coordinator.returncode == 0, (tmp_path / "coordinator.log").read_text()
@@ -299,6 +326,9 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
                 assert summary["timing"]["applied_actions"] == 0
                 assert summary["timing"]["policy_wait_ms"]["count"] == 1
                 assert "policy_response_unavailable" in summary["timing"]["reasons"]
+                trajectory = load_trace(state / "trajectories" / f"{mission['id']}.state.json", summary["recording"]["sha256"])
+                assert len(trajectory["samples"]) > 3
+                assert all(s["action_source"] == "fallback" for s in trajectory["samples"][1:])
                 coordinator.terminate()
                 coordinator.wait(timeout=15)
                 assert coordinator.returncode == 0, (tmp_path / "coordinator.log").read_text()

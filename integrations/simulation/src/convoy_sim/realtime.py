@@ -21,12 +21,12 @@ def distribution(values):
             for name, q in (("p50", .5), ("p95", .95), ("p99", .99), ("max", 1))}}
 
 
-def _physics(connection, manifest, xml, assets, seed):
+def _physics(connection, manifest, xml, assets, seed, record):
     from .registered import JointAdapter
 
     driver = None
     try:
-        driver = JointAdapter(manifest, xml, assets)
+        driver = JointAdapter(manifest, xml, assets, record=record)
         observation = driver.reset(seed)
         period = driver.control_period_s
         timing = manifest["execution"]["timing"]
@@ -35,6 +35,7 @@ def _physics(connection, manifest, xml, assets, seed):
         reward_sum = 0.0
         ticks = fallback_ticks = steady_fallback_ticks = applied = rejected = 0
         last_action = None
+        last_command = None
         valid_until = 0
         hold = observation["positions"][:]
         in_fallback = True
@@ -76,7 +77,7 @@ def _physics(connection, manifest, xml, assets, seed):
                     if not terminal and (finished - next_tick) / 1e6 > timing["max_physics_lag_ms"]:
                         fault = "physics_dispatch_lag"
                         dispatch_lag.append((finished - next_tick) / 1e6)
-                    connection.send(snapshot())
+                    connection.send({**snapshot(), "trajectory": driver.recorder.snapshot() if driver.recorder else None})
                     break
                 if request["kind"] == "observe":
                     if terminal or (ticks > request["after_tick"] and time.monotonic_ns() < next_tick):
@@ -109,6 +110,7 @@ def _physics(connection, manifest, xml, assets, seed):
                         pending = None
                     else:
                         last_action, valid_until = pending["action"], deadline
+                        last_command = pending["command_id"]
                         ages.append((dispatched - pending["captured_ns"]) / 1e6)
                         commands.add(pending["command_id"])
                         applied += 1
@@ -122,7 +124,8 @@ def _physics(connection, manifest, xml, assets, seed):
                     steady_fallback_ticks += int(applied > 0)
                 action = hold if fallback else last_action
                 in_fallback = fallback
-                outcome = asdict(driver.step(action, f"physics:{ticks}"))
+                outcome = asdict(driver.step(action, f"physics:{ticks}", action_source="fallback" if fallback else "policy" if accepted else "held-policy",
+                                             policy_command_id=last_command))
                 ticks += 1
                 reward_sum += outcome["reward"]
                 captured = time.monotonic_ns()
@@ -157,7 +160,7 @@ def _physics(connection, manifest, xml, assets, seed):
 
 
 class RealtimeJointAdapter:
-    def __init__(self, manifest, xml, assets):
+    def __init__(self, manifest, xml, assets, *, recording_directory=None):
         self.manifest, self.xml, self.assets = manifest, xml, assets
         self.control_period_s = 1 / manifest["interface"]["control_rate_hz"]
         self.process = self.connection = None
@@ -166,6 +169,8 @@ class RealtimeJointAdapter:
         self.measured = None
         self.waits, self.response_ages = [], []
         self.deadline_misses = 0
+        self.recording_directory = recording_directory
+        self.trajectory = None
 
     def _receive(self, timeout=2):
         if not self.connection.poll(timeout):
@@ -178,7 +183,7 @@ class RealtimeJointAdapter:
     def reset(self, seed):
         context = multiprocessing.get_context("spawn")
         self.connection, child = context.Pipe()
-        self.process = context.Process(target=_physics, args=(child, self.manifest, self.xml, self.assets, seed))
+        self.process = context.Process(target=_physics, args=(child, self.manifest, self.xml, self.assets, seed, self.recording_directory is not None))
         self.process.start()
         child.close()
         value = self._receive(timeout=20)
@@ -221,9 +226,12 @@ class RealtimeJointAdapter:
                 value = self._receive()
                 if "physics_control_steps" not in value:
                     raise RuntimeError("physics cleanup response did not contain timing evidence")
+                trajectory = value.pop("trajectory", None)
                 self.measured = value
                 self.process.join(timeout=2)
                 clean = not self.process.is_alive()
+                if clean:
+                    self.trajectory = trajectory
         finally:
             if self.process.is_alive():
                 self.process.terminate()
@@ -234,6 +242,15 @@ class RealtimeJointAdapter:
             self.connection.close()
         if not clean or self.process.is_alive():
             raise RuntimeError("physics cleanup was not acknowledged")
+
+    def export_recording(self, identity):
+        if self.recording_directory is None:
+            return None
+        if self.trajectory is None:
+            raise RuntimeError("physics recording was not acknowledged")
+        from .trajectory import export_trace
+
+        return export_trace(self.recording_directory, self.manifest, identity, self.trajectory)
 
     def execution_summary(self):
         if self.measured is None:

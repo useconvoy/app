@@ -29,7 +29,7 @@ from .qualification.runner import check
 
 
 class JointAdapter:
-    def __init__(self, manifest, xml, assets):
+    def __init__(self, manifest, xml, assets, *, record=False, recording_directory=None):
         self.manifest = copy.deepcopy(manifest)
         self.model = mujoco.MjModel.from_xml_string(xml, assets)
         self.data = mujoco.MjData(self.model)
@@ -44,6 +44,9 @@ class JointAdapter:
                           for j in self.joints]
         self.commands = set()
         self.closed = False
+        self.record = record or recording_directory is not None
+        self.recording_directory = recording_directory
+        self.recorder = None
 
     def observation(self):
         return {"positions": self.data.qpos[self.qpos].tolist(), "velocities": self.data.qvel[self.qvel].tolist(),
@@ -55,9 +58,14 @@ class JointAdapter:
         mujoco.mj_resetData(self.model, self.data)
         mujoco.mj_forward(self.model, self.data)
         self.commands.clear()
+        if self.record:
+            from .trajectory import TraceRecorder
+
+            self.recorder = TraceRecorder(self.model)
+            self.recorder.capture(self.data, None, "initial", None)
         return self.observation()
 
-    def step(self, action, command_id):
+    def step(self, action, command_id, *, action_source="policy", policy_command_id=None):
         if self.closed or command_id in self.commands:
             raise ValueError("adapter closed or command already applied")
         validate_action(action, self.manifest)
@@ -74,18 +82,30 @@ class JointAdapter:
         error = float(np.max(np.abs(self.data.qpos[self.qpos] - task["target_joint_positions"])))
         speed = float(np.max(np.abs(self.data.qvel[self.qvel])))
         success = error <= task["position_tolerance"] and speed <= task["velocity_tolerance"]
+        if self.recorder:
+            self.recorder.capture(self.data, action, action_source, None if action_source == "fallback" else policy_command_id or command_id)
         return StepResult(self.observation(), -error, success, terminated=success)
 
     def close(self):
         self.closed = True
 
+    def export_recording(self, identity):
+        if self.recording_directory is None:
+            return None
+        if not self.closed or self.recorder is None:
+            raise RuntimeError("physics recording is not finalized")
+        from .trajectory import export_trace
+
+        return export_trace(self.recording_directory, self.manifest, identity, self.recorder.snapshot())
+
 
 class RegisteredBundle:
     """Load immutable robot bytes; the existing worker owns model installation/inference."""
-    def __init__(self, profile, engine, assets, worker=None, *, worker_owner=None, control=None):
+    def __init__(self, profile, engine, assets, worker=None, *, worker_owner=None, control=None, recording_directory=None):
         self.profile, self.engine = copy.deepcopy(profile), engine
         self.assets, self.worker, self.worker_owner = Path(assets), worker, worker_owner
         self.control = control
+        self.recording_directory = recording_directory
         if (worker is None) == (worker_owner is None):
             raise ValueError("configure one external worker or one managed worker owner")
         self.incarnation = str(uuid.uuid4())
@@ -120,7 +140,7 @@ class RegisteredBundle:
         return PreparedBinding(binding_id=binding_id, worker=worker, planner=None,
                                observation=BindingObservation(deployment["release"]["digest"], REGISTERED_PROFILE,
                                                               manifest["policy"]["artifact_sha256"], None),
-                               adapter_factory=lambda: factory(manifest, xml, assets))
+                               adapter_factory=lambda: factory(manifest, xml, assets, recording_directory=self.recording_directory))
 
 
 def main(argv=None):
@@ -159,7 +179,8 @@ def main(argv=None):
             worker = None
         else:
             worker = WorkerHTTP(args.worker_url, token, ca_file=args.worker_ca_file)
-        owner = RegisteredBundle(registered["profile"], robot["simulation_engine"], args.assets, worker, worker_owner=worker_owner, control=control)
+        owner = RegisteredBundle(registered["profile"], robot["simulation_engine"], args.assets, worker, worker_owner=worker_owner, control=control,
+                                 recording_directory=args.data_dir / "trajectories")
         coordinator = Coordinator(robot_id=robot["id"], device_id=cfg.data["device_id"], journal=journal,
                                   control=control, worker=worker, adapter_factory=None, bundle_owner=owner,
                                   profile=REGISTERED_PROFILE, poll_s=1,
