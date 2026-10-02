@@ -6,11 +6,15 @@ host run under ``xvfb-run -a`` with ``MUJOCO_GL=glfw`` (or use EGL/OSMesa).
 ``scripts/import_offline_eval.py`` uploads; ``--replay journal`` (the default)
 writes the hosted coordinator journal.
 
-``edge_qwen_edge_skills`` (Edge Qwen) asks the model on a connected device for every
-decision: give the website origin (``--planner-server`` or ``CONVOY_SERVER``) and a
-signed-in operator session, either a file holding the ``convoy_session=…`` cookie
-(``--planner-session-file`` or ``CONVOY_SESSION_FILE``) or ``CONVOY_EMAIL`` and
-``CONVOY_PASSWORD`` (one sign-in, signed out at the end). Credentials are never printed.
+``edge_qwen_edge_skills`` (the edge device planner) asks the model on a connected
+device for every decision, through the website's device chat contract
+(``platform-chat-v1``): give the website origin (``--planner-server`` or
+``CONVOY_SERVER``) and a signed-in operator session, either a file holding the
+``convoy_session=…`` cookie (``--planner-session-file`` or ``CONVOY_SESSION_FILE``)
+or ``CONVOY_EMAIL`` and ``CONVOY_PASSWORD`` (one sign-in, signed out at the end).
+The device is the one named by ``--planner-device`` (``CONVOY_PLANNER_DEVICE``) or
+the only physical device the account sees; with several, the run refuses to start.
+Credentials are never printed.
 """
 
 from __future__ import annotations
@@ -64,25 +68,57 @@ def _planner_options(parser: argparse.ArgumentParser) -> None:
                         help="website origin for the device planner (default: $CONVOY_SERVER)")
     parser.add_argument("--planner-session-file", type=Path, default=os.environ.get("CONVOY_SESSION_FILE"),
                         help="file holding a signed-in convoy_session cookie (default: $CONVOY_SESSION_FILE)")
+    parser.add_argument("--planner-device", default=os.environ.get("CONVOY_PLANNER_DEVICE"),
+                        help="the device (dev_…) to plan on; required when the account sees several "
+                             "(default: $CONVOY_PLANNER_DEVICE, else the only one listed)")
 
 
 def _device_planner(args, configs: list[str]):
-    """(client, close) for the device-planner configurations among `configs`, else (None, no-op)."""
+    """(client, close) for the device-planner configurations among `configs`, else (None, no-op). The client
+    has checked the device: it is the one asked for (or the only one listed), ready for chat, and its active
+    release and model are pinned for the run."""
     if not any(CONFIGS[c].skill_planner.source == "device" for c in configs):
         return None, lambda: None
-    from .device_planner import PortalChatClient, sign_in, sign_out
+    from .device_planner import (
+        AccessRefused,
+        DeviceSelectionError,
+        PlatformChatClient,
+        SessionEnded,
+        model_label,
+        runtime_label,
+        sign_in,
+        sign_out,
+    )
 
     if not args.planner_server:
         raise SystemExit("a device-planner configuration needs --planner-server (or CONVOY_SERVER)")
-
+    device = getattr(args, "planner_device", None)
     if args.planner_session_file:
-        return PortalChatClient.from_session_file(args.planner_server, args.planner_session_file, log=_print), lambda: None
-    email, password = os.environ.get("CONVOY_EMAIL"), os.environ.get("CONVOY_PASSWORD")
-    if not email or not password:
-        raise SystemExit("a device-planner configuration needs --planner-session-file, or CONVOY_EMAIL and CONVOY_PASSWORD")
-    cookie = sign_in(args.planner_server, email, password)
-    client = PortalChatClient(args.planner_server, cookie, log=_print)
-    return client, lambda: sign_out(args.planner_server, cookie)
+        client = PlatformChatClient.from_session_file(args.planner_server, args.planner_session_file, device_id=device,
+                                                      log=_print)
+        close = lambda: None  # noqa: E731 - a session from a file is the caller's to end
+    else:
+        email, password = os.environ.get("CONVOY_EMAIL"), os.environ.get("CONVOY_PASSWORD")
+        if not email or not password:
+            raise SystemExit("a device-planner configuration needs --planner-session-file, or CONVOY_EMAIL and "
+                             "CONVOY_PASSWORD")
+        cookie = sign_in(args.planner_server, email, password)
+        client = PlatformChatClient(args.planner_server, cookie, device_id=device, log=_print)
+        close = lambda: sign_out(args.planner_server, cookie)  # noqa: E731
+    try:
+        state = client.device()
+    except (DeviceSelectionError, SessionEnded, AccessRefused) as error:
+        close()
+        raise SystemExit(f"the device planner cannot start: {error}") from None
+    except OSError as error:  # unreachable website: say so, and end a session this run opened
+        close()
+        raise SystemExit(f"the device planner cannot reach {args.planner_server}: {type(error).__name__}") from None
+    if not (state.online and state.eligible):
+        close()
+        raise SystemExit(f"the device is not ready for chat: {state.reason or state.status}")
+    _print(f"device planner: {state.device_id} · release {state.release_id} · {model_label(client.model)} · "
+           f"{runtime_label(client.model)} · {client.transport}")
+    return client, close
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -115,7 +151,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="recording format; offline also writes OUTPUT/CONFIG/evaluation.json for the import")
     ev.add_argument("--preview-camera", help="add this camera (e.g. photo) beside the head view in previews")
     ev.add_argument("--previews", default="", help="CONFIG:SLICE:SEED entries that get previews (default: all recorded)")
-    ev.add_argument("--name", help="the offline evaluation's name (default: Pills to bottle · <configuration>)")
+    ev.add_argument("--name", help="the offline evaluation's name (default: Pills to bottle · <configuration>; for the "
+                                   "device planner also the model the platform reports and the transport)")
     ev.add_argument("--output", type=Path, required=True, help="new directory")
     _planner_options(ev)
 
@@ -139,10 +176,6 @@ def main(argv: list[str] | None = None) -> int:
 
         planner, close = _device_planner(args, [args.config])
         try:
-            if planner is not None:
-                state = planner.device()
-                if not (state.online and state.eligible):
-                    raise SystemExit(f"the device is not ready for chat: {state.reason or state.status}")
             summary = run_job({"config": args.config, "slice": args.slice, "seed": args.seed, "horizon": args.horizon,
                                "record": args.record, "replay": args.replay, "output": str(args.output),
                                "timestep": args.timestep, "preview_camera": args.preview_camera}, planner,

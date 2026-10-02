@@ -160,6 +160,7 @@ jobs:
           check "anonymous management protected" 401 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/api/platform/auth/me")"
           check "anonymous workspace documents protected" 401 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/api/platform/workspace-documents/configurations")"
           check "anonymous offline evaluations protected" 401 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/api/platform/offline-evaluations")"
+          check "anonymous device chat protected" 401 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/api/platform/chat/devices")"
           check "sitemap"     200 "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$SITE/sitemap.xml")"
           echo "certificate: $(echo | openssl s_client -connect deployconvoy.com:443 -servername deployconvoy.com 2>/dev/null | openssl x509 -noout -issuer -enddate | tr '\n' ' ')"
           {

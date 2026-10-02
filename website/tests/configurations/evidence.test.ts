@@ -145,9 +145,23 @@ test("autonomy edge cases: no interventions, first-call acceptance when recorded
   const clean = autonomyFromEpisodes([ok(), ok({ planner_valid_replies: 20 })])!;
   assert.deepEqual([clean.autonomous, clean.autonomousShare, clean.interventions, clean.perEpisode, clean.decisions, clean.per100Decisions], [2, 1, 0, 0, 30, 0]);
   assert.equal(clean.decisionsBetween, null, "no interventions: nothing between them");
-  const firstCall = autonomyFromEpisodes([ok({ planner_first_call_valid: 9 }), ok({ planner_first_call_valid: 6, planner_failed_decisions: 1, planner_valid_replies: 9 })])!;
+  // First-call acceptance: the export's decision-level counts, the accepted ones over its own resolved decisions.
+  const exported = (first: number, decisions: number, extra: Partial<Record<string, number>> = {}) =>
+    ok({ planner_first_call_accepted: first, planner_decisions: decisions, planner_reasked_decisions: decisions - first, ...extra });
+  const firstCall = autonomyFromEpisodes([exported(9, 10), exported(6, 10, { planner_failed_decisions: 1, planner_valid_replies: 9 })])!;
   close(firstCall.firstCallAccepted, 15 / 20, "first call");
-  assert.equal(autonomyFromEpisodes([ok({ planner_first_call_valid: 9 }), ok()])!.firstCallAccepted, null, "every episode must report it");
+  assert.equal(firstCall.decisions, 20);
+  assert.equal(autonomyFromEpisodes([exported(9, 10), ok()])!.firstCallAccepted, null, "every episode must report it");
+  assert.equal(autonomyFromEpisodes([ok({ planner_first_call_accepted: 9 })])!.firstCallAccepted, null, "with its denominator");
+  assert.equal(autonomyFromEpisodes([exported(11, 10), exported(1, 10)])!.firstCallAccepted, null, "an inconsistent episode is not a report");
+  // Earlier evals: the old name was never exported and is not read; they show Not reported, the rest as before.
+  const earlier = autonomyFromEpisodes([ok({ planner_first_call_valid: 9 }), ok({ planner_invalid_json: 1, planner_timeouts: 2 })])!;
+  assert.deepEqual([earlier.firstCallAccepted, earlier.decisions, earlier.validReplies], [null, 20, 20]);
+  // The exported count is the decisions count where reported (the same as valid + failed in a real export).
+  assert.equal(autonomyFromEpisodes([ok({ planner_decisions: 12 }), ok()])!.decisions, 22);
+  assert.equal(EVIDENCE_METRICS.firstCallAccepted, "planner_first_call_accepted");
+  assert.equal(EVIDENCE_METRICS.decisions, "planner_decisions");
+  assert.equal(Object.values(EVIDENCE_METRICS).includes("planner_first_call_valid" as never), false);
   const none = autonomyFromEpisodes([ok({ planner_valid_replies: 0 })])!;
   assert.deepEqual([none.decisions, none.per100Decisions, none.decisionsBetween, none.firstCallAccepted], [0, null, null, null]);
   assert.equal(autonomyFromEpisodes([]), null);

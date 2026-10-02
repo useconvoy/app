@@ -27,10 +27,13 @@
  * - an unfinished episode: outcome timeout, failure or safety stop (one per episode).
  * `arm_arm_contacts` counts every arm–arm contact at any force; it is shown but not counted, since it
  * has no threshold and the contacts above it already count as protective stops.
- * Decisions are resolved decisions, `planner_valid_replies + planner_failed_decisions`: a valid reply
- * ends a decision and a failed decision ends without one; a decision still open when the episode ended
- * is not counted. "Accepted on the first call" needs `planner_first_call_valid` (decisions whose first
- * call returned a valid reply), which the simulator's export does not include yet.
+ * Decisions are resolved decisions: `planner_decisions` where the export reports it, else
+ * `planner_valid_replies + planner_failed_decisions` (the same count: a valid reply ends a decision and a
+ * failed decision ends without one; a decision still open when the episode ended is not counted).
+ * "Accepted on the first call" is Σ `planner_first_call_accepted` ÷ Σ `planner_decisions`, the export's
+ * decision-level counts (since the platform-chat-v1 transport); an eval whose episodes do not all report
+ * both, as every earlier eval, shows Not reported. `planner_reasked_decisions` (accepted after a re-ask,
+ * or failed) completes them: decisions = first-call accepted + re-asked.
  */
 import { median, percentile } from "./format";
 import type { LiveInference } from "./live";
@@ -51,8 +54,12 @@ export const EVIDENCE_METRICS = {
   calls: "planner_calls",
   validReplies: "planner_valid_replies",
   failedDecisions: "planner_failed_decisions",
-  /** Not in the simulator's export yet; read when present. */
-  firstCallValid: "planner_first_call_valid",
+  /** Resolved decisions, as exported (valid replies + failed decisions); evals before it derive the same count. */
+  decisions: "planner_decisions",
+  /** Resolved decisions whose first call was accepted; its denominator is `decisions`. Absent before platform-chat-v1. */
+  firstCallAccepted: "planner_first_call_accepted",
+  /** Resolved decisions that needed a re-ask (accepted after it, or failed). */
+  reaskedDecisions: "planner_reasked_decisions",
   protectiveStops: "protective_stops",
   armArmContacts: "arm_arm_contacts",
 } as const;
@@ -208,7 +215,7 @@ export interface Autonomy {
   decisions: number | null;
   /** Interventions per 100 resolved decisions. */
   per100Decisions: number | null;
-  /** Share of resolved decisions accepted on their first call, 0–1 (needs `planner_first_call_valid`). */
+  /** Share of resolved decisions accepted on their first call, 0–1: Σ `planner_first_call_accepted` ÷ Σ `planner_decisions`. */
   firstCallAccepted: number | null;
   /** Mean resolved decisions between interventions (decisions / interventions); null when there were none. */
   decisionsBetween: number | null;
@@ -261,8 +268,13 @@ export function autonomyFromEpisodes(episodes: readonly EpisodeRecord[]): Autono
   const interventions = total(rows.filter(row => row.counted).map(row => row.events));
 
   const valid = episodes.map(episode => count(episode.metrics, EVIDENCE_METRICS.validReplies));
-  const decisions = total(valid.map((value, i) => value === null || failed[i] === null ? null : value + (failed[i] ?? 0)));
-  const firstCall = total(episodes.map(episode => count(episode.metrics, EVIDENCE_METRICS.firstCallValid)));
+  // The export's own decision count where it reports one; earlier evals give the same count as valid + failed.
+  const exported = episodes.map(episode => count(episode.metrics, EVIDENCE_METRICS.decisions));
+  const decisions = total(valid.map((value, i) => exported[i] ?? (value === null || failed[i] === null ? null : value + (failed[i] ?? 0))));
+  // First-call acceptance over its own denominator: every episode must export both counts, consistently.
+  const firstCalls = episodes.map(episode => count(episode.metrics, EVIDENCE_METRICS.firstCallAccepted));
+  const firstCall = total(firstCalls), firstCallDecisions = total(exported);
+  const consistent = firstCalls.every((value, i) => value === null || exported[i] === null || value <= exported[i]!);
   const n = episodes.length;
   return {
     episodes: n,
@@ -270,7 +282,7 @@ export function autonomyFromEpisodes(episodes: readonly EpisodeRecord[]): Autono
     interventions, perEpisode: interventions === null ? null : interventions / n,
     decisions,
     per100Decisions: interventions !== null && decisions ? interventions / decisions * 100 : null,
-    firstCallAccepted: firstCall !== null && decisions && firstCall <= decisions ? firstCall / decisions : null,
+    firstCallAccepted: firstCall !== null && firstCallDecisions && consistent ? firstCall / firstCallDecisions : null,
     decisionsBetween: interventions && decisions !== null ? decisions / interventions : null,
     breakdown: rows,
     reported: episodes.filter((_, i) => failed[i] !== null && stops[i] !== null && ends[i] !== null).length,
@@ -292,7 +304,7 @@ export const EVIDENCE_DEFINITIONS = {
   intervention: "A recorded event where an operator would take over: a failed decision, a protective stop or an unfinished episode.",
   autonomous: "Finished with no intervention.",
   decisions: "Resolved decisions: valid replies + failed decisions.",
-  firstCall: "Decisions whose first call returned a valid reply.",
+  firstCall: "Resolved decisions whose first call was accepted (a valid reply).",
   between: "Resolved decisions ÷ interventions.",
   calls: "Calls to the model; a valid reply ends its decision.",
   reported: "Episodes reporting failed decisions, protective stops and a known outcome.",

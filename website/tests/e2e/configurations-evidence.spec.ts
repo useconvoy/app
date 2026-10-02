@@ -142,6 +142,18 @@ test.describe("evidence panels", () => {
     await expect(card.locator("tbody tr").first()).toHaveText("Failed decision–Not reported–Not reported");
     await expect(card.locator("tbody tr").nth(1), "reported counts stay").toHaveText("Protective stop81");
     await expect(card.locator(".cv-ev__facts > div").last()).toHaveText("Counts reported9 of 10 episodes");
+
+    // Episodes that export the decision-level counts (platform-chat-v1): the first-call share over its own
+    // decisions, 273 of 308 here.
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await mockApi(page, { document: evidenceDocument() });
+    await mockPlannerEval(page, metrics => {
+      const valid = metrics.planner_valid_replies as number, failed = metrics.planner_failed_decisions as number;
+      Object.assign(metrics, { planner_decisions: valid + failed, planner_first_call_accepted: valid - 2, planner_reasked_decisions: failed + 2 });
+    });
+    await page.goto(EVAL_PAGE);
+    await expect(card.locator(".cv-au__kpi").nth(4)).toHaveText("Accepted on first call89 %of decisions");
+    await expect(card.locator(".cv-au__kpi").nth(5)).toHaveText("Decisions308valid + failed");
   });
 
   test("the dashboard: compact latency budget and autonomy of the newest eval, equal in height; a live device's when there is none", async ({ page }, testInfo) => {

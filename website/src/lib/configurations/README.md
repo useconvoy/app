@@ -138,14 +138,16 @@ device's latest requests). The metric names are the simulator's
   table, so an arm–arm contact above the threshold is counted here), or an unfinished episode
   (outcome timeout, failure or safety stop; one per episode). `arm_arm_contacts` counts arm–arm
   contacts at any force: it is shown "Not counted", since it has no threshold and the contacts
-  above it are already protective stops. Decisions are resolved decisions,
-  `planner_valid_replies + planner_failed_decisions` (a valid reply ends a decision; a decision
-  still open when the episode ended is not counted).
+  above it are already protective stops. Decisions are resolved decisions: `planner_decisions`
+  where the export reports it, else `planner_valid_replies + planner_failed_decisions`, the same
+  count (a valid reply ends a decision; a decision still open when the episode ended is not counted).
   - Autonomous episodes: episodes with no intervention (count and share).
   - Interventions per episode: interventions ÷ episodes; per 100 decisions: 100 × interventions ÷ decisions.
   - Decisions between interventions: decisions ÷ interventions (none when there were no interventions).
-  - Accepted on the first call: Σ `planner_first_call_valid` ÷ decisions. The simulator's export
-    does not include that metric yet, so it reads Not reported.
+  - Accepted on the first call: Σ `planner_first_call_accepted` ÷ Σ `planner_decisions`, the
+    simulator's decision-level counts (exported since its `platform-chat-v1` transport, with
+    `planner_reasked_decisions`: decisions = first-call accepted + re-asked). Every episode must
+    report both, consistently; earlier evals do not, so they read Not reported.
   - By type: events and episodes per type.
 
   A count an episode does not report makes every total it feeds Not reported, never 0; an episode

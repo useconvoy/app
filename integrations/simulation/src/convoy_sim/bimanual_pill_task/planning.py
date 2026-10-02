@@ -6,8 +6,9 @@ model planner: the configurations that use it share the same decision rule, so
 differences between them come only from where the planner runs, how long a call
 takes, and what happens when the network is down. Swap in a real model through
 the ``DecisionPolicy`` protocol; if it reports its own measured latency, that
-replaces the modeled latency. "Edge Qwen" does not use the stand-in: its
-decisions are real calls to the model on a connected device (``device_planner``).
+replaces the modeled latency. The edge device planner (``edge_qwen_edge_skills``)
+does not use the stand-in: its decisions are real calls to the model on a connected
+device (``device_planner``).
 
 Latency models are log-normal, fitted to a published or measured p50/p95 pair.
 """

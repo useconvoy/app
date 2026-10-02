@@ -134,13 +134,14 @@ still scripted and runs in offline lockstep.
 `convoy_sim.bimanual_pill_task` (CLI `convoy-sim-pills`) is a second, separate
 scenario: a wheeled bimanual station robot (two 6-DOF arms with parallel
 grippers) putting 20–30 capsule pills into an open bottle, with four
-planner/policy deployment configurations (Edge Qwen, Edge Qwen + GPT Astra,
-GPT Astra, Edge SmolVLA + GPT Astra), seeds × slices evaluation, and recordings
-in the offline import format above (or the hosted journal format). Its skills
-read simulator state. Edge Qwen's planner decisions are real calls to
-Qwen2.5-1.5B-Instruct on a connected Jetson through Convoy's device chat API (a
-text description of the scene in, one JSON action out, latency measured); the
-other three use a deterministic stand-in and differ by modeled planner latency
+planner/policy deployment configurations (Edge device planner, Edge Qwen + GPT
+Astra, GPT Astra, Edge SmolVLA + GPT Astra), seeds × slices evaluation, and
+recordings in the offline import format above (or the hosted journal format). Its
+skills read simulator state. The edge device planner's decisions are real calls to
+the model of a connected device's active release, through the website's device
+chat contract (`platform-chat-v1`): a text description of the scene in, one JSON
+action out, latency measured, and the model and transport recorded with the run.
+The other three use a deterministic stand-in and differ by modeled planner latency
 and outage behaviour, and SmolVLA, which has no checkpoint for this robot, places
 no pills. See [docs/bimanual-pill-task.md](docs/bimanual-pill-task.md) for the
 model, the physics note, the on-device planner, metrics, results and the format

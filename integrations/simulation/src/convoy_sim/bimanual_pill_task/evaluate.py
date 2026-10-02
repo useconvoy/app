@@ -8,12 +8,14 @@ OUTPUT/<config>`` imports one offline evaluation per configuration. With
 every episode's seed distinct within a configuration (the platform groups an
 offline evaluation's episodes by seed).
 
-A configuration whose planner is the model on a connected device ("Edge Qwen")
-needs that connection (``planner``). Its episodes run one after another in this
-process, so the device only ever has one request; the device is checked before
-every episode, and the evaluation stops (and says so) when it goes offline. Every
-call is written to ``planner_calls.jsonl`` in its episode's directory and to
-``OUTPUT/<config>/calls.jsonl``.
+A configuration whose planner is the model on a connected device (the edge
+device planner) needs that connection (``planner``). Its episodes run one after
+another in this process, so the device only ever has one request; the device is
+checked before every episode, and the evaluation stops (and says so) when it goes
+offline or its active model is no longer the one the run started on. The model
+and transport the run used are in ``manifest.json`` and the offline evaluation's
+labels. Every call is written to ``planner_calls.jsonl`` in its episode's
+directory and to ``OUTPUT/<config>/calls.jsonl``.
 """
 
 from __future__ import annotations
@@ -95,19 +97,23 @@ def run_job(job: dict, planner=None, planner_log=None) -> dict:
 
 
 def _device_problem(planner, attempts: int = 3, wait_s: float = 10.0) -> str | None:
-    """Why the device cannot take the next episode (None when it is online and eligible). A status that
-    cannot be read is asked again a few times before it counts as a problem."""
+    """Why the device cannot take the next episode (None when it is online, eligible and still runs the
+    release the run started on). A status that cannot be read is asked again a few times before it counts
+    as a problem."""
     error = ""
     for attempt in range(attempts):
         try:
             state = planner.device()
         except Exception as failure:  # noqa: BLE001 - reported by class; a refused session stops at once
             error = type(failure).__name__
-            if error == "SessionEnded":
-                return "the session was refused"
+            if error in ("SessionEnded", "AccessRefused"):
+                return "the session was refused" if error == "SessionEnded" else "the account was refused (403)"
             if attempt + 1 < attempts:
                 time.sleep(wait_s)
             continue
+        pinned = getattr(planner, "release_id", None)
+        if state.online and state.eligible and pinned and state.release_id != pinned:
+            return f"device model changed at {state.checked_at}: release {state.release_id}, the run started on {pinned}"
         if state.online and state.eligible:
             return None
         return f"device {'offline' if not state.online else 'not eligible'} at {state.checked_at}" + (
@@ -264,9 +270,13 @@ def evaluate(output: Path, configs: list[str], slices: list[str], seeds: list[in
             "simulated physics; skills read simulator state; " + ", ".join(on_device) + ": every skill decision is a "
             "real call to the model on the connected device (text scene in, JSON action out), measured end to end; "
             "other configurations: deterministic stand-in with modeled latency")
-        manifest["device_planner"] = {**settings(), "device_at_start": {
-            k: getattr(state, k) for k in ("online", "eligible", "reason", "release_id", "status", "max_tokens",
-                                           "context_window", "checked_at")}}
+        # The model is what the platform reported when the device was first ready (pinned for the run).
+        model = getattr(planner, "model", None) or getattr(state, "model", None)
+        manifest["device_planner"] = {
+            **settings(), "transport": getattr(planner, "transport", "unknown"), "model": model,
+            "device_at_start": {k: getattr(state, k, None) for k in (
+                "device_id", "device_name", "online", "eligible", "reason", "release_id", "status", "max_tokens",
+                "context_window", "checked_at")}}
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     work = [{"config": c, "slice": s, "seed": n, "horizon": horizon, "timestep": timestep,
              "record": (c, s, n) in record, "replay": replay,
@@ -277,7 +287,9 @@ def evaluate(output: Path, configs: list[str], slices: list[str], seeds: list[in
         from .offline_replay import write_evaluation
 
         for c in configs:
-            write_evaluation(output / c, CONFIGS[c], task_label(slices, by_slice), name=name)
+            measured = ({"model": manifest["device_planner"]["model"], "transport": manifest["device_planner"]["transport"]}
+                        if c in on_device else None)
+            write_evaluation(output / c, CONFIGS[c], task_label(slices, by_slice), name=name, planner=measured)
     started = time.time()
     summaries = []
     if on_device:

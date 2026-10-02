@@ -1,4 +1,6 @@
 /** The console forwards the caller's own session to an operator-configured API. */
+import { deviceChatRoute, proxyDeviceChat } from "./chat";
+
 if (typeof window !== "undefined") throw new Error("Platform proxy is server-only");
 
 const REQUEST_LIMIT = 256 * 1024;
@@ -238,6 +240,9 @@ function json(value: unknown, status = 200, headers: Record<string, string> = {}
 }
 
 export async function proxyPlatform(request: Request, parts: string[]): Promise<Response> {
+  // Device chat (platform-chat-v1) has its own contract: limits, validation and curated results (chat.ts).
+  const chat = deviceChatRoute(parts, request.method);
+  if (chat) return proxyDeviceChat(request, chat, { consoleOrigin, ownCookie, platformOrigin: () => platformOrigin() });
   try {
     const origin = consoleOrigin(request);
     const path = allowedPlatformPath(parts, request.method, new URL(request.url).searchParams);

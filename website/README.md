@@ -20,7 +20,7 @@ License. There is no component library, animation framework, or analytics.
 
 ```text
 src/app/                 landing, workspace (/app), metadata, 404, robots, sitemap, manifest
-src/app/api/platform/    session-forwarding proxy to the management API
+src/app/api/platform/    session-forwarding proxy to the management API; device chat (platform-chat-v1)
 src/app/api/portal/      configured-device snapshot, session probe, device chat API
 src/components/          landing sections, header, footer, diagrams, contact
 src/components/configurations/  workspace frame, sign-in, Configurations pages, replay player

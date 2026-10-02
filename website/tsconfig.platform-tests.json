@@ -8,6 +8,6 @@
     "rootDir": ".",
     "plugins": []
   },
-  "include": ["src/lib/platform/proxy.ts", "src/lib/platform/replay.ts", "tests/platform/**/*.ts"],
+  "include": ["src/lib/platform/proxy.ts", "src/lib/platform/chat.ts", "src/lib/platform/replay.ts", "tests/platform/**/*.ts"],
   "exclude": ["node_modules", ".next"]
 }

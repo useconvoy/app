@@ -1,9 +1,12 @@
 """The four demo deployment configurations, motor-policy hooks, and eval slices.
 
-"Edge Qwen" (``edge_qwen_edge_skills``) calls the real model: every skill decision
-is a request to Qwen2.5-1.5B-Instruct on a connected Jetson through Convoy's
-device chat API (``device_planner``), with no latency model and no stand-in.
-The other three configurations use the rule-based stand-in with modeled latency.
+The edge device planner (``edge_qwen_edge_skills``) calls a real model: every skill
+decision is a request to the model of a connected device's active release through
+Convoy's device chat API (``device_planner``), with no latency model and no
+stand-in. Which model that is is read from the platform when a run starts and
+recorded with it (``device_planner.describe_model``); its labels are built from
+that record (``device_labels``), never from a name written here. The other three
+configurations use the rule-based stand-in with modeled latency.
 
 Latency numbers and their sources (modeled configurations):
 
@@ -40,9 +43,9 @@ EDGE_QWEN = PlannerProfile(
     evidence="Convoy Jetson soak: p50 122 ms / p95 636 ms; deploy smoke p50 181 / p95 900 ms",
     concurrency=1,
 )
-EDGE_QWEN_DEVICE = PlannerProfile(
-    name="edge-qwen2.5-1.5b-device",
-    model="Qwen2.5-1.5B-Instruct Q4_K_M, llama.cpp CUDA, Jetson Orin Nano Super 8 GB (connected device)",
+EDGE_DEVICE = PlannerProfile(
+    name="edge-device-model",
+    model="the connected device's active release, read from the platform at run start (device_planner.describe_model)",
     placement="edge",
     latency=None,  # every call is measured; nothing is drawn from a model
     timeout_s=45.0,  # the client's deadline for a terminal result (device_planner.FailurePolicy)
@@ -109,15 +112,16 @@ class DeploymentConfig:
 
 
 SCRIPTED_POLICY = "Scripted IK skills on sim state; planner choices: rule-based stand-in, modeled latency"
-DEVICE_PLANNER_POLICY = "Scripted IK skills on sim state; planner: Qwen2.5-1.5B on the Jetson, real calls, measured latency"
+DEVICE_PLANNER_POLICY = "Scripted IK skills on sim state; planner: the device's active model, real calls, measured latency"
 
 CONFIGS: dict[str, DeploymentConfig] = {
     c.id: c for c in (
         DeploymentConfig(
-            "edge_qwen_edge_skills", "Edge Qwen", EDGE_QWEN_DEVICE, SCRIPTED_SKILLS,
-            description=("Qwen2.5-1.5B on a connected Jetson chooses every skill call from a text description "
-                         "of the simulator state (real calls, measured round trips); scripted skills execute it."),
-            deployment="Edge: Qwen2.5-1.5B (Jetson Orin Nano) · Cloud: none", policy=DEVICE_PLANNER_POLICY),
+            "edge_qwen_edge_skills", "Edge device planner", EDGE_DEVICE, SCRIPTED_SKILLS,
+            description=("The model of a connected device's active release chooses every skill call from a text "
+                         "description of the simulator state (real calls, measured round trips); scripted skills "
+                         "execute it. The model is read from the platform at run start and recorded."),
+            deployment="Edge: the device's active model (recorded per run) · Cloud: none", policy=DEVICE_PLANNER_POLICY),
         DeploymentConfig(
             "edge_qwen_cloud_astra", "Edge Qwen + GPT Astra", EDGE_QWEN, SCRIPTED_SKILLS,
             task_planner=CLOUD_ASTRA,
@@ -184,6 +188,29 @@ class EpisodeSpec:
     seed: int
     horizon_s: float = DEFAULT_HORIZON_S
     extra: dict = field(default_factory=dict)
+
+
+def device_labels(config: DeploymentConfig, model: dict | None, transport: str) -> dict:
+    """The offline evaluation's labels for a device-planner run, built from the model the platform reported
+    at run start (``describe_model``) and the transport: e.g. config "Edge: org/Model-GGUF Q4_K_M · llama.cpp
+    cuda b6550 · rel_… · Cloud: none". A fact the platform did not report reads "unknown"."""
+    from .device_planner import UNKNOWN, model_label, runtime_label
+
+    label, runtime = model_label(model), runtime_label(model)
+    release = (model or {}).get("release_id") or UNKNOWN
+    release = f"release {release}" if release == UNKNOWN else release
+
+    def fit(*options: str) -> str:
+        return next((text for text in options if len(text) <= 120), options[-1][:119] + "…")
+
+    return {
+        "name": fit(f"Pills to bottle · {config.label} · {label} · {transport}", f"Pills to bottle · {label} · {transport}",
+                    f"Pills to bottle · {config.label} · {transport}"),
+        "config_label": fit(f"Edge: {label} · {runtime} · {release} · Cloud: none", f"Edge: {label} · {release} · Cloud: none",
+                            f"Edge: {label} · Cloud: none"),
+        "policy_label": fit(f"Scripted IK skills on sim state; planner: the device's model via {transport}, real calls, "
+                            "measured latency", f"Scripted IK skills; planner: device model via {transport}, measured"),
+    }
 
 
 def release_manifest(config: DeploymentConfig) -> dict:

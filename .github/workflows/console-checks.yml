@@ -37,6 +37,14 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm run build
       - run: uv sync --project ../integrations/simulation --frozen --extra managed
+      # The public device chat contract (platform-chat-v1) end to end: this website build under
+      # `next start`, the real API, a device on the real agent chat relay, and the simulation
+      # planner's transport. Required here: a missing piece fails instead of skipping.
+      - name: Device chat contract against the real API, website and agent relay
+        working-directory: integrations/simulation
+        env:
+          CONVOY_REQUIRE_CHAT_CONTRACT: "1"
+        run: uv run --frozen --extra managed pytest -q tests/test_platform_chat_contract.py
       - name: Browser against real API, worker and physics
         shell: bash
         run: |

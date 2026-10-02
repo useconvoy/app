@@ -2,9 +2,9 @@
 # Reproduce the bimanual pill-task evidence: physics checks at 2 ms and 1 ms, still images, and the
 # modelled demo matrix (the three stand-in configurations x 3 slices x 3 seeds) recorded in the offline
 # replay format, one directory per configuration, each checked with the import script's own reader
-# (--dry-run). Edge Qwen is not part of it: its planner is the real model on a connected device, run
+# (--dry-run). The edge device planner is not part of it: its planner is the real model on a connected device, run
 # with `convoy-sim-pills evaluate --configs edge_qwen_edge_skills` and a device connection
-# (docs/bimanual-pill-task.md, "Edge Qwen: the real on-device planner").
+# (docs/bimanual-pill-task.md, "The edge device planner: real on-device calls").
 #
 #   scripts/pill_task_eval.sh OUTPUT_DIR [SEEDS] [JOBS]
 #
