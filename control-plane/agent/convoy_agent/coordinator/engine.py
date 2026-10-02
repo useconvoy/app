@@ -57,6 +57,11 @@ class StepResult:
     truncated: bool = False
 
 
+@dataclass(frozen=True)
+class TimedStepResult(StepResult):
+    applied: bool = True
+
+
 class Adapter(Protocol):
     control_period_s: float
 
@@ -65,12 +70,34 @@ class Adapter(Protocol):
     def close(self) -> None: ...
 
 
+class RealtimeAdapter(Protocol):
+    """Independent physics with timestamped observations and confirmed admission.
+
+    Capture and admission use the coordinator host's monotonic clock. Close must
+    stop physics and retain evidence before execution_summary can be called.
+    """
+
+    control_period_s: float
+
+    def reset(self, seed: int) -> dict: ...
+    def capture(self) -> tuple[dict, int, TimedStepResult | None]: ...
+    def step_timed(self, action: list[float], command_id: str, deadline_ns: int) -> TimedStepResult: ...
+    def record_policy_wait(self, started_ns: int, finished_ns: int, captured_ns: int, received: bool) -> None: ...
+    def record_deadline_miss(self) -> None: ...
+    def close(self) -> None: ...
+    def execution_summary(self) -> dict: ...
+
+
 class Cancelled(Exception):
     pass
 
 
 class DecisionExpired(Exception):
     pass
+
+
+class TimingRejected(DecisionExpired):
+    """Adapter confirmed that the expired action was never applied."""
 
 
 class ExecutionUnknown(Exception):
@@ -84,7 +111,7 @@ class PlannerDeclined(ValueError):
 class Coordinator:
     def __init__(
         self, *, robot_id: str, device_id: str, journal: ExecutionJournal,
-        control, worker, adapter_factory: Callable[[], Adapter],
+        control, worker, adapter_factory: Callable[[], Adapter | RealtimeAdapter],
         poll_s: float = 0.1, clock_uncertainty_s: float = 0.25, profile: str = PROFILE,
         planner=None, bundle_owner: BundleOwner | None = None,
     ):
@@ -354,7 +381,7 @@ class Coordinator:
             self.journal.prepare(mission["id"], None)
             self.journal.finish(mission["id"], {
                 "identity": None, "state": "cancelled", "detail": "cancelled before local admission",
-                "summary": {"steps": 0, "execution_mode": "lockstep_offline",
+                "summary": {"steps": 0, "execution_mode": "not_started",
                             "failure": failure_record("mission_claim", Cancelled(), category="cancelled",
                                                       authorization_elapsed=time.time() >= mission["expires_at"])},
             })
@@ -513,7 +540,7 @@ class Coordinator:
             if not accepted:
                 raise PlannerDeclined("planner declined the fixed supported task")
 
-    def _apply(self, adapter: Adapter, request: dict, raw_result: dict, manifest: dict | None = None) -> StepResult:
+    def _apply(self, adapter: Adapter | RealtimeAdapter, request: dict, raw_result: dict, manifest: dict | None = None) -> StepResult:
         self._phase("action_admission", request)
         result = validate_result(raw_result, manifest)
         with self._submission:
@@ -532,12 +559,20 @@ class Coordinator:
                 raise
             try:
                 self._phase("adapter_step", request)
-                outcome = adapter.step(result["action"], request["request_id"])
+                if manifest and manifest["execution"].get("timing"):
+                    outcome = adapter.step_timed(result["action"], request["request_id"], request["deadline_monotonic_ns"])
+                    if not isinstance(outcome, TimedStepResult):
+                        raise ValueError("real-time adapter did not report command admission")
+                else:
+                    outcome = adapter.step(result["action"], request["request_id"])
                 validate_observation(outcome.observation, self.action_profile, manifest)
                 if not math.isfinite(outcome.reward):
                     raise ValueError("adapter returned an invalid physical state")
-                self.journal.command_outcome(request, "applied", asdict(outcome))
+                self.journal.command_outcome(request, "applied" if getattr(outcome, "applied", True) else "not_applied", asdict(outcome))
                 return outcome
+            except TimingRejected:
+                self.journal.command_outcome(request, "not_applied")
+                raise
             except Exception as error:
                 # The step may have happened. Preserve the intent and stop; an
                 # uncertain physical command must never be blindly retried.
@@ -566,6 +601,7 @@ class Coordinator:
 
     def _run_mission(self, mission: dict, manifest: dict) -> None:
         policy = action_manifest(manifest)
+        realtime = self.profile == REGISTERED_PROFILE and bool(policy["execution"].get("timing"))
         identity = self.journal.identity(mission, self.device_id, self.robot_id)
         validate_identity(identity)
         self.journal.prepare(mission["id"], identity)
@@ -576,7 +612,7 @@ class Coordinator:
         self._active_mission = mission["id"]
         self._phase("mission_claim")
         summary = {
-            "execution_mode": "lockstep_offline",
+            "execution_mode": "independent_realtime_simulation" if realtime else "lockstep_offline",
             "evidence_scope": ("simulated_physics_with_rgb_and_proprioception" if self.action_profile == VISUAL_PROFILE
                                else "simulated_physics_with_privileged_state"),
             "profile": self.profile,
@@ -631,9 +667,18 @@ class Coordinator:
             adapter = self.adapter_factory()
             observation = adapter.reset(mission["seed"])
             for sequence in range(policy["execution"]["max_steps"]):
+                captured_ns = None
+                if realtime:
+                    observation, captured_ns, terminal = adapter.capture()
+                    if terminal is not None:
+                        summary["final_success"] = terminal.success
+                        summary["ever_success"] |= terminal.success
+                        break
                 self._phase("policy_inference")
                 request_deadline = min(deadline_ns, time.monotonic_ns() +
                                        policy["execution"]["decision_timeout_ms"] * 1_000_000)
+                if realtime:
+                    request_deadline = min(request_deadline, captured_ns + policy["execution"]["timing"]["max_observation_age_ms"] * 1_000_000)
                 self._check_live(request_deadline)
                 request = {
                     "identity": identity, "request_id": str(uuid.uuid4()),
@@ -646,13 +691,22 @@ class Coordinator:
                 with self._submission:
                     self._check_live(request_deadline)
                     self._outstanding = request
-                outcome = self._apply(adapter, request, self._decide(request, claim["grant"]), policy)
+                wait_started = time.monotonic_ns()
+                received = False
+                try:
+                    decision = self._decide(request, claim["grant"])
+                    received = True
+                finally:
+                    if realtime:
+                        adapter.record_policy_wait(wait_started, time.monotonic_ns(), captured_ns, received)
+                outcome = self._apply(adapter, request, decision, policy)
                 observation = outcome.observation
-                summary["steps"] = sequence + 1
+                summary["steps"] = summary["steps"] + int(outcome.applied) if realtime else sequence + 1
                 summary["reward_sum"] += outcome.reward
                 summary["final_success"] = outcome.success
                 summary["ever_success"] |= outcome.success
-                summary["simulated_duration_s"] = (sequence + 1) * adapter.control_period_s
+                if not realtime:
+                    summary["simulated_duration_s"] = (sequence + 1) * adapter.control_period_s
                 if (outcome.terminated or outcome.truncated or
                         (self.action_profile in {VISUAL_PROFILE, REGISTERED_PROFILE} and outcome.success)):
                     break
@@ -669,6 +723,8 @@ class Coordinator:
             summary["failure"] = self._failure(error, mission, "uncertain")
         except (DecisionExpired, PlannerDeclined) as error:
             state = "failed" if claimed else "unknown"
+            if realtime and adapter and isinstance(error, DecisionExpired):
+                adapter.record_deadline_miss()
             summary["failure"] = self._failure(error, mission,
                                                "deadline" if isinstance(error, DecisionExpired) else "declined")
             detail = failure_detail(summary["failure"])
@@ -703,6 +759,10 @@ class Coordinator:
             if adapter:
                 try:
                     adapter.close()
+                    if realtime:
+                        summary.update(adapter.execution_summary())
+                        if state == "completed" and summary["timing"]["physics_fault"]:
+                            state, detail = "failed", "simulator could not maintain the requested physics timing"
                 except Exception as error:
                     state, detail = "unknown", "adapter cleanup outcome is uncertain"
                     if "failure" in summary:

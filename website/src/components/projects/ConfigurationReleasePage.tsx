@@ -42,7 +42,8 @@ export function ConfigurationReleasePage({ configurationId }: { configurationId:
     {registered && <section aria-label="Release details">
       <h2>{registered.task.instruction}</h2>
       <p>{registered.policy.runtime === REFERENCE_RUNTIME ? "Joint-position reference controller · no learned model inference" : `Installed policy: ${registered.policy.runtime}`}</p>
-      <p>MuJoCo {registered.environment.version} · {registered.interface.control_rate_hz} control steps/second · functional simulation</p>
+      <p>MuJoCo {registered.environment.version} · {registered.interface.control_rate_hz} control steps/second · {registered.execution.timing ? "independent real-time simulation" : "functional simulation"}</p>
+      {registered.execution.timing && <p>Maximum observation age: {registered.execution.timing.max_observation_age_ms} ms · Maximum physics lag: {registered.execution.timing.max_physics_lag_ms} ms · Fallback: simulated position hold</p>}
       <p>Policy response timeout: {registered.execution.decision_timeout_ms} ms · Task timeout: {registered.execution.mission_timeout_s} seconds · Maximum {registered.execution.max_steps} steps</p>
       <div className="cv-table-wrap"><table className="cv-table"><thead><tr><th scope="col">Joint</th><th scope="col">Target (SI units)</th><th scope="col">Limits</th></tr></thead><tbody>{registered.interface.joint_names.map((name, i) => <tr key={name}><th scope="row">{name}</th><td>{registered.task.target_joint_positions[i]}</td><td>{registered.interface.action_bounds[i].join(" to ")}</td></tr>)}</tbody></table></div>
       <p>Saving does not activate this release. On deployment, a configured managed runner prepares its reference policy automatically. Robot model assets and other policy workers require operator setup.</p>

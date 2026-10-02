@@ -45,7 +45,17 @@ def validate_manifest(value):
     _number(task["position_tolerance"], "position tolerance", 1e-6, 1)
     _number(task["velocity_tolerance"], "velocity tolerance", 1e-6, 1)
     execution = value["execution"]
-    _keys(execution, {"max_steps", "decision_timeout_ms", "mission_timeout_s"}, "execution")
+    fields = {"max_steps", "decision_timeout_ms", "mission_timeout_s"}
+    _keys(execution, fields | ({"timing"} if isinstance(execution, dict) and "timing" in execution else set()), "execution")
+    if "timing" in execution:
+        timing = execution["timing"]
+        _keys(timing, {"mode", "max_observation_age_ms", "max_physics_lag_ms", "fallback"}, "timing")
+        if timing["mode"] != "realtime" or timing["fallback"] != "hold-position":
+            raise ValueError("unsupported timing mode or fallback")
+        _integer(timing["max_observation_age_ms"], "observation age", 1, 30000)
+        _integer(timing["max_physics_lag_ms"], "physics lag", 1, 1000)
+        if interface["control_rate_hz"] < 10:
+            raise ValueError("real-time simulation requires at least 10 control steps per second")
     _integer(execution["max_steps"], "max_steps", 1, 500)
     _integer(execution["decision_timeout_ms"], "decision timeout", 1, 30000)
     _integer(execution["mission_timeout_s"], "mission timeout", 1, 3600)

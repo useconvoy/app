@@ -37,7 +37,7 @@ export function ConfigurationEditor({ projectId, preferredProfileId, application
   const profile = available.find(p => p.id === profileId);
   if (!operator) return <p>An operator can create configuration releases.</p>;
   return <>
-    <p>Choose a physical profile and define a joint-position task. This creates a functional MuJoCo release; it does not certify timing or physical accuracy.</p>
+    <p>Choose a physical profile and define a joint-position task. Choose functional simulation or measured real-time execution. Neither certifies physical accuracy.</p>
     {profiles.error && <p role="alert">{profiles.error}</p>}
     {!profiles.data && !profiles.error && <p role="status">Loading profiles…</p>}
     {profiles.data && available.length === 0 && <p>No compatible profiles yet. <Link className="cv-link" href={`/app/projects/${projectId}`}>Import a bounded joint-position profile with a MuJoCo position controller.</Link></p>}
@@ -61,6 +61,9 @@ function ReleaseForm({ profile, application, initial, disabled, onSaved }: {
   const [policy, setPolicy] = useState(initial && initial.policy.runtime !== REFERENCE_RUNTIME ? "installed" : "reference");
   const [runtime, setRuntime] = useState(initial?.policy.runtime === REFERENCE_RUNTIME ? "" : initial?.policy.runtime ?? "");
   const [digest, setDigest] = useState(initial?.policy.artifact_sha256 ?? "");
+  const [realtime, setRealtime] = useState(!!initial?.execution.timing);
+  const [maxAge, setMaxAge] = useState(initial?.execution.timing?.max_observation_age_ms ?? 200);
+  const [maxLag, setMaxLag] = useState(initial?.execution.timing?.max_physics_lag_ms ?? 20);
   const [steps, setSteps] = useState(initial?.execution.max_steps ?? 200);
   const [deadline, setDeadline] = useState(initial?.execution.decision_timeout_ms ?? 1000);
   const [timeout, setTimeoutSeconds] = useState(initial?.execution.mission_timeout_s ?? 60);
@@ -71,7 +74,8 @@ function ReleaseForm({ profile, application, initial, disabled, onSaved }: {
     const configuration = { profile_id: profile.id, instruction, targets: Object.fromEntries(joints.map(j => [j.name, Number(targets[j.name])])),
       policy: policy === "reference" ? { kind: "reference" } : { kind: "installed", runtime, artifact_sha256: digest },
       position_tolerance: positionTolerance, velocity_tolerance: velocityTolerance,
-      execution: { max_steps: steps, decision_timeout_ms: deadline, mission_timeout_s: timeout } };
+      execution: { max_steps: steps, decision_timeout_ms: deadline, mission_timeout_s: timeout,
+        ...(realtime ? { timing: { mode: "realtime", max_observation_age_ms: maxAge, max_physics_lag_ms: maxLag, fallback: "hold-position" } } : {}) } };
     const result = await mutation.submit<{ application: Application; release: Release }>(application ? `applications/${application.id}/configuration-releases` : "configurations",
       application ? configuration : { name, project_id: profile.project_id, configuration });
     if (result) { if (onSaved) onSaved(result.release); else router.push(configurationHref(result.application.id)); }
@@ -87,6 +91,16 @@ function ReleaseForm({ profile, application, initial, disabled, onSaved }: {
       <label className="cv-field">Installed runtime name<input className="cv-input" required maxLength={120} value={runtime} onChange={e => setRuntime(e.target.value)} /></label>
       <label className="cv-field">Policy artifact SHA-256<input className="cv-input" required pattern="[a-f0-9]{64}" value={digest} onChange={e => setDigest(e.target.value)} /></label>
     </>}
+    <label className="cv-field">Simulation timing<select className="cv-input" value={realtime ? "realtime" : "functional"} onChange={e => setRealtime(e.target.value === "realtime")}>
+      <option value="functional">Functional · physics waits for policy responses</option><option value="realtime">Measured real time · physics advances independently</option>
+    </select></label>
+    {realtime && <>
+      <p>Stale actions are rejected. When a command expires, this simulated position controller holds its current position. This is not a physical emergency stop.</p>
+      <label className="cv-field">Maximum observation age (milliseconds)<input className="cv-input" type="number" required min={1} max={30000} value={maxAge} onChange={e => setMaxAge(Number(e.target.value))} /></label>
+      <label className="cv-field">Maximum physics lag (milliseconds)<input className="cv-input" type="number" required min={1} max={1000} value={maxLag} onChange={e => setMaxLag(Number(e.target.value))} /></label>
+      <p>The maximum step count below limits physics ticks. Policy responses may arrive less often. Short tasks can succeed with insufficient timing evidence.</p>
+      {profile.spec.control_rate_hz < 10 && <p role="alert">Measured real-time execution requires a profile with at least 10 control steps per second.</p>}
+    </>}
     <details><summary>Execution limits and success criteria</summary>
       <label className="cv-field">Maximum control steps<input className="cv-input" type="number" required min={1} max={500} value={steps} onChange={e => setSteps(Number(e.target.value))} /></label>
       <label className="cv-field">Policy response timeout (milliseconds)<input className="cv-input" type="number" required min={1} max={30000} value={deadline} onChange={e => setDeadline(Number(e.target.value))} /></label>
@@ -96,6 +110,6 @@ function ReleaseForm({ profile, application, initial, disabled, onSaved }: {
     </details>
     <p>Cloud planning is not connected to this joint-state runtime yet. A configured managed runner prepares the reference policy on deployment. Robot model assets and other policy workers require operator setup.</p>
     {mutation.error && <p role="alert">{mutation.error}</p>}
-    <button className="cv-btn cv-btn--primary" disabled={disabled || mutation.busy || !instruction.trim() || !name.trim()}>{mutation.busy ? "Saving…" : application ? "Save new release" : "Create configuration"}</button>
+    <button className="cv-btn cv-btn--primary" disabled={disabled || mutation.busy || !instruction.trim() || !name.trim() || (realtime && profile.spec.control_rate_hz < 10)}>{mutation.busy ? "Saving…" : application ? "Save new release" : "Create configuration"}</button>
   </form>;
 }

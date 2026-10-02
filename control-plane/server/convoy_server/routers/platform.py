@@ -49,7 +49,15 @@ class InstalledPolicyIn(Input):
     artifact_sha256: Digest
 
 
+class TimingIn(Input):
+    mode: Literal["realtime"] = "realtime"
+    max_observation_age_ms: int = Field(default=200, strict=True, ge=1, le=30000)
+    max_physics_lag_ms: int = Field(default=20, strict=True, ge=1, le=1000)
+    fallback: Literal["hold-position"] = "hold-position"
+
+
 class ExecutionIn(Input):
+    timing: TimingIn | None = None
     max_steps: int = Field(default=200, strict=True, ge=1, le=500)
     decision_timeout_ms: int = Field(default=1000, strict=True, ge=1, le=30000)
     mission_timeout_s: int = Field(default=60, strict=True, ge=1, le=3600)

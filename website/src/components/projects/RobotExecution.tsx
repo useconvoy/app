@@ -10,6 +10,7 @@ import { Card } from "@/components/configurations/Tiles";
 import type { Application, Deployment, Episode, Mission, Release, Robot } from "@/lib/platform/client";
 import { useProjectResource, type RobotProfile } from "@/lib/projects/client";
 import { Shell, useMutation } from "./Projects";
+import { TimingResult } from "./TimingResult";
 import { SimulatorReadiness } from "./SimulatorReadiness";
 
 const finished = (state: string) => ["completed", "failed", "cancelled"].includes(state);
@@ -59,7 +60,7 @@ export function RobotExecution({ projectId, robotId }: { projectId: string; robo
           <p>{deployment ? `Deployment ${deployment.generation} · ${deployment.state}` : "No configuration deployed"}</p>
           {deployment?.observed_at && <p>Last reported: {new Date(deployment.observed_at).toLocaleString()}</p>}
           {deployment?.detail && <p>{deployment.detail}</p>}
-          <p>Runs the pinned robot model in functional simulation. Real-time timing and physical accuracy require separate experiments.</p>
+          <p>Runs the pinned robot model in the selected release’s timing mode. Physical accuracy requires separate calibration.</p>
           {operator && <p><Link className="cv-link" href={newConfigurationHref(projectId, robot.profile_id)}>Create runnable configuration</Link></p>}
           {selectedApplication && <p><Link className="cv-link" href={configurationHref(selectedApplication)}>View configuration releases</Link></p>}
           {applications.data?.length === 0 ? <p>No runnable configurations in this project yet.</p> : <>
@@ -94,8 +95,9 @@ export function RobotExecution({ projectId, robotId }: { projectId: string; robo
           {task.episode_id && <button className="cv-link" onClick={() => setEpisodeId(task.episode_id)}>View task result</button>}
           {episodeId === task.episode_id && episode.data && <div>
             <p>Task success: {typeof episode.data.summary.final_success === "boolean" ? episode.data.summary.final_success ? "Yes" : "No" : "Not reported"}</p>
-            <p>{typeof episode.data.summary.steps === "number" ? `${episode.data.summary.steps} control steps` : "Step count not reported"}</p>
-            <p>{episode.data.summary.execution_mode === "lockstep_offline" ? "Functional simulation · physics waits for each policy response" : "Execution timing mode not reported"}</p>
+            <p>{typeof episode.data.summary.steps === "number" ? `${episode.data.summary.steps} ${episode.data.summary.execution_mode === "independent_realtime_simulation" ? "applied policy actions" : "control steps"}` : "Step count not reported"}</p>
+            <p>{episode.data.summary.execution_mode === "lockstep_offline" ? "Functional simulation · physics waits for each policy response" : episode.data.summary.execution_mode === "independent_realtime_simulation" ? "Measured real-time simulation · physics advances independently" : episode.data.summary.execution_mode === "not_started" ? "Task stopped before execution began" : "Execution timing mode not reported"}</p>
+            <TimingResult value={episode.data.summary.timing} />
             <p>Simulated seconds: {String(episode.data.summary.simulated_duration_s ?? "Not reported")} · Elapsed seconds: {String(episode.data.summary.wall_duration_s ?? "Not reported")}</p>
           </div>}
         </article>)}

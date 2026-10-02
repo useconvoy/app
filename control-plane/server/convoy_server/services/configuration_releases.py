@@ -43,7 +43,7 @@ def compile_manifest(db, principal, project_id, data):
                       "control_rate_hz": spec["control_rate_hz"]},
         "task": {"instruction": data["instruction"], "target_joint_positions": positions,
                  "position_tolerance": data["position_tolerance"], "velocity_tolerance": data["velocity_tolerance"]},
-        "execution": data["execution"],
+        "execution": {key: value for key, value in data["execution"].items() if value is not None},
     }
     try:
         validate_robot_binding(manifest, profile.digest, spec, "mujoco")

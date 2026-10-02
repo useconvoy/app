@@ -30,7 +30,7 @@ export interface RegisteredManifest {
   environment: { engine: "mujoco"; version: string; robot_profile_sha256: string; asset_sha256: string };
   interface: { joint_names: string[]; command_interface: "joint-position"; action_bounds: number[][]; control_rate_hz: number };
   task: { instruction: string; target_joint_positions: number[]; position_tolerance: number; velocity_tolerance: number };
-  execution: { max_steps: number; decision_timeout_ms: number; mission_timeout_s: number };
+  execution: { max_steps: number; decision_timeout_ms: number; mission_timeout_s: number; timing?: { mode: "realtime"; max_observation_age_ms: number; max_physics_lag_ms: number; fallback: "hold-position" } };
 }
 
 export type ReleaseManifest = ActionManifest | PairedManifest | RegisteredManifest;

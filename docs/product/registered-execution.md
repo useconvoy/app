@@ -3,8 +3,8 @@
 This extends the existing deployment, worker, coordinator, mission, cancellation and execution
 journal system to a robot's imported MuJoCo model. It does not replace the existing Sawyer paths.
 The initial adapter accepts joint-position commands in SI units for 1–128 named actuated joints.
-It executes functional lockstep simulation; it does not qualify real-time behavior or command
-physical motors. The physical robot and simulated instance retain the same immutable profile.
+It executes functional lockstep simulation or measured, independently paced physics. Neither mode
+commands physical motors. The physical robot and simulated instance retain the same immutable profile.
 
 ## User flow and current boundary
 
@@ -136,6 +136,54 @@ operator, not taken from a model response. Remote endpoints require HTTPS and ca
 
 ## Evidence and remaining work
 
+### Independent physics and timing
+
+Select **Measured real time · physics advances independently** in the configuration form to pin observation freshness and
+physics lag limits. Omitting `execution.timing` retains the existing lockstep behavior and digest.
+The optional execution field is:
+
+```json
+"timing": {
+  "mode": "realtime",
+  "max_observation_age_ms": 200,
+  "max_physics_lag_ms": 20,
+  "fallback": "hold-position"
+}
+```
+
+This mode requires at least 10 Hz. `max_steps` bounds physics control ticks, rather than the number
+of policy requests; native MuJoCo substeps still use the imported model's timestep. A separate owned
+process advances physics against the host monotonic clock while the coordinator waits for inference.
+Inference starts from a timestamped observation. The request deadline is the earliest of task expiry,
+decision timeout and observation expiry; the physics process checks it again before applying an action.
+Expired commands are durably reported as not applied. Unknown admission or cleanup prevents blind retry.
+
+Until the first action arrives, and after an applied target expires, the simulation holds bounded joint
+positions through its existing position controller. This is simulated fallback behavior, not a physical
+emergency stop. Excess physics dispatch/completion lag ends the run with failed timing evidence, including
+a stall detected during cleanup. Physics is not silently slowed to accommodate inference.
+
+The task result separates task success from timing status and displays distributions for policy wait,
+observation-to-result, observation-to-applied-action, physics dispatch lag and completion lag. Policy
+wait includes transport and queueing; it is not an isolated inference-time measurement. All intervals
+are observed on one host; no remote worker clock subtraction is used. Physics ticks, policy actions,
+fallback use and physics wall duration are recorded separately. Fewer than 200 physics ticks or 10
+applied actions is insufficient evidence even if the task succeeds; these minimum sample counts are
+only a reporting floor, not statistical certification or a guarantee of future timing.
+
+Deadline failure, missing responses, physics lag and expired targets between results report timing
+failure. Sustained runs can report `observed_deadlines_met` independently of task success. Existing
+offline evaluation promotion gates require lockstep evidence and do not accept these timing results.
+A dedicated repeated timing-evaluation workflow remains to be implemented.
+
+Native tests exercise fresh commands, stale action rejection while physics advances, target expiry,
+an intentionally paused physics process, and sustained timely actions that do not complete the task.
+The HTTP pipeline covers a fast managed worker and a deliberately delayed external worker using the
+same registered robot/model contract. Browser tests cover creating/revising the timing contract and
+reading results on desktop and mobile. These are local CPU/native tests, not a Jetson qualification.
+
+### Scope
+
 The managed acceptance uses real HTTP APIs, enrollment, a real worker, a coordinator subprocess and
 native MuJoCo. It verifies successful movement, cancellation during deliberately slow inference, and
 an out-of-range policy action that fails before a control step. Simulator asset corruption still
@@ -144,7 +192,7 @@ whose verification was superseded. Existing legacy coordinator, worker/session a
 continue to run, including PostgreSQL cases and browser start/stop acknowledgment checks.
 
 Remaining: learned policies for registered joint interfaces; camera-conditioned contracts; model
-installation and configuration revision links; cloud planning and chat tasking; independent real-time
-physics/timing; visual replay for these models; other controller adapters; Isaac, scenarios, fleet
+installation and legacy configuration links; cloud planning and chat tasking; repeated timing evaluation
+and Jetson qualification; visual replay for these models; other controller adapters; Isaac, scenarios, fleet
 rollout, and dynamics characterization. Do not label this reference-controller result as evidence of
 learned manipulation, calibrated physical fidelity, or Jetson timing performance.

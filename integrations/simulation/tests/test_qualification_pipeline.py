@@ -216,12 +216,65 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
                 assert json.loads(process_path.read_text()) == second_process  # failed preflight retains A
                 restored = post("deployments", {"robot_id": robot["id"], "release_id": release["id"], "expected_generation": 4})
                 assert wait(f"deployments/{restored['id']}", {"ready", "blocked"})["state"] == "ready"
+                timed = post(f"applications/{configured['application']['id']}/configuration-releases", {
+                    "profile_id": profile["id"], "policy": {"kind": "reference"},
+                    "instruction": "Measure independent physics", "targets": {"shoulder": .25},
+                    "execution": {"timing": {"mode": "realtime", "max_observation_age_ms": 200,
+                                               "max_physics_lag_ms": 100, "fallback": "hold-position"}},
+                })["release"]
+                deployment = post("deployments", {"robot_id": robot["id"], "release_id": timed["id"], "expected_generation": 5})
+                assert wait(f"deployments/{deployment['id']}", {"ready", "blocked"})["state"] == "ready"
+                mission = post(f"robots/{robot['id']}/missions", {"deployment_id": deployment["id"], "expected_generation": 6, "seed": 0, "ttl_s": 60})
+                result = wait(f"missions/{mission['id']}", {"completed", "failed", "unknown"})
+                assert result["state"] == "completed", result
+                episode = client.get(f"/api/v1/episodes/{result['episode_id']}").json()
+                summary = episode["summary"]
+                assert summary["execution_mode"] == "independent_realtime_simulation"
+                assert summary["timing"]["physics_pid"] != coordinator.pid
+                assert summary["timing"]["status"] == "insufficient_evidence"  # brief success is not qualification
+                assert summary["physics_control_steps"] >= summary["steps"] > 0
+                assert summary["timing"]["observation_to_action_ms"]["max"] < 200
+                assert summary["timing"]["physics_wall_s"] >= summary["simulated_duration_s"]
                 coordinator.terminate()
                 coordinator.wait(timeout=15)
                 assert coordinator.returncode == 0, (tmp_path / "coordinator.log").read_text()
                 coordinator = None
                 assert json.loads(process_path.read_text())["state"] == "stopped"
                 assert json.loads((state / "managed-worker/status.json").read_text())["phase"] == "stopped"
+
+            # A genuinely delayed HTTP policy response cannot pause the physics clock.
+            delayed = DelayedReference({"target_joint_positions": [.25]})
+            delayed.delay = .35
+            worker_socket = socket.socket()
+            worker_socket.bind(("127.0.0.1", 0))
+            worker_origin = f"http://127.0.0.1:{worker_socket.getsockname()[1]}"
+            worker_server = uvicorn.Server(uvicorn.Config(create_worker(timed["manifest"], delayed,
+                execution_secret=execution_secret, probe_token=probe_token), log_level="error"))
+            worker_thread = threading.Thread(target=worker_server.run, kwargs={"sockets": [worker_socket]}, daemon=True)
+            worker_thread.start()
+            deadline = time.monotonic() + 10
+            while not worker_server.started and time.monotonic() < deadline:
+                time.sleep(.01)
+            assert worker_server.started
+            deployment = post("deployments", {"robot_id": robot["id"], "release_id": timed["id"], "expected_generation": 6})
+            with (tmp_path / "coordinator.log").open("a") as log:
+                coordinator = subprocess.Popen([sys.executable, "-m", "convoy_sim.registered", "--data-dir", str(state),
+                                                "--assets", str(assets), "--worker-url", worker_origin],
+                                               env={**os.environ, "CONVOY_WORKER_PROBE_TOKEN": probe_token}, stdout=log, stderr=log)
+                assert wait(f"deployments/{deployment['id']}", {"ready", "blocked"})["state"] == "ready"
+                mission = post(f"robots/{robot['id']}/missions", {"deployment_id": deployment["id"], "expected_generation": 7, "seed": 0, "ttl_s": 60})
+                result = wait(f"missions/{mission['id']}", {"completed", "failed", "unknown"})
+                assert result["state"] == "failed", result
+                summary = client.get(f"/api/v1/episodes/{result['episode_id']}").json()["summary"]
+                assert summary["timing"]["status"] == "failed"
+                assert summary["physics_control_steps"] >= 3
+                assert summary["timing"]["applied_actions"] == 0
+                assert summary["timing"]["policy_wait_ms"]["count"] == 1
+                assert "policy_response_unavailable" in summary["timing"]["reasons"]
+                coordinator.terminate()
+                coordinator.wait(timeout=15)
+                assert coordinator.returncode == 0, (tmp_path / "coordinator.log").read_text()
+                coordinator = None
 
             # The next request really rereads the installed bytes and persists a failure.
             (assets / model["asset"]["sha256"]).write_bytes(b"changed asset")

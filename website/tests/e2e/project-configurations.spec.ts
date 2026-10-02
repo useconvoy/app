@@ -38,6 +38,7 @@ test("project configuration creates an executable release, revises it and opens 
       const config = body.configuration ?? body;
       expect(config.profile_id).toBe(profile.id);
       expect(config.policy).toEqual({ kind: "reference" });
+      expect(config.execution.timing).toEqual({ mode: "realtime", max_observation_age_ms: 200, max_physics_lag_ms: 20, fallback: "hold-position" });
       expect(config.targets).toEqual({ shoulder: releases.length ? -0.4 : 0.25 });
       if (!applications.length) {
         expect(body.project_id).toBe(project.id);
@@ -61,6 +62,7 @@ test("project configuration creates an executable release, revises it and opens 
   await page.getByLabel("Configuration name", { exact: true }).fill("Arm target experiment");
   await page.getByLabel("Task instruction").fill("Reach the shoulder target");
   await page.getByLabel("shoulder (radians, -1 to 1)").fill("0.25");
+  await page.getByLabel("Simulation timing").selectOption("realtime");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.getByRole("button", { name: "Create configuration", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/configurations\/app_one\?source=project$/);
@@ -70,7 +72,9 @@ test("project configuration creates an executable release, revises it and opens 
   const downloadEvent = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download release manifest" }).click();
   expect((await downloadEvent).suggestedFilename()).toBe("release-manifest.json");
+  await expect(page.getByText("Maximum observation age: 200 ms · Maximum physics lag: 20 ms · Fallback: simulated position hold", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Create new release" }).click();
+  await expect(page.getByLabel("Simulation timing")).toHaveValue("realtime");
   await page.getByLabel("shoulder (radians, -1 to 1)").fill("-0.4");
   await page.getByRole("button", { name: "Save new release" }).click();
   await expect(page.getByRole("combobox", { name: "Configuration release", exact: true })).toHaveValue("apr_2");

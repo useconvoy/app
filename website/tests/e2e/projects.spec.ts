@@ -116,6 +116,7 @@ test("registered robot tasks wait for deployment and stop acknowledgements", asy
   const deployment = { id: "dep_one", robot_id: robot.id, generation: 1, state: "requested", detail: "", release_id: "apr_one" };
   const task = { id: "mis_one", robot_id: robot.id, state: "requested", detail: "", updated_at: new Date().toISOString(), episode_id: null as string | null };
   let deployed = false, started = false;
+  const summary: Record<string, unknown> = { final_success: false, steps: 3, execution_mode: "lockstep_offline", simulated_duration_s: 0.06, wall_duration_s: 1.2 };
   const manifest = { schema_version: 3, profile: robot.profile, environment: { robot_profile_sha256: "a".repeat(64) },
     policy: { runtime: "convoy-joint-target-reference-v1" }, task: { instruction: "Reach the shoulder target" } };
   await page.route("**/api/platform/**", async route => {
@@ -127,7 +128,7 @@ test("registered robot tasks wait for deployment and stop acknowledgements", asy
         applications: [{ id: "app_one", name: "Reach target" }],
         "applications/app_one/releases": [{ id: "apr_one", digest: "b".repeat(64), manifest }, { id: "apr_two", digest: "c".repeat(64), manifest }],
         deployments: deployed ? [deployment] : [], missions: started ? [task] : [],
-        "episodes/epi_one": { summary: { final_success: false, steps: 3, execution_mode: "lockstep_offline", simulated_duration_s: 0.06, wall_duration_s: 1.2 } },
+        "episodes/epi_one": { summary },
       };
       return route.fulfill({ status: path in resources ? 200 : 404, json: resources[path] ?? {} });
     }
@@ -166,6 +167,15 @@ test("registered robot tasks wait for deployment and stop acknowledgements", asy
   await expect(page.getByRole("button", { name: "Start task", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "View task result" }).click();
   await expect(page.getByText("3 control steps")).toBeVisible();
+  Object.assign(summary, { execution_mode: "independent_realtime_simulation", timing: {
+    status: "failed", reasons: ["policy_deadline_missed"], physics_control_steps: 12, applied_actions: 3,
+    fallback_ticks: 9, physics_wall_s: .25, contract: { max_observation_age_ms: 100, max_physics_lag_ms: 20 },
+    observation_to_action_ms: { p50: 35, p95: 90, max: 95 },
+  } });
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(page.getByText("3 applied policy actions")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Timing requirements not met" })).toBeVisible();
+  await expect(page.getByRole("row", { name: /Observation to applied action/ })).toContainText("90.00");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo({ top: 0, behavior: "instant" }); });
   await page.screenshot({ path: testInfo.outputPath("robot-tasks-desktop.png"), fullPage: true });

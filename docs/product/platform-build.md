@@ -175,3 +175,37 @@ Frontend verification: the configuration creation/revision/deployment browser jo
 updating the setup guidance, including accessibility and mobile overflow. Lint and production build
 (including type checks) pass. The managed CI job now includes the real startup-failure/retry case.
 This branch still requires remote CI before merge.
+
+## Registered real-time timing slice
+
+Branch: `codex/registered-realtime-timing`, stacked on managed workers. Configuration creation/revision
+now accepts an explicit timing contract. The registered runner can advance native MuJoCo physics in
+an independent process at the declared wall-clock cadence while the policy worker runs separately.
+Timestamped observations and action-time admission enforce freshness; expired targets fall back to
+simulated position hold. Physics overruns are recorded even when detected during cleanup. Command
+journaling distinguishes applied actions from confirmed rejection. Cleanup failure remains unknown.
+
+The robot's task-result view separates task success from timing evidence and reports policy wait,
+observation-to-result/action age, physics dispatch/completion lag, physical simulation ticks and fallback
+counts. Short runs show insufficient evidence. Existing functional lockstep releases remain supported;
+existing offline promotion gates do not accept these real-time reports as functional evidence.
+
+Verification: five real-physics timing cases cover expired observations, expired targets, scheduler
+pauses detected during capture or cleanup, and a sustained run that meets observed deadlines while
+failing the task. The HTTP enrollment/worker/coordinator/native-MuJoCo pipeline covers both a successful
+fast worker and a deliberately delayed HTTP policy with physics continuing during the wait. Sixty-one
+contract/coordinator/recovery checks, six PostgreSQL configuration/qualification cases, three project
+browser journeys, frontend lint/type checking and production build pass. Browser checks include the
+timing contract, results, accessibility and mobile overflow; the generated mobile result was inspected.
+
+The preceding managed-worker PR's container check exposed a stale expected migration revision.
+Updated that assertion on its own branch and verified the real API container against disposable
+PostgreSQL: migration, runtime-role data access, denied schema changes and mission grants pass.
+No application database or hosted service was changed. Remote CI for the new timing branch is pending.
+
+Remaining: Jetson qualification; repeated timing evaluation/fault scenarios; camera-conditioned learned
+policies and replay for registered models; edge/cloud planner pairing; automatic asset/model installation
+and onboarding; legacy configuration reconciliation; chat/scenario generation; Isaac; fleet rollout;
+and physical dynamics characterization. Local joint-state/reference results do not prove learned-policy
+quality or calibrated physical fidelity. This is a completed implementation slice, not completion of
+the overall objective. No public deployment, physical movement or new cloud resources were performed.

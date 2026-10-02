@@ -37,9 +37,20 @@ def test_configuration_is_atomic_idempotent_and_revisions_are_immutable(app, adm
     assert admin.get(f"/api/v1/applications/{application['id']}/releases/missing/setup").status_code == 404
     revised = configuration(prof)
     revised["targets"]["shoulder"] = -0.2
+    revised["execution"] = {"timing": {"mode": "realtime", "max_observation_age_ms": 100, "max_physics_lag_ms": 20, "fallback": "hold-position"}}
     path = f"/api/v1/applications/{application['id']}/configuration-releases"
     newer = post(admin, path, revised)
     assert newer["release"]["id"] != release["id"]
+    assert newer["release"]["manifest"]["execution"]["timing"] == revised["execution"]["timing"]
+    bad = deepcopy(revised)
+    bad["execution"]["timing"]["max_observation_age_ms"] = 0
+    post(admin, path, bad, key="invalid-timing", expected=422)
+    # Raw release callers must receive the same contract checks as the form API.
+    for index, execution in enumerate((None, {**newer["release"]["manifest"]["execution"], "timing": None},
+                                       {**newer["release"]["manifest"]["execution"], "timing": bad["execution"]["timing"]})):
+        invalid_manifest = {**newer["release"]["manifest"], "execution": execution}
+        post(admin, f"/api/v1/applications/{application['id']}/releases", {"manifest": invalid_manifest},
+             key=f"raw-invalid-timing-{index}", expected=422)
     assert post(admin, path, revised, key="same-content")["release"] == newer["release"]
     releases = admin.get(f"/api/v1/applications/{application['id']}/releases").json()
     assert len(releases) == 2 and release in releases

@@ -1,7 +1,7 @@
 """Execute registered MuJoCo joints through the shared deployment/mission coordinator.
 
-This is functional lockstep simulation. Real-time timing qualification is a
-separate mode; this runner never connects to physical motor controllers.
+The release selects functional lockstep or independently paced real-time physics.
+This runner never connects to physical motor controllers.
 """
 from __future__ import annotations
 
@@ -108,10 +108,15 @@ class RegisteredBundle:
         if not isinstance(worker_incarnation, str) or not 1 <= len(worker_incarnation) <= 128:
             raise ValueError("worker must report its process incarnation")
         binding_id = canonical_digest([self.incarnation, worker_incarnation, deployment["release"]["digest"]])
+        factory = JointAdapter
+        if manifest["execution"].get("timing"):
+            from .realtime import RealtimeJointAdapter
+
+            factory = RealtimeJointAdapter
         return PreparedBinding(binding_id=binding_id, worker=worker, planner=None,
                                observation=BindingObservation(deployment["release"]["digest"], REGISTERED_PROFILE,
                                                               manifest["policy"]["artifact_sha256"], None),
-                               adapter_factory=lambda: JointAdapter(manifest, xml, assets))
+                               adapter_factory=lambda: factory(manifest, xml, assets))
 
 
 def main(argv=None):
