@@ -444,10 +444,12 @@ test("registry reads require project scope and only explicit mutations are expos
     assert.equal(allowedPlatformPath([resource], "GET", new URLSearchParams()), null);
     assert.equal(allowedPlatformPath([resource], "GET", new URLSearchParams("project_id=prj_one")), `/api/v1/${resource}?project_id=prj_one`);
   }
-  for (const path of ["robot-profiles", "robot-registrations", "fleets", "fleets/flt_one/members", "fleets/flt_one/members/rob_one/remove"]) {
+  for (const path of ["robot-profiles", "robot-registrations", "fleets", "fleets/flt_one/members", "fleets/flt_one/members/rob_one/remove", "robots/rob_one/qualification"]) {
     assert.equal(allowedPlatformPath(path.split("/"), "POST", new URLSearchParams()), `/api/v1/${path}`);
     assert.equal(allowedPlatformPath(path.split("/"), "PUT", new URLSearchParams()), null);
   }
   assert.equal(allowedPlatformPath(["robots", "rob_one"], "GET", new URLSearchParams()), "/api/v1/robots/rob_one");
+  assert.equal(allowedPlatformPath(["robots", "rob_one", "qualification"], "GET", new URLSearchParams()), "/api/v1/robots/rob_one/qualification");
+  assert.equal(allowedPlatformPath(["qualifications", "rqc_one", "report"], "POST", new URLSearchParams()), null);
   assert.equal(allowedPlatformPath(["robot-profiles", "rpf_one"], "DELETE", new URLSearchParams()), null);
 });

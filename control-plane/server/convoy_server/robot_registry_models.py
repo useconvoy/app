@@ -43,3 +43,22 @@ class FleetMember(Base):
     __tablename__ = "robot_fleet_members"
     robot_id: Mapped[str] = mapped_column(ForeignKey("platform_robots.id"), primary_key=True)
     fleet_id: Mapped[str] = mapped_column(ForeignKey("robot_fleets.id"), index=True)
+
+
+class RobotQualification(Base):
+    __tablename__ = "robot_qualifications"
+    __table_args__ = (UniqueConstraint("robot_id", "generation"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("platform_projects.id"), index=True)
+    robot_id: Mapped[str] = mapped_column(ForeignKey("platform_robots.id"), index=True)
+    profile_id: Mapped[str] = mapped_column(ForeignKey("robot_profiles.id"))
+    profile_digest: Mapped[str] = mapped_column(String(64))
+    binding_epoch: Mapped[int] = mapped_column(INT64)
+    generation: Mapped[int] = mapped_column(INT64)
+    engine: Mapped[str] = mapped_column(String(16))
+    state: Mapped[str] = mapped_column(String(16), default="requested")
+    report: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    report_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(TS)
+    created_at: Mapped[datetime] = mapped_column(TS, default=_now)
+    completed_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)

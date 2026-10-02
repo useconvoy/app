@@ -54,10 +54,18 @@ def create_app(settings: Settings | None = None, *, start_scheduler: bool | None
 
     for r in (auth.router, users.router, enrollment.router):
         app.include_router(r)
-    from .routers import evaluations, offline_evaluations, platform, robot_registry, workspace_documents
+    from .routers import (
+        evaluations,
+        offline_evaluations,
+        platform,
+        robot_qualification,
+        robot_registry,
+        workspace_documents,
+    )
 
     app.include_router(platform.router)
     app.include_router(robot_registry.router)
+    app.include_router(robot_qualification.router)
     app.include_router(evaluations.router)
     app.include_router(workspace_documents.router)
     app.include_router(offline_evaluations.router)

@@ -51,7 +51,7 @@ def test_previous_revision_upgrade_preserves_existing_project(postgres_database,
         assert "platform_evaluations" not in inspect(engine).get_table_names()
         result = migrate_database(settings)
         assert result["from_revision"] == "0001_fleet"
-        assert result["target_revision"] == "0005_robot_registry"
+        assert result["target_revision"] == "0006_robot_qualification"
         with engine.connect() as connection:
             assert (
                 connection.execute(

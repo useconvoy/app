@@ -70,3 +70,24 @@ Concurrent work observed: PR #112 adds actual Jetson Qwen calls to the bimanual 
 independent and reconcile that PR when implementing the unified experiment runner; its simulated-time
 latency accounting is not by itself our independent real-time physics qualification. PR #101 remains
 the separate Jetson timing experiment to integrate and verify.
+
+## Simulator-readiness slice
+
+Branch: `codex/robot-simulation-qualification`, stacked on the registry work. Adds device-bound
+verification requests, immutable reports, a MuJoCo asset/controller/camera checker in a bounded
+native subprocess, and the Project → Robots verification controls with automatic result refresh.
+Profile lineage now reaches a real engine instead of ending at an asset declaration.
+
+Evidence: the actual HTTP/agent/runner pipeline registers physical and simulated identities against
+one profile, executes the imported model and records movement, survives runner restart, and rejects
+an altered installed asset. Eleven native engine tests include actual camera rendering and unstable
+physics rejection. Nineteen selected SQLite/API lifecycle tests, 51 PostgreSQL registry/migration/
+evaluation/document tests, and the updated project browser journey pass. Frontend types, lint,
+platform proxy tests and production build pass. CI now runs the HTTP pipeline with the managed extra
+and uses software OpenGL for native camera verification.
+
+Remaining: automatic enrollment/artifact installation from the project UI; configuration identity
+reconciliation; model deployment and task execution for newly registered robots; independent
+real-time timing qualification; Isaac execution; scenario/task language; staged fleets and physical
+characterization. Simulator-readiness success does not bypass these unfinished execution requirements.
+No hosted rollout, AWS resource provisioning or physical movement was performed in this slice.

@@ -9,6 +9,7 @@ test("project onboarding registers a physical robot and its simulated instance, 
   const robots: Record<string, unknown>[] = [];
   const fleets: { id: string; name: string; robot_ids: string[] }[] = [];
   const writes: { path: string; body: Record<string, unknown> }[] = [];
+  let readiness: Record<string, unknown> | undefined;
   await page.route("**/api/platform/**", async route => {
     const path = new URL(route.request().url()).pathname.replace("/api/platform/", "");
     const method = route.request().method();
@@ -31,6 +32,11 @@ test("project onboarding registers a physical robot and its simulated instance, 
       profiles.push(result);
     }
     if (path === "robot-registrations") { result = { id: `rob_${robots.length + 1}`, ...body, simulated: body.kind === "simulated", generation: 0 }; robots.push(result); }
+    if (path === "robots/rob_2/qualification") {
+      readiness = { id: "rqc_one", state: "requested", engine: "mujoco", created_at: new Date().toISOString(), completed_at: null, report: null };
+      robots[1].qualification = readiness;
+      result = readiness;
+    }
     if (path === "fleets") { result = { id: "flt_line", ...body, robot_ids: [] }; fleets.push(result); }
     if (path === "fleets/flt_line/members") {
       for (const assignment of body.assignments) {
@@ -71,6 +77,20 @@ test("project onboarding registers a physical robot and its simulated instance, 
   await page.getByRole("button", { name: "Register robot", exact: true }).click();
   await expect(page.getByRole("row", { name: /Arm 1 · simulation Simulated/ })).toBeVisible();
   expect(writes.filter(w => w.path === "robot-registrations").map(w => [w.body.profile_id, w.body.source_robot_id])).toEqual([["rpf_arm", null], ["rpf_arm", "rob_1"]]);
+  await page.getByRole("button", { name: "Verify simulator", exact: true }).click();
+  await expect(page.getByText("Waiting for runner", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Verification requested" })).toBeDisabled();
+  Object.assign(readiness!, { state: "passed", completed_at: new Date().toISOString(), report: {
+    detail: "Imported model ran successfully.", evidence: { engine_version: "3.3.0", steps: 200, sim_seconds: 0.4, wall_seconds: 0.12, checks: ["physics-step"] },
+  } });
+  await expect(page.getByText("Simulator checks passed", { exact: true })).toBeVisible({ timeout: 10000 });
+  await page.getByText("Verification results", { exact: true }).click();
+  await expect(page.getByText(/200 physics steps/)).toBeVisible();
+  await expect(page.getByText(/Timing and physical accuracy require separate experiments/)).toBeVisible();
+  Object.assign(readiness!, { state: "stale" });
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(page.getByText("Connection changed — verify again", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Verify again", exact: true })).toBeEnabled();
   await page.getByRole("tab", { name: "Fleets", exact: true }).click();
   await page.getByLabel("Fleet name").fill("Line 1");
   await page.getByRole("button", { name: "Create fleet" }).click();

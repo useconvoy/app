@@ -6,6 +6,7 @@ import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { WorkspaceSession, useSession } from "@/components/configurations/Session";
 import { Breadcrumbs, PageHeader } from "@/components/configurations/AppShell";
 import { ConvoyMark } from "@/components/configurations/Icons";
+import { SimulatorReadiness } from "./SimulatorReadiness";
 import { ApiError, errorText, MutationAttempts, type Project, type Robot, type Device } from "@/lib/platform/client";
 import { notifySessionExpired } from "@/lib/configurations/session-events";
 import { useProjectResource, type Fleet, type RobotProfile } from "@/lib/projects/client";
@@ -82,7 +83,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
   const [revision, setRevision] = useState(0);
   const refresh = () => setRevision(n => n + 1);
   const projects = useProjectResource<Project[]>("projects", revision);
-  const robots = useProjectResource<Robot[]>(`robots?project_id=${projectId}`, revision);
+  const robots = useProjectResource<Robot[]>(`robots?project_id=${projectId}`, revision, true);
   const profiles = useProjectResource<RobotProfile[]>(`robot-profiles?project_id=${projectId}`, revision);
   const fleets = useProjectResource<Fleet[]>(`fleets?project_id=${projectId}`, revision);
   const devices = useProjectResource<Device[]>("robot-connections", revision);
@@ -116,7 +117,10 @@ export function ProjectPage({ projectId }: { projectId: string }) {
               <th scope="row">{robot.name}</th><td>{robot.simulated === false ? "Physical" : "Simulated"}</td>
               <td>{profile ? `${profile.name} · revision ${profile.revision}` : "Legacy runner profile"}</td>
               <td>{fleets.data?.find(f => f.id === robot.fleet_id)?.name ?? "Unassigned"}</td>
-              <td>{robot.simulated === false && profile ? <button className="cv-link" disabled={!session.operator || !profile.simulation.engines.length} onClick={() => { setSource(robot); setAdding(true); }}>Create simulated instance</button> : robot.source_robot_id ? `From ${robots.data?.find(r => r.id === robot.source_robot_id)?.name ?? "physical robot"}` : robot.simulation_engine ?? "Existing runner"}</td>
+              <td>{robot.simulated === false && profile ? <button className="cv-link" disabled={!session.operator || !profile.simulation.engines.length} onClick={() => { setSource(robot); setAdding(true); }}>Create simulated instance</button> : <>
+                {robot.source_robot_id ? `From ${robots.data?.find(r => r.id === robot.source_robot_id)?.name ?? "physical robot"}` : robot.simulation_engine ?? "Existing runner"}
+                {robot.simulated && robot.profile_id && <SimulatorReadiness robot={robot} busy={mutation.busy} canWrite={session.operator} verify={() => void mutation.submit(`robots/${robot.id}/qualification`, {})} />}
+              </>}</td>
             </tr>;
           })}
         </tbody></table></div>

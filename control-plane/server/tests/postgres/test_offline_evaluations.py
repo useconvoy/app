@@ -79,7 +79,7 @@ def test_previous_revision_upgrade_adds_offline_evaluations(postgres_database, t
         assert "offline_evaluations" not in inspect(engine).get_table_names()
         result = migrate_database(settings)
         assert result["from_revision"] == "0003_workspace_documents"
-        assert result["target_revision"] == "0005_robot_registry"
+        assert result["target_revision"] == "0006_robot_qualification"
         with engine.begin() as connection:
             assert connection.execute(text("SELECT body FROM workspace_documents")).scalar() == '{"schemaVersion":1}'
             connection.execute(evaluation, {"id": "oev_upgrade00001", "summary": '{"episodes":1}'})
@@ -96,6 +96,6 @@ def test_previous_revision_upgrade_adds_offline_evaluations(postgres_database, t
             stored = connection.execute(text("SELECT seed, stored_bytes, metrics::text FROM offline_episodes")).one()
             assert stored == (2**40, 2**33, '{"r":1}')  # BIGINT columns keep 64-bit values
             assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []
-        assert migrate_database(settings)["from_revision"] == "0005_robot_registry"
+        assert migrate_database(settings)["from_revision"] == "0006_robot_qualification"
     finally:
         engine.dispose()

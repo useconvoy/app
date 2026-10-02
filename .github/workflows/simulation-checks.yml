@@ -18,6 +18,8 @@ jobs:
   physics:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      MUJOCO_GL: osmesa
     defaults:
       run:
         working-directory: integrations/simulation
@@ -28,6 +30,7 @@ jobs:
           version: "0.8.22"
           python-version: "3.11"
       - run: uv sync --frozen
+      - run: sudo apt-get update && sudo apt-get install -y libosmesa6
       - run: uv run --frozen ruff check src tests scripts
       - run: uv run --frozen pytest -q
       - run: uv run --frozen convoy-sim --episodes 3 --require-success --output runs/ci-reference
@@ -52,6 +55,7 @@ jobs:
           version: "0.8.22"
           python-version: "3.11"
       - run: uv sync --frozen --extra managed
+      - run: uv run --frozen --extra managed pytest -q tests/test_qualification_pipeline.py
       - run: uv run --frozen --extra managed ruff check src tests ../../examples/manipulation
       - run: uv run --frozen --extra managed python ../../examples/manipulation/pipeline.py --faults --output runs/ci-pipeline
       - run: uv run --frozen --extra managed python ../../examples/manipulation/evaluate.py --output runs/ci-evaluation

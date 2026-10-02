@@ -144,6 +144,9 @@ def robot_out(row: Robot, *, db: Session, evaluation_id: str | None = None) -> d
     device = db.get(Device, row.device_id)
     registration = db.get(RobotRegistration, row.id)
     member = db.get(FleetMember, row.id)
+    from . import robot_qualification
+
+    qualification = robot_qualification.out(db, robot_qualification.latest(db, row.id)) if registration else None
     return {
         "id": row.id,
         "project_id": row.project_id,
@@ -157,6 +160,7 @@ def robot_out(row: Robot, *, db: Session, evaluation_id: str | None = None) -> d
         "source_robot_id": registration.source_robot_id if registration else None,
         "simulation_engine": registration.simulation_engine if registration else None,
         "fleet_id": member.fleet_id if member else None,
+        "qualification": qualification,
         "created_at": iso(row.created_at),
     }
 

@@ -15,9 +15,10 @@ selected robots afterwards. Existing Configurations and application/episode URLs
 
 The first registry slice does not yet install an agent, run imported models, or authorize motion.
 A declared simulation asset is labelled **assets-declared**, not executable or physically validated.
-The following runner-qualification slice must load and hash the selected asset and validate its
-interfaces before new registrations can receive deployments. Existing qualified simulator records
-continue using their existing execution path. This is a staged implementation, not the final workflow.
+The simulator verification flow below loads and hashes the selected asset and checks its interfaces.
+Deployment and task execution for new registrations still require the next runtime/configuration
+integration. Existing qualified simulator records continue using their existing execution path.
+This is a staged implementation, not the final workflow.
 
 ## Profile import
 
@@ -77,3 +78,53 @@ robot, release, episode and document records remain intact. PostgreSQL adds froz
 `0005_robot_registry`; stop API/worker and run the existing migration command before its new release.
 Legacy frontend document robot records are not automatically guessed or merged by display name;
 the configuration-linking slice must reconcile explicit backend identities.
+
+## Simulator verification
+
+In Project → Robots, a registered MuJoCo instance offers **Verify simulator**. The website requests
+a device-bound check and polls its result every five seconds while visible. States distinguish a
+pending request, passed/failed checks, a ten-minute request expiry, and a stale device binding.
+Isaac assets can be declared but are explicitly unverified; this slice has no Isaac runner.
+
+The owner must provision the pinned asset on the enrolled simulator host. From
+`integrations/simulation`, use the existing simulator enrollment directory and a directory containing
+model files named by their profile's SHA-256:
+
+```sh
+uv sync --frozen --extra managed
+uv run --frozen --extra managed python -m convoy_sim.qualification.runner \
+  --data-dir /path/to/simulator-enrollment --assets /path/to/robot-assets
+```
+
+`--once` handles one pending request and exits (0 for passed/idle, 1 for a failed check, 2 for a
+transport/configuration error). Enrollment and credentials use the existing agent. The runner does
+not download URLs or control physical motors. Automatic artifact installation is still pending.
+
+MuJoCo verification requires the profile's exact engine version and an MJCF file, or a ZIP bundle
+with `model.xml` at its root. Bundle references must be internal; native plugins are unsupported.
+Checks cover the installed digest, model compilation, declared actuated joints/types/limits,
+direct position/velocity/torque controller mappings, control cadence relative to the physics step,
+bounded native physics execution without numerical warnings, and actual rendering of declared RGB
+cameras. Joint-state sensors are supported; other sensor kinds and controller adapters need explicit
+implementations. A native engine runs in a separate process with a 60-second verification deadline.
+
+Reports are immutable and tied to a requested profile digest, device binding and request generation.
+An authenticated runner reports its evidence; this is not independent hardware attestation. Passing
+does not establish successful policy execution, real-time deadlines, calibrated dynamics, or
+authorization to move a physical robot. Simulation time and elapsed time are shown separately.
+
+Routes:
+
+- `POST /api/v1/robots/{id}/qualification`: operator requests a check with normal idempotency.
+- `GET /api/v1/robots/{id}/qualification`: owner reads its latest result.
+- `GET /api/agent/v1/registry`: enrolled device receives only its robot/profile/request.
+- `POST /api/agent/v1/qualifications/{id}/report`: that device submits its terminal evidence.
+
+PostgreSQL requires migration `0006_robot_qualification`; SQLite creates the additive table at
+startup. The management and device endpoints retain their existing authentication boundaries.
+
+Acceptance includes actual HTTP enrollment of physical/simulated identities, shared-profile
+registration, a native MuJoCo subprocess, persisted movement evidence, restart without duplicate
+execution, and a deliberately altered asset that must fail. Separate checks render a real camera,
+reject unstable physics, and exercise lifecycle/ownership on SQLite and PostgreSQL. These checks
+exercise simulator readiness; no learned policy or Jetson timing result is claimed by this suite.

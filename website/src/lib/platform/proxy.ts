@@ -100,6 +100,7 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
   if (method === "GET") {
     allowed = /^(auth\/me|projects|devices|robot-connections|workspace-documents)$/.test(path)
       || new RegExp(`^(devices|robots|robot-profiles|deployments|missions|episodes)/${ID}$`).test(path)
+      || new RegExp(`^robots/${ID}/qualification$`).test(path)
       || new RegExp(`^applications/${ID}/(releases|evaluation-suites|evaluation-gate)$`).test(path)
       || new RegExp(`^evaluation-suites/${ID}$`).test(path)
       || new RegExp(`^episodes/${ID}/replay(?:/frames/[0-9]{1,4})?$`).test(path)
@@ -114,7 +115,7 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
     allowed = /^(auth\/(login|logout)|projects|robots|robot-profiles|robot-registrations|fleets|applications|deployments|enrollments|evaluations)$/.test(path)
       || new RegExp(`^applications/${ID}/(releases|evaluation-suites|evaluation-gate)$`).test(path)
       || new RegExp(`^fleets/${ID}/members(?:/${ID}/remove)?$`).test(path)
-      || new RegExp(`^robots/${ID}/missions$`).test(path)
+      || new RegExp(`^robots/${ID}/(missions|qualification)$`).test(path)
       || new RegExp(`^missions/${ID}/cancel$`).test(path)
       || new RegExp(`^evaluations/${ID}/(cancel|promote)$`).test(path)
       || new RegExp(`^(${OFFLINE}|${OFFLINE_EVALUATION}/episodes)$`).test(path);
