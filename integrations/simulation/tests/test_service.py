@@ -35,6 +35,7 @@ def key_document():
 
 
 def test_service_waits_for_registration_qualifies_runs_and_recovers_owned_worker(tmp_path):
+    runtime_python = os.environ.get("CONVOY_TEST_RUNTIME_PYTHON", sys.executable)
     private = tmp_path / "api-private-keys.json"
     private.write_text(json.dumps(key_document()))
     private.chmod(0o600)
@@ -82,11 +83,11 @@ def test_service_waits_for_registration_qualifies_runs_and_recovers_owned_worker
 
             project = post("projects", {"name": "One-command simulator"})
             setup = post("robot-connections/enrollments", {"project_id": project["id"], "name": "Arm runner", "simulated": True})
-            claim = subprocess.run([sys.executable, "-m", "convoy_agent.cli", *shlex.split(setup["command"])[1:]],
+            claim = subprocess.run([runtime_python, "-m", "convoy_agent.cli", *shlex.split(setup["command"])[1:]],
                                    cwd=tmp_path, env=env, capture_output=True, text=True, timeout=20)
             assert claim.returncode == 0, claim.stderr
             state = tmp_path / setup["data_dir"]
-            command = [sys.executable, "-m", "convoy_sim.service", *shlex.split(setup["simulator_command"])[1:]]
+            command = [runtime_python, "-m", "convoy_sim.service", *shlex.split(setup["simulator_command"])[1:]]
 
             def start():
                 return subprocess.Popen(command, cwd=tmp_path, env=env, stdout=log, stderr=log)

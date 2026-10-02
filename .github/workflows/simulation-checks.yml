@@ -65,6 +65,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - run: uv run --frozen --extra managed ruff check src tests ../../examples/manipulation
+      - run: bash install-runtime.sh /tmp/convoy-simulator-runtime
+      - run: /tmp/convoy-simulator-runtime/runtime/bin/python -c 'import importlib.util; assert importlib.util.find_spec("convoy_server") is None; assert importlib.util.find_spec("pytest") is None'
+      - run: CONVOY_TEST_RUNTIME_PYTHON=/tmp/convoy-simulator-runtime/runtime/bin/python uv run --frozen --extra managed pytest -q tests/test_service.py --basetemp=/tmp/convoy-installed-runtime-acceptance
       - run: uv run --frozen --extra managed python ../../examples/manipulation/pipeline.py --faults --output runs/ci-pipeline
       - run: uv run --frozen --extra managed python ../../examples/manipulation/evaluate.py --output runs/ci-evaluation
       # Do not upload the surrounding directory: it contains generated credentials.

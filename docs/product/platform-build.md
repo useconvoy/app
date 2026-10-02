@@ -309,7 +309,21 @@ including service startup before registration, duplicate rejection, real model/t
 rotation, forced owner loss, orphan recovery and graceful stop. Fifteen API signing/connection tests,
 23 coordinator/transport checks and the three project browser journeys pass. Browser coverage checks
 the generated simulator command alongside physical enrollment. Lint, type checks and production build
-pass. Installation packaging and Jetson service acceptance are the next checks before review.
+pass. The committed-source installer was exercised locally, followed by the full service test using
+its separate runtime Python (14.56 seconds). API-server and pytest packages are absent from that runtime.
+CI now installs the same distribution and runs that acceptance path too.
+
+The actual Jetson passed the separate-runtime service test in 42.25 seconds: startup before registration,
+live heartbeat, native model qualification, signed tasks, public-key rotation, duplicate-owner rejection,
+forced process loss, owned-worker recovery and graceful shutdown. Runtime source is `b8bf22a`;
+the service SHA-256 is `3f329934f25b6269c187070ed5d47a6b394a125a4152a8312419116cdb9cd5f8` and the
+separate-runtime test SHA-256 is `5af243e4d7baa35aa51364e5a26d156a3efe98c55f1978f215ac6b5dc700043c`,
+both checked against the copied files. Jetson runtime dependencies were installed from the frozen
+runtime extra, separately from the API/test environment. The installer script itself was exercised
+on the Mac; the archived Jetson source does not contain a Git checkout. No API/test packages are present
+in either runtime. The existing Jetson agent remained at PID 1047 and no test processes remained.
+These are end-to-end test durations, not action-latency measurements. Remote CI for this slice is pending;
+the preceding connection setup PR (#122) has all nine checks passing.
 
 This advances onboarding and local operation. Learned-model installation and edge/cloud pairing,
 legacy configuration reconciliation, scenario/chat tasking, registered visual replay, Isaac, fleet
