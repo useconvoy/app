@@ -4,6 +4,43 @@ import { allowedPlatformPath, platformOrigin, proxyPlatform } from "../../src/li
 
 const session = "convoy_session=cvs_abcdefghijklmnopqrstuvwx";
 const origin = "https://console.example.test";
+
+test("configuration links require one bounded lookup and expose only explicit mutations", () => {
+  for (const query of ["configuration_id=cfg_one", "application_id=app_one"]) {
+    assert.equal(allowedPlatformPath(["workspace-configuration-links"], "GET", new URLSearchParams(query)), `/api/v1/workspace-configuration-links?${query}`);
+  }
+  for (const query of ["", "configuration_id=a&application_id=b", "configuration_id=a&configuration_id=b", "owner_id=other", "configuration_id=../other"]) {
+    assert.equal(allowedPlatformPath(["workspace-configuration-links"], "GET", new URLSearchParams(query)), null);
+  }
+  assert.equal(allowedPlatformPath(["workspace-configuration-links"], "POST", new URLSearchParams()), "/api/v1/workspace-configuration-links");
+  assert.equal(allowedPlatformPath(["workspace-configuration-links", "wcl_one", "remove"], "POST", new URLSearchParams()), "/api/v1/workspace-configuration-links/wcl_one/remove");
+  assert.equal(allowedPlatformPath(["workspace-configuration-links", "wcl_one", "remove"], "GET", new URLSearchParams()), null);
+});
+
+test("robot asset uploads preserve bounded binary bytes and caller authentication", async () => {
+  const original = globalThis.fetch;
+  const path = "robot-profiles/rpf_one/simulation-assets/mujoco";
+  let calls = 0;
+  try {
+    globalThis.fetch = async (_url, options) => {
+      calls += 1;
+      const headers = new Headers(options?.headers);
+      assert.equal(headers.get("Cookie"), session);
+      assert.equal(headers.get("Content-Type"), "application/octet-stream");
+      assert.deepEqual(new Uint8Array(options?.body as ArrayBuffer), new Uint8Array([0, 255, 17]));
+      return Response.json({ stored: true }, { status: 201 });
+    };
+    const result = await proxyPlatform(request(path, { method: "POST", body: new Uint8Array([0, 255, 17]),
+      headers: { "Content-Type": "application/octet-stream" } }), path.split("/"));
+    assert.equal(result.status, 201);
+    const tooLarge = await proxyPlatform(request(path, { method: "POST", body: "small",
+      headers: { "Content-Type": "application/octet-stream", "Content-Length": String(16 * 1024 * 1024 + 1) } }), path.split("/"));
+    assert.equal(tooLarge.status, 413);
+    assert.equal(calls, 1);
+    assert.equal(allowedPlatformPath(path.split("/"), "GET", new URLSearchParams()), null);
+    assert.equal(allowedPlatformPath(path.split("/"), "POST", new URLSearchParams("url=https://other.test")), null);
+  } finally { globalThis.fetch = original; }
+});
 function request(path: string, options: RequestInit = {}) {
   return new Request(`${origin}/api/platform/${path}`, { ...options,
     headers: { Cookie: `${session}; unrelated=private`, Origin: origin, "X-Convoy-Client": "web",
@@ -11,6 +48,11 @@ function request(path: string, options: RequestInit = {}) {
 }
 
 test("allowlist excludes controller/device writes, path traversal, unknown query keys and duplicate scope", () => {
+  for (const [path, method] of [["robot-connections/enrollments", "POST"], ["robot-connections/enrollments/enr_one", "GET"], ["robot-connections/enrollments/enr_one/cancel", "POST"], ["robot-connections/dev_one", "GET"]]) {
+    assert.equal(allowedPlatformPath(path.split("/"), method, new URLSearchParams()), `/api/v1/${path}`);
+    assert.equal(allowedPlatformPath(path.split("/"), method, new URLSearchParams("url=https://elsewhere.test")), null);
+  }
+  assert.equal(allowedPlatformPath(["robot-connections", "dev_one"], "POST", new URLSearchParams()), null);
   assert.equal(allowedPlatformPath(["robots"], "GET", new URLSearchParams("project_id=prj_one")), "/api/v1/robots?project_id=prj_one");
   assert.equal(allowedPlatformPath(["deployments"], "GET", new URLSearchParams("project_id=prj_one&robot_id=rob_one")), "/api/v1/deployments?project_id=prj_one&robot_id=rob_one");
   assert.equal(allowedPlatformPath(["applications", "app_one", "qualification"], "GET", new URLSearchParams("release_id=rel_one")), "/api/v1/applications/app_one/qualification?release_id=rel_one");
@@ -27,6 +69,12 @@ test("allowlist excludes controller/device writes, path traversal, unknown query
   assert.equal(allowedPlatformPath(["projects"], "GET", new URLSearchParams("url=http://other")), null);
   assert.equal(allowedPlatformPath(["robots"], "GET", new URLSearchParams()), null);
   assert.equal(allowedPlatformPath(["projects"], "DELETE", new URLSearchParams()), null);
+  assert.equal(allowedPlatformPath(["configurations"], "POST", new URLSearchParams()), "/api/v1/configurations");
+  assert.equal(allowedPlatformPath(["applications", "app_one"], "GET", new URLSearchParams()), "/api/v1/applications/app_one");
+  assert.equal(allowedPlatformPath(["applications", "app_one", "configuration-releases"], "POST", new URLSearchParams()), "/api/v1/applications/app_one/configuration-releases");
+  assert.equal(allowedPlatformPath(["applications", "app_one", "configuration-releases"], "GET", new URLSearchParams()), null);
+  assert.equal(allowedPlatformPath(["applications", "app_one", "releases", "apr_one", "setup"], "GET", new URLSearchParams()), "/api/v1/applications/app_one/releases/apr_one/setup");
+  assert.equal(allowedPlatformPath(["applications", "app_one", "releases", "apr_one", "setup"], "POST", new URLSearchParams()), null);
   assert.equal(platformOrigin("http://localhost:8080"), "http://localhost:8080");
   for (const url of ["http://external.test", "https://user:pass@example.test", "https://example.test/base", "https://example.test?url=other"]) assert.throws(() => platformOrigin(url));
 });
@@ -444,10 +492,14 @@ test("registry reads require project scope and only explicit mutations are expos
     assert.equal(allowedPlatformPath([resource], "GET", new URLSearchParams()), null);
     assert.equal(allowedPlatformPath([resource], "GET", new URLSearchParams("project_id=prj_one")), `/api/v1/${resource}?project_id=prj_one`);
   }
-  for (const path of ["robot-profiles", "robot-registrations", "fleets", "fleets/flt_one/members", "fleets/flt_one/members/rob_one/remove"]) {
+  for (const path of ["robot-profiles", "robot-registrations", "fleets", "fleets/flt_one/members", "fleets/flt_one/members/rob_one/remove", "robots/rob_one/qualification"]) {
     assert.equal(allowedPlatformPath(path.split("/"), "POST", new URLSearchParams()), `/api/v1/${path}`);
     assert.equal(allowedPlatformPath(path.split("/"), "PUT", new URLSearchParams()), null);
   }
   assert.equal(allowedPlatformPath(["robots", "rob_one"], "GET", new URLSearchParams()), "/api/v1/robots/rob_one");
+  assert.equal(allowedPlatformPath(["robots", "rob_one", "qualification"], "GET", new URLSearchParams()), "/api/v1/robots/rob_one/qualification");
+  assert.equal(allowedPlatformPath(["missions"], "GET", new URLSearchParams("project_id=prj_one&robot_id=rob_one")), "/api/v1/missions?project_id=prj_one&robot_id=rob_one");
+  assert.equal(allowedPlatformPath(["missions"], "GET", new URLSearchParams("robot_id=rob_one")), null);
+  assert.equal(allowedPlatformPath(["qualifications", "rqc_one", "report"], "POST", new URLSearchParams()), null);
   assert.equal(allowedPlatformPath(["robot-profiles", "rpf_one"], "DELETE", new URLSearchParams()), null);
 });

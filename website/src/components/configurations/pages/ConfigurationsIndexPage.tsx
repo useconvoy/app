@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ProjectConfigurationPicker } from "@/components/projects/ProjectConfigurations";
 import { useMemo } from "react";
 import { currentRevision, listConfigurations, useWorkspace } from "@/lib/configurations/client";
 import { emptyWorkspace } from "@/lib/configurations/mutations";
@@ -31,6 +32,9 @@ export function ConfigurationsIndexPage() {
   const create = <Link className="cv-btn cv-btn--primary" href={routes.newConfiguration()}>New configuration</Link>;
   return <AppShell crumbs={CRUMBS}>
     <PageHeader title="Configurations" actions={<><ImportButton />{create}</>} />
+    <ProjectConfigurationPicker />
+    <h2>Saved workspace configurations</h2>
+    <p>Existing configuration documents and their evaluations remain available here.</p>
     <WorkspaceNotice />
     {configurations.length
       ? <div className="cv-grid">{configurations.map(config => <ConfigCard key={config.id} config={config} robots={views.filter(view => view.robot.configId === config.id)} />)}</div>

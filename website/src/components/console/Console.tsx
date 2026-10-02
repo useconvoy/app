@@ -133,7 +133,7 @@ function Workspace({ account, onSessionEnd }: { account: Account; onSessionEnd: 
   </>;
 }
 
-function ProjectWorkspace({ project, writable, canDispatch, executionProfiles, onSessionEnd }: { project: Project; writable: boolean; canDispatch: boolean; executionProfiles: string[]; onSessionEnd: () => void }) {
+export function ProjectWorkspace({ project, writable, canDispatch, executionProfiles, onSessionEnd, initialRobotId = "" }: { project: Project; writable: boolean; canDispatch: boolean; executionProfiles: string[]; onSessionEnd: () => void; initialRobotId?: string }) {
   const [robots, setRobots] = useState<Robot[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
@@ -142,7 +142,7 @@ function ProjectWorkspace({ project, writable, canDispatch, executionProfiles, o
   const [missions, setMissions] = useState<Mission[]>([]);
   const [evaluations, setEvaluations] = useState<EvaluationRun[]>([]);
   const [qualification, setQualification] = useState<Qualification | null>(null);
-  const [robotId, setRobotId] = useState("");
+  const [robotId, setRobotId] = useState(initialRobotId);
   const [applicationId, setApplicationId] = useState("");
   const [releaseId, setReleaseId] = useState("");
   const [manifest, setManifest] = useState("");

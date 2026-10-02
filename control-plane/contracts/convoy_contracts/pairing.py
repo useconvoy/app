@@ -27,6 +27,8 @@ from .execution import (
     validate_identity,
     validate_manifest,
 )
+from .registered import REGISTERED_PROFILE
+from .registered import validate_manifest as validate_registered_manifest
 
 PAIRED_PROFILE = "metaworld-smolvla-text-skill-v1"
 PLANNER_RUNTIME = "convoy-llamacpp-text-skill-v1"
@@ -54,10 +56,12 @@ PLANNER_IDENTITY_FIELDS = {"planner_artifact_sha256", "planner_incarnation", "ru
 
 
 def release_profiles() -> frozenset[str]:
-    return PROFILES | {PAIRED_PROFILE}
+    return PROFILES | {PAIRED_PROFILE, REGISTERED_PROFILE}
 
 
 def validate_release_manifest(value: dict) -> dict:
+    if isinstance(value, dict) and value.get("profile") == REGISTERED_PROFILE:
+        return validate_registered_manifest(value)
     if not isinstance(value, dict) or value.get("profile") != PAIRED_PROFILE:
         return validate_manifest(value)
     _keys(value, {"schema_version", "profile", "action_manifest", "planner", "task", "catalog_sha256",

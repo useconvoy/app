@@ -14,7 +14,8 @@ dependencies = [
 
 [project.optional-dependencies]
 video = ["imageio==2.37.0", "imageio-ffmpeg==0.6.0"]
-managed = ["convoy-agent[coordinator]", "convoy-contracts", "convoy-worker", "convoy-server"]
+runtime = ["convoy-agent[coordinator,local-host]", "convoy-contracts", "convoy-worker"]
+managed = ["convoy-agent[coordinator,local-host]", "convoy-contracts", "convoy-worker", "convoy-server"]
 
 [tool.uv.sources]
 convoy-agent = { path = "../../control-plane/agent", editable = true }
@@ -28,6 +29,8 @@ dev = ["pytest>=8,<9", "ruff>=0.12,<0.13"]
 [project.scripts]
 convoy-sim = "convoy_sim.cli:main"
 convoy-sim-pills = "convoy_sim.bimanual_pill_task.cli:main"
+convoy-sim-service = "convoy_sim.service:main"
+convoy-sim-render = "convoy_sim.trajectory:main"
 
 [build-system]
 requires = ["hatchling>=1.26,<2"]

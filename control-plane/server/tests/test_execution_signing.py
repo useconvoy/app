@@ -6,6 +6,7 @@ import os
 import uuid
 
 import pytest
+from conftest import FakeAgent, enrollment_token
 from convoy_contracts.execution import VISUAL_PROFILE, verify_grant
 from convoy_contracts.grants import GrantVerifier, SigningKeys
 from convoy_contracts.pairing import (
@@ -27,6 +28,23 @@ from fastapi.testclient import TestClient
 
 WEB = {"X-Convoy-Client": "web"}
 CLAIM = {"boot_id": "test-boot", "incarnation": "test-coordinator", "authority_epoch": 1}
+
+
+def test_enrolled_simulator_gets_only_public_action_keys(paired_api):
+    path = "/api/agent/v1/action-verification-keys"
+    assert paired_api["admin"].get(path).status_code == 401
+    response = paired_api["agent"].get(path)
+    assert response.status_code == 200
+    assert response.json() == SigningKeys(paired_api["keys"]).verification_document("action")
+    assert "private_key" not in response.text and "planner" not in response.text
+    physical = FakeAgent(paired_api["admin"].app)
+    assert physical.enroll(enrollment_token(paired_api["admin"], simulated=False), simulated=False).status_code == 200
+    assert physical.client.get(path).status_code == 403
+    paired_api["settings"].execution_signing_keys_file = None
+    paired_api["settings"].execution_secret = "explicit-test-secret-with-at-least-32-bytes"
+    unavailable = paired_api["agent"].get(path)
+    assert unavailable.status_code == 503
+    assert paired_api["settings"].execution_secret not in unavailable.text
 
 
 def key_document(suffix="1"):

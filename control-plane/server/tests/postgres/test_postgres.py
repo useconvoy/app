@@ -56,8 +56,8 @@ def test_explicit_fresh_migration_is_repeatable_and_startup_refuses_unknown_sche
             migrate_database(settings)
         with engine.begin() as connection:
             connection.execute(text("DROP TABLE unrelated"))
-        assert migrate_database(settings)["target_revision"] == "0005_robot_registry"
-        assert migrate_database(settings)["from_revision"] == "0005_robot_registry"
+        assert migrate_database(settings)["target_revision"] == "0007_workspace_links"
+        assert migrate_database(settings)["from_revision"] == "0007_workspace_links"
         assert set(inspect(engine).get_table_names()) == set(Base.metadata.tables) | {"alembic_version"}
         with engine.connect() as connection:
             assert compare_metadata(MigrationContext.configure(connection), Base.metadata) == []

@@ -159,7 +159,14 @@ def visual_png_bytes(encoded: Any) -> bytes:
     return data
 
 
-def validate_observation(value: Any, profile: str = PROFILE) -> Any:
+def validate_observation(value: Any, profile: str = PROFILE, manifest: dict | None = None) -> Any:
+    from .registered import REGISTERED_PROFILE
+    from .registered import validate_observation as registered_observation
+
+    if profile == REGISTERED_PROFILE:
+        if manifest is None or manifest.get("profile") != profile:
+            raise ValueError("registered observation requires its release interface")
+        return registered_observation(value, manifest)
     if profile == PROFILE:
         _vector(value, 39, "observation", 1e6)
     elif profile == VISUAL_PROFILE:
@@ -173,7 +180,7 @@ def validate_observation(value: Any, profile: str = PROFILE) -> Any:
     return value
 
 
-def validate_request(value: dict, profile: str = PROFILE) -> dict:
+def validate_request(value: dict, profile: str = PROFILE, manifest: dict | None = None) -> dict:
     _keys(value, {"identity", "request_id", "observation_id", "sequence", "observation",
                   "deadline_monotonic_ns", "budget_ms"}, "request")
     validate_identity(value["identity"])
@@ -182,11 +189,11 @@ def validate_request(value: dict, profile: str = PROFILE) -> dict:
     _integer(value["sequence"], "sequence", 0, 2**53 - 1)
     _integer(value["deadline_monotonic_ns"], "deadline_monotonic_ns", 1, 2**63 - 1)
     _number(value["budget_ms"], "budget_ms", 0.001, 30000)
-    validate_observation(value["observation"], profile)
+    validate_observation(value["observation"], profile, manifest)
     return value
 
 
-def validate_result(value: dict) -> dict:
+def validate_result(value: dict, manifest: dict | None = None) -> dict:
     _keys(value, {"identity", "request_id", "observation_id", "sequence", "deadline_monotonic_ns",
                   "action", "policy_duration_ms"}, "result")
     validate_identity(value["identity"])
@@ -195,7 +202,12 @@ def validate_result(value: dict) -> dict:
     _integer(value["sequence"], "sequence", 0, 2**53 - 1)
     _integer(value["deadline_monotonic_ns"], "deadline_monotonic_ns", 1, 2**63 - 1)
     _number(value["policy_duration_ms"], "policy_duration_ms", 0, 86400000)
-    _vector(value["action"], 4, "action", 1)
+    from .registered import REGISTERED_PROFILE, validate_action
+
+    if manifest is not None and manifest.get("profile") == REGISTERED_PROFILE:
+        validate_action(value["action"], manifest)
+    else:
+        _vector(value["action"], 4, "action", 1)
     return value
 
 

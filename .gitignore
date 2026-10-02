@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 .pytest_cache/
 .ruff_cache/
+MUJOCO_LOG.TXT
 .env
 .env.*
 !.env.example

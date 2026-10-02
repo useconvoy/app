@@ -2,24 +2,41 @@ import { useEffect, useState } from "react";
 import { api, ApiError, errorText } from "@/lib/platform/client";
 import { notifySessionExpired } from "@/lib/configurations/session-events";
 
+export interface ProfileJoint { name: string; kind: string; lower: number | null; upper: number | null }
+export interface ProfileSimulation { engine: string; engine_version: string; controller: string; asset: { sha256: string; uri: string; format: string } }
 export interface RobotProfile {
   id: string; project_id: string; name: string; revision: number; digest: string;
-  spec: { embodiment: string; command_interface: string; adapter: string; control_rate_hz: number; joints: unknown[]; sensors: unknown[] };
+  spec: { embodiment: string; command_interface: string; adapter: string; control_rate_hz: number; joints: ProfileJoint[]; sensors: unknown[]; simulations: ProfileSimulation[]; execution_profile?: string | null };
   simulation: { state: string; engines: string[]; runtime_verified: boolean; dynamics_source: string; detail: string };
 }
 export interface Fleet { id: string; project_id: string; name: string; robot_ids: string[] }
 
 /** Resource changes clear old results; a response from a previous project cannot overwrite this one. */
-export function useProjectResource<T>(path: string, revision = 0) {
-  const [result, setResult] = useState<{ path: string; data?: T; error?: string }>();
+export function useProjectResource<T>(path: string | null, revision = 0, poll = false) {
+  const [result, setResult] = useState<{ path: string | null; data?: T; error?: string }>();
   useEffect(() => {
+    if (path === null) return;
+    const resourcePath = path;
     let active = true;
-    void api<T>(path).then(data => { if (active) setResult({ path, data }); }).catch(error => {
+    let timer: ReturnType<typeof setTimeout>;
+    function tick() {
       if (!active) return;
-      if (error instanceof ApiError && error.status === 401) notifySessionExpired();
-      setResult({ path, error: errorText(error) });
-    });
-    return () => { active = false; };
-  }, [path, revision]);
+      if (document.visibilityState === "visible") void read();
+      else timer = setTimeout(tick, 5000);
+    }
+    async function read() {
+      try {
+        const data = await api<T>(resourcePath);
+        if (active) setResult({ path, data });
+      } catch (error) {
+        if (!active) return;
+        if (error instanceof ApiError && error.status === 401) { notifySessionExpired(); return; }
+        setResult(previous => ({ path, data: previous?.path === path ? previous.data : undefined, error: errorText(error) }));
+      }
+      if (active && poll) timer = setTimeout(tick, 5000);
+    }
+    void read();
+    return () => { active = false; clearTimeout(timer); };
+  }, [path, revision, poll]);
   return result?.path === path ? result : { path };
 }

@@ -23,6 +23,7 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--token", required=True)
     e.add_argument("--name", required=True)
     e.add_argument("--simulate", action="store_true")
+    e.add_argument("--host-inventory", action="store_true", help="report the real computer running a simulator instead of synthetic demo hardware")
     e.add_argument("--seed", type=int, default=1)
     e.add_argument("--ca-file", default=None)
     e.add_argument(
@@ -70,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
             token=args.token,
             name=args.name,
             simulate=args.simulate,
+            host_inventory=args.host_inventory,
             seed=args.seed,
             ca_file=args.ca_file,
             insecure=args.insecure,

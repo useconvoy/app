@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 
+from convoy_contracts.assets import ROBOT_ASSET_MAX_BYTES
 from fastapi import HTTPException
 from starlette.responses import JSONResponse
 
@@ -26,6 +27,7 @@ OFFLINE_EPISODE_BODY = 16 * 1024 * 1024
 OFFLINE_EPISODE_TIMEOUT_S = 120
 # Routes that consume their own body: (path, method, maximum, deadline in seconds or None for the default).
 LAZY = (
+    (re.compile(r"/api/v1/robot-profiles/[^/]+/simulation-assets/(mujoco|isaac)"), "POST", ROBOT_ASSET_MAX_BYTES, 60),
     (DOCUMENT, "PUT", DOCUMENT_BODY, None),
     (OFFLINE_EVALUATIONS, "POST", MAX_BODY, None),
     (OFFLINE_EPISODES, "POST", OFFLINE_EPISODE_BODY, OFFLINE_EPISODE_TIMEOUT_S),
@@ -53,6 +55,7 @@ class ChatBodyLimit:
             "/api/agent/v1/robots/", "/api/v1/projects", "/api/v1/robots", "/api/v1/applications",
             "/api/v1/deployments", "/api/v1/missions/", "/api/v1/evaluations", "/api/v1/evaluation-suites",
             "/api/v1/offline-evaluations",
+            "/api/v1/robot-connections",
         ))
         limited = (
             path.startswith("/api/agent/v1/chat/") or path.startswith("/api/v1/devices/") and "/chat" in path

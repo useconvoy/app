@@ -1,7 +1,13 @@
 import type { ReleaseManifest } from "./manifest";
 
 export interface Project { id: string; name: string }
-export interface Robot { id: string; project_id: string; device_id: string; name: string; profile: string; generation: number; evaluation_id: string | null; simulated?: boolean; profile_id?: string | null; source_robot_id?: string | null; simulation_engine?: string | null; fleet_id?: string | null }
+export interface SimulatorQualification {
+  id: string; profile_id: string; profile_digest: string; engine: string;
+  state: "requested" | "passed" | "failed" | "expired" | "stale";
+  scope: string; created_at: string; completed_at: string | null;
+  report: { detail: string; evidence: { engine_version: string; steps: number; sim_seconds: number; wall_seconds: number; checks: string[] } } | null;
+}
+export interface Robot { id: string; project_id: string; device_id: string; name: string; profile: string; generation: number; evaluation_id: string | null; simulated?: boolean; profile_id?: string | null; source_robot_id?: string | null; simulation_engine?: string | null; fleet_id?: string | null; qualification?: SimulatorQualification | null }
 export interface Application { id: string; project_id: string; name: string }
 export interface Release { id: string; application_id: string; digest: string; manifest: ReleaseManifest }
 export interface Deployment { id: string; robot_id: string; release_id: string; generation: number; state: string; detail: string; observed_at: string | null }

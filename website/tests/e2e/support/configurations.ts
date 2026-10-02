@@ -112,6 +112,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<{ 
     if (/^devices$/.test(path)) return route.fulfill(json([{ id: "dev_contract", name: "Contract Jetson", simulated: false, status: "online" }, { id: "dev_contract_sim", name: "Contract runner", simulated: true, status: "online" }]));
     if (/^devices\//.test(path)) return route.fulfill(json({ id: "dev_contract", name: "Contract Jetson", status: "online", hardware: { jetson_model: "Contract Jetson board", l4t_release: "36.4", cuda_version: "12.6" }, last_telemetry: {} }));
     if (path === "projects") return route.fulfill(json([{ id: PROJECT, name: "Contract project" }]));
+    if (path.startsWith("workspace-configuration-links?") || path.startsWith("applications?")) return route.fulfill(json([]));
     if (path.startsWith("robots?")) return route.fulfill(json([{ id: PLATFORM_ROBOT, project_id: PROJECT, device_id: "dev_contract_sim", name: "Contract simulator", profile: "contract", generation: 1, evaluation_id: null }]));
     if (path.startsWith("evaluations?")) return route.fulfill(json(EVALUATIONS.filter(item => path.includes(item.project_id))));
     if (path.startsWith("missions?")) return route.fulfill(json(MISSIONS));

@@ -66,11 +66,11 @@ test.describe("new configuration", () => {
     await expect(page.getByText("Route: Edge + cloud")).toBeVisible();
     await page.getByRole("button", { name: "Create" }).click();
     await expect(h1(page)).toHaveText("Arm · Hybrid");
-    await expect(page.locator(".cv-head .cv-badge")).toHaveText("Testing");
+    await expect(page.locator(".cv-head .cv-badge")).toHaveText("Draft");
     const saved = documents.writes.at(-1)!;
     expect(saved).toMatchObject({ ifMatch: "\"1\"", status: 200 });
     const config = saved.body.configurations.find(item => item.name === "Arm · Hybrid")!;
-    expect([config.status, config.candidateRev, config.revisions[0].edgeHardware.name, config.revisions[0].routing.mode]).toEqual(["testing", "r1", "Jetson Orin NX 16 GB", "hybrid"]);
+    expect([config.status, config.candidateRev, config.revisions[0].edgeHardware.name, config.revisions[0].routing.mode]).toEqual(["draft", "r1", "Jetson Orin NX 16 GB", "hybrid"]);
     expect(config.revisions[0].edgeModels.map(model => [model.name, model.role])).toEqual([["SmolVLA (450M)", "policy"]]);
     expect(config.revisions[0].cloudModels.map(model => [model.name, model.role])).toEqual([["Hosted planner", "planner"]]);
     await page.getByRole("tab", { name: "Details" }).click();

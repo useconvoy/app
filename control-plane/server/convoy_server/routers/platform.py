@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, StringConstraints
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -37,6 +37,44 @@ class ProjectIn(Input):
 
 class ApplicationIn(ProjectIn):
     project_id: Id
+
+
+class ReferencePolicyIn(Input):
+    kind: Literal["reference"]
+
+
+class InstalledPolicyIn(Input):
+    kind: Literal["installed"]
+    runtime: Name
+    artifact_sha256: Digest
+
+
+class TimingIn(Input):
+    mode: Literal["realtime"] = "realtime"
+    max_observation_age_ms: int = Field(default=200, strict=True, ge=1, le=30000)
+    max_physics_lag_ms: int = Field(default=20, strict=True, ge=1, le=1000)
+    fallback: Literal["hold-position"] = "hold-position"
+
+
+class ExecutionIn(Input):
+    timing: TimingIn | None = None
+    max_steps: int = Field(default=200, strict=True, ge=1, le=500)
+    decision_timeout_ms: int = Field(default=1000, strict=True, ge=1, le=30000)
+    mission_timeout_s: int = Field(default=60, strict=True, ge=1, le=3600)
+
+
+class ConfigurationIn(Input):
+    profile_id: Id
+    policy: Annotated[ReferencePolicyIn | InstalledPolicyIn, Field(discriminator="kind")]
+    instruction: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+    targets: dict[Name, FiniteFloat] = Field(min_length=1, max_length=128)
+    position_tolerance: FiniteFloat = Field(default=0.01, ge=1e-6, le=1)
+    velocity_tolerance: FiniteFloat = Field(default=0.02, ge=1e-6, le=1)
+    execution: ExecutionIn = Field(default_factory=ExecutionIn)
+
+
+class ConfigurationCreateIn(ApplicationIn):
+    configuration: ConfigurationIn
 
 
 class RobotIn(ApplicationIn):
@@ -147,6 +185,55 @@ def list_applications(project_id: Id, p: PrincipalRead, db: Database):
     return [service.application_out(row) for row in rows]
 
 
+@router.get("/api/v1/applications/{application_id}")
+def get_application(application_id: str, p: PrincipalRead, db: Database):
+    return service.application_out(service.resource_for(db, Application, application_id, p))
+
+
+@router.get("/api/v1/applications/{application_id}/releases/{release_id}/setup")
+def configuration_setup(application_id: str, release_id: str, p: PrincipalRead, db: Database):
+    from convoy_contracts.execution import canonical_digest, canonical_json
+
+    from ..services.configuration_releases import REFERENCE_RUNTIME
+
+    service.resource_for(db, Application, application_id, p)
+    release = db.get(ApplicationRelease, release_id)
+    if release is None or release.application_id != application_id:
+        raise HTTPException(404, "release not found in application")
+    manifest = release.manifest
+    artifact = None
+    if manifest.get("schema_version") == 3 and manifest["policy"]["runtime"] == REFERENCE_RUNTIME:
+        reference = {"target_joint_positions": manifest["task"]["target_joint_positions"]}
+        if canonical_digest(reference) == manifest["policy"]["artifact_sha256"]:
+            artifact = canonical_json(reference).decode()
+    # Return serialized bytes as strings: browser JSON re-serialization changes 0.0 to 0,
+    # invalidating the artifact/release identity that the worker must acknowledge.
+    return {"release_id": release.id, "manifest_json": canonical_json(manifest).decode(),
+            "reference_policy_json": artifact}
+
+
+@router.post("/api/v1/configurations", status_code=201)
+def create_configuration(
+    body: ConfigurationCreateIn, request: Request, p: PrincipalWrite, db: Database, key: IdempotencyKey = None
+):
+    from ..services import configuration_releases
+
+    data = body.model_dump()
+    return service.mutate(db, p, request.url.path, key, data, lambda: configuration_releases.create(db, p, data))
+
+
+@router.post("/api/v1/applications/{application_id}/configuration-releases", status_code=201)
+def revise_configuration(
+    application_id: str, body: ConfigurationIn, request: Request, p: PrincipalWrite, db: Database,
+    key: IdempotencyKey = None,
+):
+    from ..services import configuration_releases
+
+    data = body.model_dump()
+    return service.mutate(db, p, request.url.path, key, data,
+                          lambda: configuration_releases.revise(db, p, application_id, data))
+
+
 @router.post("/api/v1/applications/{application_id}/releases", status_code=201)
 def create_release(
     application_id: str,
@@ -226,12 +313,15 @@ def get_mission(mission_id: str, p: PrincipalRead, db: Database):
 
 @router.get("/api/v1/missions")
 def list_missions(
-    project_id: Id, p: PrincipalRead, db: Database, limit: int = Query(default=100, ge=1, le=200)
+    project_id: Id, p: PrincipalRead, db: Database, limit: int = Query(default=100, ge=1, le=200), robot_id: Id | None = None
 ):
     service.project_for(db, project_id, p)
+    if robot_id and service.resource_for(db, Robot, robot_id, p).project_id != project_id:
+        raise HTTPException(404, "robot not found in project")
     rows = db.scalars(
         select(Mission)
         .where(Mission.project_id == project_id)
+        .where(Mission.robot_id == robot_id if robot_id else True)
         .order_by(Mission.created_at.desc())
         .limit(limit)
     )

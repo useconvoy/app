@@ -30,7 +30,7 @@ test("J1 · explore: sign in, open a configuration, its simulated robot and an e
     await page.getByLabel("Password", { exact: true }).fill("fixture-only");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(h1(page)).toHaveText("Projects");
-    await page.getByRole("link", { name: "Existing configurations", exact: true }).click();
+    await page.getByRole("link", { name: "Organize saved configurations", exact: true }).click();
     await expect(h1(page)).toHaveText("Configurations");
     await expect(page.locator(".cv-config")).toHaveCount(3);
     await milestone(page, testInfo, "J1-01-configurations");

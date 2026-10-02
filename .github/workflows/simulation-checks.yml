@@ -18,6 +18,8 @@ jobs:
   physics:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      MUJOCO_GL: osmesa
     defaults:
       run:
         working-directory: integrations/simulation
@@ -28,6 +30,7 @@ jobs:
           version: "0.8.22"
           python-version: "3.11"
       - run: uv sync --frozen
+      - run: sudo apt-get update && sudo apt-get install -y libosmesa6
       - run: uv run --frozen ruff check src tests scripts
       - run: uv run --frozen pytest -q
       - run: uv run --frozen convoy-sim --episodes 3 --require-success --output runs/ci-reference
@@ -42,6 +45,8 @@ jobs:
   managed-pipeline:
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    env:
+      MUJOCO_GL: osmesa
     defaults:
       run:
         working-directory: integrations/simulation
@@ -52,7 +57,20 @@ jobs:
           version: "0.8.22"
           python-version: "3.11"
       - run: uv sync --frozen --extra managed
+      - run: sudo apt-get update && sudo apt-get install -y libosmesa6
+      - run: uv run --frozen --extra managed pytest -q tests/test_qualification_pipeline.py tests/test_managed_worker.py tests/test_realtime.py tests/test_trajectory.py tests/test_service.py --basetemp=/tmp/convoy-managed-acceptance
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: registered-timing-measurements
+          # Only explicit measurement summaries; never enrollment state, keys or journals.
+          path: /tmp/convoy-managed-acceptance/*/timing-*.json
+          if-no-files-found: ignore
+          retention-days: 7
       - run: uv run --frozen --extra managed ruff check src tests ../../examples/manipulation
+      - run: bash install-runtime.sh /tmp/convoy-simulator-runtime
+      - run: /tmp/convoy-simulator-runtime/runtime/bin/python -c 'import importlib.util; assert importlib.util.find_spec("convoy_server") is None; assert importlib.util.find_spec("pytest") is None'
+      - run: CONVOY_TEST_RUNTIME_PYTHON=/tmp/convoy-simulator-runtime/runtime/bin/python uv run --frozen --extra managed pytest -q tests/test_service.py --basetemp=/tmp/convoy-installed-runtime-acceptance
       - run: uv run --frozen --extra managed python ../../examples/manipulation/pipeline.py --faults --output runs/ci-pipeline
       - run: uv run --frozen --extra managed python ../../examples/manipulation/evaluate.py --output runs/ci-evaluation
       # Do not upload the surrounding directory: it contains generated credentials.

@@ -12,6 +12,7 @@ const OFFLINE = "offline-evaluations";
 const OFFLINE_EVALUATION = `${OFFLINE}/oev_[a-z0-9]{12}`;
 const OFFLINE_EPISODE = `${OFFLINE_EVALUATION}/episodes/oep_[a-z0-9]{12}`;
 const EPISODE_LIMIT = 16 * 1024 * 1024;
+const ROBOT_ASSET_LIMIT = 16 * 1024 * 1024;
 const EPISODE_BODY_MS = 120_000;
 const EPISODE_UPSTREAM_MS = 60_000;
 const MUTATIONS = ["POST", "PUT", "DELETE"];
@@ -34,6 +35,11 @@ const messages: Record<number, string> = {
   413: "The request is too large.",
   422: "Check the required fields and the supplied release manifest.",
   429: "Too many requests. Wait a moment before trying again.",
+};
+const assetMessages: Record<number, string> = {
+  ...messages,
+  413: "The model exceeds the 16 MiB upload limit.",
+  507: "Model storage is full. Contact your Convoy operator to free space.",
 };
 
 // Workspace documents: conditional saves, a per-account write budget and a document size limit.
@@ -78,6 +84,14 @@ const registryConflicts: [string, string][] = [
   ["robot fleet membership changed", "A robot’s fleet assignment changed. Refresh before assigning it."],
   ["robot is no longer", "This robot is no longer in the selected fleet. Refresh to see its assignment."],
 ];
+const executionConflicts: [string, string][] = [
+  ["registered robot requires current", "Verify this simulator and its supported controller before deploying or starting a task."],
+  ["release does not match the registered", "This release uses a different robot profile or simulation model."],
+  ["release joint interface does not match", "This release has different joints, limits, or control timing from the robot."],
+  ["robot has an active or unresolved mission", "Finish or reconcile the robot’s current task before starting another."],
+  ["current deployment is not ready", "Wait for the robot to acknowledge the current deployment."],
+  ["simulator verification is already requested", "A verification request is already waiting for this runner."],
+];
 
 export function platformOrigin(value = process.env.CONVOY_API_URL ?? "http://127.0.0.1:8080"): string {
   const url = new URL(value);
@@ -99,22 +113,31 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
   let allowed = false;
   if (method === "GET") {
     allowed = /^(auth\/me|projects|devices|robot-connections|workspace-documents)$/.test(path)
-      || new RegExp(`^(devices|robots|robot-profiles|deployments|missions|episodes)/${ID}$`).test(path)
+      || new RegExp(`^(devices|robots|robot-profiles|applications|deployments|missions|episodes)/${ID}$`).test(path)
+      || new RegExp(`^robots/${ID}/qualification$`).test(path)
+      || new RegExp(`^robot-profiles/${ID}/simulation-assets$`).test(path)
+      || new RegExp(`^robot-connections/(?:${ID}|enrollments/${ID})$`).test(path)
+      || new RegExp(`^applications/${ID}/releases/${ID}/setup$`).test(path)
       || new RegExp(`^applications/${ID}/(releases|evaluation-suites|evaluation-gate)$`).test(path)
       || new RegExp(`^evaluation-suites/${ID}$`).test(path)
       || new RegExp(`^episodes/${ID}/replay(?:/frames/[0-9]{1,4})?$`).test(path)
       || new RegExp(`^${DOCUMENT}$`).test(path);
     if (["robots", "robot-profiles", "fleets", "applications", "missions", "evaluations"].includes(path)) { allowed = true; keys = ["project_id"]; required = keys; }
     if (path === "deployments") { allowed = true; keys = ["project_id", "robot_id"]; required = ["project_id"]; }
+    if (path === "missions") { keys = ["project_id", "robot_id"]; required = ["project_id"]; }
     if (path === "episodes") { allowed = true; keys = ["mission_id"]; required = keys; }
+    if (path === "workspace-configuration-links") { allowed = true; keys = ["configuration_id", "application_id"]; if (keys.filter(key => search.has(key)).length !== 1) return null; }
     if (new RegExp(`^evaluations/${ID}$`).test(path)) { allowed = true; keys = ["baseline_id"]; }
     if (new RegExp(`^applications/${ID}/qualification$`).test(path)) { allowed = true; keys = ["release_id"]; required = keys; }
     if (new RegExp(`^(${OFFLINE}|${OFFLINE_EVALUATION}|${OFFLINE_EPISODE}/replay(?:/frames/[0-9]{1,4})?)$`).test(path)) allowed = true;
   } else if (method === "POST") {
-    allowed = /^(auth\/(login|logout)|projects|robots|robot-profiles|robot-registrations|fleets|applications|deployments|enrollments|evaluations)$/.test(path)
-      || new RegExp(`^applications/${ID}/(releases|evaluation-suites|evaluation-gate)$`).test(path)
+    allowed = /^(auth\/(login|logout)|projects|robots|robot-profiles|robot-registrations|fleets|applications|configurations|deployments|enrollments|evaluations|workspace-configuration-links)$/.test(path)
+      || new RegExp(`^workspace-configuration-links/${ID}/remove$`).test(path)
+      || new RegExp(`^applications/${ID}/(releases|configuration-releases|evaluation-suites|evaluation-gate)$`).test(path)
       || new RegExp(`^fleets/${ID}/members(?:/${ID}/remove)?$`).test(path)
-      || new RegExp(`^robots/${ID}/missions$`).test(path)
+      || new RegExp(`^robots/${ID}/(missions|qualification)$`).test(path)
+      || new RegExp(`^robot-profiles/${ID}/simulation-assets/(mujoco|isaac)$`).test(path)
+      || new RegExp(`^robot-connections/enrollments(?:/${ID}/cancel)?$`).test(path)
       || new RegExp(`^missions/${ID}/cancel$`).test(path)
       || new RegExp(`^evaluations/${ID}/(cancel|promote)$`).test(path)
       || new RegExp(`^(${OFFLINE}|${OFFLINE_EVALUATION}/episodes)$`).test(path);
@@ -221,9 +244,11 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
     const document = parts[0] === "workspace-documents";
     const offline = parts[0] === OFFLINE;
     const registry = ["robot-profiles", "robot-registrations", "fleets"].includes(parts[0]);
+    const execution = ["robots", "deployments", "missions"].includes(parts[0]);
     // An episode upload: up to 16 MiB of frames, passed through as received.
-    const upload = offline && request.method === "POST" && parts.length === 3;
-    const text = document ? documentMessages : offline ? offlineMessages : messages;
+    const assetUpload = parts[0] === "robot-profiles" && parts[2] === "simulation-assets" && request.method === "POST";
+    const upload = assetUpload || (offline && request.method === "POST" && parts.length === 3);
+    const text = assetUpload ? assetMessages : document ? documentMessages : offline ? offlineMessages : messages;
     const mutation = MUTATIONS.includes(request.method);
     if (mutation && (request.headers.get("origin") !== origin || request.headers.get("x-convoy-client") !== "web")) {
       throw new ProxyFailure(403, messages[403]);
@@ -232,7 +257,7 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
     const logout = parts.join("/") === "auth/logout";
     const cookie = ownCookie(request);
     if (!cookie && !login && !logout) throw new ProxyFailure(401, messages[401]);
-    const requestLimit = document ? DOCUMENT_LIMIT : upload ? EPISODE_LIMIT : REQUEST_LIMIT;
+    const requestLimit = assetUpload ? ROBOT_ASSET_LIMIT : document ? DOCUMENT_LIMIT : upload ? EPISODE_LIMIT : REQUEST_LIMIT;
     const responseLimit = document ? DOCUMENT_LIMIT : RESPONSE_LIMIT;
     const headers = new Headers({ Accept: "application/json" });
     if (cookie) headers.set("Cookie", cookie);
@@ -257,7 +282,8 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
     }
     let body: Uint8Array<ArrayBuffer> | string | undefined;
     if (mutation && request.method !== "DELETE") {
-      if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("content-type") ?? "")) throw new ProxyFailure(422, text[422]);
+      const contentType = assetUpload ? /^application\/octet-stream(?:\s*;|$)/i : /^application\/json(?:\s*;|$)/i;
+      if (!contentType.test(request.headers.get("content-type") ?? "")) throw new ProxyFailure(422, text[422]);
       const length = request.headers.get("content-length");
       if (length && (!/^\d+$/.test(length) || Number(length) > requestLimit)) throw new ProxyFailure(413, text[413]);
       const bytes = await boundedBody(request.body, requestLimit, text[413], upload ? EPISODE_BODY_MS : undefined);
@@ -269,7 +295,7 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
         body = utf8(bytes);
         try { JSON.parse(body); } catch { throw new ProxyFailure(422, messages[422]); }
       }
-      headers.set("Content-Type", "application/json");
+      headers.set("Content-Type", assetUpload ? "application/octet-stream" : "application/json");
     }
     const upstream = await fetch(`${platformOrigin()}${path}`, {
       method: request.method, headers, body, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(upload ? EPISODE_UPSTREAM_MS : 10000),
@@ -280,6 +306,7 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
       if (document && status === 409) message = await apiMessage(upstream, reason(documentConflicts)) ?? message;
       else if (offline && status === 409) message = await apiMessage(upstream, reason(offlineConflicts)) ?? message;
       else if (registry && status === 409) message = await apiMessage(upstream, reason(registryConflicts)) ?? message;
+      else if (execution && status === 409) message = await apiMessage(upstream, reason(executionConflicts)) ?? message;
       else if ((offline || registry) && mutation && status === 422) message = await apiMessage(upstream, validation, 8 * ERROR_LIMIT) ?? message;
       else await upstream.body?.cancel();
       const retry = upstream.headers.get("retry-after");

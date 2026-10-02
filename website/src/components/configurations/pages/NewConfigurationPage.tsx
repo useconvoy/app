@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { useProjectResource } from "@/lib/projects/client";
+import type { Project } from "@/lib/platform/client";
 import { useWorkspace } from "@/lib/configurations/client";
 import { buildRevision, EDGE_MODELS, EMPTY_INPUT, HARDWARE, inputErrors, ROLE_LABEL, ROUTE_LABEL, routeMode } from "@/lib/configurations/create";
 import type { NewConfigurationInput } from "@/lib/configurations/create";
@@ -17,13 +19,15 @@ const CRUMBS: Crumb[] = [{ label: "Configurations", href: routes.index() }, { la
 const ROLES = ["planner", "policy"] as const;
 
 /** New configuration (`/app/configurations/new`): one short form; Create saves revision r1 and opens its dashboard. */
-export function NewConfigurationPage() {
+export function NewConfigurationPage({ projectId }: { projectId?: string }) {
   const ws = useWorkspace();
+  const projects = useProjectResource<Project[]>(projectId ? "projects" : null);
+  if (projectId && !projects.data?.some(project => project.id === projectId)) return <AppShell crumbs={CRUMBS} projectId={projectId}>{projects.error || projects.data ? <p role="alert">This project is unavailable.</p> : <LoadingState />}</AppShell>;
   if (ws.status === "loading") return <AppShell crumbs={CRUMBS}><LoadingState /></AppShell>;
-  return <AppShell crumbs={CRUMBS}><NewConfigurationForm /></AppShell>;
+  return <AppShell crumbs={CRUMBS} projectId={projectId}><NewConfigurationForm projectId={projectId} /></AppShell>;
 }
 
-function NewConfigurationForm() {
+function NewConfigurationForm({ projectId }: { projectId?: string }) {
   const ws = useWorkspace();
   const router = useRouter();
   const id = useId();
@@ -54,7 +58,7 @@ function NewConfigurationForm() {
     setBusy(true);
     setError(null);
     const name = input.name.trim();
-    const result = await ws.save(current => createConfiguration(current, { name, revision: buildRevision(input, Date.now()) }, Date.now()).workspace);
+    const result = await ws.save(current => createConfiguration(current, { name, projectId, status: "draft", revision: buildRevision(input, Date.now()) }, Date.now()).workspace);
     if (!result.ok) { setBusy(false); setError(result.error); return; }
     const created = result.workspace.configurations.filter(config => config.name === name).at(-1);
     router.push(created ? routes.configuration(created.id) : routes.index());
@@ -67,6 +71,7 @@ function NewConfigurationForm() {
   return <>
     <PageHeader title="New configuration" />
     <WorkspaceNotice />
+    <p>Save a draft model setup. Model selection does not install software or make a robot ready to run. <Link className="cv-link" href={projectId ? `/app/projects/${projectId}?section=configurations` : "/app/projects"}>Configure and validate an executable release in your project</Link> before deployment.</p>
     <form ref={form} className="cv-form" onSubmit={event => void submit(event)} noValidate>
       <div className="cv-field">
         <label htmlFor={`${id}-name`}>Name</label>
@@ -108,7 +113,7 @@ function NewConfigurationForm() {
       {error && <Notice tone="error">{error}</Notice>}
       <div className="cv-form__foot">
         <span className="cv-muted">{route && `Route: ${route}`}</span>
-        <Link className="cv-btn cv-btn--secondary" href={routes.index()}>Cancel</Link>
+        <Link className="cv-btn cv-btn--secondary" href={projectId ? `/app/projects/${projectId}?section=configurations` : routes.index()}>Cancel</Link>
         <button className="cv-btn cv-btn--primary" type="submit" disabled={busy || ws.canSave === false}>{busy ? "Creating…" : "Create"}</button>
       </div>
     </form>
