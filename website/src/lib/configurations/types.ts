@@ -107,7 +107,16 @@ export interface Configuration {
   highlight?: ConfigHighlight;
   /** Aggregate view of the production robots (sample or recorded only). */
   production?: ProductionSummary;
+  /**
+   * Reference latencies the latency budget draws beside one planner decision, e.g. teleoperation
+   * round trips ({ label: "Teleop · near", ms: 60 }). Declared by the account, never measured; at most
+   * `MAX_LATENCY_TARGETS` (validate.ts), labels unique.
+   */
+  latencyTargets?: LatencyTarget[];
 }
+
+/** A reference latency: a short label and milliseconds (> 0). */
+export interface LatencyTarget { label: string; ms: number }
 
 export interface ConfigHighlight { tone: "good" | "warning" | "blocked"; lead: string; text: string; provenance?: StoredProvenance }
 

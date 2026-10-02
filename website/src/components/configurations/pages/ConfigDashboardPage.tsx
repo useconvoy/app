@@ -25,6 +25,7 @@ import { Turntable } from "../Turntable";
 import { useRobotViews, type RobotView } from "../useRobots";
 import { AddRobotDialog } from "./AddRobotDialog";
 import { CpuTile, InferenceTile, MemoryTile, PowerTile, TemperatureTile } from "./LiveTiles";
+import { ConfigEvidence } from "../evidence/EvidenceRow";
 
 const ROOT: Crumb = { label: "Configurations", href: routes.index() };
 const EMPTY = emptyWorkspace(0);
@@ -103,6 +104,7 @@ function Dashboard({ config, views }: { config: Configuration; views: RobotView[
         <CpuTile view={live} /><MemoryTile view={live} /><TemperatureTile view={live} /><PowerTile view={live} />
       </Tiles>
     </section>}
+    <ConfigEvidence config={config} views={views} />
     <Tabs tabs={tabs} value={tab} onChange={setTab} label="Configuration views" idPrefix="cd" />
     <TabPanel idPrefix="cd" tabId="robots" selected={tab === "robots"}>
       <Card label="Robots" flush>

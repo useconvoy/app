@@ -26,6 +26,7 @@ import { EmptyState, LoadingState, NotFoundState } from "../States";
 import { TabPanel, Tabs, useQueryTab, type TabItem } from "../Tabs";
 import { Card, Facts, Tile, Tiles } from "../Tiles";
 import { useRobotViews } from "../useRobots";
+import { EvalEvidence } from "../evidence/EvidenceRow";
 
 const EMPTY = emptyWorkspace(0);
 /** "Seed 0" or "Seeds 0–9". */
@@ -219,6 +220,7 @@ function EvalRun({ crumbs, model, robot }: { crumbs: Crumb[]; model: RunModel; r
     </Tiles>
     <Tabs tabs={TABS} value={tab} onChange={setTab} label="Eval views" idPrefix="ev" />
     <TabPanel idPrefix="ev" tabId="overview" selected={tab === "overview"}>
+      <EvalEvidence robot={robot} view={view} />
       {slices.length > 0 && <Card title="Slices" flush><SliceTable rows={slices} /></Card>}
       {!!metrics?.length && <Card title="Metrics" flush>{view.source === "offline" && <p className="cv-muted">Reported simulator measurements, averaged per episode. Imported results do not qualify robot or cloud timing.</p>}<MetricTable rows={metrics} /></Card>}
       <Card title="Rollouts" flush>
