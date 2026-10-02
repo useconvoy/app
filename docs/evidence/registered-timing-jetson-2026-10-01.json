@@ -1,0 +1,620 @@
+{
+  "source_revision": "95f0dd613a89af214237c7bba6f754b972ece5f5",
+  "source_sha256": {
+    "integrations/simulation/src/convoy_sim/realtime.py": "cd7cab4f95396791f0cd9c30ccca59299a30044d904f7a8cce24e724f1b433b2",
+    "integrations/simulation/src/convoy_sim/registered.py": "c1b8e98561bace9778e21810652accad5f82e6980b9c4c283c992f866a17f87d",
+    "control-plane/agent/convoy_agent/coordinator/engine.py": "f26ba2d0badca0dc7480064cb68508503fa2bf046af16b868d2d118a80b3c46d",
+    "integrations/simulation/tests/test_realtime.py": "76a439048cd4065a8a479b15b571d98e5f7931e300daa8150afa7e52638d47f6",
+    "integrations/simulation/tests/test_qualification_pipeline.py": "d8f4d5401c431d9e0f82650a22f2b9a91fefd1297464daf144cf6452e30128a9",
+    "integrations/simulation/tests/timing_evidence.py": "50fb493e8cf79a976f3d63151ef112a2808511b3cf3ea78453943f4049c32cc2"
+  },
+  "hardware": "NVIDIA Jetson Orin Nano Engineering Reference Developer Kit Super",
+  "l4t": "# R36 (release), REVISION: 4.7, GCID: 42132812, BOARD: generic, EABI: aarch64, DATE: Thu Sep 18 22:54:44 UTC 2025",
+  "acceptance": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "6",
+    "time": "47.816",
+    "timestamp": "2026-10-01T21:39:47.751724-07:00"
+  },
+  "scope": "Actual Jetson execution of a single-joint MuJoCo reference controller; no learned policy, rendered observations, physical motors, cloud planner or network impairment qualification.",
+  "cases": [
+    {
+      "case": "expired-target",
+      "host": {
+        "machine": "aarch64",
+        "platform": "Linux-5.15.148-tegra-aarch64-with-glibc2.35",
+        "python": "3.11.14",
+        "mujoco": "3.3.0"
+      },
+      "summary": {
+        "physics_control_steps": 16,
+        "final_success": false,
+        "ever_success": false,
+        "reward_sum": -11.7796727864232,
+        "simulated_duration_s": 0.32,
+        "timing": {
+          "physics_pid": 393496,
+          "physics_control_steps": 16,
+          "simulated_duration_s": 0.32,
+          "physics_wall_s": 0.322963178,
+          "physics_fault": null,
+          "final_success": false,
+          "reward_sum": -11.7796727864232,
+          "fallback_ticks": 9,
+          "steady_fallback_ticks": 9,
+          "applied_actions": 1,
+          "rejected_actions": 0,
+          "dispatch_lag_ms": {
+            "count": 16,
+            "p50": 0.618836,
+            "p95": 1.057558,
+            "p99": 1.057558,
+            "max": 1.057558
+          },
+          "completion_lag_ms": {
+            "count": 16,
+            "p50": 1.483413,
+            "p95": 2.033648,
+            "p99": 2.033648,
+            "max": 2.033648
+          },
+          "observation_to_action_ms": {
+            "count": 1,
+            "p50": 20.695432,
+            "p95": 20.695432,
+            "p99": 20.695432,
+            "max": 20.695432
+          },
+          "status": "failed",
+          "reasons": [
+            "policy_actions_expired_between_results"
+          ],
+          "deadline_misses": 0,
+          "contract": {
+            "mode": "realtime",
+            "max_observation_age_ms": 150,
+            "max_physics_lag_ms": 100,
+            "fallback": "hold-position",
+            "minimum_physics_steps": 200,
+            "minimum_applied_actions": 10
+          },
+          "policy_wait_ms": {
+            "count": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null
+          },
+          "observation_to_result_ms": {
+            "count": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null
+          },
+          "clock_scope": "one host monotonic clock; policy wait includes transport and queueing",
+          "evidence_scope": "registered joint-state simulation; not physical or learned-policy qualification"
+        }
+      }
+    },
+    {
+      "case": "stale-observation",
+      "host": {
+        "machine": "aarch64",
+        "platform": "Linux-5.15.148-tegra-aarch64-with-glibc2.35",
+        "python": "3.11.14",
+        "mujoco": "3.3.0"
+      },
+      "summary": {
+        "physics_control_steps": 10,
+        "final_success": false,
+        "ever_success": false,
+        "reward_sum": -9.000000000000002,
+        "simulated_duration_s": 0.2,
+        "timing": {
+          "physics_pid": 393487,
+          "physics_control_steps": 10,
+          "simulated_duration_s": 0.2,
+          "physics_wall_s": 0.201704294,
+          "physics_fault": null,
+          "final_success": false,
+          "reward_sum": -9.000000000000002,
+          "fallback_ticks": 10,
+          "steady_fallback_ticks": 0,
+          "applied_actions": 0,
+          "rejected_actions": 1,
+          "dispatch_lag_ms": {
+            "count": 10,
+            "p50": 0.800632,
+            "p95": 1.179191,
+            "p99": 1.179191,
+            "max": 1.179191
+          },
+          "completion_lag_ms": {
+            "count": 10,
+            "p50": 1.575147,
+            "p95": 2.297557,
+            "p99": 2.297557,
+            "max": 2.297557
+          },
+          "observation_to_action_ms": {
+            "count": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null
+          },
+          "status": "failed",
+          "reasons": [
+            "policy_deadline_missed"
+          ],
+          "deadline_misses": 1,
+          "contract": {
+            "mode": "realtime",
+            "max_observation_age_ms": 100,
+            "max_physics_lag_ms": 100,
+            "fallback": "hold-position",
+            "minimum_physics_steps": 200,
+            "minimum_applied_actions": 10
+          },
+          "policy_wait_ms": {
+            "count": 1,
+            "p50": 180.115366,
+            "p95": 180.115366,
+            "p99": 180.115366,
+            "max": 180.115366
+          },
+          "observation_to_result_ms": {
+            "count": 1,
+            "p50": 180.650292,
+            "p95": 180.650292,
+            "p99": 180.650292,
+            "max": 180.650292
+          },
+          "clock_scope": "one host monotonic clock; policy wait includes transport and queueing",
+          "evidence_scope": "registered joint-state simulation; not physical or learned-policy qualification"
+        }
+      }
+    },
+    {
+      "case": "physics-stall-capture",
+      "host": {
+        "machine": "aarch64",
+        "platform": "Linux-5.15.148-tegra-aarch64-with-glibc2.35",
+        "python": "3.11.14",
+        "mujoco": "3.3.0"
+      },
+      "summary": {
+        "physics_control_steps": 0,
+        "final_success": false,
+        "ever_success": false,
+        "reward_sum": 0.0,
+        "simulated_duration_s": 0.0,
+        "timing": {
+          "physics_pid": 393513,
+          "physics_control_steps": 0,
+          "simulated_duration_s": 0.0,
+          "physics_wall_s": 0.252905252,
+          "physics_fault": "physics_dispatch_lag",
+          "final_success": false,
+          "reward_sum": 0.0,
+          "fallback_ticks": 0,
+          "steady_fallback_ticks": 0,
+          "applied_actions": 0,
+          "rejected_actions": 0,
+          "dispatch_lag_ms": {
+            "count": 1,
+            "p50": 232.905252,
+            "p95": 232.905252,
+            "p99": 232.905252,
+            "max": 232.905252
+          },
+          "completion_lag_ms": {
+            "count": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null
+          },
+          "observation_to_action_ms": {
+            "count": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null
+          },
+          "status": "failed",
+          "reasons": [
+            "physics_dispatch_lag"
+          ],
+          "deadline_misses": 0,
+          "contract": {
+            "mode": "realtime",
+            "max_observation_age_ms": 100,
+            "max_physics_lag_ms": 100,
+            "fallback": "hold-position",
+            "minimum_physics_steps": 200,
+            "minimum_applied_actions": 10
+          },
+          "policy_wait_ms": {
+            "count": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null
+          },
+          "observation_to_result_ms": {
+            "count": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null
+          },
+          "clock_scope": "one host monotonic clock; policy wait includes transport and queueing",
+          "evidence_scope": "registered joint-state simulation; not physical or learned-policy qualification"
+        }
+      }
+    },
+    {
+      "case": "physics-stall-cleanup",
+      "host": {
+        "machine": "aarch64",
+        "platform": "Linux-5.15.148-tegra-aarch64-with-glibc2.35",
+        "python": "3.11.14",
+        "mujoco": "3.3.0"
+      },
+      "summary": {
+        "physics_control_steps": 0,
+        "final_success": false,
+        "ever_success": false,
+        "reward_sum": 0.0,
+        "simulated_duration_s": 0.0,
+        "timing": {
+          "physics_pid": 393521,
+          "physics_control_steps": 0,
+          "simulated_duration_s": 0.0,
+          "physics_wall_s": 0.251277369,
+          "physics_fault": "physics_dispatch_lag",
+          "final_success": false,
+          "reward_sum": 0.0,
+          "fallback_ticks": 0,
+          "steady_fallback_ticks": 0,
+          "applied_actions": 0,
+          "rejected_actions": 0,
+          "dispatch_lag_ms": {
+            "count": 1,
+            "p50": 231.277369,
+            "p95": 231.277369,
+            "p99": 231.277369,
+            "max": 231.277369
+          },
+          "completion_lag_ms": {
+            "count": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null
+          },
+          "observation_to_action_ms": {
+            "count": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null
+          },
+          "status": "failed",
+          "reasons": [
+            "physics_dispatch_lag"
+          ],
+          "deadline_misses": 0,
+          "contract": {
+            "mode": "realtime",
+            "max_observation_age_ms": 100,
+            "max_physics_lag_ms": 100,
+            "fallback": "hold-position",
+            "minimum_physics_steps": 200,
+            "minimum_applied_actions": 10
+          },
+          "policy_wait_ms": {
+            "count": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null
+          },
+          "observation_to_result_ms": {
+            "count": 0,
+            "p50": null,
+            "p95": null,
+            "p99": null,
+            "max": null
+          },
+          "clock_scope": "one host monotonic clock; policy wait includes transport and queueing",
+          "evidence_scope": "registered joint-state simulation; not physical or learned-policy qualification"
+        }
+      }
+    },
+    {
+      "case": "http-delayed-policy",
+      "host": {
+        "machine": "aarch64",
+        "platform": "Linux-5.15.148-tegra-aarch64-with-glibc2.35",
+        "python": "3.11.14",
+        "mujoco": "3.3.0"
+      },
+      "summary": {
+        "ever_success": false,
+        "evidence_scope": "registered_simulated_joint_state",
+        "execution_mode": "independent_realtime_simulation",
+        "failure": {
+          "authorization_elapsed": false,
+          "category": "deadline",
+          "component": "action_policy",
+          "phase": "policy_inference",
+          "request_id": "a001800c-435d-4a14-b028-2dc7941ee1af",
+          "schema_version": 1,
+          "sequence": 0
+        },
+        "final_success": false,
+        "model_asset_sha256": "cd3775ce877972a5c860c42458d32e009a0136df965016609997f8825c1a55d0",
+        "physics_control_steps": 10,
+        "policy_artifact_sha256": "77ced070ff891014590ccca974db98813dc345741d364847863f39090eb71835",
+        "policy_runtime": "convoy-joint-target-reference-v1",
+        "profile": "registered-joint-policy-v1",
+        "reward_sum": -2.5,
+        "robot_profile_sha256": "a3ee783c0cfd26853b0d179323869b9b3bced9c7fa6d4e854963da267b3794b2",
+        "seed": 0,
+        "simulated_duration_s": 0.2,
+        "steps": 0,
+        "task": {
+          "instruction": "Measure independent physics",
+          "position_tolerance": 0.01,
+          "target_joint_positions": [
+            0.25
+          ],
+          "velocity_tolerance": 0.02
+        },
+        "timing": {
+          "applied_actions": 0,
+          "clock_scope": "one host monotonic clock; policy wait includes transport and queueing",
+          "completion_lag_ms": {
+            "count": 10,
+            "max": 1.969996,
+            "p50": 1.51742,
+            "p95": 1.969996,
+            "p99": 1.969996
+          },
+          "contract": {
+            "fallback": "hold-position",
+            "max_observation_age_ms": 200,
+            "max_physics_lag_ms": 100,
+            "minimum_applied_actions": 10,
+            "minimum_physics_steps": 200,
+            "mode": "realtime"
+          },
+          "deadline_misses": 1,
+          "dispatch_lag_ms": {
+            "count": 10,
+            "max": 1.064116,
+            "p50": 0.6031,
+            "p95": 1.064116,
+            "p99": 1.064116
+          },
+          "evidence_scope": "registered joint-state simulation; not physical or learned-policy qualification",
+          "fallback_ticks": 10,
+          "final_success": false,
+          "observation_to_action_ms": {
+            "count": 0,
+            "max": null,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          "observation_to_result_ms": {
+            "count": 0,
+            "max": null,
+            "p50": null,
+            "p95": null,
+            "p99": null
+          },
+          "physics_control_steps": 10,
+          "physics_fault": null,
+          "physics_pid": 393803,
+          "physics_wall_s": 0.20179774,
+          "policy_wait_ms": {
+            "count": 1,
+            "max": 199.481422,
+            "p50": 199.481422,
+            "p95": 199.481422,
+            "p99": 199.481422
+          },
+          "reasons": [
+            "policy_response_unavailable",
+            "policy_deadline_missed"
+          ],
+          "rejected_actions": 0,
+          "reward_sum": -2.5,
+          "simulated_duration_s": 0.2,
+          "status": "failed",
+          "steady_fallback_ticks": 0
+        },
+        "wall_duration_s": 0.9613975980319083
+      }
+    },
+    {
+      "case": "http-managed-reference",
+      "host": {
+        "machine": "aarch64",
+        "platform": "Linux-5.15.148-tegra-aarch64-with-glibc2.35",
+        "python": "3.11.14",
+        "mujoco": "3.3.0"
+      },
+      "summary": {
+        "ever_success": true,
+        "evidence_scope": "registered_simulated_joint_state",
+        "execution_mode": "independent_realtime_simulation",
+        "final_success": true,
+        "model_asset_sha256": "cd3775ce877972a5c860c42458d32e009a0136df965016609997f8825c1a55d0",
+        "physics_control_steps": 23,
+        "policy_artifact_sha256": "77ced070ff891014590ccca974db98813dc345741d364847863f39090eb71835",
+        "policy_runtime": "convoy-joint-target-reference-v1",
+        "profile": "registered-joint-policy-v1",
+        "reward_sum": -1.3577414793989748,
+        "robot_profile_sha256": "a3ee783c0cfd26853b0d179323869b9b3bced9c7fa6d4e854963da267b3794b2",
+        "seed": 0,
+        "simulated_duration_s": 0.46,
+        "steps": 7,
+        "task": {
+          "instruction": "Measure independent physics",
+          "position_tolerance": 0.01,
+          "target_joint_positions": [
+            0.25
+          ],
+          "velocity_tolerance": 0.02
+        },
+        "timing": {
+          "applied_actions": 7,
+          "clock_scope": "one host monotonic clock; policy wait includes transport and queueing",
+          "completion_lag_ms": {
+            "count": 23,
+            "max": 2.292591,
+            "p50": 1.756715,
+            "p95": 2.168286,
+            "p99": 2.292591
+          },
+          "contract": {
+            "fallback": "hold-position",
+            "max_observation_age_ms": 200,
+            "max_physics_lag_ms": 100,
+            "minimum_applied_actions": 10,
+            "minimum_physics_steps": 200,
+            "mode": "realtime"
+          },
+          "deadline_misses": 0,
+          "dispatch_lag_ms": {
+            "count": 23,
+            "max": 1.122416,
+            "p50": 0.675655,
+            "p95": 1.095446,
+            "p99": 1.122416
+          },
+          "evidence_scope": "registered joint-state simulation; not physical or learned-policy qualification",
+          "fallback_ticks": 1,
+          "final_success": true,
+          "observation_to_action_ms": {
+            "count": 7,
+            "max": 59.100915,
+            "p50": 39.58727,
+            "p95": 59.100915,
+            "p99": 59.100915
+          },
+          "observation_to_result_ms": {
+            "count": 8,
+            "max": 15.807112,
+            "p50": 12.207464,
+            "p95": 15.807112,
+            "p99": 15.807112
+          },
+          "physics_control_steps": 23,
+          "physics_fault": null,
+          "physics_pid": 393760,
+          "physics_wall_s": 0.462110325,
+          "policy_wait_ms": {
+            "count": 8,
+            "max": 12.468975,
+            "p50": 11.369649,
+            "p95": 12.468975,
+            "p99": 12.468975
+          },
+          "reasons": [],
+          "rejected_actions": 0,
+          "reward_sum": -1.3577414793989748,
+          "simulated_duration_s": 0.46,
+          "status": "insufficient_evidence",
+          "steady_fallback_ticks": 0
+        },
+        "wall_duration_s": 1.192263430042658
+      }
+    },
+    {
+      "case": "sustained-reference",
+      "host": {
+        "machine": "aarch64",
+        "platform": "Linux-5.15.148-tegra-aarch64-with-glibc2.35",
+        "python": "3.11.14",
+        "mujoco": "3.3.0"
+      },
+      "summary": {
+        "physics_control_steps": 210,
+        "final_success": false,
+        "ever_success": false,
+        "reward_sum": -137.61287668457746,
+        "simulated_duration_s": 4.2,
+        "timing": {
+          "physics_pid": 393504,
+          "physics_control_steps": 210,
+          "simulated_duration_s": 4.2,
+          "physics_wall_s": 4.201383439,
+          "physics_fault": null,
+          "final_success": false,
+          "reward_sum": -137.61287668457746,
+          "fallback_ticks": 0,
+          "steady_fallback_ticks": 0,
+          "applied_actions": 210,
+          "rejected_actions": 0,
+          "dispatch_lag_ms": {
+            "count": 210,
+            "p50": 0.586006,
+            "p95": 1.054329,
+            "p99": 1.088406,
+            "max": 1.093508
+          },
+          "completion_lag_ms": {
+            "count": 210,
+            "p50": 1.580854,
+            "p95": 2.047507,
+            "p99": 2.09095,
+            "max": 3.395452
+          },
+          "observation_to_action_ms": {
+            "count": 210,
+            "p50": 18.687347,
+            "p95": 19.650029,
+            "p99": 19.685229,
+            "max": 20.723849
+          },
+          "status": "observed_deadlines_met",
+          "reasons": [],
+          "deadline_misses": 0,
+          "contract": {
+            "mode": "realtime",
+            "max_observation_age_ms": 200,
+            "max_physics_lag_ms": 100,
+            "fallback": "hold-position",
+            "minimum_physics_steps": 200,
+            "minimum_applied_actions": 10
+          },
+          "policy_wait_ms": {
+            "count": 210,
+            "p50": 0.000864,
+            "p95": 0.001184,
+            "p99": 0.001248,
+            "max": 0.002944
+          },
+          "observation_to_result_ms": {
+            "count": 210,
+            "p50": 0.380651,
+            "p95": 0.99241,
+            "p99": 1.079261,
+            "max": 1.674701
+          },
+          "clock_scope": "one host monotonic clock; policy wait includes transport and queueing",
+          "evidence_scope": "registered joint-state simulation; not physical or learned-policy qualification"
+        }
+      }
+    }
+  ]
+}

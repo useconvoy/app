@@ -209,3 +209,21 @@ and onboarding; legacy configuration reconciliation; chat/scenario generation; I
 and physical dynamics characterization. Local joint-state/reference results do not prove learned-policy
 quality or calibrated physical fidelity. This is a completed implementation slice, not completion of
 the overall objective. No public deployment, physical movement or new cloud resources were performed.
+
+## Jetson registered-runtime verification
+
+Branch: `codex/jetson-registered-qualification`. Reached the existing Jetson through its hostname using
+the existing SSH key; the earlier IP timed out. Installed a separate frozen environment and executed
+the actual native timing cases and complete HTTP enrollment/qualification/deployment/worker/coordinator
+pipeline. Both complete runs passed six tests. The recorded run retained seven bounded measurement
+reports, with source hashes verified after retrieval. CI now retains the same measurement files.
+
+The managed reference reached its target with 59.10 ms p95 observation-to-action latency; its short
+run remains insufficient timing evidence. Delayed HTTP inference applied zero actions while physics
+advanced. A sustained direct reference met its observed timing contract over 210 ticks while deliberately
+failing task success. See [hardware evidence and limits](registered-timing-jetson.md).
+
+This advances actual Jetson execution, not learned edge/cloud qualification. Camera policy integration,
+remote planning, overhead/load characterization, robot/model asset delivery, project onboarding,
+scenario/chat, Isaac, fleet rollout, legacy reconciliation and physical calibration are still required.
+No hosted deployment or new cloud resources were created; the existing device agent remained running.
