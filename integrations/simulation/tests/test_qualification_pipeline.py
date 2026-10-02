@@ -22,6 +22,7 @@ from convoy_server.app import create_app  # noqa: E402
 from convoy_server.config import Settings  # noqa: E402
 from convoy_worker.app import create_app as create_worker  # noqa: E402
 from test_robot_qualification import fixture as model_fixture  # noqa: E402
+from timing_evidence import record  # noqa: E402
 
 from convoy_sim.joint_reference import JointTargetRuntime  # noqa: E402
 
@@ -229,6 +230,7 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
                 assert result["state"] == "completed", result
                 episode = client.get(f"/api/v1/episodes/{result['episode_id']}").json()
                 summary = episode["summary"]
+                record(tmp_path, "http-managed-reference", summary)
                 assert summary["execution_mode"] == "independent_realtime_simulation"
                 assert summary["timing"]["physics_pid"] != coordinator.pid
                 assert summary["timing"]["status"] == "insufficient_evidence"  # brief success is not qualification
@@ -267,6 +269,7 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
                 assert result["state"] == "failed", result
                 summary = client.get(f"/api/v1/episodes/{result['episode_id']}").json()["summary"]
                 assert summary["timing"]["status"] == "failed"
+                record(tmp_path, "http-delayed-policy", summary)
                 assert summary["physics_control_steps"] >= 3
                 assert summary["timing"]["applied_actions"] == 0
                 assert summary["timing"]["policy_wait_ms"]["count"] == 1

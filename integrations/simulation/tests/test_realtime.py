@@ -9,6 +9,7 @@ pytest.importorskip("convoy_agent", reason="requires managed execution")
 
 from convoy_agent.coordinator.engine import TimingRejected  # noqa: E402
 from test_robot_qualification import fixture  # noqa: E402
+from timing_evidence import record  # noqa: E402
 
 from convoy_sim.realtime import RealtimeJointAdapter  # noqa: E402
 
@@ -39,6 +40,7 @@ def test_physics_advances_and_rejects_old_observation_before_action(tmp_path):
     finally:
         runner.close()
     result = runner.execution_summary()
+    record(tmp_path, "stale-observation", result)
     assert result["physics_control_steps"] >= 7
     assert result["simulated_duration_s"] >= .14
     assert result["timing"]["applied_actions"] == 0
@@ -60,7 +62,9 @@ def test_fresh_target_moves_then_expires_to_local_hold(tmp_path):
         assert later["positions"][0] > initial["positions"][0]
     finally:
         runner.close()
-    result = runner.execution_summary()["timing"]
+    summary = runner.execution_summary()
+    record(tmp_path, "expired-target", summary)
+    result = summary["timing"]
     assert result["applied_actions"] == 1
     assert result["steady_fallback_ticks"] > 0
     assert result["observation_to_action_ms"]["max"] < 150
@@ -85,6 +89,7 @@ def test_sustained_fresh_actions_report_observed_timing_without_task_success(tmp
     finally:
         runner.close()
     result = runner.execution_summary()
+    record(tmp_path, "sustained-reference", result)
     assert not result["final_success"]
     assert result["physics_control_steps"] == 210
     assert result["timing"]["applied_actions"] >= 10
@@ -110,7 +115,9 @@ def test_physics_overrun_is_a_failed_timing_measurement(tmp_path, observe_before
                 runner.capture()
     finally:
         runner.close()
-    timing = runner.execution_summary()["timing"]
+    summary = runner.execution_summary()
+    record(tmp_path, "physics-stall-capture" if observe_before_close else "physics-stall-cleanup", summary)
+    timing = summary["timing"]
     assert timing["status"] == "failed"
     assert timing["physics_fault"] == "physics_dispatch_lag"
     assert timing["dispatch_lag_ms"]["max"] > 100
