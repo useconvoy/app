@@ -220,6 +220,60 @@ def test_an_episode_replays_in_the_hosted_replay_shape(admin, evaluation, settin
     assert admin.get(f"{base}/frames/0").status_code == 404
 
 
+def test_reported_hierarchy_replays_at_its_physics_tick_and_changes_content_identity(admin, evaluation, settings):
+    body = episode(width=4, images={0: png(), 3: JPEG}, metrics={
+        "measurement_source": "Local monotonic clock on the MuJoCo runner",
+        "planner_latency_ms_p95": 120.25,
+    })
+    states = [("idle", "none", None), ("pending", "hold", None),
+              ("accepted", "pick_place", "A"), ("stale", "hold", "A")]
+    for frame, (state, skill, target) in zip(body["frames"], states, strict=True):
+        frame["hierarchy"] = {"planner_state": state, "task_revision": 1, "active_skill": skill,
+                              "target": target, "planner_latency_ms": 120.25 if frame["index"] > 1 else None,
+                              "observation_age_ms": frame["index"] * 0.25, "physics_lag_ms": 0.123}
+    first = upload(admin, evaluation["id"], body, "hierarchy")
+    assert first.status_code == 201, first.text
+    again = upload(admin, evaluation["id"], body, "hierarchy-again")
+    assert again.status_code == 200 and again.json() == first.json()
+    base = f"{ROOT}/{evaluation['id']}/episodes/{first.json()['id']}/replay"
+    manifest = admin.get(base).json()
+    assert manifest["has_hierarchy"] is True
+    assert manifest["measurement_source"] == body["metrics"]["measurement_source"]
+    assert manifest["source"] == service.REPLAY_SOURCE
+    for index, expected in enumerate(body["frames"]):
+        frame = admin.get(f"{base}/frames/{index}").json()
+        assert frame["hierarchy"] == expected["hierarchy"]
+        assert frame["action"] == expected.get("action")
+    accepted = admin.get(f"{base}/frames/2").json()
+    assert accepted["image_index"] == 0 and accepted["hierarchy"]["planner_state"] == "accepted"
+    # A different planner decision is distinct content, even with identical images/actions.
+    body["frames"][2]["hierarchy"]["target"] = "B"
+    changed = upload(admin, evaluation["id"], body, "different-decision")
+    assert changed.status_code == 201 and changed.json()["id"] != first.json()["id"]
+    # Existing recordings do not need an added table or changed response shape.
+    legacy = upload(admin, evaluation["id"], episode(), "legacy")
+    with sqlite3.connect(store(settings) / f"{legacy.json()['id']}.sqlite3") as db:
+        assert not db.execute("SELECT name FROM sqlite_master WHERE name = 'frame_metadata'").fetchone()
+    old_base = f"{ROOT}/{evaluation['id']}/episodes/{legacy.json()['id']}/replay"
+    assert "has_hierarchy" not in admin.get(old_base).json()
+    assert "hierarchy" not in admin.get(f"{old_base}/frames/0").json()
+
+
+def test_reported_hierarchy_is_strict_bounded_and_finite(admin, evaluation):
+    good = {"planner_state": "pending", "task_revision": 1, "active_skill": "hold", "target": None}
+    invalid = [("task_revision", True), ("task_revision", 2**31), ("planner_state", "ready"),
+               ("active_skill", "x" * 65), ("target", "line\nbreak"), ("unknown", 0),
+               ("planner_latency_ms", -1), ("observation_age_ms", 86_400_001),
+               ("physics_lag_ms", float("nan"))]
+    for index, (field, value) in enumerate(invalid):
+        body = episode()
+        body["frames"][1]["hierarchy"] = {**good, field: value}
+        response = upload_raw(admin, evaluation["id"], json.dumps(body).encode(), f"invalid-hierarchy-{index}")
+        assert response.status_code == 422, response.text
+        assert f"frames.1.hierarchy.{field}" in response.json()["error"]
+    assert admin.get(f"{ROOT}/{evaluation['id']}").json()["episodes"] == []
+
+
 def test_episode_uploads_are_validated_whole(admin, evaluation, monkeypatch):
     oid = evaluation["id"]
 

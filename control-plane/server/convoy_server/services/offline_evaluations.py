@@ -83,6 +83,9 @@ Label = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, ma
 AxisLabel = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=24, pattern=TEXT)]
 Finite = Annotated[float, Field(strict=True, allow_inf_nan=False)]
 NonNegative = Annotated[float, Field(strict=True, ge=0, allow_inf_nan=False)]
+# Reported local-clock measurements, bounded to one day in milliseconds. Imports
+# carry observations from their owner; these values are not timing qualification.
+ReportedMilliseconds = Annotated[float, Field(strict=True, ge=0, le=86_400_000, allow_inf_nan=False)]
 ActionValue = Annotated[float, Field(strict=True, ge=-MAX_ACTION_VALUE, le=MAX_ACTION_VALUE, allow_inf_nan=False)]
 MetricName = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,47}$")]
 MetricValue = StrictBool | Finite | Annotated[str, StringConstraints(max_length=200, pattern=TEXT)] | None
@@ -99,6 +102,16 @@ class EvaluationIn(Input):
     policy_label: Label
 
 
+class HierarchyIn(Input):
+    planner_state: Literal["idle", "pending", "accepted", "stale", "error"]
+    task_revision: int = Field(strict=True, ge=0, le=2**31 - 1)
+    active_skill: Annotated[str, StringConstraints(min_length=1, max_length=64, pattern=TEXT)]
+    target: AxisLabel | None = None
+    planner_latency_ms: ReportedMilliseconds | None = None
+    observation_age_ms: ReportedMilliseconds | None = None
+    physics_lag_ms: ReportedMilliseconds | None = None
+
+
 class FrameIn(Input):
     index: int = Field(strict=True, ge=0, le=MAX_STEPS)
     image_png_base64: Annotated[str, StringConstraints(max_length=ENCODED_IMAGE)] | None = None
@@ -106,6 +119,7 @@ class FrameIn(Input):
     reward: Finite | None = None
     success: StrictBool | None = None
     policy_ms: NonNegative | None = None
+    hierarchy: HierarchyIn | None = None
 
 
 class EpisodeIn(Input):
@@ -211,6 +225,11 @@ def decode_episode(raw: bytes) -> Episode:
         **data.model_dump(exclude={"frames"}),
         "frames": [[f.action, f.reward, f.success, f.policy_ms, hashes.get(i)] for i, f in enumerate(frames)],
     }
+    # Preserve the digest of existing uploads. A present trace contributes to
+    # content identity, so different skill decisions cannot deduplicate together.
+    for index, frame in enumerate(frames):
+        if frame.hierarchy is not None:
+            canonical["frames"][index].append(frame.hierarchy.model_dump())
     digest = canonical_digest(canonical)
     estimate = sum(len(content) for _, _, content in images) + len(json.dumps(canonical["frames"]))
     return Episode(data=data, action_dim=width, images=images, digest=digest, estimate=estimate)
@@ -322,7 +341,7 @@ def get_evaluation(db: Session, principal: Principal, evaluation_id: str) -> dic
 def replay_manifest(db: Session, principal: Principal, evaluation_id: str, episode_id: str) -> dict:
     episode = owned_episode(db, principal, evaluation_id, episode_id)
     with recordings.recording(episode) as (_, manifest):
-        return {
+        result = {
             "episode_id": episode.id,
             "mission_id": None,
             "release_digest": None,
@@ -337,6 +356,10 @@ def replay_manifest(db: Session, principal: Principal, evaluation_id: str, episo
             "action_dim": episode.action_dim,
             "images": episode.images,
         }
+        for key in ("has_hierarchy", "measurement_source"):
+            if key in manifest:
+                result[key] = manifest[key]
+        return result
 
 
 def replay_frame(db: Session, principal: Principal, evaluation_id: str, episode_id: str, index: int) -> dict:
@@ -416,6 +439,12 @@ def upload_episode(
                 "skill": data.skill, "planner_ms": data.planner_ms, "action_labels": data.action_labels,
                 "action_dim": episode.action_dim,
             }
+            metadata = [(frame.index, {"hierarchy": frame.hierarchy.model_dump()})
+                        for frame in data.frames if frame.hierarchy is not None]
+            if metadata:
+                manifest["has_hierarchy"] = True
+            if isinstance(data.metrics.get("measurement_source"), str):
+                manifest["measurement_source"] = data.metrics["measurement_source"]
             steps = [
                 (index, frame.action, frame.reward, frame.success, frame.policy_ms)
                 for index, frame in enumerate(data.frames) if index
@@ -426,6 +455,7 @@ def upload_episode(
                 size = recordings.write(
                     root, episode_id, (evaluation.id, episode.digest, episode.steps, manifest), steps,
                     episode.images, int(used), episode.estimate,
+                    metadata=metadata,
                 )
             now = utcnow()
             row = OfflineEpisode(

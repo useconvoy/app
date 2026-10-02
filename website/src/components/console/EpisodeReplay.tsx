@@ -10,6 +10,12 @@ interface Recording {
   episode_id: string; mission_id: string | null; release_digest: string | null; steps: number;
   skill: string | null; planner_ms: number | null; wall_seconds: number | null;
   sim_seconds: number | null; source: string; action_dim?: number | null; action_labels?: string[] | null;
+  has_hierarchy?: boolean; measurement_source?: string;
+}
+interface Hierarchy {
+  planner_state: "idle" | "pending" | "accepted" | "stale" | "error";
+  task_revision: number; active_skill: string; target?: string | null;
+  planner_latency_ms?: number | null; observation_age_ms?: number | null; physics_lag_ms?: number | null;
 }
 /**
  * `GET episodes/{id}/replay/frames/{index}`: the camera frame before action `index` and that action.
@@ -19,6 +25,7 @@ interface Frame {
   index: number; image_png_base64: string; action: number[] | null;
   reward: number | null; success: boolean | null; policy_ms: number | null;
   image_media_type?: string; image_index?: number;
+  hierarchy?: Hierarchy;
 }
 
 /** Viewing speeds in steps per second. Playback speed is for viewing only; it is not a timing claim. */
@@ -30,6 +37,7 @@ const KEEP = 80;
 
 const finite = (value: number | null | undefined): value is number => typeof value === "number" && Number.isFinite(value);
 const ms = (value: number | null | undefined) => finite(value) ? `${Math.round(value).toLocaleString("en-US")} ms` : "–";
+const measuredMs = (value: number | null | undefined) => finite(value) ? `${value.toLocaleString("en-US", { maximumFractionDigits: 3 })} ms` : "–";
 const seconds = (value: number | null | undefined) => finite(value) ? `${value.toFixed(value < 10 ? 2 : 1)} s` : "–";
 
 /**
@@ -124,6 +132,10 @@ export function EpisodeReplay({ episodeId, path }: { episodeId: string; path?: s
   let shown: Frame | undefined;
   for (let i = index; i >= 0 && !shown; i--) shown = frames.get(i);
   const exact = frames.get(index) ?? null;
+  // Trace values belong to this exact physics tick, even when the camera repeats
+  // an earlier image. Never borrow a previous tick's accepted plan while loading.
+  const hierarchy = exact?.hierarchy;
+  const hierarchical = recording.has_hierarchy || !!hierarchy;
   const reward = exact?.reward ?? null, success = exact?.success ?? null;
   const ended = index >= recording.steps;
   const label = playing && !ended ? "Pause" : ended ? "Replay" : "Play";
@@ -160,16 +172,22 @@ export function EpisodeReplay({ episodeId, path }: { episodeId: string; path?: s
         </select>
       </div>
       {problem && <p className="cv-player__problem" role="alert">{problem.text} <button className="cv-link" type="button" onClick={retry}>Retry</button></p>}
+      {hierarchical && <p className="cv-muted">Imported simulation measurements. {recording.measurement_source ?? "Measurement source was not reported."} Playback speed controls viewing only.</p>}
     </div>
     <dl className="cv-player__readout">
       <div><dt>Step</dt><dd>{index} / {recording.steps}</dd></div>
-      <div><dt>Skill</dt><dd className="cv-mono">{recording.skill ?? "–"}</dd></div>
-      <div><dt>Planner</dt><dd>{ms(recording.planner_ms)}</dd></div>
+      {hierarchical && <><div><dt>System 2 state</dt><dd>{hierarchy?.planner_state ?? "–"}</dd></div>
+        <div><dt>Task revision</dt><dd>{hierarchy?.task_revision ?? "–"}</dd></div></>}
+      <div><dt>{hierarchical ? "Active skill" : "Skill"}</dt><dd className="cv-mono">{hierarchical ? hierarchy?.active_skill ?? "–" : recording.skill ?? "–"}</dd></div>
+      {hierarchical && <div><dt>Target</dt><dd>{hierarchy?.target ?? "–"}</dd></div>}
+      <div><dt>{hierarchical ? "Planner latency" : "Planner"}</dt><dd>{hierarchical ? measuredMs(hierarchy?.planner_latency_ms) : ms(recording.planner_ms)}</dd></div>
+      {hierarchical && <><div><dt>Observation age</dt><dd>{measuredMs(hierarchy?.observation_age_ms)}</dd></div>
+        <div><dt>Physics lag</dt><dd>{measuredMs(hierarchy?.physics_lag_ms)}</dd></div></>}
       <div className="cv-player__action"><dt>Action</dt><dd>{axes.map((axis, i) => {
         const value = exact?.action?.[i];
         return <span key={`${i}-${axis}`}><small title={axis}>{axis}</small>{finite(value) ? value.toFixed(2) : "–"}</span>;
       })}</dd></div>
-      <div><dt>Policy</dt><dd>{ms(exact?.policy_ms)}</dd></div>
+      <div><dt>Policy</dt><dd>{hierarchical ? measuredMs(exact?.policy_ms) : ms(exact?.policy_ms)}</dd></div>
       <div><dt>Reward</dt><dd>{finite(reward) ? reward.toFixed(2) : "–"}</dd></div>
       <div><dt>Success</dt><dd>{success === null ? "–" : success ? "Yes" : "No"}</dd></div>
       <div><dt>Wall time</dt><dd>{seconds(recording.wall_seconds)}</dd></div>

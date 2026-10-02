@@ -21,6 +21,8 @@ from test_offline_evaluations import (  # reuse the same HTTP contract on the re
     test_frames_share_the_recording_store_and_its_quota,
     test_interrupted_writes_are_settled_by_the_next_write,
     test_offline_files_count_against_hosted_recording_uploads,
+    test_reported_hierarchy_is_strict_bounded_and_finite,
+    test_reported_hierarchy_replays_at_its_physics_tick_and_changes_content_identity,
     test_request_bodies_are_bounded_before_decoding,
     test_uploads_are_idempotent_deduplicated_audited_and_keep_compact_receipts,
     test_writes_are_rate_limited_per_account,
@@ -39,6 +41,8 @@ __all__ = [
     "test_interrupted_writes_are_settled_by_the_next_write",
     "test_offline_files_count_against_hosted_recording_uploads",
     "test_request_bodies_are_bounded_before_decoding",
+    "test_reported_hierarchy_is_strict_bounded_and_finite",
+    "test_reported_hierarchy_replays_at_its_physics_tick_and_changes_content_identity",
     "test_uploads_are_idempotent_deduplicated_audited_and_keep_compact_receipts",
     "test_writes_are_rate_limited_per_account",
 ]

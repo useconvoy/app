@@ -34,6 +34,20 @@ same width, 1–64 finite values. `image_png_base64` holds a PNG or a JPEG; a fr
 the latest earlier image (`image_index` names it). The frame field keeps its hosted name for one
 player; `image_media_type` gives the actual type.
 
+A frame may also carry a reported `hierarchy` snapshot from an asynchronous planner experiment:
+`planner_state` (`idle`, `pending`, `accepted`, `stale`, `error`), `task_revision` (integer
+0–2³¹−1), `active_skill` (printable text ≤64), optional `target` (printable text ≤24 or null), and
+optional `planner_latency_ms`, `observation_age_ms`, `physics_lag_ms` (finite 0–86,400,000 or null).
+The snapshot belongs to that exact physics tick, including frame 0; it is independent of a repeated
+camera image. Unknown fields are rejected. Existing uploads and recordings without it keep their
+original replay shape and content identity.
+
+Use `metrics.measurement_source` to describe the experiment's measurement clock and runner. It is
+shown in the replay and evaluation details. Replay metadata adds `has_hierarchy: true` when any frame
+has a snapshot, plus that reported source when provided. The player shows skill selection, targets,
+planner state, and local timing alongside applied actions. Aggregate numeric metrics are reported
+means per episode; importing them does not verify robot timing or qualify a cloud deployment.
+
 Writes follow the workspace-document hardening: authentication, role, client header, ownership,
 `Idempotency-Key` and the write budget are checked before the body is read; receipts keep metadata
 only (24 h, newest 1024 per account); the audit log records labels, ids, counts and sizes, never
@@ -62,6 +76,9 @@ under their lock and their installation-wide quota, so hosted uploads count offl
 uploads count hosted ones. Unlike hosted recordings, offline ones can be deleted. A file is written as
 `.partial` inside the write transaction and published after the commit; removal renames it to
 `.removed` before the rows go. The next offline write settles anything an interruption left.
+
+Only new recordings with hierarchy snapshots have an additional `frame_metadata` table; older
+recording files are read without modification. No control-plane database migration is required.
 
 Rows: `offline_evaluations` and `offline_episodes`, additive under SQLite schema version 5 and
 Alembic `0004_offline_evaluations` on PostgreSQL. A release without them still starts on the database.
