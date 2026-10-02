@@ -53,6 +53,16 @@ EDGE_DEVICE = PlannerProfile(
     concurrency=1,
     source="device",
 )
+CLOUD_LUNA_VISION = PlannerProfile(
+    name="cloud-gpt-6-luna-vision",
+    model="gpt-6-luna (OpenAI Responses API, low reasoning effort), reading the head camera image",
+    placement="cloud",
+    latency=None,  # every call is measured from this machine to the API; nothing is drawn from a model
+    timeout_s=60.0,  # the client's socket timeout (vision_planner.VisionFailurePolicy)
+    evidence="real calls to the OpenAI Responses API from the simulation host; round trip measured per call",
+    concurrency=2,  # a hosted API serves both arms' calls at once
+    source="vision",
+)
 CLOUD_ASTRA = PlannerProfile(
     name="cloud-gpt-astra",
     model="GPT-6 Astra (low reasoning effort), hosted API",
@@ -113,6 +123,10 @@ class DeploymentConfig:
 
 SCRIPTED_POLICY = "Scripted IK skills on sim state; planner choices: rule-based stand-in, modeled latency"
 DEVICE_PLANNER_POLICY = "Scripted IK skills on sim state; planner: the device's active model, real calls, measured latency"
+VISION_POLICY = "Scripted IK to the pointed location; planner: gpt-6-luna points in head-camera pixels, real calls"
+POINTED_SKILLS = MotorPolicy("scripted-ik-pick-at-point", "edge", True,
+                             "closed-form IK pick at the table point back-projected from the pixel the planner points at; "
+                             "no pill pose is read (reaching, lifting and the transfer stay scripted)")
 
 CONFIGS: dict[str, DeploymentConfig] = {
     c.id: c for c in (
@@ -134,6 +148,13 @@ CONFIGS: dict[str, DeploymentConfig] = {
             description=("Every skill call is a blocking cloud call; during an outage the robot holds and "
                          "retries with 1-8 s backoff."),
             deployment="Edge: none · Cloud: GPT-6 Astra (low)", policy=SCRIPTED_POLICY),
+        DeploymentConfig(
+            "cloud_luna_vision", "Cloud GPT-6 Luna (vision)", CLOUD_LUNA_VISION, POINTED_SKILLS,
+            description=("GPT-6 Luna (OpenAI, low reasoning effort) sees the head camera image and points at the next "
+                         "pill (a pixel) for each free arm; the pixel is back-projected with the camera's depth to a "
+                         "table point and a scripted IK grasp goes there (real calls, measured round trips)."),
+            deployment="Edge: none (Jetson as thin edge) · Cloud: GPT-6 Luna (gpt-6-luna, OpenAI, low effort)",
+            policy=VISION_POLICY),
         DeploymentConfig(
             "edge_smolvla_cloud_astra", "Edge SmolVLA + GPT Astra", CLOUD_ASTRA, SMOLVLA,
             description=("GPT Astra plans; SmolVLA on the Jetson would execute skills. No checkpoint exists for "
@@ -213,6 +234,22 @@ def device_labels(config: DeploymentConfig, model: dict | None, transport: str) 
     }
 
 
+def vision_labels(config: DeploymentConfig, model: str, provider: str, effort: str, transport: str) -> dict:
+    """The offline evaluation's labels for a cloud vision planner run: the model requested from the provider, its
+    reasoning effort and the transport, e.g. config "Edge: none (Jetson as thin edge) · Cloud: gpt-6-luna
+    (openai, low effort)"."""
+    def fit(*options: str) -> str:
+        return next((text for text in options if len(text) <= 120), options[-1][:119] + "…")
+
+    return {
+        "name": fit(f"Pills to bottle · {config.label} · {model} · {transport}", f"Pills to bottle · {config.label} · {model}"),
+        "config_label": fit(f"Edge: none (Jetson as thin edge) · Cloud: {model} ({provider}, {effort} effort)",
+                            f"Edge: none · Cloud: {model} ({provider}, {effort} effort)"),
+        "policy_label": fit(f"Scripted IK to the pointed location; {model} points in pixels via {transport}",
+                            VISION_POLICY),
+    }
+
+
 def release_manifest(config: DeploymentConfig) -> dict:
     """Immutable description of what an episode ran; its SHA-256 is the release digest."""
     from dataclasses import asdict
@@ -231,6 +268,12 @@ def release_manifest(config: DeploymentConfig) -> dict:
             return {**out, "latency": "measured per call (no latency model)",
                     "decision_policy": "the model on the connected device, through the device chat API",
                     "request": settings()}
+        if profile.source == "vision":
+            from .vision_planner import settings as vision_settings
+
+            return {**out, "latency": "measured per call (no latency model)",
+                    "decision_policy": "the cloud vision model points at a pill in the head camera image",
+                    "request": vision_settings()}
         return {**out, "latency_p50_s": profile.latency.p50_s, "latency_p95_s": profile.latency.p95_s,
                 "decision_policy": "deterministic rule-based stand-in (GreedyPillPlanner)"}
 

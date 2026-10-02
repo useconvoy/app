@@ -133,23 +133,32 @@ still scripted and runs in offline lockstep.
 
 `convoy_sim.bimanual_pill_task` (CLI `convoy-sim-pills`) is a second, separate
 scenario: a wheeled bimanual station robot (two 6-DOF arms with parallel
-grippers) putting 20–30 capsule pills into an open bottle, with four
-planner/policy deployment configurations (Edge device planner, Edge Qwen + GPT
-Astra, GPT Astra, Edge SmolVLA + GPT Astra), seeds × slices evaluation, and
-recordings in the offline import format above (or the hosted journal format). Its
-skills read simulator state. The edge device planner's decisions are real calls to
-the model of a connected device's active release, through the website's device
-chat contract (`platform-chat-v1`): a text description of the scene in, one JSON
-action out, latency measured, and the model and transport recorded with the run.
-The other three use a deterministic stand-in and differ by modeled planner latency
-and outage behaviour, and SmolVLA, which has no checkpoint for this robot, places
-no pills. See [docs/bimanual-pill-task.md](docs/bimanual-pill-task.md) for the
-model, the physics note, the on-device planner, metrics, results and the format
+grippers) putting 20–30 capsule pills into an open bottle, with five
+planner/policy deployment configurations (Edge device planner, Cloud GPT-6 Luna
+(vision), Edge Qwen + GPT Astra, GPT Astra, Edge SmolVLA + GPT Astra), seeds ×
+slices evaluation, and recordings in the offline import format above (or the
+hosted journal format). Its skills read simulator state, except the vision
+planner's pick, which goes to a point the model chose in the camera image.
+
+- **Edge device planner.** Its decisions are real calls to the model of a
+  connected device's active release, through the website's device chat contract
+  (`platform-chat-v1`): a text description of the scene in, one JSON action out,
+  latency measured, and the model and transport recorded with the run.
+- **Cloud GPT-6 Luna (vision).** Its decisions are real calls to `gpt-6-luna`
+  (OpenAI Responses API, low effort) with the head camera image: it points at the
+  next pill in pixels. The pixel is back-projected with the camera's depth and a
+  scripted IK grasp goes there. Every call's cost goes to a capped spend ledger.
+- **The other three** use a deterministic stand-in and differ by modeled planner
+  latency and outage behaviour. SmolVLA, which has no checkpoint for this robot,
+  places no pills.
+
+See [docs/bimanual-pill-task.md](docs/bimanual-pill-task.md) for the model, the
+physics note, the on-device and vision planners, metrics, results and the format
 mappings.
 
 ```sh
 uv sync --frozen --extra video --extra managed
-uv run --frozen pytest -q tests/test_bimanual_pill_task.py tests/test_device_planner.py
+uv run --frozen pytest -q tests/test_bimanual_pill_task.py tests/test_device_planner.py tests/test_vision_planner.py
 uv run --frozen convoy-sim-pills episode --config cloud_astra_only --slice nominal --seed 0 --output runs/pills
 scripts/pill_task_eval.sh runs/pill-demo     # modelled matrix, one importable directory per configuration
 ```

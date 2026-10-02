@@ -375,7 +375,8 @@ class Workspace:
     def __init__(self, world: World, arms: dict[str, ArmController]):
         self.world, self.arms = world, arms
         self.owner: str | None = None
-        self.targets: dict[str, int | None] = {side: None for side in arms}  # pill each arm works on
+        # What each arm works on: a pill index, or a table point (x, y) for a pick at a pointed location.
+        self.targets: dict[str, int | np.ndarray | None] = {side: None for side in arms}
 
     def bottle_xy(self) -> np.ndarray:
         return self.world.bottle_pose()[0][:2]
@@ -383,12 +384,20 @@ class Workspace:
     def in_zone(self, xy: np.ndarray, margin: float = 0.0) -> bool:
         return float(np.linalg.norm(np.asarray(xy)[:2] - self.bottle_xy())) < ZONE_M + margin
 
+    def target_xy(self, side: str) -> np.ndarray | None:
+        target = self.targets.get(side)
+        if target is None:
+            return None
+        if isinstance(target, int | np.integer):
+            return self.world.pill(int(target)).pos[:2]
+        return np.asarray(target, dtype=float)[:2]
+
     def occupies(self, side: str, margin: float = 0.02) -> bool:
         arm = self.arms[side]
         points = [arm.kin.shoulder_pos[:2], *arm.links_xy()]
         segments = list(zip(points[:-1], points[1:], strict=True))
         if self.targets.get(side) is not None:
-            segments.append((points[0], self.world.pill(self.targets[side]).pos[:2]))
+            segments.append((points[0], self.target_xy(side)))
         bottle = self.bottle_xy()
         return any(segment_point_distance(bottle, a, b) < ZONE_M + margin for a, b in segments)
 

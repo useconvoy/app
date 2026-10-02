@@ -134,8 +134,66 @@ def device_metrics(summary: dict) -> dict:
     }
 
 
+def vision_metrics(summary: dict) -> dict:
+    """The import's 32 metrics for an episode planned by the cloud vision model (``vision_planner``): calls by
+    result (as ``device_metrics`` groups them; ``planner_invalid_format`` also counts model refusals and
+    ``planner_call_failures`` API-side failures), the decision counts, the measured round trip, tokens and
+    cost of the episode's calls, the grasp outcomes and the task and safety counts. ``measurement_source``
+    names the model, provider, effort and transport. Nothing is modeled; a value not measured is null.
+
+    Grasps: ``grasp_attempts`` picks started; ``grasps_empty`` closed on nothing (the pointed spot held no
+    pill when the fingers closed); ``grasps_blocked`` stopped by contact on the way down (a finger on a pill
+    or the bottle); ``pills_grasped`` pills lifted off the mat and ``picks_placed`` picks that put a pill
+    in the bottle (both measured on the simulator after the fact)."""
+    from .vision_planner import CALL_FAILURES as VISION_FAILURES
+    from .vision_planner import INVALID_FORMAT as VISION_FORMAT
+
+    d = summary["vision_planner"]
+    by = d.get("by_result", {})
+    decisions = d.get("decision_counts") or {}
+    grasps = summary.get("grasps") or {}
+    model = ", ".join(d.get("models_reported") or []) or "model not reported"
+    return {
+        "pills_total": summary["pills"],
+        "pills_placed": summary["placed"],
+        "fraction_placed": round(summary["fraction_placed"], 4),
+        "time_to_all_placed_s": summary.get("time_to_all_placed_s"),
+        "planner_calls": d["calls"],
+        "planner_valid_replies": by.get("valid", 0),
+        "planner_invalid_format": sum(by.get(name, 0) for name in VISION_FORMAT),
+        "planner_invalid_choice": by.get("invalid_choice", 0),
+        "planner_call_failures": sum(by.get(name, 0) for name in VISION_FAILURES),
+        "planner_decisions": decisions.get("resolved"),
+        "planner_first_call_accepted": decisions.get("first_call_accepted"),
+        "planner_reasked_decisions": decisions.get("reasked"),
+        "planner_failed_decisions": d.get("failed_decisions", 0),
+        "planner_stale_rejections": d.get("stale_rejections", 0),
+        "planner_e2e_p50_ms": d.get("e2e_p50_ms"),
+        "planner_e2e_p95_ms": d.get("e2e_p95_ms"),
+        "planner_tokens_in_p50": d.get("tokens_in_p50"),
+        "planner_tokens_out_p50": d.get("tokens_out_p50"),
+        "planner_tokens_in": d.get("tokens_in"),
+        "planner_tokens_out": d.get("tokens_out"),
+        "planner_cost_usd": d.get("cost_usd"),
+        "grasp_attempts": grasps.get("picks", 0),
+        "grasps_empty": grasps.get("empty", 0),
+        "grasps_blocked": grasps.get("blocked", 0),
+        "pills_grasped": grasps.get("pills_lifted", 0),
+        "picks_placed": grasps.get("picks_placed", 0),
+        "protective_stops": summary.get("protective_stops", 0),
+        "arm_arm_contacts": summary.get("arm_arm_contacts", 0),
+        "max_bottle_tilt_deg": summary.get("max_bottle_tilt_deg"),
+        "slice": summary["slice"],
+        "end_reason": str(summary.get("outcome", summary.get("error", "")))[:200],
+        "measurement_source": (f"{model} ({d.get('provider') or 'openai'}, {d.get('effort') or 'low'} effort) via "
+                               f"{d.get('transport') or 'unknown'}; round trip measured per call")[:200],
+    }
+
+
 def episode_metrics(summary: dict) -> dict:
     """At most 32 lower_snake_case metrics (numbers, booleans, short text) for the import."""
+    if summary.get("vision_planner"):
+        return vision_metrics(summary)
     if summary.get("device_planner"):
         return device_metrics(summary)
 
@@ -175,9 +233,13 @@ def episode_metrics(summary: dict) -> dict:
 
 
 def chosen_skills(summary: dict) -> str:
-    """The skills the device planner chose and the executive started, e.g. "pick_and_drop ×23, push_apart ×1"."""
+    """The skills the device planner chose and the executive started, e.g. "pick_and_drop ×23, push_apart ×1";
+    for the vision planner, the actions it chose, e.g. "pick_at_point ×31, wait ×2"."""
     counts: dict[str, int] = {}
-    for record in summary["device_planner"].get("delivered", []):
+    if summary.get("vision_planner"):
+        for name, n in (summary["vision_planner"].get("actions") or {}).items():
+            counts["pick_at_point" if name == "pick" else name] = n
+    for record in (summary.get("device_planner") or {}).get("delivered", []):
         counts[record] = counts.get(record, 0) + 1
     text = ", ".join(f"{name} ×{n}" for name, n in sorted(counts.items(), key=lambda kv: -kv[1]))
     return (text or "no skill chosen")[:64]
@@ -186,11 +248,19 @@ def chosen_skills(summary: dict) -> str:
 def write_evaluation(directory: Path, config, task: str, name: str | None = None, planner: dict | None = None) -> Path:
     """evaluation.json: the labels the import creates the offline evaluation with. `planner` is a device
     planner run's ``{"model": describe_model(), "transport": ...}``: its labels say which model (as the
-    platform reported it at run start) and which transport, instead of the configuration's static text."""
+    platform reported it at run start) and which transport, instead of the configuration's static text. For
+    the cloud vision planner it is ``{"vision": True, "model", "provider", "effort", "transport"}``."""
     directory.mkdir(parents=True, exist_ok=True)
     labels = {"name": name or f"Pills to bottle · {config.label}", "task": task,
               "config_label": config.deployment or config.label, "policy_label": config.policy or config.motor.name}
-    if planner is not None:
+    if planner is not None and planner.get("vision"):
+        from .configs import vision_labels
+
+        measured = vision_labels(config, planner.get("model") or "unknown", planner.get("provider") or "unknown",
+                                 planner.get("effort") or "unknown", planner.get("transport") or "unknown")
+        labels.update(config_label=measured["config_label"], policy_label=measured["policy_label"])
+        labels["name"] = name or measured["name"]
+    elif planner is not None:
         from .configs import device_labels
 
         measured = device_labels(config, planner.get("model"), planner.get("transport") or "unknown")
@@ -326,7 +396,8 @@ class OfflineReplayRecorder:
         manifest = {
             "steps": len(self.rows), "seed": int(self.seed), "outcome": outcome(summary),
             "metrics": episode_metrics(summary), "action_labels": list(ACTION_LABELS),
-            "skill": chosen_skills(summary) if summary.get("device_planner") else "pick_and_drop",
+            "skill": (chosen_skills(summary) if summary.get("device_planner") or summary.get("vision_planner")
+                      else "pick_and_drop"),
             "planner_ms": skill_planner, "sim_seconds": summary["simulated_duration_s"],
         }
         (self.output / "replay.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")

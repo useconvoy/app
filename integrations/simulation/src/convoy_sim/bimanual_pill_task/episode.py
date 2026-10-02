@@ -109,16 +109,9 @@ class Episode:
         rng = np.random.default_rng(stable_hash("latency", cfg.id, sl.id, spec.seed))
         network = sl.network()
         self.device = cfg.skill_planner.source == "device"
-        if self.device:
-            if planner is None:
-                raise ValueError(f"{cfg.id} asks the model on a connected device for every decision: pass a device "
-                                 "planner connection (there is no stand-in for this configuration)")
-            self.skill_planner = DevicePlannerEndpoint(
-                cfg.skill_planner, planner, self.observation, sl.pills, network=network,
-                on_record=lambda record: self.trace.planner_calls.append(record),
-                label=f"{sl.id}/{spec.seed}", log=planner_log)
-        else:
-            self.skill_planner = PlannerEndpoint(cfg.skill_planner, network, rng, GreedyPillPlanner(), "skill")
+        # Every decision is a real, measured model call (the device planner, the cloud vision planner).
+        self.real_calls = cfg.skill_planner.source in ("device", "vision")
+        self.skill_planner = self._make_skill_planner(planner, planner_log, network, rng)
         self.policy_rng = np.random.default_rng(stable_hash("policy", cfg.id, sl.id, spec.seed))
         self.task_planner = (PlannerEndpoint(cfg.task_planner, network, rng, TaskPlanStandIn(), "task")
                              if cfg.task_planner else None)
@@ -142,6 +135,34 @@ class Episode:
         self.rejected_decisions = 0  # stale decisions caught by the separation re-check
         self.protective_stops = 0
         self.last_placed = 0
+
+    def _make_skill_planner(self, planner, planner_log, network, rng):
+        cfg, sl = self.spec.config, self.spec.slice
+        if self.device:
+            if planner is None:
+                raise ValueError(f"{cfg.id} asks the model on a connected device for every decision: pass a device "
+                                 "planner connection (there is no stand-in for this configuration)")
+            return DevicePlannerEndpoint(
+                cfg.skill_planner, planner, self.observation, sl.pills, network=network,
+                on_record=lambda record: self.trace.planner_calls.append(record),
+                label=f"{sl.id}/{self.spec.seed}", log=planner_log)
+        if cfg.skill_planner.source != "stand_in":
+            raise ValueError(f"{cfg.id} plans from camera images: run it with make_episode (a VisionEpisode); there is "
+                             "no stand-in for it")
+        return PlannerEndpoint(cfg.skill_planner, network, rng, GreedyPillPlanner(), "skill")
+
+    # --- what a decision targets: a pill (here) or a pointed table location (vision_episode) ------------
+    def _decision_target(self, decision: dict):
+        return int(decision["parameters"]["pill"].split("_")[1])
+
+    def _target_xy(self, target) -> np.ndarray:
+        return self.world.pill(target).pos[:2]
+
+    def _target_label(self, target) -> str:
+        return f"pill_{target:02d}"
+
+    def _skill_label(self, skill) -> str:
+        return f"{skill.skill_id}:pill_{skill.pill:02d}:{skill.phase}"
 
     # --- planner I/O -------------------------------------------------------
     def observation(self, arm: str) -> dict:
@@ -181,7 +202,7 @@ class Episode:
     def _on_skill_call(self, call: PlannerCall, t: float) -> None:
         slot = self.arms[call.arm]
         slot.call = None
-        if not self.device:  # a device call's own records reach the trace as each call completes
+        if not self.real_calls:  # a real call's own records reach the trace as each call completes
             self.trace.planner_calls.append(call_record(call))
         if call.status != "ok":
             backoff = self.spec.config.retry_backoff_s
@@ -193,18 +214,18 @@ class Episode:
         decision = call.decision or {}
         kind = decision.get("kind")
         if kind == "skill":
-            pill = int(decision["parameters"]["pill"].split("_")[1])
+            pill = self._decision_target(decision)  # a pill, or a pointed table location (vision_episode)
             # The decision was made on the observation sent with the request,
             # which can be seconds old (queued calls, cloud latency). Re-check
             # the two-arm separation rule against the current state.
             conflict = self._arm_conflict(call.arm, pill)
-            if conflict == "bottle_zone_in_use" and self.device:
-                # A device decision costs a measured round trip of seconds, during which the other arm often
+            if conflict == "bottle_zone_in_use" and self.real_calls:
+                # A real decision costs a measured round trip of seconds, during which the other arm often
                 # starts a transfer. Its only conflict being the bottle zone, it is held until the zone is
                 # free (at most ZONE_HOLD_S), then checked again (device_planner.FailurePolicy).
                 slot.held = (call, decision, pill, t, t + ZONE_HOLD_S)
                 self.events.append({"t": round(t, 3), "event": "decision_held", "arm": call.arm,
-                                    "pill": f"pill_{pill:02d}", "reason": conflict})
+                                    "pill": self._target_label(pill), "reason": conflict})
                 return
             if conflict is not None:
                 self._reject(call, pill, conflict, t)
@@ -233,10 +254,10 @@ class Episode:
     def _reject(self, call: PlannerCall, pill: int, conflict: str, t: float) -> None:
         """A delivered decision that the current state rules out: counted, and the arm asks again at once."""
         self.rejected_decisions += 1
-        if self.device:
+        if self.real_calls:
             self.skill_planner.mark_stale(call, conflict)
         self.events.append({"t": round(t, 3), "event": "decision_rejected", "arm": call.arm,
-                            "pill": f"pill_{pill:02d}", "reason": conflict})
+                            "pill": self._target_label(pill), "reason": conflict})
         self.arms[call.arm].next_request_s = t  # ask again with a fresh observation
 
     def _release_held(self, side: str, t: float) -> None:
@@ -285,14 +306,15 @@ class Episode:
         """The planner's separation rules, evaluated on the current state."""
         other_side = "right" if side == "left" else "left"
         other = self.arms[other_side]
-        xy = self.world.pill(pill).pos[:2]
+        xy = self._target_xy(pill)
         if self.space.owner == other_side:
             shoulder = self.arms[side].controller.kin.shoulder_pos[:2]
             if segment_point_distance(self.space.bottle_xy(), shoulder, xy) < ZONE_M + 0.02:
                 return "bottle_zone_in_use"
         points = other.controller.links_xy()[1:]  # wrist and TCP
         if other.skill is not None and not other.skill.done:
-            points.append(self.world.pill(other.skill.pill).pos[:2])
+            skill = other.skill
+            points.append(self.world.pill(skill.pill).pos[:2] if skill.pill is not None else skill.target_xy)
         if min(float(np.linalg.norm(xy - p)) for p in points) >= ARM_SEPARATION_M:
             return None
         if other.skill is not None:
@@ -478,8 +500,7 @@ class Episode:
             per_arm[side] = [float(np.clip(c / V_MAX, -1, 1)) for c in v] + [float(grip)]
             speed[side] = float(np.linalg.norm(v)) + (0.0 if slot.skill is None else 1e-3)
         primary = max(SIDES, key=lambda s: speed[s])
-        skills = {side: (None if s.skill is None else f"{s.skill.skill_id}:pill_{s.skill.pill:02d}:{s.skill.phase}")
-                  for side, s in self.arms.items()}
+        skills = {side: (None if s.skill is None else self._skill_label(s.skill)) for side, s in self.arms.items()}
         extension = {"arm": primary, "left": [round(v, 4) for v in per_arm["left"]],
                      "right": [round(v, 4) for v in per_arm["right"]], "skills": skills,
                      "joint_targets": {side: [round(float(v), 5) for v in s.controller.q] for side, s in self.arms.items()},
@@ -520,8 +541,8 @@ class Episode:
             "settle": {k: round(v, 6) for k, v in self.settle_report.items()},
             "events": self.events[:50],
         }
-        if self.device:
-            summary["network_outage_s"] = None  # no cloud link in this configuration: not applicable
+        if self.real_calls:
+            summary["network_outage_s"] = None  # no modelled link outage: calls go over the real network, measured
         return summary
 
     def _planner_summary(self, t: float) -> dict:
@@ -569,5 +590,15 @@ def call_record(call: PlannerCall) -> dict:
             "stand_in_compute_ms": round(call.compute_ms, 3)}
 
 
+def make_episode(spec: EpisodeSpec, recorder=None, planner=None, planner_log=None, **options) -> Episode:
+    """The episode a configuration runs: a ``VisionEpisode`` when its planner reads the head camera (`options`:
+    its ``image_dir``), else an ``Episode``."""
+    if spec.config.skill_planner.source == "vision":
+        from .vision_episode import VisionEpisode
+
+        return VisionEpisode(spec, recorder, planner, planner_log, **options)
+    return Episode(spec, recorder, planner, planner_log)
+
+
 def run_episode(spec: EpisodeSpec, recorder=None, planner=None, planner_log=None) -> dict:
-    return Episode(spec, recorder, planner, planner_log).run()
+    return make_episode(spec, recorder, planner, planner_log).run()
