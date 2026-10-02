@@ -23,7 +23,7 @@ operator-installed joint-state policy worker; entering a runtime/artifact name d
 The release page preserves earlier releases, creates a new immutable release when edited, reports
 matching verified simulators and opens their deployment controls with that exact release selected.
 It offers exact serialized setup files: browser re-serialization would change numeric representations
-and invalidate artifact identity. Saving a release never starts installation or changes a running robot.
+and invalidate artifact identity. Saving a release never changes a running robot; deployment can trigger managed reference-worker preparation.
 
 Existing workspace configuration documents remain readable/editable separately; their names are not
 assumed to identify backend applications. Explicit linking/migration of those documents, automatic model
@@ -105,6 +105,27 @@ uv run --frozen --extra managed python -m convoy_sim.registered \
   --data-dir /path/to/simulator-enrollment --assets /path/to/robot-assets \
   --worker-url http://127.0.0.1:8091
 ```
+
+For reference-policy releases, the runner can now own its policy worker. With the same enrolled
+simulator, installed robot assets and action verification configuration, run:
+
+```sh
+uv run --frozen --extra managed python -m convoy_sim.registered \
+  --data-dir /path/to/simulator-enrollment --assets /path/to/robot-assets --manage-worker
+```
+
+No policy file, per-release worker command or probe token needs to be assembled in this mode.
+The runner derives the reference artifact from the validated release, writes private canonical setup
+files, launches a fixed installed worker and verifies its exact release/runtime/artifact before
+acknowledging readiness. It switches the owned worker only behind the coordinator's idle/recovery
+fences. Failed starts are retained across runner restarts and require a new deployment generation to
+retry. An unsupported installed-policy release is blocked before stopping the previous worker.
+Shutdown verifies the owned child's exit; bounded logs and process records remain for diagnosis.
+
+`--manage-worker` and `--worker-url` are mutually exclusive. Other learned policy runtimes still use
+an operator-managed external worker. Robot asset delivery, initial enrollment/trust configuration and
+simulator verification still require setup; this is automatic reference-worker preparation, not
+universal model installation. No cloud planner or physical motor controller is launched by this mode.
 
 The coordinator uses its enrolled device identity and a dedicated journal. Its bundle owner reloads
 and hashes the installed model, validates profile compatibility and native model readiness, and probes

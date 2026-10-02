@@ -148,3 +148,30 @@ journeys pass. Browser checks include release creation/revision/download, preser
 releases, navigation with the exact selected release, existing device/replay flows, accessibility and
 mobile overflow. Type checks, lint, design-token checks and the production build pass. Remote CI for
 this branch still needs to run. The disposable PostgreSQL container and local test services were stopped.
+
+## Managed registered-worker slice
+
+Branch: `codex/managed-registered-worker`, stacked on configuration releases. An enrolled registered
+simulator can use `--manage-worker` to prepare the validated joint-reference artifact and launch its
+owned local policy worker. No per-release policy file, worker command or manually supplied probe token
+is needed. The coordinator's existing idle/mission-recovery gate controls preparation; exact live
+worker identity is verified before activation. Unsupported policy preflight retains the prior loaded
+worker. Startup failures are persisted and require a new deployment generation before retry, including
+after runner restart. Owned-process records, bounded logs and verified shutdown reuse the agent's
+existing process-owner implementation. External operator-managed policy workers remain supported.
+
+Actual acceptance now covers automatic reference-worker creation, task success, switching to an
+opposite-target release, blocking an unavailable runtime, restoring an earlier release and verified
+worker shutdown. A separate actual-child failure case checks persistent retry fencing. These and the
+native model checks pass (13 tests); 24 coordinator bundle/recovery checks also pass. This mode still
+uses functional lockstep physics and a reference controller, not learned manipulation or real-time
+qualification. No physical motors, hosted rollout or new cloud resources are involved.
+
+Remaining: robot asset delivery and onboarding, general learned model installation, old configuration
+identity migration, real-time edge/cloud experiments, Isaac, scenario/chat tasking, staged fleet
+rollout and dynamics characterization. The full objective remains incomplete.
+
+Frontend verification: the configuration creation/revision/deployment browser journey passes after
+updating the setup guidance, including accessibility and mobile overflow. Lint and production build
+(including type checks) pass. The managed CI job now includes the real startup-failure/retry case.
+This branch still requires remote CI before merge.

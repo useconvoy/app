@@ -14,7 +14,7 @@ dependencies = [
 
 [project.optional-dependencies]
 video = ["imageio==2.37.0", "imageio-ffmpeg==0.6.0"]
-managed = ["convoy-agent[coordinator]", "convoy-contracts", "convoy-worker", "convoy-server"]
+managed = ["convoy-agent[coordinator,local-host]", "convoy-contracts", "convoy-worker", "convoy-server"]
 
 [tool.uv.sources]
 convoy-agent = { path = "../../control-plane/agent", editable = true }

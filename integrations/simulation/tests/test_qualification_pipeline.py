@@ -172,6 +172,57 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
                 coordinator.wait(timeout=10)
                 coordinator = None
 
+            # No external worker or policy files: the enrolled runner prepares its own
+            # reference runtime, then replaces it for an explicitly deployed revision.
+            worker_server.should_exit = True
+            worker_thread.join(timeout=10)
+            worker_socket.close()
+            assert not worker_thread.is_alive()
+            worker_server = None
+            deployment = post("deployments", {"robot_id": robot["id"], "release_id": release["id"], "expected_generation": 1})
+            with (tmp_path / "coordinator.log").open("a") as log:
+                coordinator = subprocess.Popen([sys.executable, "-m", "convoy_sim.registered", "--data-dir", str(state),
+                                                "--assets", str(assets), "--manage-worker"],
+                                               env={**os.environ, "CONVOY_EXECUTION_SECRET": execution_secret},
+                                               stdout=log, stderr=log)
+                assert wait(f"deployments/{deployment['id']}", {"ready", "blocked"})["state"] == "ready"
+                process_path = state / "managed-worker/process.json"
+                first_process = json.loads(process_path.read_text())
+                assert first_process["state"] == "running"
+                assert json.loads((state / "managed-worker/reference.json").read_text()) == {"target_joint_positions": [0.25]}
+                mission = post(f"robots/{robot['id']}/missions", {"deployment_id": deployment["id"], "expected_generation": 2, "seed": 0, "ttl_s": 60})
+                assert wait(f"missions/{mission['id']}", {"completed", "failed", "unknown"})["state"] == "completed"
+                changed = post(f"applications/{configured['application']['id']}/configuration-releases", {
+                    "profile_id": profile["id"], "policy": {"kind": "reference"},
+                    "instruction": "Reach the opposite target", "targets": {"shoulder": -0.25},
+                })["release"]
+                deployment = post("deployments", {"robot_id": robot["id"], "release_id": changed["id"], "expected_generation": 2})
+                assert wait(f"deployments/{deployment['id']}", {"ready", "blocked"})["state"] == "ready"
+                second_process = json.loads(process_path.read_text())
+                assert second_process["marker"] != first_process["marker"]
+                assert json.loads((state / "managed-worker/previous.json").read_text())["state"] == "stopped"
+                mission = post(f"robots/{robot['id']}/missions", {"deployment_id": deployment["id"], "expected_generation": 3, "seed": 0, "ttl_s": 60})
+                result = wait(f"missions/{mission['id']}", {"completed", "failed", "unknown"})
+                assert result["state"] == "completed", result
+                episode = client.get(f"/api/v1/episodes/{result['episode_id']}").json()
+                assert episode["release_digest"] == changed["digest"] and episode["summary"]["final_success"]
+                assert json.loads((state / "managed-worker/reference.json").read_text()) == {"target_joint_positions": [-0.25]}
+                unsupported = post(f"applications/{configured['application']['id']}/configuration-releases", {
+                    "profile_id": profile["id"], "policy": {"kind": "installed", "runtime": "not-installed", "artifact_sha256": "c" * 64},
+                    "instruction": "Use another policy", "targets": {"shoulder": 0},
+                })["release"]
+                blocked = post("deployments", {"robot_id": robot["id"], "release_id": unsupported["id"], "expected_generation": 3})
+                assert wait(f"deployments/{blocked['id']}", {"blocked"})["state"] == "blocked"
+                assert json.loads(process_path.read_text()) == second_process  # failed preflight retains A
+                restored = post("deployments", {"robot_id": robot["id"], "release_id": release["id"], "expected_generation": 4})
+                assert wait(f"deployments/{restored['id']}", {"ready", "blocked"})["state"] == "ready"
+                coordinator.terminate()
+                coordinator.wait(timeout=15)
+                assert coordinator.returncode == 0, (tmp_path / "coordinator.log").read_text()
+                coordinator = None
+                assert json.loads(process_path.read_text())["state"] == "stopped"
+                assert json.loads((state / "managed-worker/status.json").read_text())["phase"] == "stopped"
+
             # The next request really rereads the installed bytes and persists a failure.
             (assets / model["asset"]["sha256"]).write_bytes(b"changed asset")
             post(f"robots/{robot['id']}/qualification", {})
@@ -188,6 +239,12 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
             except subprocess.TimeoutExpired:
                 coordinator.kill()
                 coordinator.wait(timeout=5)
+        managed_directory = tmp_path / "simulator/managed-worker"
+        if (managed_directory / "process.json").exists():
+            from convoy_agent.owned_process import OwnedProcess
+
+            with OwnedProcess(managed_directory) as owner:
+                owner.stop()
         if worker_server:
             worker_server.should_exit = True
             worker_thread.join(timeout=10)

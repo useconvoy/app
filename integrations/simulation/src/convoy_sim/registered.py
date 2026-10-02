@@ -11,6 +11,7 @@ import logging
 import os
 import signal
 import uuid
+from contextlib import ExitStack
 from pathlib import Path
 
 import mujoco
@@ -80,9 +81,11 @@ class JointAdapter:
 
 class RegisteredBundle:
     """Load immutable robot bytes; the existing worker owns model installation/inference."""
-    def __init__(self, profile, engine, assets, worker):
+    def __init__(self, profile, engine, assets, worker=None, *, worker_owner=None):
         self.profile, self.engine = copy.deepcopy(profile), engine
-        self.assets, self.worker = Path(assets), worker
+        self.assets, self.worker, self.worker_owner = Path(assets), worker, worker_owner
+        if (worker is None) == (worker_owner is None):
+            raise ValueError("configure one external worker or one managed worker owner")
         self.incarnation = str(uuid.uuid4())
         self.checked = set()
 
@@ -99,12 +102,13 @@ class RegisteredBundle:
                 raise ValueError(result["detail"])
             self.checked.add(model["asset"]["sha256"])
         xml, assets = mujoco_files(payload, model["asset"]["format"])
-        probe = self.worker.probe(deployment["release"]["digest"], REGISTERED_PROFILE)
+        worker = self.worker_owner.prepare(deployment, manifest) if self.worker_owner else self.worker
+        probe = worker.probe(deployment["release"]["digest"], REGISTERED_PROFILE)
         worker_incarnation = probe.get("worker_incarnation")
         if not isinstance(worker_incarnation, str) or not 1 <= len(worker_incarnation) <= 128:
             raise ValueError("worker must report its process incarnation")
         binding_id = canonical_digest([self.incarnation, worker_incarnation, deployment["release"]["digest"]])
-        return PreparedBinding(binding_id=binding_id, worker=self.worker, planner=None,
+        return PreparedBinding(binding_id=binding_id, worker=worker, planner=None,
                                observation=BindingObservation(deployment["release"]["digest"], REGISTERED_PROFILE,
                                                               manifest["policy"]["artifact_sha256"], None),
                                adapter_factory=lambda: JointAdapter(manifest, xml, assets))
@@ -114,7 +118,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--assets", type=Path, required=True)
-    parser.add_argument("--worker-url", required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--worker-url", help="operator-managed policy worker")
+    mode.add_argument("--manage-worker", action="store_true", help="prepare and own the local joint-reference worker")
     parser.add_argument("--worker-ca-file")
     parser.add_argument("--clock-uncertainty-seconds", type=float, default=0.25)
     parser.add_argument("--once", action="store_true")
@@ -124,17 +130,27 @@ def main(argv=None):
     if not cfg.credential or not cfg.data.get("simulate"):
         parser.error("enroll a simulator first")
     token = os.environ.get("CONVOY_WORKER_PROBE_TOKEN")
-    if not token:
+    if not args.manage_worker and not token:
         parser.error("CONVOY_WORKER_PROBE_TOKEN is required")
     control = JsonHTTP(cfg.data["server"], cfg.credential, ca_file=cfg.data.get("ca_file"))
     registered = control.get("/api/agent/v1/registry")
     robot = registered.get("robot")
     if not robot or robot["profile"] != REGISTERED_PROFILE:
         parser.error("register a robot with a joint-position profile first")
-    worker = WorkerHTTP(args.worker_url, token, ca_file=args.worker_ca_file)
-    owner = RegisteredBundle(registered["profile"], robot["simulation_engine"], args.assets, worker)
-    journal = ExecutionJournal(args.data_dir / "coordinator", robot["id"], cfg.data["device_id"])
-    try:
+    if args.manage_worker and args.worker_ca_file:
+        parser.error("the managed worker uses an owned loopback endpoint")
+    with ExitStack() as resources:
+        journal = ExecutionJournal(args.data_dir / "coordinator", robot["id"], cfg.data["device_id"])
+        resources.callback(journal.close)
+        worker_owner = None
+        if args.manage_worker:
+            from .managed_worker import ManagedWorker
+
+            worker_owner = resources.enter_context(ManagedWorker(args.data_dir / "managed-worker"))
+            worker = None
+        else:
+            worker = WorkerHTTP(args.worker_url, token, ca_file=args.worker_ca_file)
+        owner = RegisteredBundle(registered["profile"], robot["simulation_engine"], args.assets, worker, worker_owner=worker_owner)
         coordinator = Coordinator(robot_id=robot["id"], device_id=cfg.data["device_id"], journal=journal,
                                   control=control, worker=worker, adapter_factory=None, bundle_owner=owner,
                                   profile=REGISTERED_PROFILE, poll_s=1,
@@ -142,8 +158,6 @@ def main(argv=None):
         signal.signal(signal.SIGTERM, lambda *_: coordinator.request_stop())
         signal.signal(signal.SIGINT, lambda *_: coordinator.request_stop())
         coordinator.run(once=args.once)
-    finally:
-        journal.close()
     return 0
 
 

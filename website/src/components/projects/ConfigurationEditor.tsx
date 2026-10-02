@@ -94,7 +94,7 @@ function ReleaseForm({ profile, application, initial, disabled, onSaved }: {
       <label className="cv-field">Position tolerance (joint SI units)<input className="cv-input" type="number" required min={0.000001} max={1} step="any" value={positionTolerance} onChange={e => setPositionTolerance(Number(e.target.value))} /></label>
       <label className="cv-field">Settled velocity tolerance (joint SI units/second)<input className="cv-input" type="number" required min={0.000001} max={1} step="any" value={velocityTolerance} onChange={e => setVelocityTolerance(Number(e.target.value))} /></label>
     </details>
-    <p>Cloud planning is not connected to this joint-state runtime yet. The simulator and policy worker currently require operator setup.</p>
+    <p>Cloud planning is not connected to this joint-state runtime yet. A configured managed runner prepares the reference policy on deployment. Robot model assets and other policy workers require operator setup.</p>
     {mutation.error && <p role="alert">{mutation.error}</p>}
     <button className="cv-btn cv-btn--primary" disabled={disabled || mutation.busy || !instruction.trim() || !name.trim()}>{mutation.busy ? "Saving…" : application ? "Save new release" : "Create configuration"}</button>
   </form>;

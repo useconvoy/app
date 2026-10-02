@@ -55,7 +55,7 @@ jobs:
           version: "0.8.22"
           python-version: "3.11"
       - run: uv sync --frozen --extra managed
-      - run: uv run --frozen --extra managed pytest -q tests/test_qualification_pipeline.py
+      - run: uv run --frozen --extra managed pytest -q tests/test_qualification_pipeline.py tests/test_managed_worker.py
       - run: uv run --frozen --extra managed ruff check src tests ../../examples/manipulation
       - run: uv run --frozen --extra managed python ../../examples/manipulation/pipeline.py --faults --output runs/ci-pipeline
       - run: uv run --frozen --extra managed python ../../examples/manipulation/evaluate.py --output runs/ci-evaluation
