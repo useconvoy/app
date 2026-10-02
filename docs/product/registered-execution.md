@@ -26,9 +26,12 @@ It offers exact serialized setup files: browser re-serialization would change nu
 and invalidate artifact identity. Saving a release never changes a running robot; deployment can trigger managed reference-worker preparation.
 
 Existing workspace configuration documents remain readable/editable separately; their names are not
-assumed to identify backend applications. Explicit linking/migration of those documents and automatic model
-installation remain unfinished. Project connection setup is described below. Task result summaries are available here;
-uploaded visual replay for this joint interface is not implemented yet. Existing Sawyer recordings
+assumed to identify backend applications. An operator can explicitly link a saved specification to a
+project application, with navigation in both directions and changed-source status. This association
+does not translate declared model names into installed policies. Project connection setup is described
+below. Task result summaries are available here. Uploaded visual replay for this joint interface is not
+implemented yet. Local physics-state capture and
+post-run image reconstruction are available as described below. Existing Sawyer recordings
 keep their existing viewer.
 
 ## Project connection setup
@@ -284,7 +287,51 @@ Native tests exercise fresh commands, stale action rejection while physics advan
 an intentionally paused physics process, and sustained timely actions that do not complete the task.
 The HTTP pipeline covers a fast managed worker and a deliberately delayed external worker using the
 same registered robot/model contract. Browser tests cover creating/revising the timing contract and
-reading results on desktop and mobile. These are local CPU/native tests, not a Jetson qualification.
+reading results on desktop and mobile. Native Jetson evidence and its limits are recorded in
+[registered-timing-jetson.md](registered-timing-jetson.md) and [platform-build.md](platform-build.md).
+
+## Physics-state recording and local replay reconstruction
+
+The registered CLI and combined simulator service now capture bounded physics trajectories in
+`<enrollment-data-dir>/trajectories/<mission-id>.state.json`. Each includes the execution identity,
+exact release manifest, model-state widths and an initial state followed by every completed control
+tick. Samples contain MuJoCo position/velocity/actuation/control/mocap state, simulation time, host
+monotonic capture time and the applied target. They distinguish a new policy command, a held policy
+target and fallback hold. Physics substeps between control ticks are not separately recorded.
+
+Independent real-time recording happens inside the physics process, so inference delays do not leave
+gaps where the robot continued moving. Its copy overhead is included in measured physics completion
+lag. No rendering, PNG compression or disk writes occur in the control loop. After acknowledged physics
+shutdown, the coordinator writes the immutable trajectory and reports its SHA-256 under
+`episode.summary.recording`. Artifact export time is outside the reported execution duration. A failed
+export reports recording unavailability without changing task success or causing another action.
+
+Limits: 501 samples, 2,048 model-state values per sample, 16 MiB per trajectory and 256 MiB in the local
+trajectory directory. A limit failure is explicit; there is no silent downsampling or automatic deletion
+of earlier evidence. Hosted upload/retention management is a subsequent integration.
+
+From the installed runtime, reconstruct frames with the digest reported by that task:
+
+```sh
+convoy-sim-render \
+  --trace /path/to/enrollment/trajectories/mission-id.state.json \
+  --sha256 <digest-from-task-result> \
+  --asset /path/to/robot-assets/<pinned-model-sha256> \
+  --asset-format mjcf \
+  --output /path/to/new-replay-directory
+```
+
+For a ZIP model, use `--asset-format bundle`. Rendering runs in a bounded native subprocess, validates
+trajectory/release/model identity and engine version, restores the recorded states, then runs
+`mj_forward` to reconstruct each pose. It never steps physics or invokes a policy. Output is a sequence
+of 320×320 PNGs and a final `index.json` containing frame hashes, action provenance, times, joint labels
+and observer-camera settings. A directory without that final index is incomplete; existing output
+directories are not overwritten. Rendering requires a functioning MuJoCo OpenGL backend; the Jetson
+acceptance uses `MUJOCO_GL=egl`, and CI uses software OSMesa.
+
+These images are explicitly observer reconstructions, **not policy camera observations**. Local rendering
+does not make the recording available in the hosted player yet. Automatic upload, API validation and
+the registered-robot result/player connection remain necessary before that user journey is complete.
 
 ### Scope
 
@@ -297,7 +344,7 @@ whose verification was superseded. Existing legacy coordinator, worker/session a
 continue to run, including PostgreSQL cases and browser start/stop acknowledgment checks.
 
 Remaining: learned policies for registered joint interfaces; camera-conditioned contracts; model
-installation and legacy configuration links; cloud planning and chat tasking; repeated timing evaluation
-and Jetson qualification; visual replay for these models; other controller adapters; Isaac, scenarios, fleet
-rollout, and dynamics characterization. Do not label this reference-controller result as evidence of
-learned manipulation, calibrated physical fidelity, or Jetson timing performance.
+installation; cloud planning and chat tasking; repeated timing evaluations of learned workloads;
+uploaded visual replay for these models; other controller adapters; Isaac, scenarios, fleet rollout,
+and dynamics characterization. Reference-controller measurements do not establish learned manipulation
+quality or calibrated physical fidelity.

@@ -126,7 +126,14 @@ def test_service_waits_for_registration_qualifies_runs_and_recovers_owned_worker
                 wait(lambda: get("missions/" + task["id"])["state"] in {"completed", "failed", "unknown"})
                 result = get("missions/" + task["id"])
                 assert result["state"] == "completed", result
-                assert get("episodes/" + result["episode_id"])["summary"]["final_success"]
+                episode = get("episodes/" + result["episode_id"])
+                assert episode["summary"]["final_success"]
+                from convoy_sim.trajectory import load_trace
+
+                recording = episode["summary"]["recording"]
+                assert recording["state"] == "recorded-locally"
+                trajectory = load_trace(state / "trajectories" / f"{task['id']}.state.json", recording["sha256"])
+                assert trajectory["identity"] == episode["identity"]
                 return task["id"]
 
             first = run_task()

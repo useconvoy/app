@@ -359,3 +359,38 @@ declarations into a runnable deployment. A newly created runnable configuration 
 policy and target choices, followed by explicit linking from the saved setup. Broader project navigation,
 learned-policy installation and pairing, visual replay, task/scenario language, Isaac, staged fleets and
 characterization remain unfinished. No hosted rollout, new AWS resources or physical motion occurred.
+
+## Registered physics trajectory and local replay reconstruction
+
+Branch: `codex/registered-trajectory-replay`, stacked on workspace links. The registered CLI and
+combined service capture initial state plus every completed physics control tick, including held
+policy commands and fallback ticks while inference is unavailable. Bounded in-memory state copies
+occur inside measured physics; rendering and file writes stay outside the control loop. The terminal
+report pins a locally saved trajectory by SHA-256. Recording export failure leaves task outcome intact.
+
+`convoy-sim-render` checks trajectory, release, robot-model and engine identities, then restores each
+recorded pose in an isolated MuJoCo renderer. It produces real PNG frames, hashes, action provenance,
+timestamps and observer-camera metadata without stepping physics or rerunning a policy. Frames are
+explicitly observer reconstructions, not the images seen by a policy. The hosted upload/API/player
+integration remains unfinished; this slice establishes its recording and rendering source.
+
+Verification: native tests cover moving poses and actual image differences, independent physics/held
+targets/fallback, digest and model mismatch rejection, discontinuity rejection, immutable outputs and
+bounded local storage. The actual HTTP/worker/coordinator pipeline verifies recorded identities and
+tick counts for functional success, timely real-time control and a policy timeout with zero admitted
+actions. A deliberate recording-directory failure preserves a successful task and reports the export
+failure. The combined service's successful tasks also verify their exported trajectory identity.
+Twenty-two coordinator regression cases pass; simulator and agent lint pass.
+
+The Jetson ran commit `9076b97` in `/home/jetsy/convoy-experiments/trajectory-9076b97`, with a separate
+frozen Python 3.11 environment and EGL rendering. All nine trajectory/timing/HTTP-pipeline cases passed
+in 61.13 seconds (test-suite duration, not inference latency). Source hashes match local files:
+`trajectory.py` = `d91b9db2cf475ec5507449eac6be5357fd81e627b07346571b5e5dcf1a314e2e`;
+coordinator `engine.py` = `86933c3513a46e969501cf1d2f5ac013a8274132ad339fad6342a4b7c933a9d6`.
+No isolated test processes remained; the original device agent stayed running at PID 1047. Local initial
+and final rendered frames were inspected. No public deployment, cloud provisioning or physical motion.
+
+Next required integration: upload completed recordings independently of control execution and expose
+the registered trajectory in the existing robot task-result player, preserving timing/action provenance.
+The full product scope, including learned edge/cloud models, task/scenario language, Isaac, staged fleets
+and characterization, remains active and incomplete.
