@@ -391,6 +391,40 @@ slice runs seeds `i·N + seed`, so every episode of a configuration has its own
 seed (Convoy groups an offline evaluation's rollouts by seed), and every
 configuration runs the same layouts: a layout depends only on the slice and seed.
 
+### Real run: Edge Qwen on the Jetson
+
+2026-10-02, 76 min of wall time. Every decision was a real call to the connected
+Jetson Orin Nano: release `rel_7horo87k6lxs`, Qwen2.5-1.5B-Instruct Q4_K_M,
+llama.cpp CUDA, `--temp 0.0 --seed 42` as the device reports. Calls went through
+the website's device chat routes. Physics as above (2 ms, noslip 4), 150 s
+horizon, nominal seeds 0–4 and 30-pill seeds 200–204. The prompt (`pill-planner-v5`),
+the 32-token cap and the failure policy were fixed before the run; prompt work
+used development seeds 1000, 1001 and 1100 only.
+
+| Slice | Seed | Pills placed | Outcome | Calls | Valid | Refused choices | Failed decisions | Protective stops | e2e p50 (ms) | On-device p50 (ms) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| nominal | 0 | 18/24 | horizon | 39 | 33 | 6 | 1 | 8 | 2,675 | 1,345 |
+| nominal | 1 | 24/24 | all in at 143.1 s | 39 | 30 | 9 | 2 | 0 | 2,673 | 1,333 |
+| nominal | 2 | 24/24 | all in at 145.1 s | 36 | 25 | 11 | 3 | 0 | 2,654 | 1,330 |
+| nominal | 3 | 24/24 | all in at 136.8 s | 35 | 26 | 9 | 2 | 0 | 2,671 | 1,328 |
+| nominal | 4 | 24/24 | all in at 133.9 s | 36 | 26 | 10 | 1 | 0 | 2,692 | 1,337 |
+| 30 pills | 200 | 22/30 | horizon | 40 | 26 | 14 | 2 | 0 | 2,801 | 1,390 |
+| 30 pills | 201 | 24/30 | horizon | 27 | 27 | 0 | 0 | 0 | 2,738 | 1,406 |
+| 30 pills | 202 | 26/30 | horizon | 46 | 41 | 5 | 0 | 0 | 2,658 | 1,391 |
+| 30 pills | 203 | 22/30 | horizon | 40 | 25 | 15 | 4 | 0 | 2,722 | 1,380 |
+| 30 pills | 204 | 25/30 | horizon | 40 | 34 | 6 | 0 | 0 | 2,719 | 1,398 |
+
+- **Episodes.** 4 of 10 put every pill in the bottle, all of them nominal: 114 of 120 nominal pills (95%) and 119 of 150 in the 30-pill slice (79%). Serial decisions of about 2.7 s use up the 30-pill horizon (6 s per pill for 25 pills) first.
+- **Replies.** 378 calls: 293 valid, 85 refused choices (out of reach 48, cannot-take list 18, needs a push first 12, already in the bottle 5, taken by the other arm 1, wait with a pill available 1). There were 0 invalid JSON or schema replies, 0 device or HTTP errors and 0 timeouts. 15 decisions failed after 3 calls. Every reply ended with `stop` within the 32-token cap.
+- **Bottle zone.** Accepted actions were held 47 times for the bottle zone (at most 2.4 s); none went stale.
+- **Latency.** End-to-end p50 2,697 ms and p95 3,453 ms (this drives simulated time). On-device p50 1,367 ms and p95 1,452 ms; first token p50 808 ms; about 906 tokens in and 22 out.
+- **Relay delays.** Three calls took 5.6, 24.0 and 25.0 s end to end with normal on-device latency: delays in the relay, not in the model.
+- **Device counter.** The device's gateway counter went from 224 to 602 requests: every call was served, and nothing else used the device.
+- **Safety.**
+  - In nominal seed 0 the arms collided at t = 99 s: the right arm was approaching pill 17 while the left arm lifted pill 13 toward the bottle. The peak contact was 1,115 N, followed by 140 contact steps and 8 protective stops.
+  - Both choices had passed the separation checks when made and again on delivery. The scripted two-arm coordination, which the stand-in's ordering rarely tested, does not prevent every crossing.
+  - No other episode had arm contact. No pill was lost, and the peak bottle tilt was 0.24°.
+
 ### Modelled demo results (stand-in planner)
 
 `scripts/pill_task_eval.sh` (seeds 0–2, stride 100), every configuration on the
