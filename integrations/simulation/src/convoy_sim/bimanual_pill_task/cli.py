@@ -15,6 +15,12 @@ or ``CONVOY_EMAIL`` and ``CONVOY_PASSWORD`` (one sign-in, signed out at the end)
 The device is the one named by ``--planner-device`` (``CONVOY_PLANNER_DEVICE``) or
 the only physical device the account sees; with several, the run refuses to start.
 Credentials are never printed.
+
+``cloud_luna_vision`` (the cloud vision planner) calls GPT-6 Luna through the OpenAI
+Responses API with the head camera image: the key comes from ``OPEN_AI_API_KEY``
+(never printed), and every call's cost is appended to the spend ledger
+(``--spend-ledger`` or ``CONVOY_SPEND_LEDGER``). No call is sent once the ledger's
+spend plus the call's worst case would pass ``--spend-cap-usd`` (default 3.00).
 """
 
 from __future__ import annotations
@@ -71,6 +77,30 @@ def _planner_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--planner-device", default=os.environ.get("CONVOY_PLANNER_DEVICE"),
                         help="the device (dev_…) to plan on; required when the account sees several "
                              "(default: $CONVOY_PLANNER_DEVICE, else the only one listed)")
+    parser.add_argument("--spend-ledger", type=Path, default=os.environ.get("CONVOY_SPEND_LEDGER"),
+                        help="the cloud vision planner's spend ledger (JSON lines, shared across runs; default: "
+                             "$CONVOY_SPEND_LEDGER); its key comes from $OPEN_AI_API_KEY")
+    parser.add_argument("--spend-cap-usd", type=float, default=float(os.environ.get("CONVOY_SPEND_CAP_USD", "3.0")),
+                        help="no call is sent once the ledger's spend plus the call's worst case would pass this (USD)")
+
+
+def _vision_planner(args, configs: list[str]):
+    """The cloud vision planner's client for the vision configurations among `configs`, else None. The key is
+    read from the environment by the client and never printed."""
+    if not any(CONFIGS[c].skill_planner.source == "vision" for c in configs):
+        return None
+    from .openai_responses import KEY_ENV, OpenAIResponsesClient, SpendLedger
+
+    if not getattr(args, "spend_ledger", None):
+        raise SystemExit("the cloud vision planner needs --spend-ledger (or CONVOY_SPEND_LEDGER): every call's cost "
+                         "is recorded there and capped")
+    if not os.environ.get(KEY_ENV):
+        raise SystemExit(f"the cloud vision planner needs {KEY_ENV}")
+    ledger = SpendLedger(args.spend_ledger, args.spend_cap_usd)
+    client = OpenAIResponsesClient(ledger)
+    _print(f"cloud vision planner: {client.model} · {client.provider} · {client.effort} effort · {client.transport} · "
+           f"spent ${ledger.spent_usd:.4f} of ${ledger.cap_usd:.2f}")
+    return client
 
 
 def _device_planner(args, configs: list[str]):
@@ -175,6 +205,7 @@ def main(argv: list[str] | None = None) -> int:
         from .evaluate import run_job
 
         planner, close = _device_planner(args, [args.config])
+        planner = planner or _vision_planner(args, [args.config])
         try:
             summary = run_job({"config": args.config, "slice": args.slice, "seed": args.seed, "horizon": args.horizon,
                                "record": args.record, "replay": args.replay, "output": str(args.output),
@@ -190,6 +221,7 @@ def main(argv: list[str] | None = None) -> int:
         configs, slices, seeds = _ids(args.configs, CONFIGS), _ids(args.slices, SLICES), _seeds(args.seeds)
         record = "all" if args.record == "all" else _triples(args.record)
         planner, close = _device_planner(args, configs)
+        planner = planner or _vision_planner(args, configs)
         try:
             report = evaluate(args.output, configs, slices, seeds, jobs=args.jobs, horizon=args.horizon, record=record,
                               timestep=args.timestep, preview_camera=args.preview_camera, replay=args.replay,

@@ -1,7 +1,7 @@
 # Bimanual pill task (`convoy_sim.bimanual_pill_task`)
 
 A MuJoCo simulation of a wheeled bimanual station robot putting 20–30 capsule pills
-into an open supplement bottle, four planner/policy deployment configurations,
+into an open supplement bottle, five planner/policy deployment configurations,
 seeds × slices evaluation, and recordings in the platform's replay formats: the
 offline evaluation import (`scripts/import_offline_eval.py`) and the hosted
 coordinator journal.
@@ -11,7 +11,16 @@ Scope, stated plainly:
 - **Physics, kinematics and contacts are simulated** with MuJoCo 3.3.0 at SI units.
 - **Skills read simulator state** (pill and bottle poses). They are a scripted,
   privileged-state skill library like the MetaWorld scripted reference in this
-  package, not perception or a learned policy.
+  package, not perception or a learned policy. The exception is the cloud vision
+  planner's pick, which goes to the table point a model pointed at in the camera
+  image and reads no pill pose (below).
+- **The cloud vision planner decides from pixels, with real model calls.** Every
+  skill decision of `cloud_luna_vision` ("Cloud GPT-6 Luna (vision)") is a call to
+  GPT-6 Luna (OpenAI Responses API, low reasoning effort) with the rendered head
+  camera image. The model answers with a pixel to pick at; the pixel is
+  back-projected with the same camera's depth to a table point and a scripted IK
+  grasp goes there. Reaching, lifting and the transfer stay scripted
+  ([below](#the-cloud-vision-planner-real-calls-from-pixels-vision_plannerpy)).
 - **The edge device planner's decisions are real model calls.** Every skill
   decision of `edge_qwen_edge_skills` is a request to the model of a connected
   device's active release through Convoy's device chat API. Which model that is
@@ -62,6 +71,13 @@ CONVOY_SERVER=https://deployconvoy.com CONVOY_SESSION_FILE=~/.convoy-session CON
 MUJOCO_GL=glfw xvfb-run -a uv run --frozen convoy-sim-pills evaluate --configs edge_qwen_edge_skills \
     --slices nominal,pill_count_30 --seeds 0-4 --seed-stride 200 --record all --replay offline \
     --output runs/edge-device
+
+# The cloud vision planner: real gpt-6-luna calls from this machine with the head camera image. The key
+# comes from OPEN_AI_API_KEY (never printed); every call's cost goes to the spend ledger, and no call is
+# sent once the ledger's spend plus the call's worst case would pass --spend-cap-usd (default 3.00).
+OPEN_AI_API_KEY=… MUJOCO_GL=egl uv run --frozen convoy-sim-pills evaluate --configs cloud_luna_vision \
+    --slices nominal,pill_count_30 --seeds 0-4 --seed-stride 200 --record all --replay offline \
+    --spend-ledger runs/spend.jsonl --output runs/cloud-luna-vision
 
 # The device chat contract end to end, without a device: the real control plane, a production build
 # of the website (`next start`), a device on the agent's chat relay with a scripted model, and the
@@ -244,7 +260,7 @@ the 84 mm gripper housing knocked the 22 g bottle over.
   collaborative arm. If MuJoCo ever reports a diverging step, the episode ends
   as `simulation_unstable` instead of continuing from the reset state.
 
-## Planner and policy hooks, and the four configurations (`planning.py`, `configs.py`)
+## Planner and policy hooks, and the five configurations (`planning.py`, `configs.py`)
 
 - `DecisionPolicy.decide(request) -> (decision, measured_latency_s | None)`: the hook
   for the stand-in planner. The request is JSON (instruction, pills, arms, bottle, motor
@@ -263,6 +279,7 @@ the 84 mm gripper housing knocked the 22 g bottle over.
 | Config (label) | Skill planner (per skill call, closed loop) | Task planner | Motor policy |
 |---|---|---|---|
 | `edge_qwen_edge_skills` (Edge device planner) | **Real calls** to the model of a connected device's active release (recorded per run) through the device chat API; latency measured per call, no stand-in ([below](#the-edge-device-planner-real-on-device-calls-device_plannerpy)) | – | scripted skills on the robot |
+| `cloud_luna_vision` (Cloud GPT-6 Luna (vision)) | **Real calls** to GPT-6 Luna (`gpt-6-luna`, OpenAI Responses API, low reasoning effort) with the head camera image: it points at the next pill in pixels; round trip measured from this machine, both arms' calls can be in flight at once, no stand-in ([below](#the-cloud-vision-planner-real-calls-from-pixels-vision_plannerpy)) | – | scripted IK pick at the pointed table location (`point_skills.py`); no pill pose read |
 | `edge_qwen_cloud_astra` (Edge Qwen + GPT Astra) | Edge Qwen2.5-1.5B Q4_K_M on the Jetson Orin Nano, **modeled**: stand-in decisions, p50 150 ms, p95 700 ms (Convoy soak 122/636 ms, deploy smoke 181/900 ms, `control-plane/docs/VERIFICATION.md`) | Cloud GPT-6 Astra (low effort): decomposes the task before the start (waits ≤8 s), re-verifies every 8 placed pills without blocking | scripted skills |
 | `cloud_astra_only` (GPT Astra) | Cloud GPT-6 Astra: p50 3.9 s (Artificial Analysis, OpenAI API: median time to first answer token 2.96 s, 43.2 output tokens/s, plus ~40 output tokens), p95 6.0 s assumed (only medians are published) | – | scripted skills |
 | `edge_smolvla_cloud_astra` (Edge SmolVLA + GPT Astra) | Cloud GPT-6 Astra | – | SmolVLA-450M on the Jetson: **unavailable** (no checkpoint for this embodiment) |
@@ -270,7 +287,8 @@ the 84 mm gripper housing knocked the 22 g bottle over.
 In the outage slice the hosted planner is unreachable from 15 s to 45 s: Edge Qwen +
 GPT Astra keeps placing pills (the task planner's checks just fail), the
 cloud-only one holds and retries (the edge device planner has no cloud link, so the slice does
-not apply to it). SmolVLA's configuration dispatches the first
+not apply to it; the cloud vision planner's calls go over the real network, so a modelled outage
+does not apply either). SmolVLA's configuration dispatches the first
 skill, gets `policy_unavailable` for both arms and the planner declines: the
 episode ends after ~8 s with no pill placed.
 
@@ -441,6 +459,158 @@ re-asked − failed. Configurations shows "Accepted on the first call" as
 Σ first-call accepted ÷ Σ decisions. Earlier evaluations do not report these
 counts and show it as Not reported.
 
+## The cloud vision planner: real calls from pixels (`vision_planner.py`)
+
+The cloud vision configuration (`cloud_luna_vision`, shown as "Cloud GPT-6 Luna
+(vision)") has no stand-in and no text scene. Every skill decision is a call to
+GPT-6 Luna (`gpt-6-luna`, OpenAI, low reasoning effort) with the rendered head
+camera image, made from the machine that runs the simulation. The model points at
+the next pill in pixels; nothing it is given comes from the simulator's state.
+
+| Part | What it is | Measured or scripted |
+|---|---|---|
+| Decision: which pixel to pick at, or wait / done, for the free arm | GPT-6 Luna through the OpenAI Responses API | real call per decision |
+| What the model sees | the head camera image (RGB) and a short instruction | rendered from the simulation |
+| Pixel to table point | back-projection with the same camera's depth, intrinsics and pose (`head_camera.py`) | scripted, from pixels |
+| Grasp yaw | across the long axis of the raised depth blob under the pixel, turned until the fingertips come down on clear mat (`choose_finger_yaw`) | scripted, from pixels |
+| Executive: parsing, the pixel check, the failure policy, the two-arm re-check | `vision_planner.py`, `vision_episode.py` | scripted, fixed before the run |
+| Motion: reach, descend, close, lift, transfer, release | the IK skill library (`point_skills.PickAtPoint`); transits are checked against the bottle and cap poses | scripted |
+| Time an arm waits for a decision | each call's measured round trip | measured |
+
+**Camera.** The head camera (the RGB-D bar on the head, 64° vertical field of view)
+is rendered at 1024 × 768, colour and depth from the same pose at the same instant.
+Depth is MuJoCo's depth buffer in metres along the optical axis. The planner gets
+columns 256–767 and rows 208–591 of that render (512 × 384), the mat in front of the
+bottle at full resolution: a 2× digital zoom, about 1 mm per pixel across the mat. A
+pill is about 8 × 20 px there. Yellow ticks on the image borders every 32 px
+(labelled every 64) help the model read coordinates. Nothing about the scene is
+drawn: no ids and no positions. The image is a JPEG (quality 92) sent as an
+`input_image` data URL with `detail: high`.
+
+**Request.** One user message: the instruction, then the image (`build_content`).
+The instruction (`luna-vision-v3`) names the task, the bottle and cap, which arm
+is free and the image column where each arm's reach ends (from the calibration).
+It also gives what the other arm is doing, from the executive's own commands
+(idle, carrying, or picking at a pixel: choose a pill at least 120 px from it), and
+the free arm's last pick, from its gripper and wrist force sensing (e.g. "the
+fingers closed on nothing at (212, 140)"). Spots where two picks failed are
+listed. The instruction asks for a pill with free mat around it, and for a
+touching or bottle-side pill when no free one is left. Wait is only for when the
+other arm is near every pill the free arm could take. Done is only for when no
+pill is left on the arm's side (look along the edges and around the bottle).
+Settings: `reasoning: {effort: "low"}`, `max_output_tokens` 2048 (reasoning
+included), `store: false`, and the reply schema as a strict structured-output
+format.
+
+**Reply.** Exactly one JSON object (`parse_reply`), nothing repaired:
+
+```json
+{"arm": "L", "action": "pick", "u": 212, "v": 140}
+{"arm": "R", "action": "wait", "u": null, "v": null}
+{"arm": "L", "action": "done", "u": null, "v": null}
+```
+
+A refusal by the model, an empty or cut-off reply, a code block or any other shape
+is refused (`invalid_json`, `invalid_schema`, `model_refusal`). `check_point` then
+refuses a pick the executive cannot act on (`invalid_choice`). It reads the frame's
+depth and the robot's own geometry only:
+
+- `outside_image`, or `no_depth`;
+- `not_on_mat`: the pixel sees something more than 12 mm above the mat (the
+  bottle, the cap, an arm);
+- `out_of_reach`: the device planner's reach rule on the back-projected point;
+- `given_up`: within 10 mm of a spot where two picks already failed;
+- `next_to_other_arm`: within 12 cm of the other arm's wrist, fingertips or the
+  point it is picking at;
+- `wrong_arm`.
+
+Wait and done are accepted as given: whether pills are left is not something the
+executive knows without the model. Done ends that arm's work. The episode ends
+when both arms are done.
+
+**From pixel to grasp.** The accepted pixel is back-projected with its depth to
+the visible surface (the top of a pill is about 3 mm nearer the camera than its
+centre at this viewing angle), and `PickAtPoint` goes to that table point. It never
+moves to the nearest pill, so pointing at bare mat closes the gripper on nothing.
+
+1. The fingers close across the long axis of the raised depth blob under the
+   pixel, the depth points 2–14 mm above the mat connected to it.
+2. If a raised point lies where an open fingertip would come down, the yaw turns by
+   up to 0.6 rad to the first clear one.
+3. The grasp height assumes a pill lying flat on the mat (a fixture of the
+   station), and the grasp pose must have a closed-form IK solution and clear the
+   bottle and cap.
+4. A finger that lands on something stops the descent at 2 N (`blocked`).
+5. Fingers that close past 5.5 mm hold nothing (`empty_grasp`), and fingers that
+   close during the lift dropped the pill (`dropped`).
+
+After a release the arm retreats only out of the bottle zone, as `PickAndDrop`
+does, and asks for its next pick from there. That pose is in the camera's view,
+beside the bottle, so the arm's own gripper can hide pills from its next frame. A
+failed pick therefore parks the arm at rest, outside the window, before it asks
+again. A wait or done said away from rest is not acted on: the arm parks and asks
+again from rest, and only a wait or done said from rest counts. In development an
+arm said done from beside the bottle while its gripper hid the last pill on its
+side. Retreating to rest after every pick also fixed that, but cost about 1 s per
+pick.
+
+Once the arm holds a pill, the spot it picked at stops counting as where it works
+for the bottle-zone rule (its links do), as `PickAndDrop`'s target pill moves with
+the gripper. Without that, two arms lifting at once deadlocked in development.
+Whether a pill was lifted, and whether it ended in the bottle, is measured on the
+simulator after the fact, for the metrics only.
+
+**Failure policy** (`VisionFailurePolicy`, fixed before the evaluation and recorded
+in its manifest):
+
+- A decision takes at most 3 calls: the first ask and two re-asks, each with a
+  fresh frame. After a refused reply the re-ask quotes the reply and the reason;
+  after an HTTP or transport error, an API-side failure or a timeout it is the
+  plain request again.
+- Without a usable action after 3 calls the decision fails: the arm parks and asks
+  again after the other arm's next result, or 10 s of simulated time.
+- An episode makes at most 3 × pills + 12 calls (84 for 24 pills, 102 for 30).
+- The spend cap refusing the next call, or the API refusing the key or the model
+  (401, 403, 404), stops the episode and the evaluation.
+- A call without a response after 60 s is a timeout and costs its whole wait in
+  simulated time.
+- An accepted pick is re-checked against the two-arm rules when it arrives, as
+  the device planner's are: held for the bottle zone (at most 6 s) or rejected as
+  stale.
+
+**Transport, time and spend.** `OpenAIResponsesClient` (transport "openai-responses
+from cloud container") sends `POST https://api.openai.com/v1/responses` and
+measures each call from the request sent to the response received. The arm holds
+in simulated time for exactly that round trip (to the next 10 ms tick), while the
+other arm keeps working. Both arms can have a call in flight at once, as with any
+hosted API.
+
+The key is read from `OPEN_AI_API_KEY` and kept in the request header only: never
+printed, logged or written. Every call is priced from its `usage`: $0.10 per 1M
+input tokens, $0.01 per 1M cached input and $0.50 per 1M output, reasoning
+included. The cost goes to a spend ledger (`--spend-ledger`, JSON lines). Before
+each call the ledger books the call's worst case: its input estimate, all
+uncached, plus the whole output cap. It refuses the call when recorded spend plus
+open bookings plus that worst case would pass the cap (`--spend-cap-usd`, default
+3.00). A timeout or a broken connection is booked at its worst case, since the API
+may have run it; an HTTP error is not billed.
+
+**Audit.** Every call is a line in the episode's `planner_calls.jsonl` and in
+`OUTPUT/<config>/calls.jsonl`, with no key. A line holds the instruction, the image
+digest and file (every image sent is kept in the episode's `planner_images/`, not
+uploaded), the response and request ids, the model the API reported, the status,
+the round trip, the API's processing time (`openai-processing-ms`), the tokens
+(input, cached, output, reasoning) and the cost. It also holds the raw reply, the
+parse result and the refusal reason, the target (pixel, table point, finger yaw,
+whether an axis was seen, the obstruction count), what followed, and the simulated
+start and end. `summary.json` lists every pick with its outcome.
+
+**Measured first call.** One call on a real rendered frame (dev seed 1000, t = 0)
+came before anything else. It used 599 input tokens: 231 for the 512 × 384 image
+and 368 for the text, as the API's input-token counter splits them. It used 138
+output tokens, 111 of them reasoning, and took 4.48 s end to end (3.2 s on the
+API side) for $0.000129. The reply pointed within 1 px of a pill's centre.
+
 ## Evaluation (`evaluate.py`)
 
 Slices: `nominal` (24 pills, 0.20 × 0.44 m), `pill_count_30`, `scatter_wide`
@@ -584,6 +754,23 @@ creates one offline evaluation, tagged "Offline sim" in Configurations.
   - the task and safety counts.
 
   Outage seconds and motor-policy availability do not apply and are left out.
+- Cloud vision planner episodes (`vision_metrics`) export 32 metrics:
+  - the calls by result, as above; `planner_invalid_format` also counts model
+    refusals and `planner_call_failures` API-side failures;
+  - the decision counts, stale rejections, and the end-to-end p50/p95;
+  - tokens: in and out p50 per call, and in and out (reasoning included) summed
+    over the episode, with `planner_cost_usd`, the episode's cost;
+  - the grasp outcomes: `grasp_attempts` (picks started), `grasps_empty` (the
+    fingers closed on nothing), `grasps_blocked` (the descent was stopped by
+    contact), `pills_grasped` (pills lifted off the mat) and `picks_placed`;
+  - pills total, placed, fraction and time to all placed, protective stops,
+    arm–arm contacts, peak bottle tilt, slice and end reason;
+  - `measurement_source`, which names the model the API reported, the provider,
+    the effort and the transport ("Measurement source" on the eval page).
+
+  `skill` lists the chosen actions (e.g. `pick_at_point ×31, wait ×2`) and
+  `planner_ms` is the median round trip. The evaluation's labels name the model,
+  provider, effort and transport (`configs.vision_labels`).
   Exports before `platform-chat-v1` had five separate counts instead of the two
   merged ones (`planner_invalid_json`, `planner_invalid_schema`,
   `planner_device_errors`, `planner_http_errors`, `planner_timeouts`); the

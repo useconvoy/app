@@ -69,16 +69,18 @@ def run_job(job: dict, planner=None, planner_log=None) -> dict:
     the device planner's calls (planner_calls.jsonl) and, if asked, the recording."""
     if job.get("timestep"):
         P.TIMESTEP_S = float(job["timestep"])
-    from .episode import Episode
+    from .episode import make_episode
 
     config = CONFIGS[job["config"]]
     spec = EpisodeSpec(config, SLICES[job["slice"]], int(job["seed"]), float(job["horizon"]))
     out = Path(job["output"])
     out.mkdir(parents=True, exist_ok=False)
     recorder = make_recorder(job, out)
+    # The vision planner keeps every image it sent beside the calls (local evidence, not uploaded).
+    options = {"image_dir": out / "planner_images"} if config.skill_planner.source == "vision" else {}
     episode = None
     try:
-        episode = Episode(spec, recorder, planner, planner_log)
+        episode = make_episode(spec, recorder, planner, planner_log, **options)
         summary = episode.run()
         summary["status"] = "completed"
     except Exception as error:  # keep the denominator honest: errors are results
@@ -86,7 +88,7 @@ def run_job(job: dict, planner=None, planner_log=None) -> dict:
                    "error": f"{type(error).__name__}: {error}"[:1000], "success": False, "fraction_placed": 0.0,
                    "placed": 0, "pills": SLICES[job["slice"]].pills}
     records = getattr(getattr(episode, "skill_planner", None), "records", None)
-    if records is not None and getattr(episode, "device", False):
+    if records is not None and getattr(episode, "real_calls", False):
         with (out / "planner_calls.jsonl").open("w") as handle:
             for record in records:
                 handle.write(json.dumps({"config": job["config"], "slice": job["slice"], "seed": int(job["seed"]),
@@ -121,15 +123,29 @@ def _device_problem(planner, attempts: int = 3, wait_s: float = 10.0) -> str | N
     return f"device status unreadable ({error})"
 
 
-def _run_on_device(work: list[dict], planner, planner_log=None) -> list[dict]:
-    """The device planner's episodes, one after another (one request at a time on the device). The device
-    is checked before each episode; once it is offline, or an episode stops on the device (offline, model
-    changed, session ended), the remaining episodes are not run and are reported as such."""
+def _vision_problem(planner) -> str | None:
+    """Why the cloud vision planner cannot take the next episode: the spend cap leaves no room for one more call
+    (None while it does)."""
+    ledger = getattr(planner, "ledger", None)
+    if ledger is None or not hasattr(planner, "worst_case_usd"):
+        return None
+    worst = planner.worst_case_usd()
+    if ledger.spent_usd + ledger.booked_usd + worst > ledger.cap_usd:
+        return f"spend cap: ${ledger.spent_usd:.4f} of ${ledger.cap_usd:.2f} spent; the next call could cost ${worst:.4f}"
+    return None
+
+
+def _run_on_device(work: list[dict], planner, planner_log=None, problem=_device_problem) -> list[dict]:
+    """Episodes that make real planner calls, one after another in this process: the device planner's (one
+    request at a time on the device) and the cloud vision planner's. `problem(planner)` is checked before each
+    episode (the device online and on its release; the spend cap); once it reports one, or an episode stops on
+    the planner (device offline, model changed, session ended, spend cap, key refused), the remaining episodes
+    are not run and are reported as such."""
     summaries: list[dict] = []
     stopped: str | None = None
     for job in work:
         if stopped is None:
-            stopped = _device_problem(planner)
+            stopped = problem(planner)
         if stopped is not None:
             summary = {"config": job["config"], "slice": job["slice"], "seed": job["seed"], "status": "not_run",
                        "reason": stopped, "success": False, "fraction_placed": 0.0, "placed": 0,
@@ -240,12 +256,18 @@ def evaluate(output: Path, configs: list[str], slices: list[str], seeds: list[in
     """Run every (config, slice, seed). `record` is "all" or the (config, slice, seed) triples to
     record, and `previews` the recorded ones that also render `preview_camera` for a preview
     video (all recorded ones when None). Seeds in triples are the episodes' own (after the stride).
-    `planner` is the device connection a device-planner configuration needs (run in this process,
-    one episode at a time); `name` overrides the offline evaluation's name."""
+    `planner` is the device connection a device-planner configuration needs, or the cloud client the vision
+    planner needs (run in this process, one episode at a time); `name` overrides the offline evaluation's name."""
     on_device = [c for c in configs if CONFIGS[c].skill_planner.source == "device"]
+    vision = [c for c in configs if CONFIGS[c].skill_planner.source == "vision"]
     if on_device and planner is None:
         raise ValueError(f"{', '.join(on_device)} call the model on a connected device: pass a device planner "
                          "connection (there is no stand-in for it)")
+    if vision and planner is None:
+        raise ValueError(f"{', '.join(vision)} call a cloud vision model: pass its client (there is no stand-in for it)")
+    if on_device and vision:
+        raise ValueError("the device planner and the cloud vision planner each need their own connection: evaluate "
+                         "them separately")
     output.mkdir(parents=True, exist_ok=False)
     by_slice = {s: [i * seed_stride + n for n in seeds] for i, s in enumerate(slices)}
     triples = [(c, s, n) for c in configs for s in slices for n in by_slice[s]]
@@ -277,6 +299,17 @@ def evaluate(output: Path, configs: list[str], slices: list[str], seeds: list[in
             "device_at_start": {k: getattr(state, k, None) for k in (
                 "device_id", "device_name", "online", "eligible", "reason", "release_id", "status", "max_tokens",
                 "context_window", "checked_at")}}
+    if vision:
+        from .vision_planner import settings as vision_settings
+
+        ledger = getattr(planner, "ledger", None)
+        manifest["evidence_scope"] = (
+            "simulated physics; " + ", ".join(vision) + ": every skill decision is a real call to a cloud vision model "
+            "(head camera image in, a pixel to pick at out), measured end to end from this machine; the pixel is "
+            "back-projected with the camera's depth and a scripted IK grasp goes to that point (no pill pose is read for "
+            "the decision or the grasp); reaching, lifting and the transfer stay scripted (bottle and cap poses)")
+        manifest["vision_planner"] = {**vision_settings(planner),
+                                      "spend_at_start_usd": None if ledger is None else ledger.spent_usd}
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     work = [{"config": c, "slice": s, "seed": n, "horizon": horizon, "timestep": timestep,
              "record": (c, s, n) in record, "replay": replay,
@@ -287,14 +320,20 @@ def evaluate(output: Path, configs: list[str], slices: list[str], seeds: list[in
         from .offline_replay import write_evaluation
 
         for c in configs:
-            measured = ({"model": manifest["device_planner"]["model"], "transport": manifest["device_planner"]["transport"]}
-                        if c in on_device else None)
+            measured = None
+            if c in on_device:
+                measured = {"model": manifest["device_planner"]["model"], "transport": manifest["device_planner"]["transport"]}
+            elif c in vision:
+                measured = {"vision": True, "model": getattr(planner, "model", None),
+                            "provider": getattr(planner, "provider", None), "effort": getattr(planner, "effort", None),
+                            "transport": getattr(planner, "transport", None)}
             write_evaluation(output / c, CONFIGS[c], task_label(slices, by_slice), name=name, planner=measured)
     started = time.time()
     summaries = []
-    if on_device:
-        summaries = _run_on_device(work, planner, planner_log)
-        for c in on_device:  # every call of the configuration, in order (prompts, replies, timings; no credentials)
+    if on_device or vision:
+        summaries = _run_on_device(work, planner, planner_log, problem=_vision_problem if vision else _device_problem)
+        for c in on_device + vision:  # every call of the configuration, in order (prompts, replies, timings; no credentials)
+            (output / c).mkdir(parents=True, exist_ok=True)  # also when no episode ran
             with (output / c / "calls.jsonl").open("w") as handle:
                 for job in work:
                     calls = Path(job["output"]) / "planner_calls.jsonl"
@@ -315,6 +354,9 @@ def evaluate(output: Path, configs: list[str], slices: list[str], seeds: list[in
     report = {"manifest": "manifest.json", "wall_s": round(time.time() - started, 1), "results": results,
               "not_run": [s for s in summaries if s.get("status") == "not_run"],
               "episodes": sorted(summaries, key=lambda s: (s["config"], s["slice"], s["seed"]))}
+    if vision and getattr(planner, "ledger", None) is not None:
+        report["spend_usd"] = {"at_start": manifest["vision_planner"]["spend_at_start_usd"],
+                               "at_end": planner.ledger.spent_usd, "cap": planner.ledger.cap_usd}
     (output / "results.json").write_text(json.dumps(report, indent=2, default=float) + "\n")
     (output / "results.md").write_text(markdown(results, slices))
     return report
