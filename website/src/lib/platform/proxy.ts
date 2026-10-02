@@ -69,6 +69,16 @@ const offlineConflicts: [string, string][] = [
   ["Idempotency-Key was already used", "This upload was already submitted with different content."],
 ];
 
+const registryConflicts: [string, string][] = [
+  ["profile revision changed", "This profile has a newer revision. Refresh before saving."],
+  ["device is already attached", "This connection is already assigned to a robot."],
+  ["device kind does not match", "Choose a connection matching the physical or simulated robot type."],
+  ["profile has no model", "Add a model for the selected simulator to this robot profile."],
+  ["simulation must reference", "Use the physical robot’s exact profile revision for its simulated instance."],
+  ["robot fleet membership changed", "A robot’s fleet assignment changed. Refresh before assigning it."],
+  ["robot is no longer", "This robot is no longer in the selected fleet. Refresh to see its assignment."],
+];
+
 export function platformOrigin(value = process.env.CONVOY_API_URL ?? "http://127.0.0.1:8080"): string {
   const url = new URL(value);
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
@@ -88,21 +98,22 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
   let required: string[] = [];
   let allowed = false;
   if (method === "GET") {
-    allowed = /^(auth\/me|projects|devices|workspace-documents)$/.test(path)
-      || new RegExp(`^(devices|deployments|missions|episodes)/${ID}$`).test(path)
+    allowed = /^(auth\/me|projects|devices|robot-connections|workspace-documents)$/.test(path)
+      || new RegExp(`^(devices|robots|robot-profiles|deployments|missions|episodes)/${ID}$`).test(path)
       || new RegExp(`^applications/${ID}/(releases|evaluation-suites|evaluation-gate)$`).test(path)
       || new RegExp(`^evaluation-suites/${ID}$`).test(path)
       || new RegExp(`^episodes/${ID}/replay(?:/frames/[0-9]{1,4})?$`).test(path)
       || new RegExp(`^${DOCUMENT}$`).test(path);
-    if (["robots", "applications", "missions", "evaluations"].includes(path)) { allowed = true; keys = ["project_id"]; required = keys; }
+    if (["robots", "robot-profiles", "fleets", "applications", "missions", "evaluations"].includes(path)) { allowed = true; keys = ["project_id"]; required = keys; }
     if (path === "deployments") { allowed = true; keys = ["project_id", "robot_id"]; required = ["project_id"]; }
     if (path === "episodes") { allowed = true; keys = ["mission_id"]; required = keys; }
     if (new RegExp(`^evaluations/${ID}$`).test(path)) { allowed = true; keys = ["baseline_id"]; }
     if (new RegExp(`^applications/${ID}/qualification$`).test(path)) { allowed = true; keys = ["release_id"]; required = keys; }
     if (new RegExp(`^(${OFFLINE}|${OFFLINE_EVALUATION}|${OFFLINE_EPISODE}/replay(?:/frames/[0-9]{1,4})?)$`).test(path)) allowed = true;
   } else if (method === "POST") {
-    allowed = /^(auth\/(login|logout)|projects|robots|applications|deployments|enrollments|evaluations)$/.test(path)
+    allowed = /^(auth\/(login|logout)|projects|robots|robot-profiles|robot-registrations|fleets|applications|deployments|enrollments|evaluations)$/.test(path)
       || new RegExp(`^applications/${ID}/(releases|evaluation-suites|evaluation-gate)$`).test(path)
+      || new RegExp(`^fleets/${ID}/members(?:/${ID}/remove)?$`).test(path)
       || new RegExp(`^robots/${ID}/missions$`).test(path)
       || new RegExp(`^missions/${ID}/cancel$`).test(path)
       || new RegExp(`^evaluations/${ID}/(cancel|promote)$`).test(path)
@@ -209,6 +220,7 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
     if (!path) throw new ProxyFailure(404, "This console action is unavailable.");
     const document = parts[0] === "workspace-documents";
     const offline = parts[0] === OFFLINE;
+    const registry = ["robot-profiles", "robot-registrations", "fleets"].includes(parts[0]);
     // An episode upload: up to 16 MiB of frames, passed through as received.
     const upload = offline && request.method === "POST" && parts.length === 3;
     const text = document ? documentMessages : offline ? offlineMessages : messages;
@@ -267,7 +279,8 @@ export async function proxyPlatform(request: Request, parts: string[]): Promise<
       let message = login && status === 401 ? "The email or password was not accepted." : text[status] ?? UNAVAILABLE;
       if (document && status === 409) message = await apiMessage(upstream, reason(documentConflicts)) ?? message;
       else if (offline && status === 409) message = await apiMessage(upstream, reason(offlineConflicts)) ?? message;
-      else if (offline && mutation && status === 422) message = await apiMessage(upstream, validation, 8 * ERROR_LIMIT) ?? message;
+      else if (registry && status === 409) message = await apiMessage(upstream, reason(registryConflicts)) ?? message;
+      else if ((offline || registry) && mutation && status === 422) message = await apiMessage(upstream, validation, 8 * ERROR_LIMIT) ?? message;
       else await upstream.body?.cancel();
       const retry = upstream.headers.get("retry-after");
       throw new ProxyFailure(status, message, status === 429 && retry && /^\d{1,6}$/.test(retry) ? { "Retry-After": retry } : {});

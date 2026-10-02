@@ -138,7 +138,12 @@ def project_out(row: Project) -> dict:
     return {"id": row.id, "name": row.name, "created_at": iso(row.created_at)}
 
 
-def robot_out(row: Robot, *, evaluation_id: str | None = None) -> dict:
+def robot_out(row: Robot, *, db: Session, evaluation_id: str | None = None) -> dict:
+    from ..robot_registry_models import FleetMember, RobotRegistration
+
+    device = db.get(Device, row.device_id)
+    registration = db.get(RobotRegistration, row.id)
+    member = db.get(FleetMember, row.id)
     return {
         "id": row.id,
         "project_id": row.project_id,
@@ -147,7 +152,11 @@ def robot_out(row: Robot, *, evaluation_id: str | None = None) -> dict:
         "profile": row.profile,
         "generation": row.generation,
         "evaluation_id": evaluation_id,
-        "simulated": True,
+        "simulated": bool(device and device.simulated),
+        "profile_id": registration.profile_id if registration else None,
+        "source_robot_id": registration.source_robot_id if registration else None,
+        "simulation_engine": registration.simulation_engine if registration else None,
+        "fleet_id": member.fleet_id if member else None,
         "created_at": iso(row.created_at),
     }
 
@@ -242,7 +251,7 @@ def create_robot(db: Session, p: Principal, data: dict) -> dict:
     row = Robot(id=new_id("rob"), **data)
     db.add(row)
     db.flush()
-    return robot_out(row)
+    return robot_out(row, db=db)
 
 
 def create_application(db: Session, p: Principal, data: dict) -> dict:
@@ -282,6 +291,10 @@ def create_deployment(db: Session, p: Principal, data: dict, *, evaluation_id: s
 
     dispatch_allowed(db)
     robot = resource_for(db, Robot, data["robot_id"], p)
+    from ..robot_registry_models import RobotRegistration
+
+    if db.get(RobotRegistration, robot.id):
+        raise HTTPException(409, "registered robot requires runner profile qualification before execution")
     require_available(db, robot.id, evaluation_id)
     if robot.generation != data["expected_generation"]:
         raise HTTPException(409, "robot generation changed")
@@ -317,6 +330,10 @@ def create_mission(db: Session, p: Principal, robot_id: str, data: dict, *, eval
 
     dispatch_allowed(db)
     robot = resource_for(db, Robot, robot_id, p)
+    from ..robot_registry_models import RobotRegistration
+
+    if db.get(RobotRegistration, robot.id):
+        raise HTTPException(409, "registered robot requires runner profile qualification before execution")
     require_available(db, robot.id, evaluation_id)
     if robot.generation != data["expected_generation"]:
         raise HTTPException(409, "robot generation changed")
@@ -393,7 +410,7 @@ def desired(db: Session, robot: Robot) -> dict:
         deployed["release"] = release_out(db.get(ApplicationRelease, deployment.release_id))
     evaluation = active_for_robot(db, robot.id)
     return {
-        "robot": robot_out(robot, evaluation_id=evaluation.id if evaluation else None),
+        "robot": robot_out(robot, db=db, evaluation_id=evaluation.id if evaluation else None),
         "deployment": deployed,
         "mission": mission_out(mission) if mission else None,
     }

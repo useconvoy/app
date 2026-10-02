@@ -1,2 +1,2 @@
 import { redirect } from "next/navigation";
-export default function WorkspacePage() { redirect("/app/configurations"); }
+export default function WorkspacePage() { redirect("/app/projects"); }

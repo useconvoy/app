@@ -32,6 +32,7 @@ export function AppShell({ crumbs, children }: { crumbs: readonly Crumb[]; child
       <div className="cv-bar__in">
         <Link className="cv-brand" href={routes.index()}><ConvoyMark />Convoy</Link>
         <Breadcrumbs crumbs={crumbs} />
+        <Link className="cv-link" href="/app/projects">Projects</Link>
         {sample && <span className="cv-sample" title="Sample data: no workspace is saved for this account yet">Sample</span>}
         <div className="cv-account">
           <span className="cv-account__email">{session.email}</span>

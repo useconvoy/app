@@ -567,4 +567,5 @@ class FixtureModel(Base):
 from . import evaluation_models as _evaluation_models  # noqa: E402, F401
 from . import offline_models as _offline_models  # noqa: E402, F401
 from . import platform_models as _platform_models  # noqa: E402, F401
+from . import robot_registry_models as _robot_registry_models  # noqa: E402, F401
 from . import workspace_models as _workspace_models  # noqa: E402, F401

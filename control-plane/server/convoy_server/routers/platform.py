@@ -124,7 +124,7 @@ def list_robots(project_id: Id, p: PrincipalRead, db: Database):
     rows = db.scalars(
         select(Robot).where(Robot.project_id == project_id).order_by(Robot.created_at.desc()).limit(200)
     )
-    return [service.robot_out(row, evaluation_id=reservations.get(row.id)) for row in rows]
+    return [service.robot_out(row, db=db, evaluation_id=reservations.get(row.id)) for row in rows]
 
 
 @router.post("/api/v1/applications", status_code=201)

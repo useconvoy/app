@@ -41,12 +41,12 @@ test("landing opens one workspace; one login covers configurations, applications
   await mockSession(page, snapshot(), false);
   await page.goto("/");
   await page.locator(".hero-actions").getByRole("link", { name: "Open demo" }).click();
-  await expect(page).toHaveURL(/\/app\/configurations\/?$/);
+  await expect(page).toHaveURL(/\/app\/projects\/?$/);
   await expect(page.getByRole("heading", { name: "One workspace for your robots." })).toBeVisible();
   await page.getByLabel("Email", { exact: true }).fill("fixture@example.test");
   await page.getByLabel("Password", { exact: true }).fill("fixture-only");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Configurations" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeVisible();
   // Applications stays reachable by its URL on the same session; Configurations never links to it.
   await expect(page.locator('a[href*="/app/applications"], a[href*="/portal"]')).toHaveCount(0);
   await page.goto("/app/applications");
