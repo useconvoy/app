@@ -54,7 +54,7 @@ from urllib.parse import urlsplit
 
 LABELS = ("name", "task", "config_label", "policy_label")
 MANIFEST = ("seed", "outcome", "metrics", "action_labels", "skill", "planner_ms", "wall_seconds", "sim_seconds")
-FRAME = ("index", "image_png_base64", "action", "reward", "success", "policy_ms")
+FRAME = ("index", "image_png_base64", "action", "reward", "success", "policy_ms", "hierarchy")
 IMAGES = (".png", ".jpg", ".jpeg")
 MAX_BODY = 16 * 1024 * 1024
 MAX_IMAGE = 256 * 1024
@@ -100,7 +100,8 @@ def read_episode(directory: Path) -> dict:
         elif "image_png_base64" not in frame:
             image = next((base64.b64encode(file.read_bytes()).decode() for file in map(path.with_suffix, IMAGES)
                           if file.is_file()), None)
-        frames[index] = {**{key: frame.get(key) for key in FRAME}, "image_png_base64": image}
+        frames[index] = {**{key: frame.get(key) for key in FRAME
+                           if key != "hierarchy" or frame.get(key) is not None}, "image_png_base64": image}
     if sorted(frames) != list(range(steps + 1)):
         raise ImportFailure(f"{folder}: expected frames 0 to {steps}, found {len(frames)}")
     body = {key: manifest[key] for key in MANIFEST if manifest.get(key) is not None}

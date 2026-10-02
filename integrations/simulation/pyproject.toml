@@ -31,6 +31,7 @@ convoy-sim = "convoy_sim.cli:main"
 convoy-sim-pills = "convoy_sim.bimanual_pill_task.cli:main"
 convoy-sim-service = "convoy_sim.service:main"
 convoy-sim-render = "convoy_sim.trajectory:main"
+convoy-sim-hierarchy = "convoy_sim.hierarchy.cli:main"
 
 [build-system]
 requires = ["hatchling>=1.26,<2"]
