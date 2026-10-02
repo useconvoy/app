@@ -85,6 +85,10 @@ def wait_for(read, accept, *, timeout: float = 30):
                 return last
         except httpx.TransportError:
             pass
+        except sqlite3.OperationalError as error:
+            # The coordinator may still be writing the journal being read; a lock is transient.
+            if "locked" not in str(error) and "busy" not in str(error):
+                raise
         time.sleep(0.05)
     raise RuntimeError(f"timed out waiting for pipeline state; last={last}")
 

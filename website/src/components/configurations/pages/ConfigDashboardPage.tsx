@@ -5,10 +5,11 @@ import { useMemo, useState } from "react";
 import { currentRevision, getConfiguration, robotsFor, useWorkspace } from "@/lib/configurations/client";
 import { ROUTE_LABEL } from "@/lib/configurations/create";
 import { fmtCount, fmtDate, fmtFixed, fmtWhen } from "@/lib/configurations/format";
-import { deleteConfiguration, emptyWorkspace } from "@/lib/configurations/mutations";
+import { deleteConfiguration, emptyWorkspace, NOT_SPECIFIED } from "@/lib/configurations/mutations";
+import { robotPreview, type RobotPreview } from "@/lib/configurations/previews";
 import { routes } from "@/lib/configurations/routes";
 import { latestScored, runShare } from "@/lib/configurations/runs";
-import type { Configuration } from "@/lib/configurations/types";
+import type { ConfigRevision, Configuration } from "@/lib/configurations/types";
 import { robotType } from "@/lib/configurations/status";
 import { AppShell, PageHeader, type Crumb } from "../AppShell";
 import { ConfigStatusBadge, Missing, ResultBadge, StatusBadge } from "../Badges";
@@ -19,15 +20,19 @@ import { ConfirmDialog } from "../Overlay";
 import { LoadingState, NotFoundState } from "../States";
 import { TabPanel, Tabs, useQueryTab, type TabItem } from "../Tabs";
 import { Card, Facts, Tile, Tiles } from "../Tiles";
+import { Turntable } from "../Turntable";
 import { useRobotViews, type RobotView } from "../useRobots";
 import { AddRobotDialog } from "./AddRobotDialog";
 import { CpuTile, InferenceTile, MemoryTile, PowerTile, TemperatureTile } from "./LiveTiles";
 
 const ROOT: Crumb = { label: "Configurations", href: routes.index() };
 const EMPTY = emptyWorkspace(0);
-const models = (items: ReadonlyArray<{ name: string; role: string }>) => items.map(item => `${item.name} (${item.role === "policy" ? "policy" : item.role === "planner" ? "planner" : item.role})`).join(", ");
+const models = (items: ReadonlyArray<{ name: string; shortName: string; role: string }>, short = false) => items.map(item => `${short ? item.shortName : item.name} (${item.role})`).join(", ");
 
-/** Config dashboard (`/app/configurations/[configId]`): four KPI tiles, the live device's telemetry, the robots; the specification under Details. */
+/**
+ * Config dashboard (`/app/configurations/[configId]`): four KPI tiles, the live device's telemetry, the robots; the
+ * specification under Details; below them, the robot turning beside its facts when the robot names a preview.
+ */
 export function ConfigDashboardPage({ configId }: { configId: string }) {
   const ws = useWorkspace();
   const now = useNow();
@@ -51,6 +56,7 @@ function Dashboard({ config, views }: { config: Configuration; views: RobotView[
   const [error, setError] = useState<string | null>(null);
   const editable = ws.source === "document" && ws.canSave;
   const revision = currentRevision(config);
+  const preview = robotPreview(revision.robot);
   const runs = views.flatMap(view => view.runs);
   const latest = latestScored(runs);
   const newest = runs.toSorted((a, b) => (Date.parse(b.at ?? "") || 0) - (Date.parse(a.at ?? "") || 0))[0] ?? null;
@@ -117,7 +123,30 @@ function Dashboard({ config, views }: { config: Configuration; views: RobotView[
       </Card>
       {editable && <div className="cv-danger"><button className="cv-btn cv-btn--danger" type="button" onClick={() => { setError(null); setDialog("delete"); }}>Delete configuration</button></div>}
     </TabPanel>
+    {preview && <RobotSection config={config} revision={revision} preview={preview} />}
     {dialog === "add" && <AddRobotDialog config={config} onClose={() => setDialog(null)} onAdded={name => { setDialog(null); setAdded(name); }} />}
     {dialog === "delete" && <ConfirmDialog title={`Delete ${config.name}?`} action="Delete" busyAction="Deleting…" busy={busy} error={error} onConfirm={() => void remove()} onClose={() => setDialog(null)} />}
   </AppShell>;
+}
+
+/** The simulated robot turning (the wider side) beside the configuration's robot, edge hardware, models and status. */
+function RobotSection({ config, revision, preview }: { config: Configuration; revision: ConfigRevision; preview: RobotPreview }) {
+  const robot = revision.robot;
+  return <section className="cv-row" aria-labelledby="cd-robot">
+    <div className="cv-row__head"><h2 id="cd-robot">Robot</h2></div>
+    <div className="cv-robot">
+      <Turntable preview={preview} />
+      <Card>
+        <Facts single items={[
+          { label: "Robot", value: robot.name },
+          { label: "Body", value: robot.summary === NOT_SPECIFIED ? null : robot.summary },
+          { label: "Cameras", value: robot.cameras.join(", ") || null },
+          { label: "Edge hardware", value: revision.edgeHardware.name },
+          { label: "Edge model", value: models(revision.edgeModels, true) || null },
+          { label: "Cloud model", value: models(revision.cloudModels, true) || null },
+          { label: "Status", value: <ConfigStatusBadge status={config.status} /> },
+        ]} />
+      </Card>
+    </div>
+  </section>;
 }

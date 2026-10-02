@@ -152,3 +152,7 @@ uv run --frozen pytest -q tests/test_bimanual_pill_task.py tests/test_device_pla
 uv run --frozen convoy-sim-pills episode --config cloud_astra_only --slice nominal --seed 0 --output runs/pills
 scripts/pill_task_eval.sh runs/pill-demo     # modelled matrix, one importable directory per configuration
 ```
+
+`scripts/render_robot_preview.py` renders the robot alone in its idle pose as a turntable loop
+(VP9 and H.264) and a still, for the website's configuration page; it writes
+`website/public/sim/bimanual-station/` (needs OpenGL, e.g. `MUJOCO_GL=egl`, and `--extra video`).

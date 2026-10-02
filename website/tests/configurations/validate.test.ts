@@ -82,6 +82,27 @@ test("platform links: a project and a platform robot are ids, and a platform rob
   assert.deepEqual(issues(ws => { ws.robots[2].projectId = "prj contract"; }).map(issue => issue.path), ["robots[2].projectId"]);
 });
 
+test("a robot's preview is one the website ships, named by id: never a URL or a path", () => {
+  const withPreview = (preview: unknown) => {
+    const ws = sample();
+    (ws.configurations[0].revisions[0].robot as unknown as Record<string, unknown>).preview = preview;
+    return ws;
+  };
+  for (const preview of ["bimanual-station", null]) {
+    const result = validateWorkspace(withPreview(preview));
+    assert.equal(result.ok, true, String(preview));
+    assert.deepEqual(result.ok && result.warnings, [], "a known key, not an extra one");
+  }
+  const absent = sample();
+  delete absent.configurations[0].revisions[0].robot.preview;
+  assert.equal(validateWorkspace(absent).ok, true, "optional");
+  const refused = ["https://example.test/robot.mp4", "/sim/bimanual-station/turntable.mp4", "bimanual-station/../x", "Bimanual-station", "", "__proto__", 7, true, {}, ["bimanual-station"]];
+  for (const preview of refused) {
+    assert.deepEqual(issues(() => withPreview(preview)),
+      [{ path: "configurations[0].revisions[0].robot.preview", message: "expected one of \"bimanual-station\" or null" }], JSON.stringify(preview));
+  }
+});
+
 test("references, uniqueness and reserved ids are checked", () => {
   assert.deepEqual(issues(ws => { ws.robots[2].rev = "r9"; }), [{ path: "robots[2].rev", message: "\"r9\" is not a revision of \"edge-vla\"" }]);
   assert.deepEqual(issues(ws => { ws.runs[0].robotId = "ghost"; }), [{ path: "runs[0].robotId", message: "unknown robot \"ghost\"" }]);

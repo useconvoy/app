@@ -19,6 +19,9 @@ export const WORKSPACE_DOCUMENT_NAME = "configurations";
 export const CONFIGURED_DEVICE = "configured-device";
 /** Ids are route segments: letters, digits, `_` and `-`, 1–64 characters. */
 export const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+/** Robot previews this website ships (`previews.ts` maps each to its files). A document names one by id, never by URL. */
+export const ROBOT_PREVIEW_IDS = ["bimanual-station"] as const;
+export type RobotPreviewId = (typeof ROBOT_PREVIEW_IDS)[number];
 
 /* ---------- Evidence ---------- */
 
@@ -132,6 +135,8 @@ export interface RobotSpec {
   actionSpace: string;
   safetyController?: string;
   simTwin: { name: string; engine: string; note?: string } | null;
+  /** The simulated robot the configuration page shows turning (one of `ROBOT_PREVIEW_IDS`); absent or null shows none. */
+  preview?: RobotPreviewId | null;
   /** Declared values are usually assumptions for the pilot: sample. */
   provenance: StoredProvenance;
 }
