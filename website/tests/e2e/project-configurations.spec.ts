@@ -7,10 +7,10 @@ import type { RegisteredManifest } from "../../src/lib/platform/manifest";
 test("project configuration creates an executable release, revises it and opens the selected robot deployment", async ({ page }, testInfo) => {
   const project = { id: "prj_lab", name: "Manipulation lab" };
   const profile = { id: "rpf_arm", project_id: project.id, name: "Custom arm", revision: 1, digest: "a".repeat(64),
-    spec: { command_interface: "joint-position", control_rate_hz: 50, joints: [{ name: "shoulder", kind: "revolute", lower: -1, upper: 1 }], sensors: [],
-      simulations: [{ engine: "mujoco", engine_version: "3.3.0", controller: "position", asset: { sha256: "b".repeat(64) } }] },
+    spec: { embodiment: "arm", adapter: "convoy-mujoco-joints-v1", command_interface: "joint-position", control_rate_hz: 50, joints: [{ name: "shoulder", kind: "revolute", lower: -1, upper: 1 }], sensors: [],
+      simulations: [{ engine: "mujoco", engine_version: "3.3.0", controller: "position", asset: { sha256: "b".repeat(64), uri: "convoy-profile://arm.xml", format: "mjcf" } }] },
     simulation: { engines: ["mujoco"], dynamics_source: "unknown" } };
-  const robot = { id: "rob_sim", project_id: project.id, name: "Arm simulation", profile_id: profile.id, simulated: true,
+  const robot = { id: "rob_sim", project_id: project.id, device_id: "dev_sim", name: "Arm simulation", profile_id: profile.id, simulated: true, simulation_engine: "mujoco",
     profile: "registered-joint-policy-v1", generation: 0, qualification: { state: "passed", profile_digest: profile.digest }, evaluation_id: null };
   const applications: Application[] = [];
   const releases: Release[] = [];
@@ -23,6 +23,7 @@ test("project configuration creates an executable release, revises it and opens 
         "auth/me": { user: { email: "operator@example.test", role: "operator" }, installation: { simulator: true } },
         projects: [project], "robot-profiles": [profile], "robot-profiles/rpf_arm": profile, robots: [robot], "robots/rob_sim": robot,
         applications, "applications/app_one": applications[0], "applications/app_one/releases": releases,
+        "applications/app_one/qualification": { release_id: new URL(route.request().url()).searchParams.get("release_id"), gate: null, promotion: null, deployment_allowed: true },
         deployments: [], missions: [], devices: [], "robot-connections": [], fleets: [], "workspace-configuration-links": [],
       };
       if (path.endsWith("/setup")) {

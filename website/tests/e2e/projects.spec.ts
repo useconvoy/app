@@ -188,16 +188,25 @@ test("registered robot tasks wait for deployment and stop acknowledgements", asy
   const task = { id: "mis_one", robot_id: robot.id, state: "requested", detail: "", updated_at: new Date().toISOString(), episode_id: null as string | null };
   let deployed = false, started = false;
   const summary: Record<string, unknown> = { final_success: false, steps: 3, execution_mode: "lockstep_offline", simulated_duration_s: 0.06, wall_duration_s: 1.2 };
-  const manifest = { schema_version: 3, profile: robot.profile, environment: { robot_profile_sha256: "a".repeat(64) },
-    policy: { runtime: "convoy-joint-target-reference-v1" }, task: { instruction: "Reach the shoulder target" } };
+  const profile = { id: "rpf_arm", project_id: "prj_lab", name: "Custom arm", revision: 1, digest: "a".repeat(64),
+    spec: { embodiment: "arm", adapter: "convoy-mujoco-joints-v1", command_interface: "joint-position", control_rate_hz: 20,
+      joints: [{ name: "shoulder", kind: "revolute", lower: -1, upper: 1 }], sensors: [],
+      simulations: [{ engine: "mujoco", engine_version: "3.3.0", controller: "position", asset: { sha256: "b".repeat(64), uri: "convoy-profile://arm.xml", format: "mjcf" } }] } };
+  const manifest = { schema_version: 3, profile: robot.profile,
+    environment: { engine: "mujoco", version: "3.3.0", robot_profile_sha256: profile.digest, asset_sha256: "b".repeat(64) },
+    interface: { joint_names: ["shoulder"], command_interface: "joint-position", action_bounds: [[-1, 1]], control_rate_hz: 20 },
+    policy: { runtime: "convoy-joint-target-reference-v1", artifact_sha256: "c".repeat(64) },
+    task: { instruction: "Reach the shoulder target", target_joint_positions: [.5], position_tolerance: .02, velocity_tolerance: .1 },
+    execution: { max_steps: 100, decision_timeout_ms: 1000, mission_timeout_s: 60 } };
   await page.route("**/api/platform/**", async route => {
     const path = new URL(route.request().url()).pathname.replace("/api/platform/", "");
     if (route.request().method() === "GET") {
       const resources: Record<string, unknown> = {
         "auth/me": { user: { email: "operator@example.test", role: "operator" }, installation: { simulator: true } },
-        "robots/rob_sim": robot, "robot-profiles/rpf_arm": { name: "Custom arm", revision: 1, digest: "a".repeat(64) },
-        applications: [{ id: "app_one", name: "Reach target" }],
-        "applications/app_one/releases": [{ id: "apr_one", digest: "b".repeat(64), manifest }, { id: "apr_two", digest: "c".repeat(64), manifest }],
+        "robots/rob_sim": robot, "robot-profiles/rpf_arm": profile,
+        applications: [{ id: "app_one", project_id: "prj_lab", name: "Reach target" }],
+        "applications/app_one/releases": [{ id: "apr_one", application_id: "app_one", digest: "b".repeat(64), manifest }, { id: "apr_two", application_id: "app_one", digest: "c".repeat(64), manifest }],
+        "applications/app_one/qualification": { release_id: new URL(route.request().url()).searchParams.get("release_id"), gate: null, promotion: null, deployment_allowed: true },
         deployments: deployed ? [deployment] : [], missions: started ? [task] : [],
         "episodes/epi_one": { summary },
       };
@@ -255,4 +264,71 @@ test("registered robot tasks wait for deployment and stop acknowledgements", asy
   await expect.poll(async () => (await page.getByRole("banner").boundingBox())?.y).toBe(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
   await page.screenshot({ path: testInfo.outputPath("robot-tasks-mobile.png"), fullPage: true });
+});
+
+test("robot configuration follows its current deployment and changes only after explicit apply", async ({ page }) => {
+  const robot = { id: "rob_config", project_id: "prj_lab", device_id: "dev_config", name: "Configured arm", simulated: true,
+    profile_id: "rpf_config", profile: "registered-joint-policy-v1", simulation_engine: "mujoco", generation: 3,
+    qualification: { state: "passed", report: null }, evaluation_id: null };
+  const profile = { id: "rpf_config", project_id: "prj_lab", name: "Configured arm profile", revision: 1, digest: "a".repeat(64),
+    spec: { embodiment: "arm", adapter: "convoy-mujoco-joints-v1", command_interface: "joint-position", control_rate_hz: 20,
+      joints: [{ name: "shoulder", kind: "revolute", lower: -1, upper: 1 }], sensors: [],
+      simulations: [{ engine: "mujoco", engine_version: "3.3.0", controller: "position", asset: { sha256: "b".repeat(64), uri: "convoy-profile://arm.xml", format: "mjcf" } }] } };
+  const manifest = { schema_version: 3, profile: robot.profile,
+    environment: { engine: "mujoco", version: "3.3.0", robot_profile_sha256: profile.digest, asset_sha256: "b".repeat(64) },
+    interface: { joint_names: ["shoulder"], command_interface: "joint-position", action_bounds: [[-1, 1]], control_rate_hz: 20 },
+    policy: { runtime: "convoy-joint-target-reference-v1", artifact_sha256: "c".repeat(64) },
+    task: { instruction: "Reach target", target_joint_positions: [.5], position_tolerance: .02, velocity_tolerance: .1 },
+    execution: { max_steps: 100, decision_timeout_ms: 1000, mission_timeout_s: 60 } };
+  const deployments = [{ id: "dep_current", robot_id: robot.id, generation: 3, state: "ready", detail: "", release_id: "apr_current", observed_at: new Date().toISOString() }];
+  const writes: string[] = [];
+  await page.route("**/api/platform/**", async route => {
+    const url = new URL(route.request().url());
+    const path = url.pathname.replace("/api/platform/", "");
+    if (route.request().method() === "GET") {
+      const resources: Record<string, unknown> = {
+        "auth/me": { user: { email: "operator@example.test", role: "operator" }, installation: { simulator: true } },
+        "robots/rob_config": robot, "robot-profiles/rpf_config": profile,
+        "robot-connections/dev_config": { id: "dev_config", name: "Arm runner", simulated: true, status: "online", metadata: null, heartbeat_at: null },
+        applications: [{ id: "app_first", project_id: "prj_lab", name: "Alternative configuration" },
+          { id: "app_current", project_id: "prj_lab", name: "Current configuration" },
+          { id: "app_incompatible", project_id: "prj_lab", name: "Other robot configuration" }],
+        "applications/app_first/releases": [{ id: "apr_first", application_id: "app_first", digest: "d".repeat(64), manifest }],
+        "applications/app_current/releases": [{ id: "apr_current", application_id: "app_current", digest: "e".repeat(64), manifest }],
+        "applications/app_incompatible/releases": [{ id: "apr_incompatible", application_id: "app_incompatible", digest: "f".repeat(64), manifest: { ...manifest, environment: { ...manifest.environment, asset_sha256: "f".repeat(64) } } }],
+        deployments, missions: [],
+      };
+      if (/^applications\/app_(first|current)\/qualification$/.test(path)) return route.fulfill({ json: { release_id: url.searchParams.get("release_id"), gate: null, promotion: null, deployment_allowed: true } });
+      return route.fulfill({ status: path in resources ? 200 : 404, json: resources[path] ?? {} });
+    }
+    writes.push(path);
+    expect(path).toBe("deployments");
+    expect(route.request().headers()["idempotency-key"]).toBeTruthy();
+    expect(route.request().postDataJSON()).toEqual({ robot_id: robot.id, release_id: "apr_first", expected_generation: 3 });
+    robot.generation = 4;
+    const requested = { id: "dep_requested", robot_id: robot.id, generation: 4, state: "requested", detail: "", release_id: "apr_first", observed_at: "" };
+    deployments.unshift(requested);
+    return route.fulfill({ status: 201, json: requested });
+  });
+  await page.goto("/app/projects/prj_lab/robots/rob_config");
+  const configuration = page.getByRole("combobox", { name: "Configuration", exact: true });
+  const release = page.getByRole("combobox", { name: "Release", exact: true });
+  const start = page.getByRole("button", { name: "Start task", exact: true });
+  await expect(configuration).toHaveValue("app_current");
+  await expect(release).toHaveValue("apr_current");
+  await expect(start).toBeEnabled();
+  await expect(configuration.getByRole("option", { name: "Other robot configuration · no compatible release" })).toHaveAttribute("disabled", "");
+  await configuration.selectOption("app_first");
+  await release.selectOption("apr_first");
+  await expect(start).toBeDisabled();
+  expect(writes).toEqual([]);
+  await page.getByRole("button", { name: "Deploy selected release" }).click();
+  await expect(page.getByText("Deployment 4 · requested", { exact: true })).toBeVisible();
+  await expect(start).toBeDisabled();
+  expect(writes).toEqual(["deployments"]);
+  deployments[0].state = "ready";
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(start).toBeEnabled();
+  await expect(page.getByText("Deployment 4 · ready", { exact: true })).toBeVisible();
+  expect(writes).toEqual(["deployments"]);
 });

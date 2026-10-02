@@ -16,6 +16,8 @@ import { ComputerDetails, ConnectionSetup } from "./ConnectionSetup";
 import { ApiError, errorText, MutationAttempts, type Project, type Robot, type Device } from "@/lib/platform/client";
 import { notifySessionExpired } from "@/lib/configurations/session-events";
 import { useProjectResource, type Fleet, type RobotProfile } from "@/lib/projects/client";
+import { ProjectFleetDirectory } from "./ProjectFleetDirectory";
+import { RobotConfigurationSummary, useProjectRobotConfigurations } from "./ProjectRobotConfigurations";
 
 export function ProjectsRoot({ children }: { children: ReactNode }) {
   return <ConfigurationsRoot>{children}</ConfigurationsRoot>;
@@ -57,17 +59,29 @@ export function ProjectsIndex() {
     if (project) router.push(`/app/projects/${project.id}`);
   }
   return <Shell>
-    <PageHeader title="Projects" actions={<Link className="cv-btn cv-btn--secondary" href="/app/configurations">Organize saved configurations</Link>} />
-    <p>Organize your robots, their physical profiles, and simulation instances in one project.</p>
-    {projects.error && <p role="alert">{projects.error}</p>}
-    {!projects.data && !projects.error && <p role="status">Loading projects…</p>}
-    {projects.data?.length === 0 && <div className="cv-empty"><h2>Create your first project</h2><p>Then register a robot or its simulated counterpart.</p></div>}
-    <div className="cv-grid">{projects.data?.map(project => <Link className="cv-card" key={project.id} href={`/app/projects/${project.id}`}><div><h2>{project.name}</h2><p>Open project →</p></div></Link>)}</div>
-    {session.operator && <form className="cv-form project-create" onSubmit={create}>
-      <label className="cv-field">Project name<input className="cv-input" required maxLength={120} value={name} onChange={e => setName(e.target.value)} /></label>
-      {mutation.error && <p role="alert">{mutation.error}</p>}
-      <button className="cv-btn cv-btn--primary" disabled={mutation.busy || !name.trim()}>{mutation.busy ? "Creating…" : "Create project"}</button>
-    </form>}
+    <p className="project-eyebrow">Workspace</p>
+    <PageHeader title="Projects" actions={<Link className="cv-link" href="/app/configurations">Organize saved configurations</Link>} />
+    <p className="project-intro">Each project brings your robots, configurations, and task results together.</p>
+    <div className="projects-directory">
+      <section className="projects-list" aria-label="Your projects">
+        <div className="project-section-heading"><h2>Your projects</h2>{projects.data && <span className="cv-muted">{projects.data.length} {projects.data.length === 1 ? "project" : "projects"}</span>}</div>
+        {projects.error && <p role="alert">{projects.error}</p>}
+        {!projects.data && !projects.error && <p role="status">Loading projects…</p>}
+        {projects.data?.length === 0 && <div className="cv-empty"><h2>Create your first project</h2><p>Give it a name, then add a robot or simulator.</p></div>}
+        <div className="projects-list__items">{projects.data?.map(project => <Link className="project-directory-card" key={project.id} href={`/app/projects/${project.id}`}>
+          <span className="project-directory-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z" /></svg></span>
+          <div><h3>{project.name}</h3><p>Robots · Configurations · Runs</p></div><span className="project-directory-card__open">Open project →</span>
+        </Link>)}</div>
+      </section>
+      {session.operator && <aside className="projects-create-panel">
+        <p className="project-eyebrow">New workspace</p><h2>Create a project</h2><p>Group the robots and configurations you want to work on together.</p>
+        <form className="cv-form" aria-label="Create project" onSubmit={create}>
+          <label className="cv-field">Project name<input className="cv-input" required maxLength={120} placeholder="e.g. Warehouse robotics" value={name} onChange={e => setName(e.target.value)} /></label>
+          {mutation.error && <p role="alert">{mutation.error}</p>}
+          <button className="cv-btn cv-btn--primary" disabled={mutation.busy || !name.trim()}>{mutation.busy ? "Creating…" : "Create project"}</button>
+        </form>
+      </aside>}
+    </div>
   </Shell>;
 }
 
@@ -90,6 +104,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [fleetId, setFleetId] = useState("");
   const mutation = useMutation(refresh);
+  const configurationCatalogue = useProjectRobotConfigurations(projectId, revision);
   const errors = [projects.error, robots.error, profiles.error, fleets.error, devices.error].filter(Boolean);
   async function assign() {
     if (!robots.data) return;
@@ -97,25 +112,26 @@ export function ProjectPage({ projectId }: { projectId: string }) {
     if (result) setSelected([]);
   }
   return <Shell project={project?.name ?? "Project"} projectId={projectId} section={tab}>
+    <p className="project-eyebrow">{tab}</p>
     <PageHeader title={project?.name ?? "Project"} actions={<><button type="button" className="cv-btn cv-btn--secondary" onClick={refresh}>Refresh</button>{session.operator && <button type="button" className="cv-btn cv-btn--primary" onClick={() => { setTab("Robots"); setSource(undefined); setAdding(true); }}>Add robot</button>}</>} />
     {projects.data && !project && <p role="alert">This project is unavailable.</p>}
     {errors.map((error, i) => <p role="alert" key={i}>{error}</p>)}
     {project && <>
-      {tab === "Overview" && <ProjectOverview projectId={projectId} robots={robots.data} profiles={profiles.data} fleets={fleets.data} />}
+      {tab === "Overview" && <ProjectOverview projectId={projectId} robots={robots.data} profiles={profiles.data} fleets={fleets.data} catalogue={configurationCatalogue} />}
       {tab === "Simulations" && <ProjectSimulations projectId={projectId} robots={robots.data} />}
       {tab === "Runs" && <ProjectRuns projectId={projectId} robots={robots.data} />}
       {tab === "Robots" && <section aria-label="Robots">
         <p>Physical robots and simulated instances keep separate connections and share a versioned physical profile.</p>
         {robots.data?.length === 0 && !adding && <div className="cv-empty"><h2>No robots yet</h2><p>Import a robot profile, then connect an enrolled device to it.</p><button className="cv-btn cv-btn--primary" onClick={() => setTab("Profiles")}>Add a profile</button></div>}
-        <div className="cv-table-wrap"><table className="cv-table"><thead><tr><th scope="col">Select</th><th scope="col">Robot</th><th scope="col">Type</th><th scope="col">Profile</th><th scope="col">Fleet</th><th scope="col">Simulation</th></tr></thead><tbody>
+        <div className="cv-card project-robot-table cv-table-wrap"><table className="cv-table"><thead><tr><th scope="col">Select</th><th scope="col">Robot</th><th scope="col">Configuration</th><th scope="col">Fleet</th><th scope="col">Robot setup</th></tr></thead><tbody>
           {robots.data?.map(robot => {
             const profile = profiles.data?.find(p => p.id === robot.profile_id);
             return <tr key={robot.id}>
               <td><input type="checkbox" aria-label={`Select ${robot.name}`} checked={selected.includes(robot.id)} disabled={!session.operator} onChange={e => setSelected(s => e.target.checked ? [...s, robot.id] : s.filter(id => id !== robot.id))} /></td>
-              <th scope="row"><Link href={`/app/projects/${projectId}/robots/${robot.id}`}>{robot.name}</Link></th><td>{robot.simulated === false ? "Physical" : "Simulated"}</td>
-              <td>{profile ? `${profile.name} · revision ${profile.revision}` : "Legacy runner profile"}</td>
+              <th scope="row"><Link href={`/app/projects/${projectId}/robots/${robot.id}`}>{robot.name}</Link><span className="project-row-meta">{robot.simulated === false ? "Physical" : "Simulated"}</span></th>
+              <td><RobotConfigurationSummary projectId={projectId} robot={robot} catalogue={configurationCatalogue} compact /></td>
               <td>{fleets.data?.find(f => f.id === robot.fleet_id)?.name ?? "Unassigned"}</td>
-              <td>{robot.simulated === false && profile ? <button className="cv-link" disabled={!session.operator || !profile.simulation.engines.length} onClick={() => { setSource(robot); setAdding(true); }}>Create simulated instance</button> : <>
+              <td><span className="project-row-meta">{profile ? `${profile.name} · revision ${profile.revision}` : "Legacy runner profile"}</span>{robot.simulated === false && profile ? <button className="cv-link" disabled={!session.operator || !profile.simulation.engines.length} onClick={() => { setSource(robot); setAdding(true); }}>Create simulated instance</button> : <>
                 {robot.source_robot_id ? `From ${robots.data?.find(r => r.id === robot.source_robot_id)?.name ?? "physical robot"}` : robot.simulation_engine ?? "Existing runner"}
                 {robot.simulated && robot.profile_id && <SimulatorReadiness robot={robot} busy={mutation.busy} canWrite={session.operator} verify={() => void mutation.submit(`robots/${robot.id}/qualification`, {})} />}
               </>}</td>
@@ -137,8 +153,8 @@ export function ProjectPage({ projectId }: { projectId: string }) {
         {session.operator && <ProfileForm projectId={projectId} profiles={profiles.data ?? []} onSaved={refresh} />}
       </section>}
       {tab === "Fleets" && <section aria-label="Fleets">
-        <p>Group registered robots here. Membership does not start tasks or deploy software.</p>
-        {fleets.data?.map(fleet => <article className="cv-card" key={fleet.id}><div><h2>{fleet.name}</h2><p>{fleet.robot_ids.length} robots</p>{fleet.robot_ids.map(id => <p key={id}>{robots.data?.find(r => r.id === id)?.name ?? id} {session.operator && <button className="cv-link" disabled={mutation.busy} onClick={() => void mutation.submit(`fleets/${fleet.id}/members/${id}/remove`, {})}>Remove from {fleet.name}</button>}</p>)}</div></article>)}
+        <p className="project-intro">Expand a fleet to see its robots and their configurations. Assign robots from the Robots page.</p>
+        <ProjectFleetDirectory projectId={projectId} fleets={fleets.data} robots={robots.data} catalogue={configurationCatalogue} onRemove={session.operator ? (fleetId, robotId) => void mutation.submit(`fleets/${fleetId}/members/${robotId}/remove`, {}) : undefined} busy={mutation.busy} />
         {mutation.error && <p role="alert">{mutation.error}</p>}
         {session.operator && <FleetForm projectId={projectId} onSaved={refresh} />}
       </section>}
@@ -212,5 +228,5 @@ function FleetForm({ projectId, onSaved }: { projectId: string; onSaved: () => v
   const [name, setName] = useState("");
   const mutation = useMutation(onSaved);
   async function submit(event: FormEvent) { event.preventDefault(); if (await mutation.submit("fleets", { project_id: projectId, name: name.trim() })) setName(""); }
-  return <form className="cv-form project-create" onSubmit={submit}><label className="cv-field">Fleet name<input className="cv-input" required maxLength={120} value={name} onChange={e => setName(e.target.value)} /></label>{mutation.error && <p role="alert">{mutation.error}</p>}<button className="cv-btn cv-btn--primary" disabled={mutation.busy || !name.trim()}>Create fleet</button></form>;
+  return <form className="cv-form project-create" onSubmit={submit}><h2>Create a fleet</h2><p className="cv-muted">Give the group a name, then assign its robots from the Robots page.</p><label className="cv-field">Fleet name<input className="cv-input" required maxLength={120} value={name} onChange={e => setName(e.target.value)} /></label>{mutation.error && <p role="alert">{mutation.error}</p>}<button className="cv-btn cv-btn--primary" disabled={mutation.busy || !name.trim()}>Create fleet</button></form>;
 }

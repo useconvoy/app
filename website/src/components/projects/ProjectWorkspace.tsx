@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useWorkspace } from "@/lib/configurations/client";
 import { routes } from "@/lib/configurations/routes";
-import type { Robot, Application, Deployment, Mission, Episode } from "@/lib/platform/client";
+import type { Robot, Mission, Episode } from "@/lib/platform/client";
 import { useProjectResource, type RobotProfile, type Fleet } from "@/lib/projects/client";
 import { projectHref } from "./ProjectNavigation";
 import { EpisodeReplay } from "@/components/console/EpisodeReplay";
@@ -11,22 +11,22 @@ import { Portal } from "@/components/portal/Portal";
 import { useSession } from "@/components/configurations/Session";
 import { notifySessionExpired } from "@/lib/configurations/session-events";
 import { TimingResult } from "./TimingResult";
+import { ProjectFleetDirectory } from "./ProjectFleetDirectory";
+import type { ProjectRobotConfigurationCatalogue } from "./ProjectRobotConfigurations";
 
 export const robotHref = (projectId: string, robotId: string) => `/app/projects/${projectId}/robots/${robotId}`;
 
-export function ProjectOverview({ projectId, robots, profiles, fleets }: { projectId: string; robots?: Robot[]; profiles?: RobotProfile[]; fleets?: Fleet[] }) {
+export function ProjectOverview({ projectId, robots, profiles, fleets, catalogue }: { projectId: string; robots?: Robot[]; profiles?: RobotProfile[]; fleets?: Fleet[]; catalogue: ProjectRobotConfigurationCatalogue }) {
   const workspace = useWorkspace();
   const setups = workspace.source === "document" ? workspace.workspace?.configurations.filter(c => c.projectId === projectId).length ?? 0 : 0;
-  const configurations = useProjectResource<Application[]>(`applications?project_id=${projectId}`);
-  const deployments = useProjectResource<Deployment[]>(`deployments?project_id=${projectId}`, 0, true);
-  const next = !profiles?.length ? ["Profiles", "Import a robot profile", "Describe its joints and controller, then upload a matching simulation model."] : !robots?.length ? ["Robots", "Register your first robot", "Connect a computer and associate it with the robot’s physical profile."] : !configurations.data?.length ? ["Configurations", "Configure a task", "Choose a policy and timing limits for a registered robot."] : ["Simulations", "Test your configuration", "Verify a simulator, deploy a release and inspect the resulting run."];
-  return <section className="project-section" aria-label="Project overview"><p>Register robots, configure their intelligence, and verify how tasks perform before deployment.</p>
-    <div className="cv-grid">{[["Robots", robots?.length], ["Fleets", fleets?.length], ["Configurations", configurations.data ? `${configurations.data.length} runnable · ${setups} model setups` : undefined]].map(([label, count]) => <Link className="cv-config" key={label} href={projectHref(projectId, String(label))}><h2>{label}</h2><p>{count ?? "Loading…"}</p></Link>)}</div>
-    <article className="cv-card"><div><h2>{next[1]}</h2><p>{next[2]}</p><Link className="cv-btn cv-btn--primary" href={projectHref(projectId, next[0])}>Continue setup</Link></div></article>
-    <h2>Deployments</h2>{[configurations.error, deployments.error].filter(Boolean).map(error => <p role="alert" key={error}>{error}</p>)}
-    {deployments.data?.length === 0 && <p>No deployments yet. Saving a configuration does not activate it on a robot.</p>}
-    {deployments.data?.filter(d => robots?.some(r => r.id === d.robot_id && r.generation === d.generation)).map(d => <p key={d.id}><Link className="cv-link" href={robotHref(projectId, d.robot_id)}>{robots?.find(r => r.id === d.robot_id)?.name}</Link> · {d.state} · revision {d.generation}</p>)}
-    <p><Link className="cv-link" href={projectHref(projectId, "Runs")}>View task results and evaluations →</Link></p>
+  const next = !robots?.length ? !profiles?.length ? ["Profiles", "Import a robot profile", "Add the physical model and controller interfaces for your first robot."] : ["Robots", "Register your first robot", "Connect a computer to the robot profile you have imported."] : catalogue.applications.length === 0 ? ["Configurations", "Set up a configuration", "Choose the models, policy, and timing for your robots."] : ["Runs", "Review task results", "Inspect completed tasks, timing measurements, and recordings."];
+  return <section className="project-section project-overview" aria-label="Project overview">
+    <p className="project-intro">Your fleet, each robot’s configuration, and its current deployment status in one place.</p>
+    <div className="project-metrics">{[["Robots", robots?.length, "Registered in this project"], ["Fleets", fleets?.length, "Groups of robots"], ["Configurations", catalogue.loading ? undefined : catalogue.applications.length + setups, `${catalogue.applications.length} runnable · ${setups} model setups`]].map(([label, count, detail]) => <Link className="project-metric" key={label} href={projectHref(projectId, String(label))}><span>{label}</span><strong>{count ?? "—"}</strong><small>{detail}</small></Link>)}</div>
+    {catalogue.error && <p className="cv-notice cv-notice--error" role="alert">Configuration status could not be loaded. Refresh to try again.</p>}
+    <div className="project-section-heading project-overview__heading"><div><h2>Fleets and robots</h2><p>Expand a fleet or open a robot to manage its configuration.</p></div><Link className="cv-link" href={projectHref(projectId, "Fleets")}>Manage fleets →</Link></div>
+    <ProjectFleetDirectory projectId={projectId} fleets={fleets} robots={robots} catalogue={catalogue} />
+    {!catalogue.loading && robots && profiles && <aside className="project-next-step"><div><h2>{next[1]}</h2><p>{next[2]}</p></div><Link className="cv-btn cv-btn--secondary" href={projectHref(projectId, next[0])}>{next[0] === "Runs" ? "View results" : "Continue setup"}</Link></aside>}
   </section>;
 }
 

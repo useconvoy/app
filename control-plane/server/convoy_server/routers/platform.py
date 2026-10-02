@@ -278,6 +278,7 @@ def get_deployment(deployment_id: str, p: PrincipalRead, db: Database):
 def list_deployments(
     project_id: Id, p: PrincipalRead, db: Database,
     robot_id: str | None = Query(default=None, max_length=64),
+    current_only: bool = Query(default=False),
 ):
     service.project_for(db, project_id, p)
     statement = select(Deployment).where(Deployment.project_id == project_id)
@@ -286,6 +287,14 @@ def list_deployments(
         if robot.project_id != project_id:
             raise HTTPException(404, "robot not found in project")
         statement = statement.where(Deployment.robot_id == robot_id)
+    if current_only:
+        # Filter before the history limit so a busy robot cannot hide another
+        # robot's current configuration in the project directory.
+        statement = statement.join(Robot, (
+            (Robot.id == Deployment.robot_id)
+            & (Robot.project_id == Deployment.project_id)
+            & (Robot.generation == Deployment.generation)
+        ))
     return [service.deployment_out(row) for row in db.scalars(
         statement.order_by(Deployment.created_at.desc()).limit(200)
     )]

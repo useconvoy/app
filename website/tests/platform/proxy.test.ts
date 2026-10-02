@@ -55,6 +55,12 @@ test("allowlist excludes controller/device writes, path traversal, unknown query
   assert.equal(allowedPlatformPath(["robot-connections", "dev_one"], "POST", new URLSearchParams()), null);
   assert.equal(allowedPlatformPath(["robots"], "GET", new URLSearchParams("project_id=prj_one")), "/api/v1/robots?project_id=prj_one");
   assert.equal(allowedPlatformPath(["deployments"], "GET", new URLSearchParams("project_id=prj_one&robot_id=rob_one")), "/api/v1/deployments?project_id=prj_one&robot_id=rob_one");
+  assert.equal(allowedPlatformPath(["deployments"], "GET", new URLSearchParams("project_id=prj_one&current_only=true")), "/api/v1/deployments?project_id=prj_one&current_only=true");
+  assert.equal(allowedPlatformPath(["deployments"], "GET", new URLSearchParams("project_id=prj_one&robot_id=rob_one&current_only=false")), "/api/v1/deployments?project_id=prj_one&robot_id=rob_one&current_only=false");
+  for (const search of ["current_only=true", "project_id=prj_one&current_only=invalid", "project_id=prj_one&current_only=true&current_only=false"]) {
+    assert.equal(allowedPlatformPath(["deployments"], "GET", new URLSearchParams(search)), null);
+  }
+  assert.equal(allowedPlatformPath(["robots"], "GET", new URLSearchParams("project_id=prj_one&current_only=true")), null);
   assert.equal(allowedPlatformPath(["applications", "app_one", "qualification"], "GET", new URLSearchParams("release_id=rel_one")), "/api/v1/applications/app_one/qualification?release_id=rel_one");
   assert.equal(allowedPlatformPath(["applications", "app_one", "qualification"], "GET", new URLSearchParams()), null);
   assert.equal(allowedPlatformPath(["evaluations", "eva_one"], "GET", new URLSearchParams()), "/api/v1/evaluations/eva_one");
