@@ -44,6 +44,16 @@ def test_real_model_loads_and_moves_under_the_declared_controller(tmp_path):
     assert isolated["state"] == "passed", isolated
 
 
+def test_shutdown_interrupts_native_verification_without_reporting_a_pass(tmp_path):
+    import multiprocessing
+
+    path, spec, model = fixture(tmp_path)
+    previous = {child.pid for child in multiprocessing.active_children()}
+    with pytest.raises(InterruptedError):
+        check(spec, model, path, stop_requested=lambda: True)
+    assert {child.pid for child in multiprocessing.active_children()} == previous
+
+
 @pytest.mark.parametrize("change", ["digest", "joint", "limits", "controller", "version", "cadence", "camera"])
 def test_wrong_profile_or_asset_cannot_pass(tmp_path, change):
     path, spec, model = fixture(tmp_path)

@@ -36,7 +36,8 @@ keep their existing viewer.
 Project → Robots → Add robot now creates a one-use enrollment token and command in the registration
 form. Install this revision of `convoy-agent` on the intended computer first. Run the displayed command
 there; the form polls enrollment and selects the newly enrolled connection. Then run its displayed
-agent command to report heartbeats and hardware sensors. Choose a profile, optional fleet, and register.
+agent command to report heartbeats and hardware sensors. Simulator enrollment instead displays the
+combined simulator service command described below. Choose a profile, optional fleet, and register.
 The registration API remains the authority for assigning an unassigned caller-owned connection.
 
 Tokens expire after 15 minutes and can be cancelled before use. The command is shell-quoted and each
@@ -59,8 +60,52 @@ API: `POST /api/v1/robot-connections/enrollments` creates setup for an owned `pr
 `POST /api/v1/robot-connections/enrollments/{id}/cancel` cancels unused setup;
 `GET /api/v1/robot-connections/{device-id}` returns caller-owned connection and bounded hardware details.
 Creation is deliberately not replayed through a plaintext idempotency receipt. No new database schema.
-Automatic agent installation and the combined qualification/execution service launcher remain future
-work; the simulator commands below are still required. Existing connections can still be selected.
+Existing connections can still be selected. Physical-agent installation remains separate.
+
+## Combined simulator service
+
+From a checkout of the desired committed revision, install the runtime on the simulator computer:
+
+```sh
+bash integrations/simulation/install-runtime.sh "$HOME/.local/share/convoy/simulator-v1"
+source "$HOME/.local/share/convoy/simulator-v1/runtime/bin/activate"
+```
+
+The installer snapshots committed source into a private installation directory, creates a Python 3.11
+environment and installs the frozen `runtime` dependencies. It does not install the API server or test
+tools. If `uv` is missing, it bootstraps a pinned version in its own environment using Python 3's venv.
+It never changes the system Python, requests root or starts a background service. The initial install
+needs package/Python download access; compatible cached dependencies can be reused. A different revision
+needs a different destination. Retrying the same revision can resume dependency installation. The
+checkout must have committed runtime changes, and the installed copy remains independent of later edits.
+
+Run the enrollment command from Add robot, then its simulator command:
+
+```sh
+convoy-sim-service --data-dir ./convoy-connections/<enrollment-id>
+```
+
+The foreground service reports host health, waits for project registration, fulfills requested model
+verification and watches for deployments/tasks. It embeds the existing connection agent on a thread and
+uses the existing execution coordinator and managed worker. Inference and real-time physics retain their
+separate processes. Native verification runs only when local execution/recovery work has settled. The
+service rejects physical-device enrollments, unsupported engines and duplicate local owners. Ctrl-C or
+SIGTERM requests coordinated shutdown. A successor recovers the execution journal and the proven owned
+worker; it does not replay completed tasks. Local diagnostics are in `simulator-service/status.json`.
+
+Normal automatic setup requires the API's existing `CONVOY_EXECUTION_SIGNING_KEYS_FILE` configuration
+with separate action/planner Ed25519 keys. The service fetches **public action verification keys only**
+from its authenticated enrolled API origin, before activation and between coordinator iterations. It
+supports key rotation with stable issuer/audience; retain old public keys until their grants expire.
+Changing trust anchors requires operator review of the installed trust file. Private signing keys stay
+on the API; HMAC secrets are never downloaded. Explicit operator-configured verifier files or a local
+test HMAC secret remain supported. A server without public signing configured reports unavailable setup,
+while the connection agent continues reporting health. Nothing silently downgrades signing mode.
+
+The service currently manages the joint reference worker. Operator-installed learned workers can still
+use the standalone registered runner below. Camera-conditioned learned policies, cloud planner pairing,
+Isaac execution, system-service installation and a browser-downloadable runtime distribution remain
+unfinished. Installing this runtime does not calibrate the robot's mechanical model or command motors.
 
 ## Robot model delivery
 

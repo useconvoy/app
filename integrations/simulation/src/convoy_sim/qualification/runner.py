@@ -28,15 +28,21 @@ def _child(connection, spec, model_spec, asset):
         connection.close()
 
 
-def check(spec, model_spec, asset, *, timeout_s=60):
+def check(spec, model_spec, asset, *, timeout_s=60, stop_requested=lambda: False):
     context = multiprocessing.get_context("spawn")
     parent, child = context.Pipe(duplex=False)
     process = context.Process(target=_child, args=(child, spec, model_spec, str(asset)))
     process.start()
     child.close()
     try:
-        if not parent.poll(timeout_s):
-            return {"state": "failed", "detail": "Simulator verification exceeded its time budget.", "evidence": {}}
+        deadline = time.monotonic() + timeout_s
+        while not parent.poll(min(.1, max(0, deadline - time.monotonic()))):
+            if stop_requested():
+                raise InterruptedError("verification stopped before completion")
+            if time.monotonic() >= deadline:
+                return {"state": "failed", "detail": "Simulator verification exceeded its time budget.", "evidence": {}}
+        if stop_requested():
+            raise InterruptedError("verification stopped before completion")
         try:
             return parent.recv()
         except EOFError:
@@ -51,7 +57,7 @@ def check(spec, model_spec, asset, *, timeout_s=60):
             process.join(timeout=2)
 
 
-def reconcile(control, asset_root, *, timeout_s=60):
+def reconcile(control, asset_root, *, timeout_s=60, stop_requested=lambda: False):
     desired = control.get("/api/agent/v1/registry")
     request = desired.get("qualification")
     if not request or request["state"] != "requested":
@@ -63,7 +69,11 @@ def reconcile(control, asset_root, *, timeout_s=60):
 
     try:
         asset = ensure_asset(control, profile, model_spec, asset_root)
-        result = check(profile["spec"], model_spec, asset, timeout_s=timeout_s)
+        if stop_requested():
+            raise InterruptedError("verification stopped during delivery")
+        result = check(profile["spec"], model_spec, asset, timeout_s=timeout_s, stop_requested=stop_requested)
+    except InterruptedError:
+        raise
     except Exception as error:
         result = {"state": "failed", "detail": f"Model delivery failed ({type(error).__name__}); upload the pinned asset and retry verification.", "evidence": {}}
     report = {**result, "profile_digest": request["profile_digest"],

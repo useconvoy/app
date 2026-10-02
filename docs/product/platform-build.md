@@ -287,3 +287,30 @@ separate directory, with no public application records. Runtime source is commit
 heartbeat test's SHA-256 is `8039201abc8400d096d158c22ab34186d96bc8e74395fcb05dd13b95264c09cd`,
 verified against the local file after transfer. Full pipeline elapsed time is a test duration, not
 a policy-latency measurement. These checks still use a reference controller rather than a learned policy.
+
+## Combined simulator service slice
+
+Branch: `codex/registered-simulator-service`, stacked on connection setup. Simulator onboarding now
+offers a single foreground service command. The service starts connection health reporting before
+registration, then performs requested model verification and watches for deployments/tasks. Existing
+coordinator journals, admission checks, managed worker ownership and independently paced physics remain
+the execution mechanisms. Model verification is interruptible and waits for local execution/recovery
+to settle. Duplicate service owners are rejected. A committed-source installer builds a private frozen
+runtime without the API server or test dependencies; immutable source copies allow later checkout edits.
+
+Added authenticated public action-key delivery. The API exports no private key or HMAC secret; public
+keys are refreshed from the enrolled origin and checked before publication. Rotations keep the same
+issuer/audience; private signing authority stays on the API. Existing explicit local trust configuration
+still works. The generated service command assumes this runtime is installed and the API has signing
+configured; merely enrolling a computer never proves those conditions.
+
+Local verification: 20 native simulator, timing, managed worker and actual HTTP pipeline tests pass,
+including service startup before registration, duplicate rejection, real model/task execution, key
+rotation, forced owner loss, orphan recovery and graceful stop. Fifteen API signing/connection tests,
+23 coordinator/transport checks and the three project browser journeys pass. Browser coverage checks
+the generated simulator command alongside physical enrollment. Lint, type checks and production build
+pass. Installation packaging and Jetson service acceptance are the next checks before review.
+
+This advances onboarding and local operation. Learned-model installation and edge/cloud pairing,
+legacy configuration reconciliation, scenario/chat tasking, registered visual replay, Isaac, fleet
+rollout and characterization remain required. No public rollout or cloud resources were created.

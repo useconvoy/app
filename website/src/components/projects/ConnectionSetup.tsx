@@ -7,7 +7,7 @@ import { notifySessionExpired } from "@/lib/configurations/session-events";
 
 interface Computer extends Device { hardware: Record<string, string | number | boolean | null>; last_seen_at?: string | null }
 interface SetupStatus { enrollment: { id: string; status: string; expires_at: string }; device: Computer | null }
-interface Setup extends SetupStatus { command: string; run_command: string; data_dir: string }
+interface Setup extends SetupStatus { command: string; run_command: string; simulator_command?: string | null; data_dir: string }
 
 export function ConnectionSetup({ projectId, name, simulated, onConnected }: {
   projectId: string; name: string; simulated: boolean; onConnected: (device: Device) => void;
@@ -76,7 +76,7 @@ export function ConnectionSetup({ projectId, name, simulated, onConnected }: {
     {(!current || ["expired", "revoked"].includes(current.enrollment.status)) && <button type="button" className="cv-btn cv-btn--secondary" disabled={busy || !name.trim()} onClick={() => void act()}>Create connection token</button>}
     {current?.enrollment.status === "open" && setup && <>
       <p>Waiting for enrollment. This one-use token expires {new Date(current.enrollment.expires_at).toLocaleTimeString()}.</p>
-      <p>With the Convoy agent installed, run this in a terminal on the computer you want to connect:</p>
+      <p>With the Convoy {simulated ? "simulator runtime" : "agent"} installed, run this in a terminal on the computer you want to connect:</p>
       <pre className="project-spec project-command" aria-label="Connection command">{setup.command}</pre>
       <div className="project-actions"><button type="button" className="cv-link" onClick={() => void navigator.clipboard.writeText(setup.command).catch(() => setError("Copy failed. Select and copy the command above."))}>Copy connection command</button>
       <button type="button" className="cv-link" disabled={busy} onClick={() => void act(true)}>Cancel connection token</button></div>
@@ -85,7 +85,7 @@ export function ConnectionSetup({ projectId, name, simulated, onConnected }: {
     {current?.enrollment.status === "revoked" && <p>The token was cancelled.</p>}
     {current?.enrollment.status === "consumed" && <>
       <p>{current.device ? `${current.device.name} enrolled and selected.` : "The token was used, but the connection is no longer available."}</p>
-      {setup && current.device && <><p>Keep the agent running to report connection health and computer sensors:</p><pre className="project-spec project-command" aria-label="Agent run command">{setup.run_command}</pre></>}
+      {setup && current.device && <><p>{setup.simulator_command ? "Start the simulator service. It reports computer health, verifies the robot model when requested, and runs deployed tasks:" : "Keep the agent running to report connection health and computer sensors:"}</p><pre className="project-spec project-command" aria-label="Agent run command">{setup.simulator_command ?? setup.run_command}</pre></>}
     </>}
     {pollingId && <button type="button" className="cv-link" onClick={() => setRevision(n => n + 1)}>Check connection</button>}
   </section>;

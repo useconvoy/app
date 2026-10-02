@@ -45,17 +45,26 @@ def _write(path, value):
 
 
 class ManagedWorker:
-    def __init__(self, directory, *, startup_timeout_s=30):
+    def __init__(self, directory, *, startup_timeout_s=30, verification_keys_file=None):
         if type(startup_timeout_s) not in (int, float) or not 0 < startup_timeout_s <= 120:
             raise ValueError("worker startup budget must be in (0, 120] seconds")
         # Validate operator-provided public keys or the explicit local HMAC test setup
         # without copying API signing keys or unrelated credentials into the child.
-        execution_options()
+        if verification_keys_file is None:
+            execution_options()
+        else:
+            from convoy_contracts.grants import GrantVerifier
+
+            if any(name in os.environ for name in ("CONVOY_EXECUTION_SIGNING_KEYS_FILE", "CONVOY_EXECUTION_SECRET", "CONVOY_PLANNER_EXECUTION_SECRET", "CONVOY_ACTION_VERIFICATION_KEYS_FILE")):
+                raise ValueError("automatic verification keys cannot be mixed with explicit execution credentials")
+            GrantVerifier(verification_keys_file, purpose="action")
         names = ("PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "SYSTEMROOT", "VIRTUAL_ENV")
         self.environment = {name: os.environ[name] for name in names if name in os.environ}
         if "PYTHONPATH" in os.environ:
             self.environment["PYTHONPATH"] = os.pathsep.join(str(Path(p or ".").absolute()) for p in os.environ["PYTHONPATH"].split(os.pathsep))
-        if "CONVOY_ACTION_VERIFICATION_KEYS_FILE" in os.environ:
+        if verification_keys_file is not None:
+            self.environment["CONVOY_ACTION_VERIFICATION_KEYS_FILE"] = str(Path(verification_keys_file).absolute())
+        elif "CONVOY_ACTION_VERIFICATION_KEYS_FILE" in os.environ:
             self.environment["CONVOY_ACTION_VERIFICATION_KEYS_FILE"] = str(Path(os.environ["CONVOY_ACTION_VERIFICATION_KEYS_FILE"]).absolute())
         else:
             self.environment["CONVOY_EXECUTION_SECRET"] = os.environ["CONVOY_EXECUTION_SECRET"]

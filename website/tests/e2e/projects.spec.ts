@@ -14,19 +14,26 @@ test("project onboarding registers a physical robot and its simulated instance, 
   const model = Buffer.from('<mujoco model="custom-arm"/>');
   let assetStored = false;
   let connected = false;
+  let setupSimulated = false;
   let connectionStatus = "open";
   const computer = { id: "dev_physical", name: "Jetson", simulated: false, status: "never_seen",
     hardware: { arch: "aarch64", mem_total_mb: 7619, cpu_count: 6, gpu_name: null, synthetic: false } };
-  const enrollment = () => ({ enrollment: { id: "enr_setup", status: connectionStatus, expires_at: new Date(Date.now() + 900000).toISOString() }, device: connected ? computer : null });
+  const simulator = { id: "dev_simulated", name: "MuJoCo runner", simulated: true, status: "online", hardware: { arch: "arm64", synthetic: false } };
+  const enrollment = () => ({ enrollment: { id: "enr_setup", status: connectionStatus, expires_at: new Date(Date.now() + 900000).toISOString() }, device: connected ? setupSimulated ? simulator : computer : null });
   await page.route("**/api/platform/**", async route => {
     const path = new URL(route.request().url()).pathname.replace("/api/platform/", "");
     const method = route.request().method();
     if (path === "auth/me") return route.fulfill({ json: { user: { email: "operator@example.test", role: "operator" }, installation: { simulator: true } } });
     if (path === "robot-connections/enrollments" && method === "POST") {
-      expect(route.request().postDataJSON()).toEqual({ project_id: "prj_lab", name: "Arm 1", simulated: false });
+      const body = route.request().postDataJSON();
+      setupSimulated = body.simulated;
+      expect(body).toEqual({ project_id: "prj_lab", name: setupSimulated ? "Arm 1 · simulation" : "Arm 1", simulated: setupSimulated });
+      connected = false;
       connectionStatus = "open";
       return route.fulfill({ status: 201, json: { ...enrollment(), command: "convoy-agent --data-dir ./convoy-connections/enr_setup enroll --token one-use-test-token",
-        run_command: "convoy-agent --data-dir ./convoy-connections/enr_setup run --no-robot-sim", data_dir: "./convoy-connections/enr_setup" } });
+        run_command: "convoy-agent --data-dir ./convoy-connections/enr_setup run --no-robot-sim",
+        simulator_command: setupSimulated ? "convoy-sim-service --data-dir ./convoy-connections/enr_setup" : null,
+        data_dir: "./convoy-connections/enr_setup" } });
     }
     if (path === "robot-connections/enrollments/enr_setup/cancel" && method === "POST") {
       connectionStatus = "revoked";
@@ -44,7 +51,7 @@ test("project onboarding registers a physical robot and its simulated instance, 
         ...(connected ? [computer] : []),
         { id: "dev_simulated", name: "MuJoCo runner", simulated: true, status: "online" },
       ], "robot-connections/enrollments/enr_setup": enrollment(), "robot-connections/dev_physical": computer,
-        "robot-connections/dev_simulated": { id: "dev_simulated", name: "MuJoCo runner", simulated: true, status: "online", hardware: { arch: "arm64", synthetic: false } } };
+        "robot-connections/dev_simulated": simulator };
       return route.fulfill({ status: path in resources ? 200 : 404, json: resources[path] ?? { error: "Not found" } });
     }
     const body = route.request().postDataJSON();
@@ -131,7 +138,13 @@ test("project onboarding registers a physical robot and its simulated instance, 
   await page.getByRole("button", { name: "Create simulated instance" }).click();
   await expect(page.getByLabel("Robot profile", { exact: true })).toBeDisabled();
   await page.getByLabel("Simulation engine").selectOption("mujoco");
-  await page.getByLabel("Enrolled simulator runner").selectOption("dev_simulated");
+  await page.getByRole("button", { name: "Create connection token" }).click();
+  await expect(page.getByLabel("Connection command")).toBeVisible();
+  connected = true; connectionStatus = "consumed";
+  await page.getByRole("button", { name: "Check connection" }).click();
+  await expect(page.getByLabel("Enrolled simulator runner")).toHaveValue("dev_simulated");
+  await expect(page.getByLabel("Agent run command")).toContainText("convoy-sim-service --data-dir");
+  await expect(page.getByText(/Start the simulator service/)).toBeVisible();
   await page.getByRole("button", { name: "Register robot", exact: true }).click();
   await expect(page.getByRole("row", { name: /Arm 1 · simulation Simulated/ })).toBeVisible();
   expect(writes.filter(w => w.path === "robot-registrations").map(w => [w.body.profile_id, w.body.source_robot_id])).toEqual([["rpf_arm", null], ["rpf_arm", "rob_1"]]);

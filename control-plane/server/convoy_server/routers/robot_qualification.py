@@ -71,6 +71,15 @@ def registry(device: DeviceIdentity, db: Database):
     return device_write(db, device, lambda fresh: service.desired(db, fresh))
 
 
+@router.get("/api/agent/v1/action-verification-keys")
+def action_keys(device: DeviceIdentity, db: Database):
+    def read(fresh):
+        if not fresh.simulated:
+            raise HTTPException(403, "automatic simulation worker setup requires a simulated device")
+        return platform.action_verification_document()
+    return device_write(db, device, read)
+
+
 @router.post("/api/agent/v1/qualifications/{qualification_id}/report")
 def report(qualification_id: str, body: ReportIn, device: DeviceIdentity, db: Database):
     return device_write(db, device, lambda fresh: service.report_check(db, fresh, qualification_id, body.model_dump()))

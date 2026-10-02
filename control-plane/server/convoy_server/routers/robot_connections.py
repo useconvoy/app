@@ -65,7 +65,8 @@ def create_setup(body: SetupIn, p: PrincipalWrite, db: Database):
                 command += ["--simulate", "--host-inventory"]
             # Plaintext setup material is returned once; never persisted in an idempotency receipt.
             result = {**status(db, row), "command": shlex.join(command), "data_dir": directory,
-                      "run_command": shlex.join([*prefix, "run", "--no-robot-sim"])}
+                      "run_command": shlex.join([*prefix, "run", "--no-robot-sim"]),
+                      "simulator_command": shlex.join(["convoy-sim-service", "--data-dir", directory]) if body.simulated else None}
         return result
     except identity.IdentityError as error:
         raise HTTPException(error.status, str(error), headers={"Retry-After": str(error.retry_after)} if error.retry_after is not None else None) from error

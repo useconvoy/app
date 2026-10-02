@@ -258,6 +258,11 @@ managed = [
     { name = "convoy-server" },
     { name = "convoy-worker" },
 ]
+runtime = [
+    { name = "convoy-agent", extra = ["coordinator", "local-host"] },
+    { name = "convoy-contracts" },
+    { name = "convoy-worker" },
+]
 video = [
     { name = "imageio" },
     { name = "imageio-ffmpeg" },
@@ -272,9 +277,12 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "convoy-agent", extras = ["coordinator", "local-host"], marker = "extra == 'managed'", editable = "../../control-plane/agent" },
+    { name = "convoy-agent", extras = ["coordinator", "local-host"], marker = "extra == 'runtime'", editable = "../../control-plane/agent" },
     { name = "convoy-contracts", marker = "extra == 'managed'", editable = "../../control-plane/contracts" },
+    { name = "convoy-contracts", marker = "extra == 'runtime'", editable = "../../control-plane/contracts" },
     { name = "convoy-server", marker = "extra == 'managed'", editable = "../../control-plane/server" },
     { name = "convoy-worker", marker = "extra == 'managed'", editable = "../../control-plane/worker" },
+    { name = "convoy-worker", marker = "extra == 'runtime'", editable = "../../control-plane/worker" },
     { name = "gymnasium", specifier = "==1.2.1" },
     { name = "imageio", marker = "extra == 'video'", specifier = "==2.37.0" },
     { name = "imageio-ffmpeg", marker = "extra == 'video'", specifier = "==0.6.0" },
@@ -284,7 +292,7 @@ requires-dist = [
     { name = "packaging", specifier = "==26.3" },
     { name = "scipy", specifier = "==1.15.3" },
 ]
-provides-extras = ["video", "managed"]
+provides-extras = ["video", "runtime", "managed"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -43,7 +43,7 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
     server = uvicorn.Server(uvicorn.Config(create_app(settings, start_scheduler=False), log_level="error"))
     thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
     thread.start()
-    worker_server = worker_thread = worker_socket = coordinator = None
+    worker_server = worker_thread = worker_socket = coordinator = state = None
     try:
         deadline = time.monotonic() + 10
         while not server.started and thread.is_alive() and time.monotonic() < deadline:
@@ -329,8 +329,8 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
             except subprocess.TimeoutExpired:
                 coordinator.kill()
                 coordinator.wait(timeout=5)
-        managed_directory = tmp_path / "simulator/managed-worker"
-        if (managed_directory / "process.json").exists():
+        managed_directory = state / "managed-worker" if state else None
+        if managed_directory is not None and (managed_directory / "process.json").exists():
             from convoy_agent.owned_process import OwnedProcess
 
             with OwnedProcess(managed_directory) as owner:

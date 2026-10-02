@@ -228,6 +228,10 @@ class Coordinator:
                     or (self._cleanup_thread and self._cleanup_thread.is_alive())
                     or (self._inference_thread and self._inference_thread.is_alive()))
 
+    def idle_for_maintenance(self) -> bool:
+        """Local work may start only after execution and pending recovery reports settle."""
+        return self._idle() and not self.journal.pending()
+
     def _invalidate_readiness(self) -> None:
         self._ready = None
         self._planner_readiness = None

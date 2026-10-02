@@ -567,6 +567,17 @@ def validate_execution_signing(*, paired: bool = False) -> None:
         raise HTTPException(503, "distinct planner execution signing is not configured")
 
 
+def action_verification_document() -> dict:
+    """Export only public action keys to authenticated simulators; HMAC is never exported."""
+    signer = _configured_signer()
+    if signer is None:
+        raise HTTPException(503, "automatic worker setup requires public-key execution signing")
+    try:
+        return signer.verification_document("action")
+    except (OSError, TypeError, ValueError):
+        raise HTTPException(503, "execution signing configuration is unavailable") from None
+
+
 def _sign_execution_grant(identity: dict, purpose: str, expires_at: float) -> str:
     signer = _configured_signer()
     if signer is not None:
