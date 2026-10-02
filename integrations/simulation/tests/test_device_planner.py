@@ -69,12 +69,12 @@ def test_prompt_describes_the_scene_as_text_for_the_free_arm():
     assert "Bottle at (37, 0)." in text and "Arm L: free, gripper at (33, 30)." in text
     assert "Arm R: busy with pill 3 (descend)." in text
     assert "In the bottle: 1 (1 of 6 pills)." in text
-    assert "0: (50, 12), reach L, available" in text
-    assert "2: (48, -15), reach R, not available, out of reach" in text
-    assert "4: (55, 20), reach L, available, last try no_clear_grasp" in text
+    can, cannot = text.split("Pills on the table that arm L can take now (id: position):\n")[1].split(
+        "Pills on the table that arm L cannot take now (id: position, reason):\n")
+    assert can.splitlines() == ["0: (50, 12)", "4: (55, 20), needs push_apart (last try no_clear_grasp)"]
     # 4.7 cm from the right arm's target and 5 cm from its fingertips: the executive's 12 cm rule
-    assert "5: (47, 2), reach L+R, not available, next to arm R" in text
-    assert "3:" not in text.split("Pills on the table")[1]  # held by the other arm: not on the table
+    assert cannot.splitlines()[:2] == ["2: (48, -15), out of reach", "5: (47, 2), next to arm R"]
+    assert "3:" not in can + cannot.split("Actions:")[0]  # held by the other arm: not on the table
     assert '{"arm": "L", "skill": "pick_and_drop", "pill": ID}' in text and text.endswith("and nothing else.")
 
 
@@ -85,7 +85,7 @@ def test_messages_are_one_worked_example_then_the_request_within_the_chat_limits
     assert messages[1]["content"] == EXAMPLE_REPLY
     assert check_choice(parse_reply(EXAMPLE_REPLY), EXAMPLE_OBSERVATION, "right") is None  # the example is right
     assert messages[2]["content"].endswith("Your previous reply \"x\" was refused: because. Reply again.")
-    assert PROMPT_VERSION == "pill-planner-v2" and MAX_TOKENS <= 128
+    assert PROMPT_VERSION == "pill-planner-v4" and MAX_TOKENS <= 128
     # A 30-pill table stays inside the device chat API's limits: 16 messages, 8 KiB of text.
     episode = Episode(EpisodeSpec(CONFIGS["edge_qwen_edge_skills"], SLICES["pill_count_30"], 0, 5.0),
                       planner=_ScriptedTransport([]))
@@ -434,13 +434,13 @@ def test_portal_client_raises_when_the_session_is_refused():
 
 
 class _FirstAvailable(_ScriptedTransport):
-    """Test double for the device: picks the first available pill named in the request (or waits / is done)."""
+    """Test double for the device: picks the first pill the request lists as takeable (or waits / is done)."""
 
     def send(self, messages, max_tokens):
         self.sent.append(messages)
         text = messages[-1]["content"]
         arm = re.search(r"Arm (L|R) is free", text).group(1)
-        pill = re.search(r"^(\d+): .*, available", text, re.M)
+        pill = re.search(r"can take now \(id: position\):\n(\d+): ", text)
         if pill:
             reply = {"arm": arm, "skill": "pick_and_drop", "pill": int(pill.group(1))}
         else:
@@ -448,6 +448,31 @@ class _FirstAvailable(_ScriptedTransport):
         return ChatOutcome(request_id=str(uuid.uuid4()), status="succeeded", e2e_ms=1500.0, sent_at="t0",
                            finished_at="t1", content=json.dumps(reply), trace_id=f"tr_{len(self.sent):04x}",
                            device_latency_ms=800.0, ttft_ms=400.0, tokens_in=900, tokens_out=21)
+
+
+def test_a_decision_that_meets_the_busy_bottle_zone_is_held_then_started_or_rejected():
+    episode = Episode(EpisodeSpec(CONFIGS["edge_qwen_edge_skills"], SLICES["nominal"], 0, 30.0),
+                      planner=_ScriptedTransport([]))
+    episode.space.owner = "right"  # the right arm is transferring a pill over the bottle
+    pill = next(p.index for p in episode.world.pills() if episode._arm_conflict("left", p.index) == "bottle_zone_in_use")
+    decision = {"kind": "skill", "skill_id": "pick_and_drop", "parameters": {"pill": f"pill_{pill:02d}", "arm": "left"}}
+    from convoy_sim.bimanual_pill_task.planning import PlannerCall
+
+    episode._on_skill_call(PlannerCall(1, "left", "skill", 0.0, {}, dict(decision), "ok"), 2.0)
+    slot = episode.arms["left"]
+    assert slot.held is not None and slot.skill is None and episode.rejected_decisions == 0
+    episode._release_held("left", 3.0)  # still in use: keeps holding
+    assert slot.held is not None and slot.skill is None
+    episode.space.owner = None
+    episode._release_held("left", 4.0)  # free: the model's decision starts unchanged
+    assert slot.held is None and slot.skill is not None and slot.skill.pill == pill
+    # A hold that runs out is a stale rejection, and the arm asks again at once.
+    other = Episode(EpisodeSpec(CONFIGS["edge_qwen_edge_skills"], SLICES["nominal"], 0, 30.0), planner=_ScriptedTransport([]))
+    other.space.owner = "right"
+    other._on_skill_call(PlannerCall(1, "left", "skill", 0.0, {}, dict(decision), "ok"), 2.0)
+    other._release_held("left", 2.0 + 6.0)
+    assert other.arms["left"].held is None and other.arms["left"].skill is None and other.rejected_decisions == 1
+    assert other.arms["left"].next_request_s == 8.0 and other.events[-1]["event"] == "decision_rejected"
 
 
 def test_edge_qwen_needs_a_device_connection_and_has_no_stand_in():

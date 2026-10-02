@@ -54,6 +54,7 @@ CONTROL_DT = 0.01  # skill + IK update period (100 Hz); physics steps every phys
 RECORD_DT = 0.2  # one replay step (5 Hz) unless the recorder sets `record_dt`
 SETTLE_S = 0.6  # pills settle before the episode clock starts
 STALL_PAGE_S = 8.0  # no progress for this long while work remains -> page an operator
+ZONE_HOLD_S = 6.0  # a device decision waits at most this long for the bottle zone (as PickAndDrop does)
 SUCCESS_SETTLE_S = 0.5
 PROTECTIVE_STOP_N = 10.0  # contact with the bottle, cap or other arm that stops an arm (power and force limiting)
 PROTECTIVE_STOP_TABLE_N = 60.0  # fingertips bumping the table/mat stop the arm only above this
@@ -75,6 +76,7 @@ class ArmSlot:
     finished: bool = False  # planner said there is nothing left for this arm
     waiting: bool = False  # planner said wait; re-ask after the other arm's next result
     stop_until: float = 0.0  # no second protective stop before this time (the arm is backing off)
+    held: tuple | None = None  # a device decision waiting for the bottle zone: (call, decision, pill, since, until)
 
 
 @dataclass
@@ -196,39 +198,18 @@ class Episode:
             # which can be seconds old (queued calls, cloud latency). Re-check
             # the two-arm separation rule against the current state.
             conflict = self._arm_conflict(call.arm, pill)
-            if conflict is not None:
-                self.rejected_decisions += 1
-                if self.device:
-                    self.skill_planner.mark_stale(call, conflict)
-                self.events.append({"t": round(t, 3), "event": "decision_rejected", "arm": call.arm,
+            if conflict == "bottle_zone_in_use" and self.device:
+                # A device decision costs a measured round trip of seconds, during which the other arm often
+                # starts a transfer. Its only conflict being the bottle zone, it is held until the zone is
+                # free (at most ZONE_HOLD_S), then checked again (device_planner.FailurePolicy).
+                slot.held = (call, decision, pill, t, t + ZONE_HOLD_S)
+                self.events.append({"t": round(t, 3), "event": "decision_held", "arm": call.arm,
                                     "pill": f"pill_{pill:02d}", "reason": conflict})
-                slot.next_request_s = t  # ask again with a fresh observation
                 return
-            motor = self.spec.config.motor
-            if motor.runtime == "learned":
-                skill = LearnedSkill(self.world, slot.controller, make_policy(motor.name, motor.reason),
-                                     decision.get("skill_id", SKILL_ID), pill, t, motor.latency or LatencyModel(0.5, 1.0),
-                                     self.policy_rng)
-                if skill.done:  # e.g. no checkpoint for this embodiment
-                    self._record_result(skill.result, t)
-                    slot.next_request_s = t
-                    return
-                self.attempts[pill] = self.attempts.get(pill, 0) + 1
-                slot.parking, slot.skill = None, skill
-                self.space.targets[call.arm] = pill
-                self.trace.skill_events.append({"arm": call.arm, "skill": skill.skill_id, "pill": f"pill_{pill:02d}",
-                                                "event": "start", "runtime": "learned"})
+            if conflict is not None:
+                self._reject(call, pill, conflict, t)
                 return
-            slot.parking = None
-            self.space.targets[call.arm] = pill
-            skill_id = decision.get("skill_id", SKILL_ID)
-            if skill_id == PUSH_SKILL_ID:
-                self.pushes[pill] = self.pushes.get(pill, 0) + 1
-                slot.skill = PushApart(self.world, slot.controller, slot.probe, pill, self.space, t)
-            else:
-                self.attempts[pill] = self.attempts.get(pill, 0) + 1
-                slot.skill = PickAndDrop(self.world, slot.controller, slot.probe, pill, self.space, t)
-            self.trace.skill_events.append({"arm": call.arm, "skill": skill_id, "pill": f"pill_{pill:02d}", "event": "start"})
+            self._start_skill(call, decision, pill, t)
         elif kind in ("wait", "failed"):
             # Ask again when the other arm finishes a skill (or after 10 s);
             # meanwhile clear the shared space by returning to rest. "failed": the
@@ -248,6 +229,57 @@ class Episode:
         else:
             self.declined = decision.get("reason", "declined")
             self.events.append({"t": round(t, 3), "event": "planner_declined", "reason": self.declined})
+
+    def _reject(self, call: PlannerCall, pill: int, conflict: str, t: float) -> None:
+        """A delivered decision that the current state rules out: counted, and the arm asks again at once."""
+        self.rejected_decisions += 1
+        if self.device:
+            self.skill_planner.mark_stale(call, conflict)
+        self.events.append({"t": round(t, 3), "event": "decision_rejected", "arm": call.arm,
+                            "pill": f"pill_{pill:02d}", "reason": conflict})
+        self.arms[call.arm].next_request_s = t  # ask again with a fresh observation
+
+    def _release_held(self, side: str, t: float) -> None:
+        """A held device decision starts once the bottle zone is free, or is rejected as stale."""
+        slot = self.arms[side]
+        call, decision, pill, since, until = slot.held
+        conflict = self._arm_conflict(side, pill)
+        if conflict == "bottle_zone_in_use" and t < until:
+            return
+        slot.held = None
+        if conflict is not None:
+            self._reject(call, pill, conflict if t < until else f"{conflict} (held {t - since:.1f} s)", t)
+            return
+        self.skill_planner.mark_held(call, round(t - since, 3))
+        self._start_skill(call, decision, pill, t)
+
+    def _start_skill(self, call: PlannerCall, decision: dict, pill: int, t: float) -> None:
+        slot = self.arms[call.arm]
+        motor = self.spec.config.motor
+        if motor.runtime == "learned":
+            skill = LearnedSkill(self.world, slot.controller, make_policy(motor.name, motor.reason),
+                                 decision.get("skill_id", SKILL_ID), pill, t, motor.latency or LatencyModel(0.5, 1.0),
+                                 self.policy_rng)
+            if skill.done:  # e.g. no checkpoint for this embodiment
+                self._record_result(skill.result, t)
+                slot.next_request_s = t
+                return
+            self.attempts[pill] = self.attempts.get(pill, 0) + 1
+            slot.parking, slot.skill = None, skill
+            self.space.targets[call.arm] = pill
+            self.trace.skill_events.append({"arm": call.arm, "skill": skill.skill_id, "pill": f"pill_{pill:02d}",
+                                            "event": "start", "runtime": "learned"})
+            return
+        slot.parking = None
+        self.space.targets[call.arm] = pill
+        skill_id = decision.get("skill_id", SKILL_ID)
+        if skill_id == PUSH_SKILL_ID:
+            self.pushes[pill] = self.pushes.get(pill, 0) + 1
+            slot.skill = PushApart(self.world, slot.controller, slot.probe, pill, self.space, t)
+        else:
+            self.attempts[pill] = self.attempts.get(pill, 0) + 1
+            slot.skill = PickAndDrop(self.world, slot.controller, slot.probe, pill, self.space, t)
+        self.trace.skill_events.append({"arm": call.arm, "skill": skill_id, "pill": f"pill_{pill:02d}", "event": "start"})
 
     def _arm_conflict(self, side: str, pill: int) -> str | None:
         """The planner's separation rules, evaluated on the current state."""
@@ -327,9 +359,12 @@ class Episode:
                 if not self.gate_open and t >= spec.config.task_planner_deadline_s:
                     self.gate_open = True
                     self.events.append({"t": round(t, 3), "event": "task_plan_deadline_passed"})
-            # 2. Idle arms ask for their next skill.
+            # 2. Held device decisions start once the bottle zone is free; idle arms ask for their next skill.
             for side, slot in self.arms.items():
-                if (self.gate_open and not slot.finished and slot.call is None and slot.skill is None
+                if slot.held is not None:
+                    self._release_held(side, t)
+            for side, slot in self.arms.items():
+                if (self.gate_open and not slot.finished and slot.call is None and slot.skill is None and slot.held is None
                         and t >= slot.next_request_s and self.declined is None and self.stopped is None):
                     self.request(side, t)
             # 3. Skills and servo commands.

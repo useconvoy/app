@@ -37,7 +37,7 @@ from .control import segment_point_distance
 from .planning import ARM_SEPARATION_M, PUSH_SKILL_ID, SKILL_ID, PlannerCall, PlannerProfile
 from .skills import ZONE_M
 
-PROMPT_VERSION = "pill-planner-v2"
+PROMPT_VERSION = "pill-planner-v4"
 MAX_TOKENS = 32  # a valid reply is ~20 tokens; the release caps output at 128
 ARM_CODE = {"left": "L", "right": "R"}
 SIDE = {"L": "left", "R": "right"}
@@ -51,6 +51,8 @@ REACH_MIN_M, REACH_MAX_M = 0.18, 0.62
 ZONE_CHECK_M = round(ZONE_M + 0.02, 3)  # the executive's bottle-zone rule (Episode._arm_conflict)
 MAX_PILL_ID = 999
 TERMINAL = ("succeeded", "failed", "expired")
+# A pick that reported one of these found no clear grasp: the skill library's remedy is push_apart first.
+PUSH_FIRST = ("no_clear_grasp", "blocked")
 
 
 # ---- the scene as text -------------------------------------------------------------------------------
@@ -135,7 +137,8 @@ def scene(obs: dict, side: str) -> Scene:
                 note = blocked_by_other_arm(obs, side, xy) or ""
                 available = not note
             if available and pill.get("last_status"):
-                note = f"last try {pill['last_status']}"
+                last = pill["last_status"]
+                note = (f"needs push_apart (last try {last})" if last in PUSH_FIRST else f"last try {last}")
         lines[number] = PillLine(number, pill["state"], (round(xy[0] * 100), round(xy[1] * 100)), reach, available, note)
     in_bottle = sorted(n for n, p in lines.items() if p.state == "in_bottle")
     return Scene(side, lines, in_bottle, held, other_number)
@@ -168,13 +171,14 @@ def build_prompt(obs: dict, side: str, feedback: str | None = None) -> str:
         f"Arm {them}: {_other_arm_text(obs, side)}.",
         f"In the bottle: {_ids(s.in_bottle)} ({len(s.in_bottle)} of {len(s.pills)} pills).",
     ]
-    table = [p for p in s.pills.values() if p.state == "on_mat"]
+    table = sorted((p for p in s.pills.values() if p.state == "on_mat"), key=lambda p: p.number)
+    free = [p for p in table if p.available]
+    other = [p for p in table if not p.available]
     if table:
-        lines.append(f"Pills on the table (id: position, which arm reaches it, status for arm {me}):")
-        for p in sorted(table, key=lambda p: p.number):
-            status = "available" if p.available else "not available"
-            note = f", {p.note}" if p.note else ""
-            lines.append(f"{p.number}: ({p.xy_cm[0]}, {p.xy_cm[1]}), reach {p.reach}, {status}{note}")
+        lines.append(f"Pills on the table that arm {me} can take now (id: position):")
+        lines += [f"{p.number}: ({p.xy_cm[0]}, {p.xy_cm[1]})" + (f", {p.note}" if p.note else "") for p in free] or ["none"]
+        lines.append(f"Pills on the table that arm {me} cannot take now (id: position, reason):")
+        lines += [f"{p.number}: ({p.xy_cm[0]}, {p.xy_cm[1]}), {p.note}" for p in other] or ["none"]
     else:
         lines.append("No pill is left on the table.")
     gone = [p.number for p in s.pills.values() if p.state in ("lost", "elsewhere")]
@@ -183,11 +187,12 @@ def build_prompt(obs: dict, side: str, feedback: str | None = None) -> str:
     lines += [
         "",
         "Actions:",
-        f'{{"arm": "{me}", "skill": "pick_and_drop", "pill": ID}} puts an available pill into the bottle.',
-        f'{{"arm": "{me}", "skill": "push_apart", "pill": ID}} slides an available pill away from its '
-        "neighbours; use it when that pill's last try was no_clear_grasp or blocked.",
-        f'{{"arm": "{me}", "skill": "wait"}} when no pill on the table is available for arm {me}.',
+        f'{{"arm": "{me}", "skill": "pick_and_drop", "pill": ID}} puts a pill arm {me} can take now into the bottle.',
+        f'{{"arm": "{me}", "skill": "push_apart", "pill": ID}} slides a pill arm {me} can take now away from its '
+        "neighbours; use it for a pill marked needs push_apart.",
+        f'{{"arm": "{me}", "skill": "wait"}} when the list of pills arm {me} can take now is none.',
         f'{{"arm": "{me}", "skill": "done"}} when no pill is left on the table.',
+        f"Never choose a pill from the list of pills arm {me} cannot take now.",
         "Reply with exactly one of these JSON objects, ID being a pill id, and nothing else.",
     ]
     if feedback:
@@ -340,8 +345,10 @@ class FailurePolicy:
       counts like any round trip; before the next call the client waits, in wall-clock time only, for
       that request to finish or expire so that the device never has two requests.
     * When an accepted action is delivered, the executive re-checks the separation rules on the current
-      simulator state (the other arm kept moving during the round trip); a conflict rejects it as stale
-      and a new decision starts at once.
+      simulator state (the other arm kept moving during the round trip). If its only conflict is that the
+      other arm now uses the bottle zone, the action is held until the zone is free (at most 6 s) and
+      checked again; any other conflict, or a hold that runs out, rejects it as stale and a new decision
+      starts at once.
     """
 
     calls_per_decision: int = 3
@@ -805,6 +812,12 @@ class DevicePlannerEndpoint:
             self._last_record[call.call_id] = record
         return [call]
 
+    def mark_held(self, call: PlannerCall, held_s: float) -> None:
+        """The executive held this delivered action until the bottle zone was free, then started it."""
+        record = self._last_record.get(call.call_id)
+        if record:
+            record["held_for_zone_s"] = held_s
+
     def mark_stale(self, call: PlannerCall, reason: str) -> None:
         """The executive rejected this delivered action on the current state (see FailurePolicy)."""
         record = self._last_record.get(call.call_id)
@@ -840,6 +853,7 @@ class DevicePlannerEndpoint:
             if x.get("refusal_code"):
                 refusals[x["refusal_code"]] = refusals.get(x["refusal_code"], 0) + 1
         nexts = [x.get("next", "") for x in r]
+        held = [x["held_for_zone_s"] for x in r if x.get("held_for_zone_s") is not None]
         delivered = [x["action"]["skill"] for x in r if x.get("next") == "delivered" and x.get("action")]
         return {
             "calls": len(r), "decisions": self.decisions, "by_result": by_result, "refusals": refusals,
@@ -847,6 +861,7 @@ class DevicePlannerEndpoint:
             "actions": {name: delivered.count(name) for name in ACTIONS if name in delivered},
             "failed_decisions": sum(n == "failed_decision" for n in nexts),
             "stale_rejections": sum(n.startswith("rejected_stale") for n in nexts),
+            "held_for_zone": len(held), "held_for_zone_s": round(sum(held), 2),
             "not_delivered": sum(x.get("delivered_sim_s") is None for x in r),
             "e2e_p50_ms": _percentile(e2e, 50), "e2e_p95_ms": _percentile(e2e, 95),
             "e2e_max_ms": round(max(e2e), 1) if e2e else None,
