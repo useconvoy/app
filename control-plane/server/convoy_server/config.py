@@ -64,6 +64,9 @@ class Settings:
     artifact_quota_bytes: int = field(
         default_factory=lambda: int(os.environ.get("CONVOY_ARTIFACT_QUOTA_BYTES", str(20 * 1024**3)))
     )
+    robot_asset_quota_bytes: int = field(
+        default_factory=lambda: int(os.environ.get("CONVOY_ROBOT_ASSET_QUOTA_BYTES", str(1024**3)))
+    )
     login_throttle: int = field(default_factory=lambda: int(os.environ.get("CONVOY_LOGIN_THROTTLE", "10")))
     enroll_throttle: int = field(default_factory=lambda: int(os.environ.get("CONVOY_ENROLL_THROTTLE", "30")))
     backup_dir: Path | None = field(

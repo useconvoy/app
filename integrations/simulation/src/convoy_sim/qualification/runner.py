@@ -59,11 +59,13 @@ def reconcile(control, asset_root, *, timeout_s=60):
     profile = desired["profile"]
     model_spec = next(m for m in profile["spec"]["simulations"] if m["engine"] == request["engine"])
     digest = model_spec["asset"]["sha256"]
-    # Files are provisioned by the owner under their content digest. No remote URL fetch, shell
-    # interpolation or arbitrary path supplied by a planner/server is performed by the runner.
-    if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
-        raise ValueError("invalid pinned asset digest")
-    result = check(profile["spec"], model_spec, Path(asset_root) / digest, timeout_s=timeout_s)
+    from .delivery import ensure_asset
+
+    try:
+        asset = ensure_asset(control, profile, model_spec, asset_root)
+        result = check(profile["spec"], model_spec, asset, timeout_s=timeout_s)
+    except Exception as error:
+        result = {"state": "failed", "detail": f"Model delivery failed ({type(error).__name__}); upload the pinned asset and retry verification.", "evidence": {}}
     report = {**result, "profile_digest": request["profile_digest"],
               "binding_epoch": request["binding_epoch"], "asset_sha256": digest if result["state"] == "passed" else None}
     response = control.post(f"/api/agent/v1/qualifications/{request['id']}/report", report)

@@ -8,6 +8,7 @@ import { Breadcrumbs, PageHeader } from "@/components/configurations/AppShell";
 import { ConvoyMark } from "@/components/configurations/Icons";
 import { ProjectConfigurations } from "./ProjectConfigurations";
 import { SimulatorReadiness } from "./SimulatorReadiness";
+import { SimulationAssets } from "./SimulationAssets";
 import { ApiError, errorText, MutationAttempts, type Project, type Robot, type Device } from "@/lib/platform/client";
 import { notifySessionExpired } from "@/lib/configurations/session-events";
 import { useProjectResource, type Fleet, type RobotProfile } from "@/lib/projects/client";
@@ -135,7 +136,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
       {tab === "Configurations" && <ProjectConfigurations projectId={projectId} />}
       {tab === "Profiles" && <section aria-label="Robot profiles">
         <p>Each revision pins the robot interfaces and simulation assets. Asset declarations still require runner verification and calibration.</p>
-        {profiles.data?.map(profile => <article className="cv-card" key={profile.id}><div><h2>{profile.name} · revision {profile.revision}</h2><p>{profile.spec.embodiment} · {profile.spec.joints.length} joints · {profile.spec.sensors.length} sensors</p><p>{profile.simulation.engines.length ? `Simulation assets: ${profile.simulation.engines.join(", ")}` : "Simulation assets missing"} · Dynamics: {profile.simulation.dynamics_source}</p><p>{profile.simulation.detail}</p><details><summary>Profile specification</summary><pre className="project-spec">{JSON.stringify(profile.spec, null, 2)}</pre></details></div></article>)}
+        {profiles.data?.map(profile => <article className="cv-card" key={profile.id}><div><h2>{profile.name} · revision {profile.revision}</h2><p>{profile.spec.embodiment} · {profile.spec.joints.length} joints · {profile.spec.sensors.length} sensors</p><p>{profile.simulation.engines.length ? `Simulation assets: ${profile.simulation.engines.join(", ")}` : "Simulation assets missing"} · Dynamics: {profile.simulation.dynamics_source}</p><p>{profile.simulation.detail}</p><SimulationAssets profile={profile} /><details><summary>Profile specification</summary><pre className="project-spec">{JSON.stringify(profile.spec, null, 2)}</pre></details></div></article>)}
         {session.operator && <ProfileForm projectId={projectId} profiles={profiles.data ?? []} onSaved={refresh} />}
       </section>}
       {tab === "Fleets" && <section aria-label="Fleets">

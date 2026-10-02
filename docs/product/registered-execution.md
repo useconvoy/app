@@ -31,6 +31,34 @@ installation and project onboarding remain unfinished. Task result summaries are
 uploaded visual replay for this joint interface is not implemented yet. Existing Sawyer recordings
 keep their existing viewer.
 
+## Robot model delivery
+
+Project → Profiles → Simulation files accepts the MJCF/ZIP model already pinned in that profile's
+SHA-256. The browser checks the fingerprint for immediate feedback; the API independently verifies
+it before publishing the file. A different model requires a new immutable profile revision. The
+upload is byte storage, not simulator verification or physical calibration.
+
+The qualification runner and registered execution runner fetch missing or damaged cached models from
+their enrolled control plane. Only a simulated device assigned to that exact profile and engine may
+download it. They never fetch the arbitrary `asset.uri` from a profile or a model response. Downloads
+are bounded, reject redirects, validate the digest and atomically publish before native model loading.
+Owner-provisioned local assets continue to work without an upload. A missing upload or failed transfer
+is a failed verification with a retry action, not fabricated simulator readiness.
+
+Uploads are at most 16 MiB. The API streams to a temporary file under an exclusive store lock, limits
+stored robot assets to 1 GiB by default (`CONVOY_ROBOT_ASSET_QUOTA_BYTES`), and rechecks the caller before
+publication. Identical retries do not consume another stored copy. Current server files live at
+`CONVOY_DATA_DIR/artifacts/robot-models/<profile-id>/<sha256>` on the existing persistent data volume.
+Back up this directory with the data volume; a database-only backup does not include model bytes.
+Filesystem-backed delivery requires that volume; the separate CPU-only AWS staging allowlist does
+not expose these routes. Larger bundles, storage management and external object storage remain future
+work. Initial runner enrollment, trust configuration and launch still require setup.
+
+API: `GET /api/v1/robot-profiles/{id}/simulation-assets` reports storage availability;
+`POST /api/v1/robot-profiles/{id}/simulation-assets/{engine}` receives `application/octet-stream`;
+`GET /api/agent/v1/robot-assets/{profile-id}/{engine}` delivers to its assigned simulator. Uploads are
+content-addressed retries and need no separate idempotency key. No database migration is required.
+
 ## Release contract
 
 The UI uses `POST /api/v1/configurations` with `name`, `project_id` and a `configuration` containing
@@ -107,7 +135,7 @@ uv run --frozen --extra managed python -m convoy_sim.registered \
 ```
 
 For reference-policy releases, the runner can now own its policy worker. With the same enrolled
-simulator, installed robot assets and action verification configuration, run:
+simulator, uploaded (or locally provisioned) robot assets and action verification configuration, run:
 
 ```sh
 uv run --frozen --extra managed python -m convoy_sim.registered \
@@ -123,8 +151,8 @@ retry. An unsupported installed-policy release is blocked before stopping the pr
 Shutdown verifies the owned child's exit; bounded logs and process records remain for diagnosis.
 
 `--manage-worker` and `--worker-url` are mutually exclusive. Other learned policy runtimes still use
-an operator-managed external worker. Robot asset delivery, initial enrollment/trust configuration and
-simulator verification still require setup; this is automatic reference-worker preparation, not
+an operator-managed external worker. Initial enrollment/trust configuration and simulator verification
+still require setup; this is automatic reference-worker preparation, not
 universal model installation. No cloud planner or physical motor controller is launched by this mode.
 
 The coordinator uses its enrolled device identity and a dedicated journal. Its bundle owner reloads
@@ -186,8 +214,9 @@ reading results on desktop and mobile. These are local CPU/native tests, not a J
 
 The managed acceptance uses real HTTP APIs, enrollment, a real worker, a coordinator subprocess and
 native MuJoCo. It verifies successful movement, cancellation during deliberately slow inference, and
-an out-of-range policy action that fails before a control step. Simulator asset corruption still
-produces a failed verification. Server tests also reject incompatible assets/interfaces and a claim
+an out-of-range policy action that fails before a control step. An empty or damaged local asset cache is
+restored from the uploaded model; corrupt source bytes fail verification without publishing a cached file.
+Server tests also reject incompatible assets/interfaces and a claim
 whose verification was superseded. Existing legacy coordinator, worker/session and lifecycle tests
 continue to run, including PostgreSQL cases and browser start/stop acknowledgment checks.
 

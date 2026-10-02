@@ -24,6 +24,7 @@ from convoy_contracts.execution import canonical_digest
 from convoy_contracts.registered import REGISTERED_PROFILE, validate_action, validate_robot_binding
 
 from .qualification.assets import mujoco_files, read_asset
+from .qualification.delivery import ensure_asset
 from .qualification.runner import check
 
 
@@ -81,9 +82,10 @@ class JointAdapter:
 
 class RegisteredBundle:
     """Load immutable robot bytes; the existing worker owns model installation/inference."""
-    def __init__(self, profile, engine, assets, worker=None, *, worker_owner=None):
+    def __init__(self, profile, engine, assets, worker=None, *, worker_owner=None, control=None):
         self.profile, self.engine = copy.deepcopy(profile), engine
         self.assets, self.worker, self.worker_owner = Path(assets), worker, worker_owner
+        self.control = control
         if (worker is None) == (worker_owner is None):
             raise ValueError("configure one external worker or one managed worker owner")
         self.incarnation = str(uuid.uuid4())
@@ -95,6 +97,8 @@ class RegisteredBundle:
             raise ValueError("robot profile content changed")
         model = validate_robot_binding(manifest, self.profile["digest"], spec, self.engine)
         asset = self.assets / model["asset"]["sha256"]
+        if self.control is not None:
+            asset = ensure_asset(self.control, self.profile, model, self.assets)
         payload = read_asset(asset, model["asset"]["sha256"])
         if model["asset"]["sha256"] not in self.checked:
             result = check(spec, model, asset)
@@ -155,7 +159,7 @@ def main(argv=None):
             worker = None
         else:
             worker = WorkerHTTP(args.worker_url, token, ca_file=args.worker_ca_file)
-        owner = RegisteredBundle(registered["profile"], robot["simulation_engine"], args.assets, worker, worker_owner=worker_owner)
+        owner = RegisteredBundle(registered["profile"], robot["simulation_engine"], args.assets, worker, worker_owner=worker_owner, control=control)
         coordinator = Coordinator(robot_id=robot["id"], device_id=cfg.data["device_id"], journal=journal,
                                   control=control, worker=worker, adapter_factory=None, bundle_owner=owner,
                                   profile=REGISTERED_PROFILE, poll_s=1,

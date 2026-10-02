@@ -63,6 +63,9 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
             for joint in spec["joints"]:
                 joint["evidence"] = {"source": "imported"}
             profile = post("robot-profiles", {"project_id": project["id"], "name": "Custom arm", "expected_revision": 0, "spec": spec})
+            uploaded = client.post(f"/api/v1/robot-profiles/{profile['id']}/simulation-assets/mujoco",
+                                   content=asset.read_bytes(), headers={"Content-Type": "application/octet-stream"})
+            assert uploaded.status_code == 201, uploaded.text
             source = None
             for simulated in (False, True):
                 token = post("enrollments", {"label": "acceptance", "simulated": simulated})["token"]
@@ -81,7 +84,7 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
             assert robot["qualification"] is None
             assets = tmp_path / "assets"
             assets.mkdir()
-            (assets / model["asset"]["sha256"]).write_bytes(asset.read_bytes())
+            assert not list(assets.iterdir())  # Verification must fetch the registered model itself.
             requested = post(f"robots/{robot['id']}/qualification", {})
             command = [sys.executable, "-m", "convoy_sim.qualification.runner", "--data-dir", str(state),
                        "--assets", str(assets), "--once"]
@@ -93,9 +96,11 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
             assert observed["state"] == "passed"
             assert observed["report"]["evidence"]["max_joint_displacement"] > 0
             assert observed["report"]["evidence"]["steps"] == 200
+            assert (assets / model["asset"]["sha256"]).read_bytes() == asset.read_bytes()
             # Restarting a runner does not repeat a terminal request.
             restart = subprocess.run(command, capture_output=True, text=True, timeout=15, check=True)
             assert json.loads(restart.stdout)["state"] == "idle"
+            (assets / model["asset"]["sha256"]).unlink()  # Deployment also recovers an empty local cache.
 
             class DelayedReference(JointTargetRuntime):
                 delay = 0
@@ -279,14 +284,23 @@ def test_registered_physical_robot_has_a_verified_simulation(tmp_path):
                 assert coordinator.returncode == 0, (tmp_path / "coordinator.log").read_text()
                 coordinator = None
 
-            # The next request really rereads the installed bytes and persists a failure.
+            # A corrupt cache is restored from the owner's pinned upload before native verification.
             (assets / model["asset"]["sha256"]).write_bytes(b"changed asset")
+            post(f"robots/{robot['id']}/qualification", {})
+            repaired = subprocess.run(command, capture_output=True, text=True, timeout=75, check=False)
+            assert repaired.returncode == 0, repaired.stderr
+            assert (assets / model["asset"]["sha256"]).read_bytes() == asset.read_bytes()
+            # Corruption at the source must not publish bad bytes into an empty cache.
+            (assets / model["asset"]["sha256"]).unlink()
+            stored = settings.artifacts_dir / "robot-models" / profile["id"] / model["asset"]["sha256"]
+            stored.write_bytes(b"changed server asset")
             post(f"robots/{robot['id']}/qualification", {})
             failed = subprocess.run(command, capture_output=True, text=True, timeout=75, check=False)
             assert failed.returncode == 1
             observed = client.get(f"/api/v1/robots/{robot['id']}").json()["qualification"]
             assert observed["state"] == "failed"
-            assert "digest" in observed["report"]["detail"]
+            assert "delivery failed" in observed["report"]["detail"]
+            assert not list(assets.iterdir())
     finally:
         if coordinator is not None:
             coordinator.terminate()

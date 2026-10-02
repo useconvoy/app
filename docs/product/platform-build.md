@@ -227,3 +227,26 @@ This advances actual Jetson execution, not learned edge/cloud qualification. Cam
 remote planning, overhead/load characterization, robot/model asset delivery, project onboarding,
 scenario/chat, Isaac, fleet rollout, legacy reconciliation and physical calibration are still required.
 No hosted deployment or new cloud resources were created; the existing device agent remained running.
+
+## Robot model delivery slice
+
+Branch: `codex/robot-asset-delivery`, stacked on Jetson evidence. Project profiles now expose simulation
+file upload, local fingerprint feedback and stored-file status. The API streams a bounded model to
+profile-scoped storage, checks its pinned SHA-256 and rechecks the operator before publication. Only the
+assigned simulated device may retrieve it. Qualification and deployment fetch a missing/damaged cache
+from the authenticated control-plane origin, verify the bytes, then run the existing native checks.
+Local pre-provisioned assets remain supported. Model upload alone never grants simulator readiness.
+
+The actual HTTP/MuJoCo pipeline now starts with an empty asset directory, downloads during verification,
+recovers a removed cache during deployment, runs tasks, restores a damaged local copy and rejects
+corrupted server bytes. Five SQLite/API and five PostgreSQL upload/qualification checks pass, covering
+ownership, assigned-device access, physical-device rejection, pinned bytes, quota, bounded bodies and
+cleanup. Nineteen proxy/frontend checks and the three project browser journeys pass; mobile asset UI
+was inspected. Seventeen native model/timing/pipeline cases, the transport regression, Python lint,
+frontend lint/type checks and production build pass. These changes have not been deployed to the public app.
+
+Current hosted file limit is 16 MiB with a separate configurable 1 GiB robot-model quota. Larger model
+bundles, external storage and self-service storage management remain unfinished. This removes manual
+copying for supported uploads, not the remaining enrollment, device discovery, learned-model installation,
+cloud pairing, legacy migration, task/scenario language, Isaac execution, fleet rollout or calibration.
+The earlier timing PR (#118) now has all remote CI checks passing. No new cloud infrastructure was used.

@@ -4,6 +4,31 @@ import { allowedPlatformPath, platformOrigin, proxyPlatform } from "../../src/li
 
 const session = "convoy_session=cvs_abcdefghijklmnopqrstuvwx";
 const origin = "https://console.example.test";
+
+test("robot asset uploads preserve bounded binary bytes and caller authentication", async () => {
+  const original = globalThis.fetch;
+  const path = "robot-profiles/rpf_one/simulation-assets/mujoco";
+  let calls = 0;
+  try {
+    globalThis.fetch = async (_url, options) => {
+      calls += 1;
+      const headers = new Headers(options?.headers);
+      assert.equal(headers.get("Cookie"), session);
+      assert.equal(headers.get("Content-Type"), "application/octet-stream");
+      assert.deepEqual(new Uint8Array(options?.body as ArrayBuffer), new Uint8Array([0, 255, 17]));
+      return Response.json({ stored: true }, { status: 201 });
+    };
+    const result = await proxyPlatform(request(path, { method: "POST", body: new Uint8Array([0, 255, 17]),
+      headers: { "Content-Type": "application/octet-stream" } }), path.split("/"));
+    assert.equal(result.status, 201);
+    const tooLarge = await proxyPlatform(request(path, { method: "POST", body: "small",
+      headers: { "Content-Type": "application/octet-stream", "Content-Length": String(16 * 1024 * 1024 + 1) } }), path.split("/"));
+    assert.equal(tooLarge.status, 413);
+    assert.equal(calls, 1);
+    assert.equal(allowedPlatformPath(path.split("/"), "GET", new URLSearchParams()), null);
+    assert.equal(allowedPlatformPath(path.split("/"), "POST", new URLSearchParams("url=https://other.test")), null);
+  } finally { globalThis.fetch = original; }
+});
 function request(path: string, options: RequestInit = {}) {
   return new Request(`${origin}/api/platform/${path}`, { ...options,
     headers: { Cookie: `${session}; unrelated=private`, Origin: origin, "X-Convoy-Client": "web",

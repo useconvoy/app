@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { AxeBuilder } from "@axe-core/playwright";
+import { createHash } from "node:crypto";
 
 // Stateful HTTP fixtures exercise browser requests and profile lineage. Real database/ownership
 // cases live in server/tests/test_robot_registry.py and its PostgreSQL counterpart.
@@ -10,12 +11,21 @@ test("project onboarding registers a physical robot and its simulated instance, 
   const fleets: { id: string; name: string; robot_ids: string[] }[] = [];
   const writes: { path: string; body: Record<string, unknown> }[] = [];
   let readiness: Record<string, unknown> | undefined;
+  const model = Buffer.from('<mujoco model="custom-arm"/>');
+  let assetStored = false;
   await page.route("**/api/platform/**", async route => {
     const path = new URL(route.request().url()).pathname.replace("/api/platform/", "");
     const method = route.request().method();
     if (path === "auth/me") return route.fulfill({ json: { user: { email: "operator@example.test", role: "operator" }, installation: { simulator: true } } });
+    if (path === "robot-profiles/rpf_arm/simulation-assets/mujoco" && method === "POST") {
+      expect(route.request().headers()["content-type"]).toBe("application/octet-stream");
+      expect(route.request().postDataBuffer()).toEqual(model);
+      assetStored = true;
+      return route.fulfill({ status: 201, json: { engine: "mujoco", stored: true, size_bytes: model.length } });
+    }
     if (method === "GET") {
-      const resources: Record<string, unknown> = { projects, "robot-profiles": profiles, robots, fleets, "robot-connections": [
+      const resources: Record<string, unknown> = { projects, "robot-profiles": profiles, robots, fleets,
+        "robot-profiles/rpf_arm/simulation-assets": [{ engine: "mujoco", stored: assetStored, size_bytes: assetStored ? model.length : null }], "robot-connections": [
         { id: "dev_physical", name: "Jetson", simulated: false, status: "online" },
         { id: "dev_simulated", name: "MuJoCo runner", simulated: true, status: "online" },
       ] };
@@ -59,10 +69,21 @@ test("project onboarding registers a physical robot and its simulated instance, 
   const spec = { embodiment: "arm", adapter: "ros2", command_interface: "joint-position", control_rate_hz: 50,
     joints: [{ name: "shoulder", kind: "revolute", lower: -1, upper: 1, evidence: { source: "imported" } }], sensors: [],
     dynamics: { source: "unknown" }, simulations: [{ engine: "mujoco", engine_version: "3.3.0", controller: "position",
-      asset: { uri: "artifact:arm", sha256: "a".repeat(64), format: "mjcf" }, evidence: { source: "imported" } }] };
+      asset: { uri: "artifact:arm", sha256: createHash("sha256").update(model).digest("hex"), format: "mjcf" }, evidence: { source: "imported" } }] };
   await page.getByLabel("Profile JSON").setInputFiles({ name: "arm.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(spec)) });
   await page.getByRole("button", { name: "Save profile revision" }).click();
   await expect(page.getByRole("heading", { name: "Custom arm · revision 1" })).toBeVisible();
+  await expect(page.getByText("mujoco · mjcf · File needed")).toBeVisible();
+  await page.getByLabel("Upload mujoco model").setInputFiles({ name: "wrong.xml", mimeType: "text/xml", buffer: Buffer.from("wrong") });
+  await expect(page.getByRole("region", { name: "Simulation files for Custom arm revision 1" }).getByRole("alert")).toContainText("does not match the saved profile");
+  expect(assetStored).toBe(false);
+  await page.getByLabel("Upload mujoco model").setInputFiles({ name: "arm.xml", mimeType: "text/xml", buffer: model });
+  await expect(page.getByText(/mujoco · mjcf · Stored/)).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("profile-assets-desktop.png"), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
+  await page.screenshot({ path: testInfo.outputPath("profile-assets-mobile.png"), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole("tab", { name: "Robots", exact: true }).click();
   await page.getByRole("button", { name: "Add robot", exact: true }).click();
   await page.getByLabel("Robot name", { exact: true }).fill("Arm 1");
