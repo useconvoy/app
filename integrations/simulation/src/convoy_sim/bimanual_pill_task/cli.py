@@ -55,6 +55,10 @@ def _seeds(value: str) -> list[int]:
     return out
 
 
+def _print(line: str) -> None:
+    print(line, flush=True)
+
+
 def _planner_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--planner-server", default=os.environ.get("CONVOY_SERVER"),
                         help="website origin for the device planner (default: $CONVOY_SERVER)")
@@ -71,16 +75,13 @@ def _device_planner(args, configs: list[str]):
     if not args.planner_server:
         raise SystemExit("a device-planner configuration needs --planner-server (or CONVOY_SERVER)")
 
-    def log(line: str) -> None:
-        print(line, flush=True)
-
     if args.planner_session_file:
-        return PortalChatClient.from_session_file(args.planner_server, args.planner_session_file, log=log), lambda: None
+        return PortalChatClient.from_session_file(args.planner_server, args.planner_session_file, log=_print), lambda: None
     email, password = os.environ.get("CONVOY_EMAIL"), os.environ.get("CONVOY_PASSWORD")
     if not email or not password:
         raise SystemExit("a device-planner configuration needs --planner-session-file, or CONVOY_EMAIL and CONVOY_PASSWORD")
     cookie = sign_in(args.planner_server, email, password)
-    client = PortalChatClient(args.planner_server, cookie, log=log)
+    client = PortalChatClient(args.planner_server, cookie, log=_print)
     return client, lambda: sign_out(args.planner_server, cookie)
 
 
@@ -144,7 +145,8 @@ def main(argv: list[str] | None = None) -> int:
                     raise SystemExit(f"the device is not ready for chat: {state.reason or state.status}")
             summary = run_job({"config": args.config, "slice": args.slice, "seed": args.seed, "horizon": args.horizon,
                                "record": args.record, "replay": args.replay, "output": str(args.output),
-                               "timestep": args.timestep, "preview_camera": args.preview_camera}, planner)
+                               "timestep": args.timestep, "preview_camera": args.preview_camera}, planner,
+                              _print if planner else None)
         finally:
             close()
         print(json.dumps({k: v for k, v in summary.items() if k != "events"}, indent=2, default=float))
@@ -159,7 +161,7 @@ def main(argv: list[str] | None = None) -> int:
             report = evaluate(args.output, configs, slices, seeds, jobs=args.jobs, horizon=args.horizon, record=record,
                               timestep=args.timestep, preview_camera=args.preview_camera, replay=args.replay,
                               seed_stride=args.seed_stride, previews=_triples(args.previews) if args.previews else None,
-                              planner=planner, name=args.name)
+                              planner=planner, planner_log=_print if planner else None, name=args.name)
         finally:
             close()
         print((args.output / "results.md").read_text())

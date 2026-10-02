@@ -288,12 +288,14 @@ device, and the episode cannot start without that connection.
 Each request describes the scene in text computed from the simulator: the bottle
 position, the free arm and its gripper position, what the other arm is doing,
 which pills are already in the bottle, and every pill on the table with its
-position in cm, in two lists: the pills the free arm can take now, and the ones
-it cannot, with the reason. "Can take" means the arm's own half of the table plus
-2 cm, 18–62 cm from its shoulder, and the executive's separation rules allow it
-(not within 12 cm of the other arm's wrist, fingertips or target pill, and not
-past the bottle while the other arm uses the bottle zone). A pill whose last pick
-found no clear grasp is marked "needs push_apart".
+position in cm, in three lists for the free arm: pills it can pick now, pills it
+must push apart before picking (its last pick found no clear grasp), and pills it
+cannot take now, with the reason. An arm can take a pill on its own half of the
+table plus 2 cm, 18–62 cm from its shoulder, when the executive's separation rules
+allow it (not within 12 cm of the other arm's wrist, fingertips or target pill,
+and not past the bottle while the other arm uses the bottle zone). A pill is given
+up after 4 picks or 2 pushes, or when a skill found no grasp or push pose for it
+(the stand-in planner's limits).
 
 **Request.** One worked exchange on a small fixed scene (user request, assistant
 reply) and then the real request, as three chat messages (`build_messages`): on
@@ -317,7 +319,9 @@ other than "L"/"R" or a pill that is not an integer are `invalid_schema`.
 `check_choice` then refuses what the scene in the same request rules out
 (`invalid_choice`): `wrong_arm` (not the free arm), `unknown_pill`,
 `pill_in_bottle`, `taken_by_other_arm`, `pill_not_on_table`, `out_of_reach`,
-`pill_blocked`, `wait_with_pill_available`, `done_with_pills_on_table`.
+`pill_blocked` and `given_up` (from the cannot-take list), `needs_push_apart`
+(a pick of a must-push-apart pill), `push_not_needed` (a push of a can-pick pill),
+`wait_with_pill_available`, `done_with_pills_on_table`.
 
 **Failure policy** (`FailurePolicy`, fixed before an evaluation and recorded in
 its manifest):

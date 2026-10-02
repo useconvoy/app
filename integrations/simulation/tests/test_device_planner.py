@@ -536,3 +536,31 @@ def recorder_records(out):
     for path in sorted((out / "frames").glob("*.json")):
         rows += json.loads(path.read_text()).get("planner", [])
     return [{"sim_start_s": r["started_s"], "sim_end_s": round(r["started_s"] + r["latency_ms"] / 1000, 3)} for r in rows]
+
+
+def test_evaluate_runs_device_episodes_one_after_another_and_stops_when_the_device_goes_offline(tmp_path):
+    from convoy_sim.bimanual_pill_task.cli import main
+    from convoy_sim.bimanual_pill_task.evaluate import evaluate
+
+    with pytest.raises(SystemExit, match="planner-server"):
+        main(["evaluate", "--configs", "edge_qwen_edge_skills", "--output", str(tmp_path / "refused")])
+    with pytest.raises(ValueError, match="no stand-in"):
+        evaluate(tmp_path / "none", ["edge_qwen_edge_skills"], ["nominal"], [0])
+
+    class GoesOffline(_FirstAvailable):
+        def device(self):
+            self.online = self.checks < 2  # online for the manifest and the first episode, then offline
+            return super().device()
+
+    transport = GoesOffline([])
+    report = evaluate(tmp_path / "run", ["edge_qwen_edge_skills"], ["nominal"], [0, 1], horizon=6.0, planner=transport,
+                      name="Pills to bottle · Edge Qwen · test")
+    first, second = sorted(report["episodes"], key=lambda e: e["seed"])
+    assert first["status"] == "completed" and first["device_planner"]["calls"] == len(transport.sent) >= 2
+    assert second["status"] == "not_run" and "offline" in second["reason"] and report["not_run"] == [second]
+    assert report["results"]["edge_qwen_edge_skills"]["overall"]["episodes"] == 1  # not-run episodes are not counted
+    calls = (tmp_path / "run" / "edge_qwen_edge_skills" / "calls.jsonl").read_text().splitlines()
+    assert len(calls) == len(transport.sent) and json.loads(calls[0])["seed"] == 0
+    manifest = json.loads((tmp_path / "run" / "manifest.json").read_text())
+    assert manifest["device_planner"]["prompt_version"] == PROMPT_VERSION
+    assert manifest["device_planner"]["device_at_start"]["release_id"] == "rel_test"
