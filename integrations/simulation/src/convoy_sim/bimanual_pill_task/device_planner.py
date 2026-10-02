@@ -37,7 +37,7 @@ from .control import segment_point_distance
 from .planning import ARM_SEPARATION_M, PUSH_SKILL_ID, SKILL_ID, PlannerCall, PlannerProfile
 from .skills import ZONE_M
 
-PROMPT_VERSION = "pill-planner-v1"
+PROMPT_VERSION = "pill-planner-v2"
 MAX_TOKENS = 32  # a valid reply is ~20 tokens; the release caps output at 128
 ARM_CODE = {"left": "L", "right": "R"}
 SIDE = {"L": "left", "R": "right"}
@@ -195,8 +195,33 @@ def build_prompt(obs: dict, side: str, feedback: str | None = None) -> str:
     return "\n".join(lines)
 
 
+# One worked exchange before the real request, on a small fixed scene, shows the reply format: without
+# it the model wrapped most replies in a ``` code block on the development seeds.
+EXAMPLE_OBSERVATION = {
+    "pills": [
+        {"id": "pill_00", "xy": [0.52, 0.14], "state": "on_mat", "last_status": None},
+        {"id": "pill_01", "xy": [0.37, 0.0], "state": "in_bottle", "last_status": None},
+        {"id": "pill_02", "xy": [0.47, -0.12], "state": "on_mat", "last_status": None},
+        {"id": "pill_03", "xy": [0.45, 0.10], "state": "held", "last_status": None},
+    ],
+    "arms": {
+        "left": {"tcp": [0.45, 0.10, 0.80], "shoulder": [0.08, 0.17, 1.13],
+                 "links_xy": [[0.30, 0.25], [0.40, 0.14], [0.45, 0.10]], "phase": "approach",
+                 "busy": True, "target": "pill_03", "target_xy": [0.45, 0.10]},
+        "right": {"tcp": [0.33, -0.30, 0.87], "shoulder": [0.08, -0.17, 1.13],
+                  "links_xy": [[0.20, -0.25], [0.30, -0.30], [0.33, -0.30]], "phase": None,
+                  "busy": False, "target": None, "target_xy": None},
+    },
+    "bottle": {"xy": [0.37, 0.0]}, "zone_owner": None,
+}
+EXAMPLE_REPLY = '{"arm": "R", "skill": "pick_and_drop", "pill": 2}'
+
+
 def build_messages(obs: dict, side: str, feedback: str | None = None) -> list[dict]:
-    return [{"role": "user", "content": build_prompt(obs, side, feedback)}]
+    """The worked example (user, assistant), then the request for the free arm `side`."""
+    return [{"role": "user", "content": build_prompt(EXAMPLE_OBSERVATION, "right")},
+            {"role": "assistant", "content": EXAMPLE_REPLY},
+            {"role": "user", "content": build_prompt(obs, side, feedback)}]
 
 
 def refusal_feedback(reply: str | None, reason: str) -> str:
@@ -247,7 +272,9 @@ def parse_reply(text: str | None) -> Action:
     try:
         value = json.loads(text.strip(), object_pairs_hook=_pairs, parse_constant=_constant)
     except ValueError:
-        raise ReplyError("invalid_json", "the reply was not one JSON object and nothing else") from None
+        fenced = text.strip().startswith("```")
+        raise ReplyError("invalid_json", "the JSON object must not be wrapped in a ``` code block" if fenced
+                         else "the reply was not one JSON object and nothing else") from None
     if not isinstance(value, dict):
         raise ReplyError("invalid_schema", "the reply must be a JSON object")
     skill = value.get("skill")
@@ -561,6 +588,37 @@ class PortalChatClient:
             release_id=data.get("release_id"), device_latency_ms=metrics.get("latency_ms"),
             ttft_ms=metrics.get("ttft_ms"), queue_ms=metrics.get("queue_ms"), tokens_in=usage.get("prompt_tokens"),
             tokens_out=usage.get("completion_tokens"), post_ms=post_ms, polls=polls)
+
+
+def _post_json(server: str, path: str, body: dict, cookie: str | None = None) -> tuple[int, list[str]]:
+    headers = {"Accept": "application/json", "Content-Type": "application/json", "X-Convoy-Client": "web",
+               "Origin": server}
+    if cookie:
+        headers["Cookie"] = cookie
+    request = urllib.request.Request(server + path, data=json.dumps(body).encode(), method="POST", headers=headers)
+    try:
+        with urllib.request.build_opener(_NoRedirect).open(request, timeout=30) as response:
+            return response.status, response.headers.get_all("Set-Cookie") or []
+    except urllib.error.HTTPError as error:
+        return error.code, []
+
+
+def sign_in(server: str, email: str, password: str) -> str:
+    """One sign-in through the website (``/api/platform/auth/login``); returns the session cookie. Not retried:
+    sign-ins are throttled per account. Neither the credentials nor the cookie are printed."""
+    origin = server.rstrip("/")
+    if not origin.startswith("https://") and not re.match(r"http://(localhost|127\.0\.0\.1)(:\d+)?$", origin):
+        raise ValueError("credentials are only sent over https (or to localhost)")
+    status, cookies = _post_json(origin, "/api/platform/auth/login", {"email": email, "password": password})
+    match = next((m for m in (re.match(r"convoy_session=(cvs_[A-Za-z0-9_-]{16,128})(?:;|$)", c) for c in cookies) if m),
+                 None)
+    if status != 200 or match is None:
+        raise RuntimeError(f"sign-in was not accepted (HTTP {status})")
+    return f"convoy_session={match.group(1)}"
+
+
+def sign_out(server: str, cookie: str) -> int:
+    return _post_json(server.rstrip("/"), "/api/platform/auth/logout", {}, cookie)[0]
 
 
 # ---- the planner endpoint -------------------------------------------------------------------------------

@@ -12,10 +12,17 @@ Scope, stated plainly:
 - **Skills read simulator state** (pill and bottle poses). They are a scripted,
   privileged-state skill library like the MetaWorld scripted reference in this
   package, not perception or a learned policy.
-- **Planner decisions come from one deterministic rule-based stand-in** for every
-  configuration. Configurations differ only in where the planner runs, its
-  latency distribution (from measured or published numbers) and what a network
-  outage does. Nothing claims a language model's planning quality.
+- **Edge Qwen's planner decisions are real model calls.** Every skill decision of
+  the Edge Qwen configuration is a request to Qwen2.5-1.5B-Instruct (Q4_K_M,
+  llama.cpp CUDA) on a connected Jetson Orin Nano through Convoy's device chat API;
+  its latency is measured, not modeled, and nothing stands in when a call fails
+  ([below](#edge-qwen-the-real-on-device-planner-device_plannerpy)). Qwen2.5-1.5B
+  reads text only, so it gets the scene as text computed from the simulator state,
+  not camera images.
+- **The other three configurations use one deterministic rule-based stand-in.**
+  They differ only in where the planner runs, its latency distribution (from
+  measured or published numbers) and what a network outage does. Nothing claims a
+  language model's planning quality for them.
 - **SmolVLA is reported unavailable** for this robot. The only local checkpoint is
   the single-arm MetaWorld policy; it is not trained on this embodiment, so the
   configuration that uses it places no pills rather than borrowing competence.
@@ -26,29 +33,37 @@ From `integrations/simulation`, Python 3.11 and uv:
 
 ```sh
 uv sync --frozen --extra video --extra managed     # video: GIF/PNG previews; managed: platform replay reader
-uv run --frozen pytest -q tests/test_bimanual_pill_task.py
-uv run --frozen convoy-sim-pills episode --config edge_qwen_edge_skills --slice nominal --seed 0 --output runs/one
+uv run --frozen pytest -q tests/test_bimanual_pill_task.py tests/test_device_planner.py
+uv run --frozen convoy-sim-pills episode --config cloud_astra_only --slice nominal --seed 0 --output runs/one
 uv run --frozen convoy-sim-pills check-physics --output runs/physics.json
 
 # Rendering needs OpenGL. Headless Linux: MUJOCO_GL=glfw under xvfb-run (or EGL/OSMesa).
 MUJOCO_GL=glfw xvfb-run -a uv run --frozen convoy-sim-pills episode --record --preview-camera photo \
     --config cloud_astra_only --slice network_outage --seed 2 --output runs/recorded
 MUJOCO_GL=glfw xvfb-run -a uv run --frozen convoy-sim-pills evaluate --seeds 0-4 --jobs 4 \
-    --record edge_qwen_edge_skills:nominal:0,cloud_astra_only:network_outage:2 --output runs/matrix
+    --configs edge_qwen_cloud_astra,cloud_astra_only,edge_smolvla_cloud_astra \
+    --record edge_qwen_cloud_astra:nominal:0,cloud_astra_only:network_outage:2 --output runs/matrix
 uv run --frozen convoy-sim-pills verify runs/recorded     # platform replay rules + convoy_server's reader
 MUJOCO_GL=glfw xvfb-run -a uv run --frozen convoy-sim-pills render --output runs/stills
 
-# The demo matrix in the offline import format (one directory per configuration), then the import:
-MUJOCO_GL=glfw xvfb-run -a uv run --frozen convoy-sim-pills evaluate --configs all \
+# The modelled demo matrix in the offline import format (one directory per configuration), then the import:
+MUJOCO_GL=glfw xvfb-run -a uv run --frozen convoy-sim-pills evaluate \
+    --configs edge_qwen_cloud_astra,cloud_astra_only,edge_smolvla_cloud_astra \
     --slices nominal,network_outage,pill_count_30 --seeds 0-2 --seed-stride 100 \
     --record all --replay offline --jobs 4 --output runs/demo
-python scripts/import_offline_eval.py --dry-run runs/demo/edge_qwen_edge_skills
+python scripts/import_offline_eval.py --dry-run runs/demo/cloud_astra_only
 CONVOY_SERVER=https://deployconvoy.com CONVOY_EMAIL=… CONVOY_PASSWORD=… \
-    python scripts/import_offline_eval.py runs/demo/edge_qwen_edge_skills
+    python scripts/import_offline_eval.py runs/demo/cloud_astra_only
+
+# Edge Qwen: real calls to the model on the connected device (an operator session on the website):
+CONVOY_SERVER=https://deployconvoy.com CONVOY_SESSION_FILE=~/.convoy-session \
+MUJOCO_GL=glfw xvfb-run -a uv run --frozen convoy-sim-pills evaluate --configs edge_qwen_edge_skills \
+    --slices nominal,pill_count_30 --seeds 0-4 --seed-stride 200 --record all --replay offline \
+    --name "Pills to bottle · Edge Qwen · real on-device planner (Jetson)" --output runs/edge-qwen-real
 ```
 
 Every command writes to a new directory and refuses to overwrite a recording.
-`scripts/pill_task_eval.sh` runs the demo matrix.
+`scripts/pill_task_eval.sh` runs the modelled demo matrix (not Edge Qwen).
 
 ## Robot model (`robot.py`)
 
@@ -253,6 +268,107 @@ episode ends after ~8 s with no pill placed.
 Simulated time is what the robot experiences: a planner call's latency elapses in
 simulation while the arms hold, so planning delays and outages cost task time.
 Wall-clock compute of the stand-in decision code is recorded separately.
+
+## Edge Qwen: the real on-device planner (`device_planner.py`)
+
+The Edge Qwen configuration (`edge_qwen_edge_skills`) has no latency model and no
+stand-in. Every skill decision is a real request to the model on a connected
+device, and the episode cannot start without that connection.
+
+| Part | What it is | Measured or scripted |
+|---|---|---|
+| Decision: which arm, which pill, which skill, or wait / done | Qwen2.5-1.5B-Instruct Q4_K_M, llama.cpp CUDA, on a Jetson Orin Nano (the device's active release) | real call per decision |
+| Scene the model reads | text computed from the simulator state (privileged) | from the simulator |
+| Executive: when to ask, parsing, the choice check, the failure policy, the separation re-check | `device_planner.py`, `episode.py` | scripted, fixed before the run |
+| Motion | the IK skill library on the simulator state | scripted |
+| Time an arm waits for a decision | each call's measured end-to-end round trip | measured |
+
+**Text only.** Qwen2.5-1.5B-Instruct is a text model: it never sees the camera.
+Each request describes the scene in text computed from the simulator: the bottle
+position, the free arm and its gripper position, what the other arm is doing,
+which pills are already in the bottle, and one line per pill on the table with
+its position in cm, which arm reaches it and whether the free arm may take it
+now. "Reaches" is the arm's own half of the table plus 2 cm, 18–62 cm from its
+shoulder; "not available" applies the executive's separation rules (within 12 cm
+of the other arm's wrist, fingertips or target pill, or past the bottle while the
+other arm uses the bottle zone). A pill's last skill result is shown beside it.
+
+**Request.** One worked exchange on a small fixed scene (user request, assistant
+reply) and then the real request, as three chat messages (`build_messages`): on
+the development seeds the model wrapped most replies in a ``` code block without
+the example. `max_tokens` 32; a valid reply is about 21 tokens. Requests are about
+1,000–1,150 tokens.
+
+**Reply.** Exactly one JSON object, whitespace around it allowed, and nothing else
+(`parse_reply`); nothing is repaired:
+
+```json
+{"arm": "L", "skill": "pick_and_drop", "pill": 7}
+{"arm": "R", "skill": "push_apart", "pill": 12}
+{"arm": "L", "skill": "wait"}
+{"arm": "R", "skill": "done"}
+```
+
+Text around the object, a code block, a cut-off object, duplicate keys or NaN are
+`invalid_json`; a non-object, a missing or extra key, another skill name, an arm
+other than "L"/"R" or a pill that is not an integer are `invalid_schema`.
+`check_choice` then refuses what the scene in the same request rules out
+(`invalid_choice`): `wrong_arm` (not the free arm), `unknown_pill`,
+`pill_in_bottle`, `taken_by_other_arm`, `pill_not_on_table`, `out_of_reach`,
+`pill_blocked`, `wait_with_pill_available`, `done_with_pills_on_table`.
+
+**Failure policy** (`FailurePolicy`, fixed before an evaluation and recorded in
+its manifest):
+
+- A decision takes at most 3 calls: the first ask and two re-asks, each with a
+  fresh scene. After a refused reply the re-ask quotes the reply and the reason it
+  was refused; after a device error, an HTTP error or a timeout it is the plain
+  request again.
+- Without a usable action after 3 calls the decision *fails*: the arm parks and
+  asks again after the other arm's next skill result, or 10 s of simulated time.
+- An episode makes at most 2 × pills + 12 calls (60 for 24 pills, 72 for 30); then
+  it ends as `planner_stopped:planner_call_budget_exhausted`.
+- After a transport failure the device is checked. Offline, not eligible for
+  chat, a changed model or a refused session stops the episode and the evaluation
+  (`planner_stopped:…`; later episodes are reported as not run).
+- A call with no terminal result after 45 s is a timeout; its elapsed time counts
+  like any round trip, and before the next request the client waits (wall clock
+  only) until that request has finished or expired, so the device never has two.
+- When an accepted action arrives, the executive re-checks the separation rules on
+  the current state (the other arm kept moving during the round trip). A conflict
+  rejects it as stale and a new decision starts at once.
+
+**Transport.** `PortalChatClient` uses the website's device chat routes with one
+signed-in operator session: `POST /api/portal/chat` with `{request_id,
+expected_release_id, messages, max_tokens}` (202), then `GET
+/api/portal/chat/{request_id}` until `succeeded`, `failed` or `expired`; the
+control plane relays it (`/api/v1/devices/{device}/chat`) to the agent on the
+device, which claims requests once a second and runs them through its gateway.
+Limits: user and assistant messages only, at most 16 messages and 8 KiB of text,
+1–128 output tokens, one request at a time per device; 6 sends and 180 reads per
+minute per session (20 and 1,200 per site); requests expire after 120 s. Sends
+are spaced 10.5 s apart; reads poll every 0.25 s for 5 s, then every second. The
+API takes no temperature or seed: decoding is the active release's, which the
+device reports in its runtime arguments as `--temp 0.0 --seed 42` (greedy),
+2,048-token context, 128-token output cap.
+
+**Time.** Each call blocks the simulation in wall-clock time; then the requesting
+arm holds in simulated time for exactly the call's measured end-to-end round trip
+(client send to terminal result), rounded up to the next 10 ms control tick, while
+the other arm keeps working. That round trip includes the website, the control
+plane relay, the agent's one-second claim interval and the client's polling; the
+on-device latency (gateway slot to completion), first-token time and queue time
+are recorded beside it. A robot calling its own Jetson directly would wait about
+the on-device latency, so these episodes are pessimistic about planning time.
+The pacing wait for the routes' rate limit is wall-clock only and not counted.
+
+**Audit.** Every call is a line in the episode's `planner_calls.jsonl` (and in
+`OUTPUT/<config>/calls.jsonl`): the messages sent, the raw reply, the platform
+trace id (the device's inference trace, listed in its Traces), request id, send
+and finish times, HTTP and relay status, on-device latency, first-token and queue
+time, tokens in and out, the end-to-end round trip, the parse result and refusal
+reason, the action, what followed (delivered, re-asked, failed decision, stale
+rejection, stopped) and the simulated start and end times. No credentials.
 
 ## Evaluation (`evaluate.py`)
 
