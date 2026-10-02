@@ -470,6 +470,21 @@ creates one offline evaluation, tagged "Offline sim" in Configurations.
 - `--preview-camera photo` (with `--previews` to pick episodes) also writes
   `preview.mp4` and `preview.gif`: the wide view beside the head camera with a
   caption. They are not uploaded.
+- Edge Qwen (device planner) episodes export measured numbers instead: `planner_ms`
+  is the median end-to-end round trip of the calls the model answered, `skill`
+  lists the skills it chose and the executive started (e.g. `pick_and_drop ×30,
+  push_apart ×3`), and the 32 metrics are the calls by result (valid, invalid JSON,
+  schema or choice, device and HTTP errors, timeouts), failed decisions, stale
+  rejections, end-to-end and on-device p50/p95, first-token p50, tokens in and out
+  p50 and planner wait, besides the task and safety counts. Outage seconds and
+  motor-policy availability do not apply and are left out.
+- The import's frame shape (`index, image_png_base64, action, reward, success,
+  policy_ms`) has no planner fields, and the replay page shows `skill` and
+  `planner_ms` once per episode. The calls that completed during a step are kept in
+  the local `frames/NNNN.json` under `planner` (trace id, arm, action, round trip,
+  on-device latency, tokens), with each arm's active skill under `skills`; the
+  import script does not send them. Showing them per step on the website would
+  need a platform change (frame fields in the API and the replay readout).
 
 ## Hosted journal format (`recording.py`)
 
