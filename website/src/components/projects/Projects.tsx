@@ -22,7 +22,7 @@ import { ComputerDetails, ConnectionSetup } from "./ConnectionSetup";
 import { ProjectFleetDirectory } from "./ProjectFleetDirectory";
 import { engineLabel, projectCrumbs, projectHref, ProjectTabs, robotHref, sections, type Section } from "./ProjectNavigation";
 import { RobotConfigurationSummary, useProjectRobotConfigurations, type ProjectRobotConfigurationCatalogue } from "./ProjectRobotConfigurations";
-import { ProjectConnectionTools, ProjectOverview, ProjectRuns, ProjectSimulations } from "./ProjectWorkspace";
+import { ProjectOverview, ProjectRuns, ProjectSimulations } from "./ProjectWorkspace";
 import { ProjectConfigurationsSection } from "./SavedProjectConfigurations";
 import { SimulationAssets } from "./SimulationAssets";
 import { SimulatorReadiness } from "./SimulatorReadiness";
@@ -183,7 +183,7 @@ export function ProjectPage({ projectId }: { projectId: string }) {
   </ProjectShell>;
 }
 
-/** Robots: the registration panel when adding one, the table, assigning a selection to a fleet, and the workspace device's tools. */
+/** Robots: the registration panel when adding one, the table, and assigning a selection to a fleet. */
 function ProjectRobots({ projectId, robots, profiles, fleets, devices, catalogue, registering, onRegister, onRegistered, onCancel, refresh }: {
   projectId: string; robots?: Robot[]; profiles?: RobotProfile[]; fleets?: Fleet[]; devices?: Device[]; catalogue: ProjectRobotConfigurationCatalogue;
   registering: { source?: Robot } | null; onRegister: (source?: Robot) => void; onRegistered: () => void; onCancel: () => void; refresh: () => void;
@@ -225,7 +225,6 @@ function ProjectRobots({ projectId, robots, profiles, fleets, devices, catalogue
       <button className="cv-btn cv-btn--secondary" type="button" disabled={mutation.busy || !fleetId} onClick={() => void assign()}>Assign {selected.length} robots</button>
     </div>}
     {mutation.error && <Notice tone="error">{mutation.error}</Notice>}
-    <ProjectConnectionTools />
   </section>;
 }
 

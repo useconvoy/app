@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
-import { EpisodeReplay } from "@/components/console/EpisodeReplay";
+import { EpisodeReplay } from "../EpisodeReplay";
 import { getSuite, resolveRobotRoute, useWorkspace } from "@/lib/configurations/client";
 import { fmtCount, fmtFixed, fmtNumber, fmtSeconds, fmtWhen } from "@/lib/configurations/format";
 import { emptyWorkspace } from "@/lib/configurations/mutations";

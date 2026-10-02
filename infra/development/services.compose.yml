@@ -123,7 +123,7 @@ services:
     depends_on:
       api: {condition: service_healthy}
     healthcheck:
-      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/console').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/app/configurations').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 3s
       timeout: 5s
       retries: 30

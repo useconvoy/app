@@ -1,11 +1,12 @@
 # Production Jetson portal
 
-> Historical deployment record. The unified workspace now opens at `/app` and
-> places these device tools inside Robot applications → Device connection. It uses
-> the caller's management session instead of the separate demo credentials/token
-> described below. See [the current workspace guide](v1/unified-workspace.md) for
-> authentication, migration and current routes. The hardware acceptance figures
-> below remain historical observations, not verification of the new UI release.
+> Historical deployment record. The portal pages described below (Device, Chat,
+> Usage and Traces), and the later console that hosted them, have been removed;
+> `/portal` now redirects to `/app/configurations`, and browser Chat is gone. The
+> workspace opens at `/app` with the caller's management session, and the configured
+> device's live telemetry and traces appear on its Configurations robot page. See
+> [the current workspace guide](v1/unified-workspace.md). The hardware acceptance
+> figures below remain historical observations.
 
 The entry point is [deployconvoy.com/portal](https://deployconvoy.com/portal),
 reachable through **Open demo** on the landing page. The operator supplies demo

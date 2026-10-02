@@ -267,7 +267,7 @@ export const FAQ = {
     {
       question: "What can I use today?",
       answer:
-        "The Jetson demo lets you chat with a model on a physical device and inspect its telemetry, received usage, and inference traces. Demo credentials are supplied by the operator. The broader robot deployment workflow remains in development; design partnerships start with a defined model, robot configuration, and scope.",
+        "The Jetson demo lets you inspect live telemetry and inference traces from a model running on a physical device. Demo credentials are supplied by the operator. The broader robot deployment workflow remains in development; design partnerships start with a defined model, robot configuration, and scope.",
     },
     {
       question: "Will it work with any model or robot?",

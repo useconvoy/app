@@ -1,10 +1,11 @@
 # Convoy
 
 Convoy combines device inference and robot application deployment in one workspace.
-Open `/app` on your deployment: **Robot applications** manages projects, releases,
-simulator enrollment, evaluations, deployment and missions; **Device & inference**
-retains the physical-device chat, usage and traces. Camera episodes can be watched
-inside mission history. See the [workspace and replay guide](docs/v1/unified-workspace.md).
+Open `/app` on your deployment: **Projects** manages robots, profiles, fleets, runnable
+configurations, simulations and runs; **Configurations** shows saved configurations,
+their robots and evals, and the workspace device's live telemetry and traces. Camera
+episodes can be replayed from runs and evals. See the
+[workspace and replay guide](docs/v1/unified-workspace.md).
 
 The implemented simulation path includes MetaWorld/MuJoCo, a labeled scripted
 baseline, a learned SmolVLA policy, and a Qwen text planner selecting a fixed skill.
@@ -16,11 +17,11 @@ See [local activation](docs/v1/local-activation.md), the
 
 Convoy's public website and physical Jetson demo live in this repository.
 The landing page introduces the deployment workflow being built for physical AI;
-the portal exposes a focused, working text-inference path on one configured Jetson.
+the workspace reads live telemetry and inference traces from one configured Jetson.
 
 - [Website](https://deployconvoy.com/)
-- [Jetson demo](https://deployconvoy.com/portal) — credentials are supplied privately by the operator
-- [Production portal architecture and walkthrough](docs/production-portal.md)
+- [Jetson demo](https://deployconvoy.com/app) — credentials are supplied privately by the operator
+- [Production portal record (historical)](docs/production-portal.md)
 - [Website development and verification](website/README.md)
 - [Physical verification record](control-plane/docs/VERIFICATION.md)
 

@@ -1,5 +1,6 @@
 /** One paired evaluation against an already-running API, jobs, planner, policy
- * worker and simulator. Starts/stops only this check's web server and browser.
+ * worker and simulator, through the robot's page and its policy and evaluation tools.
+ * Starts/stops only this check's web server and browser.
  * Usage: node scripts/test-live-pairing.mjs CONNECTION_JSON NEW_OUTPUT_DIRECTORY
  */
 import { chromium, expect } from '@playwright/test';
@@ -27,6 +28,7 @@ await new Promise(resolve => reserved.listen(0, '127.0.0.1', resolve));
 const port = reserved.address().port;
 await new Promise(resolve => reserved.close(resolve));
 const origin = `http://127.0.0.1:${port}`;
+const robotPage = `${origin}/app/projects/${encodeURIComponent(connection.project_id)}/robots/${encodeURIComponent(connection.robot_id)}`;
 const server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '--hostname', '127.0.0.1', '--port', String(port)], {
   cwd: website, env: { ...process.env, CONVOY_API_URL: connection.api_url, CONVOY_CONSOLE_ORIGIN: origin },
   stdio: ['ignore', 'pipe', 'pipe'],
@@ -38,21 +40,23 @@ const evidence = { status: 'failed', planner_backend_kind: connection.planner_ba
   scope: 'One fixed seed with a controlled text planner and pretrained SmolVLA/MuJoCo action policy. No Jetson/cloud planner model or physical-robot qualification.', checks: [] };
 try {
   await expect.poll(async () => {
-    if (server.exitCode !== null) throw new Error('Console exited before readiness');
-    return fetch(origin + '/console').then(response => response.status).catch(() => 0);
+    if (server.exitCode !== null) throw new Error('Web server exited before readiness');
+    return fetch(robotPage).then(response => response.status).catch(() => 0);
   }, { timeout: 30000 }).toBe(200);
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto(origin + '/console');
+  await page.goto(robotPage);
   await page.getByLabel('Email', { exact: true }).fill(connection.email);
   await page.getByLabel('Password', { exact: true }).fill(connection.password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await page.getByRole('combobox', { name: 'Project', exact: true }).selectOption(connection.project_id);
-  await page.getByRole('combobox', { name: 'Selected robot', exact: true }).selectOption(connection.robot_id);
-  await page.getByRole('combobox', { name: 'Release', exact: true }).selectOption(connection.release_id);
-  const components = page.locator('.console-release-details');
+  // The robot page's own controls stay outside this region; every check below is scoped to the tools.
+  const tools = page.getByRole('region', { name: 'Existing policy runtime', exact: true });
+  await page.locator('summary', { hasText: 'Advanced policy and evaluation tools' }).click();
+  await tools.getByRole('combobox', { name: 'Selected robot', exact: true }).selectOption(connection.robot_id);
+  await tools.getByRole('combobox', { name: 'Release', exact: true }).selectOption(connection.release_id);
+  const components = tools.locator('.console-release-details');
   await expect(components).toContainText(manifest.profile);
   await expect(components).toContainText(manifest.action_manifest.policy.runtime);
   await expect(components).toContainText(manifest.planner.runtime);
@@ -63,26 +67,26 @@ try {
   for (const digest of [manifest.action_manifest.policy.artifact_sha256, manifest.planner.artifact_sha256, manifest.planner.protocol_sha256]) {
     await expect(components).toContainText(digest);
   }
-  const connect = page.locator('summary', { hasText: 'Connect a simulator' });
+  const connect = tools.locator('summary', { hasText: 'Connect a simulator' });
   await connect.click();
-  await expect(page.getByRole('combobox', { name: 'Simulator profile', exact: true })
+  await expect(tools.getByRole('combobox', { name: 'Simulator profile', exact: true })
     .locator(`option[value="${manifest.profile}"]`)).toHaveJSProperty('disabled', false);
   await connect.click();
 
-  const panel = page.locator('[aria-labelledby="evaluations-heading"]');
+  const panel = tools.locator('[aria-labelledby="evaluations-heading"]');
   await panel.locator('summary', { hasText: 'Create an immutable suite' }).click();
-  await page.getByLabel('Suite name', { exact: true }).fill('Paired browser qualification');
-  await page.getByLabel('Scenario seeds', { exact: true }).fill('0');
-  await page.getByLabel('Required successes', { exact: true }).fill('1');
-  await page.getByRole('button', { name: 'Create suite', exact: true }).click();
-  const evaluate = page.getByRole('button', { name: 'Evaluate selected release', exact: true });
+  await tools.getByLabel('Suite name', { exact: true }).fill('Paired browser qualification');
+  await tools.getByLabel('Scenario seeds', { exact: true }).fill('0');
+  await tools.getByLabel('Required successes', { exact: true }).fill('1');
+  await tools.getByRole('button', { name: 'Create suite', exact: true }).click();
+  const evaluate = tools.getByRole('button', { name: 'Evaluate selected release', exact: true });
   await expect(evaluate).toBeEnabled(); // the suite matches the outer paired profile
   await evaluate.click();
   await expect(panel.locator('.console-reservation')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Request deployment', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Start mission', exact: true })).toBeDisabled();
+  await expect(tools.getByRole('button', { name: 'Request deployment', exact: true })).toBeDisabled();
+  await expect(tools.getByRole('button', { name: 'Start mission', exact: true })).toBeDisabled();
   await expect(panel.locator('.console-evaluation-outcome')).toContainText('Passed', { timeout: 330000 });
-  const evaluationId = await page.getByRole('combobox', { name: 'Evaluation run', exact: true }).inputValue();
+  const evaluationId = await tools.getByRole('combobox', { name: 'Evaluation run', exact: true }).inputValue();
   const result = await page.evaluate(async id => (await fetch(`/api/platform/evaluations/${id}`)).json(), evaluationId);
   expect(result.report.passed).toBe(true);
   expect(result.report.cases).toHaveLength(1);
@@ -99,15 +103,16 @@ try {
   expect(episode.summary.policy_runtime).toBe(manifest.action_manifest.policy.runtime);
   expect(episode.summary.final_success).toBe(true);
   expect(episode.summary.planner_result.identity.release_digest).toBe(episode.release_digest);
-  await page.getByRole('button', { name: 'View case episode', exact: true }).click();
-  await expect(page.locator('.console-episode')).toContainText('Succeeded');
-  await expect(page.locator('.console-episode')).toContainText('planner_accepted');
-  await page.getByRole('button', { name: 'Promote passing report', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Report promoted', exact: true })).toBeDisabled();
+  await tools.getByRole('button', { name: 'View case episode', exact: true }).click();
+  await expect(tools.locator('.console-episode')).toContainText('Succeeded');
+  await expect(tools.locator('.console-episode')).toContainText('planner_accepted');
+  await tools.getByRole('button', { name: 'Promote passing report', exact: true }).click();
+  await expect(tools.getByRole('button', { name: 'Report promoted', exact: true })).toBeDisabled();
   await page.screenshot({ path: path.join(output, 'paired-console.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
   await page.screenshot({ path: path.join(output, 'paired-console-mobile.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Account', exact: true }).click();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
   expect(errors).toEqual([]);

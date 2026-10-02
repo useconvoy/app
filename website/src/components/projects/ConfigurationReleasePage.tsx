@@ -12,7 +12,7 @@ import { Card, Facts } from "@/components/configurations/Tiles";
 import type { Application, Deployment, Project, Release, Robot } from "@/lib/platform/client";
 import { useProjectResource } from "@/lib/projects/client";
 import { ConfigurationEditor, REFERENCE_RUNTIME } from "./ConfigurationEditor";
-import { projectCrumbs, robotHref } from "./ProjectNavigation";
+import { projectCrumbs, projectHref, robotHref } from "./ProjectNavigation";
 import { ProjectShell } from "./Projects";
 import { LinkedWorkspaceSpecifications } from "./WorkspaceConfigurationLink";
 
@@ -39,6 +39,8 @@ export function ConfigurationReleasePage({ configurationId }: { configurationId:
   const manifest = release?.manifest;
   const registered = manifest?.schema_version === 3 ? manifest : undefined;
   const matching = robots.data?.filter(robot => robot.simulated && robot.profile_id && registered && robot.qualification?.state === "passed" && robot.qualification.profile_digest === registered.environment.robot_profile_sha256);
+  // An existing-interface release is managed from a simulated robot with that interface (its policy and evaluation tools).
+  const runner = manifest && !registered ? robots.data?.find(robot => !robot.profile_id && robot.simulated !== false && robot.profile === manifest.profile) : undefined;
   const setup = useProjectResource<{ release_id: string; manifest_json: string; reference_policy_json: string | null }>(setupOpen && release ? `applications/${configurationId}/releases/${release.id}/setup` : null);
   const errors = [...new Set([application, releases, robots, deployments, setup].map(read => read.error).filter((error): error is string => !!error))];
   const name = application.data?.name ?? "Configuration";
@@ -93,7 +95,8 @@ export function ConfigurationReleasePage({ configurationId }: { configurationId:
         </div>
       </details>
     </>}
-    {manifest && !registered && <Notice>This release uses the existing {manifest.profile} interface. <Link className="cv-link" href="/app/applications">Open its application controls</Link></Notice>}
+    {manifest && !registered && projectId && <Notice>This release uses the existing {manifest.profile} interface. Its evaluations and deployment are under Advanced policy and evaluation tools on a robot with that interface.{" "}
+      <Link className="cv-link" href={runner ? robotHref(projectId, runner.id) : projectHref(projectId, "Robots")}>{runner ? `Open ${runner.name}` : "Open robots"}</Link></Notice>}
     {application.data && <LinkedWorkspaceSpecifications applicationId={application.data.id} />}
   </ProjectShell>;
 }

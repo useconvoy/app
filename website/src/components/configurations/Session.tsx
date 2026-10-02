@@ -3,10 +3,10 @@
 import { usePathname } from "next/navigation";
 import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { Brand, Login } from "@/components/console/Console";
 import { WorkspaceProvider } from "@/lib/configurations/client";
 import { LiveDeviceProvider } from "./LiveDeviceProvider";
 import { PlatformProvider } from "./platform";
+import { Brand, Login } from "./SignIn";
 import { onSessionExpired } from "@/lib/configurations/session-events";
 import { api, ApiError, errorText } from "@/lib/platform/client";
 import type { Account } from "@/lib/platform/client";
@@ -25,9 +25,9 @@ export interface WorkspaceSessionValue {
 const SessionContext = createContext<WorkspaceSessionValue | null>(null);
 
 /**
- * The existing client-side session gate (Console pattern): `auth/me` once per
- * mount, the shared sign-in form on 401, and back to sign-in when any request
- * reports an ended session.
+ * The client-side session gate: `auth/me` once per mount, the sign-in form
+ * (`SignIn.tsx`) on 401, and back to sign-in when any request reports an ended
+ * session.
  */
 export function WorkspaceSession({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<Account | null | undefined>(undefined);
@@ -49,8 +49,8 @@ export function WorkspaceSession({ children }: { children: ReactNode }) {
   const value = useMemo<WorkspaceSessionValue | null>(() => account ? {
     account, email: account.user.email, role: account.user.role, operator: account.user.role !== "viewer", signOut, signingOut, signOutError,
   } : null, [account, signOut, signingOut, signOutError]);
-  if (account === undefined) return <div className="console-shell"><main className="console-auth"><Brand label="Convoy" /><p role="status">Checking your session…</p></main></div>;
-  if (!value) return <div className="console-shell"><Login initialError={error} onLogin={load} brand="Convoy" /></div>;
+  if (account === undefined) return <div className="console-shell"><main className="console-auth"><Brand /><p role="status">Checking your session…</p></main></div>;
+  if (!value) return <div className="console-shell"><Login initialError={error} onLogin={load} /></div>;
   // Keyed by account: everything below (workspace document, live device data) starts afresh for another account.
   return <SessionContext.Provider value={value}><Fragment key={value.email}>{children}</Fragment></SessionContext.Provider>;
 }
@@ -75,7 +75,7 @@ export function ConfigurationsRoot({ children }: { children: ReactNode }) {
 /**
  * Mounted by the `/app` layout: Configurations and Projects share one `ConfigurationsRoot`,
  * so moving between them keeps the session and the workspace document instead of checking
- * the session again. Other `/app` pages (the applications console) keep their own sign-in.
+ * the session again. `/app` itself only redirects to Projects.
  */
 export function WorkspaceRoot({ children }: { children: ReactNode }) {
   const pathname = usePathname();

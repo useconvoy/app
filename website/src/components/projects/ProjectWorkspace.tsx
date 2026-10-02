@@ -4,16 +4,13 @@ import Link from "next/link";
 import { useState } from "react";
 import { Badge, Missing } from "@/components/configurations/Badges";
 import { DataTable, type Column } from "@/components/configurations/DataTable";
+import { EpisodeReplay } from "@/components/configurations/EpisodeReplay";
 import { Notice } from "@/components/configurations/Notice";
-import { useSession } from "@/components/configurations/Session";
 import { EmptyState, LoadingState } from "@/components/configurations/States";
 import { Card, Facts, Tile, Tiles } from "@/components/configurations/Tiles";
-import { EpisodeReplay } from "@/components/console/EpisodeReplay";
-import { Portal } from "@/components/portal/Portal";
 import { useWorkspace } from "@/lib/configurations/client";
 import { fmtCount, fmtSeconds, fmtWhen } from "@/lib/configurations/format";
 import { routes } from "@/lib/configurations/routes";
-import { notifySessionExpired } from "@/lib/configurations/session-events";
 import type { Episode, Mission, Robot } from "@/lib/platform/client";
 import { useProjectResource, type Fleet, type RobotProfile } from "@/lib/projects/client";
 import { ProjectFleetDirectory } from "./ProjectFleetDirectory";
@@ -120,15 +117,5 @@ function SavedResults({ projectId }: { projectId: string }) {
       { key: "robot", header: "Robot", cell: row => row.robot.name },
       { key: "configuration", header: "Configuration", cell: row => row.config.name },
     ]} /></Card>
-  </section>;
-}
-
-/** The workspace's configured device, inspected and tested on demand. */
-export function ProjectConnectionTools() {
-  const [open, setOpen] = useState(false);
-  const { operator } = useSession();
-  return <section className="cv-row" aria-label="Connection diagnostics">
-    <div className="cv-strip cv-strip--static"><span>Workspace device</span><button className="cv-btn cv-btn--secondary cv-btn--small" type="button" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? "Close device tools" : "Open device tools"}</button></div>
-    {open && <div className="cv-embedded"><Portal active onSessionEnd={notifySessionExpired} canChat={operator} /></div>}
   </section>;
 }

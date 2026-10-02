@@ -1,4 +1,5 @@
-/** One browser acceptance against a running, authenticated API/worker/simulator stack.
+/** One browser acceptance against a running, authenticated API/worker/simulator stack, through
+ * the seeded robot's page and its policy and evaluation tools (Advanced policy and evaluation tools).
  * Usage: node scripts/test-live-console.mjs CONNECTION_JSON NEW_OUTPUT_DIRECTORY
  * Create the stack with examples/manipulation/pipeline.py --serve first.
  */
@@ -23,6 +24,7 @@ await new Promise(resolve => reserved.listen(0, '127.0.0.1', resolve));
 const port = reserved.address().port;
 await new Promise(resolve => reserved.close(resolve));
 const origin = `http://127.0.0.1:${port}`;
+const robotPage = `${origin}/app/projects/${encodeURIComponent(connection.project_id)}/robots/${encodeURIComponent(connection.robot_id)}`;
 const server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '--hostname', '127.0.0.1', '--port', String(port)], {
   cwd: website,
   env: { ...process.env, CONVOY_API_URL: connection.api_url, CONVOY_CONSOLE_ORIGIN: origin },
@@ -36,56 +38,62 @@ let browser;
 const report = { status: 'failed', checks: [] };
 try {
   await expect.poll(async () => {
-    if (server.exitCode !== null) throw new Error('Console server exited before readiness');
-    return fetch(origin + '/console').then(response => response.status).catch(() => 0);
+    if (server.exitCode !== null) throw new Error('Web server exited before readiness');
+    return fetch(robotPage).then(response => response.status).catch(() => 0);
   }, { timeout: 30000 }).toBe(200);
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1120 } });
   const failures = [];
   page.on('pageerror', error => failures.push(error.message));
-  await page.goto(origin + '/console');
+  await page.goto(robotPage);
   await page.getByLabel('Email', { exact: true }).fill(connection.email);
   await page.getByLabel('Password', { exact: true }).fill(connection.password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Robots', exact: true })).toBeVisible();
-  const connect = page.locator('summary', { hasText: 'Connect a simulator' });
+  // The robot page's own controls stay outside this region; every check below is scoped to the tools.
+  const tools = page.getByRole('region', { name: 'Existing policy runtime', exact: true });
+  const openTools = () => page.locator('summary', { hasText: 'Advanced policy and evaluation tools' }).click();
+  await openTools();
+  await expect(tools.getByRole('heading', { name: 'Robots', exact: true })).toBeVisible();
+  const connect = tools.locator('summary', { hasText: 'Connect a simulator' });
   await connect.click();
-  await expect(page.getByRole('combobox', { name: 'Simulator profile', exact: true })
+  await expect(tools.getByRole('combobox', { name: 'Simulator profile', exact: true })
     .locator('option[value="metaworld-smolvla-text-skill-v1"]')).toHaveJSProperty('disabled', true);
   await connect.click();
-  const deploy = page.getByRole('button', { name: 'Request deployment', exact: true });
+  const deploy = tools.getByRole('button', { name: 'Request deployment', exact: true });
   await expect(deploy).toBeEnabled();
-  const before = await page.locator('[aria-labelledby="deployment-heading"]').innerText();
+  const before = await tools.locator('[aria-labelledby="deployment-heading"]').innerText();
   const generation = Number(before.match(/Generation (\d+)/)?.[1]);
   if (!generation) throw new Error('Seeded deployment not observed');
   await deploy.click();
-  await expect(page.getByText(`Generation ${generation + 1}`, { exact: true })).toBeVisible({ timeout: 15000 });
-  const start = page.getByRole('button', { name: 'Start mission', exact: true });
+  await expect(tools.getByText(`Generation ${generation + 1}`, { exact: true })).toBeVisible({ timeout: 15000 });
+  const start = tools.getByRole('button', { name: 'Start mission', exact: true });
   await expect(start).toBeEnabled({ timeout: 15000 });
-  const rows = page.locator('.console-history tbody tr');
+  const rows = tools.locator('.console-history tbody tr');
   const previous = await rows.count() ? await rows.first().locator('code').innerText() : null;
   await start.click();
   if (previous) await expect(rows.first()).not.toContainText(previous);
   await expect(rows.first()).toContainText('completed', { timeout: 20000 });
-  await page.getByRole('button', { name: 'View episode', exact: true }).first().click();
-  await expect(page.locator('.console-episode')).toContainText('Succeeded');
-  await expect(page.locator('.console-episode')).toContainText('500');
-  await expect(page.locator('.console-diagnosis')).toHaveCount(0);
-  await expect(page.locator('.console-episode details')).not.toHaveAttribute('open');
+  await tools.getByRole('button', { name: 'View episode', exact: true }).first().click();
+  await expect(tools.locator('.console-episode')).toContainText('Succeeded');
+  await expect(tools.locator('.console-episode')).toContainText('500');
+  await expect(tools.locator('.console-diagnosis')).toHaveCount(0);
+  await expect(tools.locator('.console-episode details')).not.toHaveAttribute('open');
   await page.screenshot({ path: path.join(output, 'console.png'), fullPage: true });
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Robots', exact: true })).toBeVisible();
+  await openTools();
+  await expect(tools.getByRole('heading', { name: 'Robots', exact: true })).toBeVisible();
   await expect(start).toBeEnabled();
   await start.click();
-  await page.getByRole('button', { name: 'Request cancellation', exact: true }).click({ timeout: 5000 });
+  await tools.getByRole('button', { name: 'Request cancellation', exact: true }).click({ timeout: 5000 });
   await expect(rows.first()).toContainText('cancelled', { timeout: 15000 });
-  await page.getByRole('button', { name: 'View episode', exact: true }).first().click();
-  await expect(page.locator('.console-diagnosis')).toContainText('Where execution stopped');
-  await expect(page.locator('.console-diagnosis')).toContainText('Cancellation requested');
-  await expect(page.locator('.console-diagnosis')).not.toContainText('authorization had elapsed');
+  await tools.getByRole('button', { name: 'View episode', exact: true }).first().click();
+  await expect(tools.locator('.console-diagnosis')).toContainText('Where execution stopped');
+  await expect(tools.locator('.console-diagnosis')).toContainText('Cancellation requested');
+  await expect(tools.locator('.console-diagnosis')).not.toContainText('authorization had elapsed');
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
   await page.screenshot({ path: path.join(output, 'console-mobile.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Account', exact: true }).click();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
   expect(failures).toEqual([]);

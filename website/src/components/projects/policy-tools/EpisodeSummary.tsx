@@ -1,4 +1,4 @@
-import { EpisodeReplay } from "./EpisodeReplay";
+import { EpisodeReplay } from "@/components/configurations/EpisodeReplay";
 import type { Episode } from "@/lib/platform/client";
 import { executionDiagnosis } from "@/lib/platform/diagnosis";
 

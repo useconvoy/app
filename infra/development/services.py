@@ -122,7 +122,7 @@ def initialize(web_port, api_port, image_prefix=None):
         (directory / "service.csr").unlink()
         extensions.unlink()
     credentials = {"email": "developer@convoy.local", "password": secrets.token_urlsafe(32),
-                   "console_url": f"http://localhost:{web_port}/console", "api_url": f"https://localhost:{api_port}",
+                   "console_url": f"http://localhost:{web_port}/app", "api_url": f"https://localhost:{api_port}",
                    "ca_file": str(tls / "ca.crt")}
     private_json(STATE / "connection.json", credentials)
     prefix = image_prefix or ("convoy-v1" if PROJECT == DEFAULT_PROJECT else PROJECT)

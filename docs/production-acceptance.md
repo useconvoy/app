@@ -1,5 +1,8 @@
 # Public portal acceptance — September 14, 2026 UTC
 
+> Historical acceptance record. The portal pages and browser Chat it verified have
+> since been removed; see [the production portal record](production-portal.md).
+
 The public [Convoy demo](https://deployconvoy.com/portal) was verified against the
 physical `nano-lab-01` Jetson Orin Nano. The dedicated demo login worked in a real
 Chrome browser. No browser responses were mocked during this live verification.
