@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useSession } from "@/components/configurations/Session";
 import { PageHeader } from "@/components/configurations/AppShell";
 import { Card } from "@/components/configurations/Tiles";
-import type { Application, Deployment, Episode, Mission, Release, Robot } from "@/lib/platform/client";
+import type { Episode, Mission, Qualification, Robot } from "@/lib/platform/client";
 import { useProjectResource, type RobotProfile } from "@/lib/projects/client";
 import { Shell, useMutation } from "./Projects";
 import { TimingResult } from "./TimingResult";
@@ -15,6 +15,7 @@ import { ComputerDetails } from "./ConnectionSetup";
 import { ProjectWorkspace } from "@/components/console/Console";
 import { notifySessionExpired } from "@/lib/configurations/session-events";
 import { SimulatorReadiness } from "./SimulatorReadiness";
+import { currentRobotConfiguration, robotReleaseCompatible, useProjectRobotConfigurations, RobotConfigurationSummary } from "./ProjectRobotConfigurations";
 
 const finished = (state: string) => ["completed", "failed", "cancelled"].includes(state);
 
@@ -25,70 +26,87 @@ export function RobotExecution({ projectId, robotId }: { projectId: string; robo
   const [applicationId, setApplicationId] = useState(query.get("application_id") ?? "");
   const [releaseId, setReleaseId] = useState(query.get("release_id") ?? "");
   const [episodeId, setEpisodeId] = useState<string | null>(null);
+  const [advancedTools, setAdvancedTools] = useState(false);
   const refresh = () => setRevision(n => n + 1);
   const mutation = useMutation(refresh);
   const robotRead = useProjectResource<Robot>(`robots/${robotId}`, revision, true);
   const robot = robotRead.data?.project_id === projectId ? robotRead.data : undefined;
   const profile = useProjectResource<RobotProfile>(robot?.profile_id ? `robot-profiles/${robot.profile_id}` : null, revision);
-  const applications = useProjectResource<Application[]>(`applications?project_id=${projectId}`, revision);
-  const selectedApplication = applicationId || applications.data?.[0]?.id;
-  const releases = useProjectResource<Release[]>(selectedApplication ? `applications/${selectedApplication}/releases` : null, revision);
-  const deployments = useProjectResource<Deployment[]>(`deployments?project_id=${projectId}&robot_id=${robotId}`, revision, true);
+  const catalogue = useProjectRobotConfigurations(projectId, revision, robotId);
+  const current = robot ? currentRobotConfiguration(robot, catalogue) : undefined;
+  const deployment = current?.deployment;
+  const compatibleApplications = robot ? catalogue.applications.filter(app => catalogue.releases.some(release => release.application_id === app.id && robotReleaseCompatible(robot, release, profile.data))) : [];
+  const selectedApplication = applicationId || current?.application?.id || compatibleApplications[0]?.id;
+  const releases = catalogue.releases.filter(release => release.application_id === selectedApplication);
   const missions = useProjectResource<Mission[]>(`missions?project_id=${projectId}&robot_id=${robotId}`, revision, true);
   const episode = useProjectResource<Episode>(episodeId ? `episodes/${episodeId}` : null, revision);
   const tasks = missions.data?.filter(m => m.robot_id === robotId) ?? [];
   const active = tasks.find(m => !finished(m.state));
-  const deployment = deployments.data?.find(d => d.generation === robot?.generation);
-  const selectedReleaseId = releaseId || (releases.data?.some(r => r.id === deployment?.release_id) ? deployment!.release_id : "");
-  const selectedRelease = releases.data?.find(r => r.id === selectedReleaseId);
-  const supported = robot?.simulated && robot.profile === "registered-joint-policy-v1";
-  const qualified = robot?.qualification?.state === "passed";
-  const compatible = selectedRelease?.manifest.schema_version === 3 && selectedRelease.manifest.environment.robot_profile_sha256 === profile.data?.digest;
-  const reads = [robotRead, profile, applications, releases, deployments, missions, episode];
+  const selectedReleaseId = releaseId || (releases.some(r => r.id === deployment?.release_id) ? deployment!.release_id
+    : releases.find(release => robot && robotReleaseCompatible(robot, release, profile.data))?.id ?? "");
+  const selectedRelease = releases.find(r => r.id === selectedReleaseId);
+  const registered = !!robot?.profile_id;
+  const supported = !!robot && robot.simulated !== false && (registered
+    ? robot.simulated === true && robot.simulation_engine === "mujoco" && profile.data?.spec?.command_interface === "joint-position" && (robot.profile === "registered-joint-policy-v1" || robot.profile === "custom-unqualified" && !profile.data?.spec?.execution_profile)
+    : (account.installation.execution_profiles ?? []).includes(robot.profile));
+  const qualified = !registered || robot?.qualification?.state === "passed";
+  const compatible = !!robot && !!selectedRelease && robotReleaseCompatible(robot, selectedRelease, profile.data);
+  const qualification = useProjectResource<Qualification>(selectedApplication && selectedReleaseId ? `applications/${selectedApplication}/qualification?release_id=${selectedReleaseId}` : null, revision, true);
+  const releaseQualified = qualification.data?.release_id === selectedReleaseId && qualification.data.deployment_allowed;
+  const reads = [robotRead, profile, missions, episode, qualification];
   // A stale poll can still display the previous state, but it must not enable a new command.
-  const fresh = reads.every(read => !read.error) && !!robot && !!deployments.data && !!missions.data;
-  const canStart = operator && fresh && supported && qualified && !active && !robot.evaluation_id && deployment?.state === "ready" && selectedReleaseId === deployment.release_id;
+  const fresh = reads.every(read => !read.error) && catalogue.fresh && !!robot && !!missions.data;
+  const canDispatch = account.installation.simulator && !account.installation.dispatch_paused_at && !account.installation.quarantined_at;
+  const canStart = operator && fresh && canDispatch && supported && qualified && compatible && releaseQualified && !active && !robot.evaluation_id && deployment?.state === "ready" && selectedReleaseId === deployment.release_id;
   return <Shell project={robot?.name ?? "Robot"} projectId={projectId} section="Robots">
     <Link className="cv-link" href={`/app/projects/${projectId}`}>← Back to project</Link>
     <PageHeader title={robot?.name ?? "Robot"} actions={<button className="cv-btn cv-btn--secondary" onClick={refresh}>Refresh</button>} />
     {reads.map((read, index) => read.error ? <p key={index} role="alert">{read.error}</p> : null)}
+    {catalogue.error && <p role="alert">{catalogue.error}</p>}
     {mutation.error && <p role="alert">{mutation.error}</p>}
     {robotRead.data && !robot && <p role="alert">This robot does not belong to this project.</p>}
     {robot && <>
       <p>{robot.simulated ? "Simulated robot" : "Physical robot"} · {profile.data ? `${profile.data.name} · revision ${profile.data.revision}` : "Profile unavailable"}</p>
       <ComputerDetails deviceId={robot.device_id} />
-      {!supported && robot.simulated && !robot.profile_id && <section className="console-shell" aria-label="Existing policy runtime"><ProjectWorkspace project={{ id: projectId, name: robot.name }} initialRobotId={robot.id} writable={operator} canDispatch={account.installation.simulator && !account.installation.dispatch_paused_at && !account.installation.quarantined_at} executionProfiles={account.installation.execution_profiles ?? []} onSessionEnd={notifySessionExpired} /></section>}
-      {!supported && (!robot.simulated || robot.profile_id) && <p>Task execution is not available for this robot interface yet.</p>}
-      {supported && <>
-        <Card title="Simulator readiness"><div className="robot-execution-content"><SimulatorReadiness robot={robot} busy={mutation.busy} canWrite={operator} verify={() => void mutation.submit(`robots/${robot.id}/qualification`, {})} /></div></Card>
-        <Card title="Deployment"><div className="robot-execution-content">
-          <p>{deployment ? `Deployment ${deployment.generation} · ${deployment.state}` : "No configuration deployed"}</p>
+      {registered && robot.simulated && <Card title="Simulator readiness"><div className="robot-execution-content"><SimulatorReadiness robot={robot} busy={mutation.busy} canWrite={operator} verify={() => void mutation.submit(`robots/${robot.id}/qualification`, {})} /></div></Card>}
+        <div id="robot-configuration"><Card title="Robot configuration"><div className="robot-execution-content">
+          <h3>Current configuration</h3>
+          <RobotConfigurationSummary projectId={projectId} robot={robot} catalogue={catalogue} />
+          {deployment && <p>Deployment {deployment.generation} · {deployment.state}</p>}
           {deployment?.observed_at && <p>Last reported: {new Date(deployment.observed_at).toLocaleString()}</p>}
           {deployment?.detail && <p>{deployment.detail}</p>}
-          <p>Runs the pinned robot model in the selected release’s timing mode. Physical accuracy requires separate calibration.</p>
+          <h3>{deployment ? "Change configuration" : "Set up configuration"}</h3>
+          <p>Select a compatible configuration and release, then request deployment. Changing the selection does not deploy software or start a task.</p>
           {operator && <p><Link className="cv-link" href={newConfigurationHref(projectId, robot.profile_id)}>Create runnable configuration</Link></p>}
           {selectedApplication && <p><Link className="cv-link" href={configurationHref(selectedApplication)}>View configuration releases</Link></p>}
-          {applications.data?.length === 0 ? <p>No runnable configurations in this project yet.</p> : <>
+          {catalogue.loading ? <p role="status">Loading runnable configurations…</p> : catalogue.applications.length === 0 ? <p>No runnable configurations in this project yet.</p> : <>
             <label className="cv-field">Configuration<select className="cv-input" value={selectedApplication ?? ""} onChange={e => { setApplicationId(e.target.value); setReleaseId(""); }}>
-              {applications.data?.map(app => <option key={app.id} value={app.id}>{app.name}</option>)}
+              <option value="">Choose a configuration</option>{catalogue.applications.map(app => <option key={app.id} value={app.id} disabled={!compatibleApplications.some(compatibleApp => compatibleApp.id === app.id)}>{app.name}{compatibleApplications.some(compatibleApp => compatibleApp.id === app.id) ? "" : " · no compatible release"}</option>)}
             </select></label>
             <label className="cv-field">Release<select className="cv-input" value={selectedReleaseId} onChange={e => setReleaseId(e.target.value)}>
-              <option value="">Choose a release</option>{releases.data?.map(release => <option key={release.id} value={release.id}>{release.digest.slice(0, 12)}</option>)}
+              <option value="">Choose a release</option>{releases.map(release => <option key={release.id} value={release.id} disabled={!robotReleaseCompatible(robot, release, profile.data)}>{release.digest.slice(0, 12)}{release.id === deployment?.release_id ? " · current" : ""}{robotReleaseCompatible(robot, release, profile.data) ? "" : " · incompatible"}</option>)}
             </select></label>
-            {selectedRelease && <p>{compatible ? "Matches this robot profile." : "This release does not match this robot profile."}</p>}
+            {selectedRelease && <p>{compatible ? "Matches this robot profile and execution interface." : "This release does not match this robot profile and execution interface."}</p>}
             {selectedRelease?.manifest.schema_version === 3 && <p>Task: {selectedRelease.manifest.task.instruction}</p>}
+            {selectedRelease?.manifest.schema_version === 2 && <p>Task: {selectedRelease.manifest.task.instruction}</p>}
             {selectedRelease?.manifest.schema_version === 3 && selectedRelease.manifest.policy.runtime === "convoy-joint-target-reference-v1" && <p>Joint-position reference controller · no learned model inference.</p>}
             {deployment?.state === "ready" && selectedReleaseId !== deployment.release_id && <p>Choose the deployed release to run it, or deploy your new selection first.</p>}
+            {selectedRelease && !qualification.data && !qualification.error && <p role="status">Checking release qualification…</p>}
+            {qualification.data && !releaseQualified && <p>This release must pass its configured evaluation gate before deployment.</p>}
+            {compatibleApplications.length === 0 && <p>No release matches this robot’s current profile and controller.</p>}
           </>}
+          {!supported && <p>Deployment and task execution are unavailable for this robot interface.</p>}
+          {supported && !qualified && <p>Verify this simulator before deploying a configuration.</p>}
+          {!canDispatch && <p>Task dispatch is unavailable or paused on this installation.</p>}
           {robot.evaluation_id && <p>This robot is reserved by an evaluation.</p>}
-          {operator && <div className="project-actions">
-            <button className="cv-btn cv-btn--secondary" disabled={mutation.busy || !fresh || !qualified || !compatible || !!active || !!robot.evaluation_id}
+          {operator && supported && <div className="project-actions">
+            <button className="cv-btn cv-btn--secondary" disabled={mutation.busy || !fresh || !canDispatch || !qualified || !compatible || !releaseQualified || !!active || !!robot.evaluation_id || deployment?.release_id === selectedReleaseId && !["failed", "blocked"].includes(deployment.state)}
               onClick={() => void mutation.submit("deployments", { robot_id: robot.id, release_id: selectedReleaseId, expected_generation: robot.generation })}>Deploy selected release</button>
             <button className="cv-btn cv-btn--primary" disabled={mutation.busy || !canStart}
               onClick={() => void mutation.submit(`robots/${robot.id}/missions`, { deployment_id: deployment!.id, expected_generation: robot.generation, seed: 0, ttl_s: 60 })}>Start task</button>
           </div>}
-        </div></Card>
-      </>}
+        </div></Card></div>
+      {!registered && robot.simulated !== false && <details className="robot-runtime-tools" onToggle={event => setAdvancedTools(event.currentTarget.open)}><summary>Advanced policy and evaluation tools</summary>{advancedTools && <section className="console-shell" aria-label="Existing policy runtime"><ProjectWorkspace project={{ id: projectId, name: robot.name }} initialRobotId={robot.id} writable={operator} canDispatch={canDispatch} executionProfiles={account.installation.execution_profiles ?? []} onSessionEnd={notifySessionExpired} /></section>}</details>}
       <Card title="Tasks"><div className="robot-execution-content">
         {tasks.length === 0 && <p>No tasks yet.</p>}
         {tasks.map(task => <article className="robot-task" key={task.id}>

@@ -123,7 +123,7 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
       || new RegExp(`^episodes/${ID}/replay(?:/frames/[0-9]{1,4})?$`).test(path)
       || new RegExp(`^${DOCUMENT}$`).test(path);
     if (["robots", "robot-profiles", "fleets", "applications", "missions", "evaluations"].includes(path)) { allowed = true; keys = ["project_id"]; required = keys; }
-    if (path === "deployments") { allowed = true; keys = ["project_id", "robot_id"]; required = ["project_id"]; }
+    if (path === "deployments") { allowed = true; keys = ["project_id", "robot_id", "current_only"]; required = ["project_id"]; }
     if (path === "missions") { keys = ["project_id", "robot_id"]; required = ["project_id"]; }
     if (path === "episodes") { allowed = true; keys = ["mission_id"]; required = keys; }
     if (path === "workspace-configuration-links") { allowed = true; keys = ["configuration_id", "application_id"]; if (keys.filter(key => search.has(key)).length !== 1) return null; }
@@ -151,6 +151,7 @@ export function allowedPlatformPath(parts: string[], method: string, search: URL
   if (!allowed) return null;
   for (const [key, value] of search) {
     if (!keys.includes(key) || search.getAll(key).length !== 1 || !new RegExp(`^${ID}$`).test(value)) return null;
+    if (key === "current_only" && value !== "true" && value !== "false") return null;
   }
   if (required.some(key => !search.has(key))) return null;
   return `/api/v1/${path}${search.size ? `?${search.toString()}` : ""}`;

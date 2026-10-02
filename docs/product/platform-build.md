@@ -426,3 +426,24 @@ regression for project placement and execution-link isolation. The deployment sm
 now expects `/app/projects`, fixing the stale redirect expectation that rolled back #113.
 Deployment uses the existing Lightsail host and existing runtime data, with no new AWS
 resources. Release CI and public verification are recorded in the integration PR.
+
+## Project directory, fleet navigation and robot configurations
+
+Branch: `codex/project-fleet-workspace`. Projects use a dedicated list alongside
+a separate creation panel. Project pages and their robot/configuration details
+share a persistent left sidebar, with fleet dropdowns linking to member robots.
+The overview groups robots by fleet and shows each robot's current configuration
+and deployment acknowledgement instead of a separate list of deployment links.
+Unassigned robots remain visible and can be grouped from the Robots page.
+
+Robot configuration controls resolve the actual deployed application and release
+for the robot's current generation. Operators can select compatible alternatives
+and explicitly deploy them; task start waits for the current release to be ready.
+New robots without a deployment display an unconfigured state and setup controls.
+Saved model drafts remain distinct from executable releases. Existing legacy
+policy/evaluation tools remain available in an expandable section.
+
+Validation includes desktop/mobile project and fleet navigation, accessibility,
+creation and reload, deployment selection without accidental dispatch, and
+switching the configuration on the existing local MuJoCo runner. The release
+retains the existing hosted data and uses the existing Lightsail infrastructure.

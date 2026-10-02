@@ -21,10 +21,7 @@ export function Breadcrumbs({ crumbs }: { crumbs: readonly Crumb[] }) {
   </ol></nav>;
 }
 
-/**
- * The page frame: a slim top bar (wordmark, breadcrumbs, account, sign out) and
- * `main#main`. Configurations is the only area, so there is no other navigation.
- */
+/** Shared account frame and persistent project navigation. */
 export function AppShell({ crumbs, children, projectId: explicitProject, section, navigation = true }: { crumbs: readonly Crumb[]; children: ReactNode; projectId?: string; section?: string; navigation?: boolean }) {
   const session = useSession();
   const ws = useWorkspace();
@@ -52,10 +49,16 @@ export function AppShell({ crumbs, children, projectId: explicitProject, section
         </div>
       </div>
     </header>
-    <main id="main" className="cv-main" tabIndex={-1}>
-      {session.signOutError && <p className="cv-notice cv-notice--error" role="alert">{session.signOutError}</p>}
-      {navigation && projectId && <ProjectNavigation projectId={projectId} selected={section ?? (configurationId ? "Configurations" : undefined)} />}
-      {children}
+    <main id="main" className={`cv-main${navigation && projectId ? " cv-main--project" : ""}`} tabIndex={-1}>
+      {navigation && projectId && <aside className="project-sidebar" aria-label="Project navigation">
+        <Link className="project-back" href="/app/projects">← All projects</Link>
+        <p className="project-sidebar__name">{project?.name ?? "Project workspace"}</p>
+        <ProjectNavigation projectId={projectId} selected={section ?? (configurationId ? "Configurations" : "Overview")} />
+      </aside>}
+      <div className="project-content">
+        {session.signOutError && <p className="cv-notice cv-notice--error" role="alert">{session.signOutError}</p>}
+        {children}
+      </div>
     </main>
   </div>;
 }

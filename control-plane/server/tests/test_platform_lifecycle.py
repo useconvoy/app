@@ -9,10 +9,11 @@ import pytest
 from conftest import WEB, FakeAgent, enrollment_token, login, make_user
 from convoy_contracts.execution import PROFILE, VISUAL_PROFILE, canonical_digest, verify_grant
 from convoy_server import migrations
-from convoy_server.db import make_engine, reset_engine, session_scope, write_txn
+from convoy_server.db import get_engine, make_engine, reset_engine, session_scope, write_txn
 from convoy_server.ids import utcnow
-from convoy_server.platform_models import Mission
+from convoy_server.platform_models import Deployment, Mission, Robot
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 
 
 def post(client, path, body, key="create", expected=201):
@@ -84,6 +85,79 @@ def claim(pipeline, mission):
     response = p["agent"].client.post(f"{p['base']}/missions/{mission['id']}/claim", json=body)
     assert response.status_code == 200, response.text
     return response.json(), body
+
+
+def test_current_deployments_survive_another_robots_history_limit(app, pipeline):
+    p = pipeline
+    agent = FakeAgent(app, name="frequently-deployed-runner")
+    assert agent.enroll(enrollment_token(p["admin"])).status_code == 200
+    robot = post(p["admin"], "/api/v1/robots", {
+        "project_id": p["project"]["id"], "device_id": agent.device_id,
+        "name": "Frequently deployed robot", "profile": PROFILE,
+    }, key="busy-robot")
+    with session_scope() as db, write_txn(db):
+        db.get(Robot, robot["id"]).generation = 205
+        created_at = utcnow()
+        for generation in range(1, 206):
+            db.add(Deployment(
+                id=f"dep_history_{generation}", project_id=p["project"]["id"],
+                robot_id=robot["id"], release_id=p["release"]["id"],
+                generation=generation, state="requested" if generation == 205 else "ready",
+                created_at=created_at + timedelta(milliseconds=generation),
+            ))
+    params = {"project_id": p["project"]["id"]}
+    # Existing callers still receive bounded history, including historical generations.
+    history = p["admin"].get("/api/v1/deployments", params=params).json()
+    assert len(history) == 200
+    assert p["deployment"]["id"] not in {item["id"] for item in history}
+    assert p["admin"].get("/api/v1/deployments", params={**params, "current_only": "false"}).json() == history
+
+    selects = []
+    engine = get_engine()
+
+    def track_deployment_select(connection, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().upper().startswith("SELECT") and "platform_deployments" in statement:
+            selects.append(statement)
+
+    event.listen(engine, "before_cursor_execute", track_deployment_select)
+    try:
+        response = p["admin"].get("/api/v1/deployments", params={**params, "current_only": "true"})
+    finally:
+        event.remove(engine, "before_cursor_execute", track_deployment_select)
+    assert response.status_code == 200
+    current = response.json()
+    assert {(item["robot_id"], item["generation"]) for item in current} == {
+        (p["robot"]["id"], 1), (robot["id"], 205),
+    }
+    assert next(item for item in current if item["robot_id"] == robot["id"])["state"] == "requested"
+    assert len(selects) == 1  # Fleet size does not introduce a deployment lookup per robot.
+    assert p["admin"].get("/api/v1/deployments", params={
+        **params, "current_only": "true", "robot_id": p["robot"]["id"],
+    }).json() == [item for item in current if item["robot_id"] == p["robot"]["id"]]
+
+
+def test_current_deployment_filter_preserves_project_and_owner_scope(app, pipeline):
+    p = pipeline
+    empty = post(p["admin"], "/api/v1/projects", {"name": "Separate project"}, key="separate-project")
+    assert p["admin"].get("/api/v1/deployments", params={
+        "project_id": empty["id"], "current_only": "true",
+    }).json() == []
+    assert p["admin"].get("/api/v1/deployments", params={
+        "project_id": empty["id"], "current_only": "true", "robot_id": p["robot"]["id"],
+    }).status_code == 404
+    make_user(p["admin"], "deployment-viewer@example.com", "operator")
+    with TestClient(app) as other:
+        login(other, "deployment-viewer@example.com", "password-123")
+        assert other.get("/api/v1/deployments", params={
+            "project_id": p["project"]["id"], "current_only": "true",
+        }).status_code == 404
+        own = post(other, "/api/v1/projects", {"name": "Other owner's project"})
+        assert other.get("/api/v1/deployments", params={
+            "project_id": own["id"], "current_only": "true",
+        }).json() == []
+        assert other.get("/api/v1/deployments", params={
+            "project_id": own["id"], "current_only": "true", "robot_id": p["robot"]["id"],
+        }).status_code == 404
 
 
 @pytest.mark.parametrize("pipeline", [PROFILE, VISUAL_PROFILE], indirect=True)
