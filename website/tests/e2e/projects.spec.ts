@@ -167,8 +167,11 @@ test("registered robot tasks wait for deployment and stop acknowledgements", asy
   await page.getByRole("button", { name: "View task result" }).click();
   await expect(page.getByText("3 control steps")).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo({ top: 0, behavior: "instant" }); });
   await page.screenshot({ path: testInfo.outputPath("robot-tasks-desktop.png"), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo({ top: 0, behavior: "instant" }); });
+  await expect.poll(async () => (await page.getByRole("banner").boundingBox())?.y).toBe(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
   await page.screenshot({ path: testInfo.outputPath("robot-tasks-mobile.png"), fullPage: true });
 });
