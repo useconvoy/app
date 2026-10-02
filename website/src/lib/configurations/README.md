@@ -57,7 +57,11 @@ stays reachable on the same session, but Configurations never links to it.
     hosted runner and imported unsigned (`docs/v1/offline-evaluations.md`). The eval page
     shows their metrics and rollouts; the replay plays the uploaded frames (PNG or JPEG)
     with one label per action value. Add robot → "Simulator · offline" links them; a
-    simulator's Details → Offline evals changes the links.
+    simulator's Details → Offline evals changes the links. An offline evaluation belongs
+    to the configuration whose robots link it: both pickers offer only this
+    configuration's and unassigned ones (`offlineEvaluationsFor` in `selectors.ts`), a
+    robot keeps its own links, and `addRobot` and `linkOfflineEvaluations` refuse one
+    that another configuration's robot links, so a stale form cannot take it.
   - `EvalRun.recordedEvaluationId` (`eva_…`): a stored run whose metrics and rollouts
     come from that evaluation. `EvalRun.recordedEpisodeId` (`epi_…`): a one-episode run.
   - `Rollout.episodeId` (`epi_…`): a stored rollout backed by a real episode.

@@ -2,11 +2,12 @@
 
 A *decision policy* chooses the next skill call from a JSON observation. The
 included ``GreedyPillPlanner`` is deterministic code standing in for a language
-model planner: every configuration uses the same decision rule, so differences
-between configurations come only from where the planner runs, how long a call
+model planner: the configurations that use it share the same decision rule, so
+differences between them come only from where the planner runs, how long a call
 takes, and what happens when the network is down. Swap in a real model through
 the ``DecisionPolicy`` protocol; if it reports its own measured latency, that
-replaces the modeled latency.
+replaces the modeled latency. "Edge Qwen" does not use the stand-in: its
+decisions are real calls to the model on a connected device (``device_planner``).
 
 Latency models are log-normal, fitted to a published or measured p50/p95 pair.
 """
@@ -59,17 +60,21 @@ class PlannerProfile:
     """Where a planner runs and how long it takes. `evidence` names the source.
 
     `concurrency` is how many calls run at once: one for a model on the robot's
-    single edge GPU (requests queue), one per arm for a hosted API.
+    single edge GPU (requests queue), one per arm for a hosted API. `source`
+    "stand_in" is the rule-based ``GreedyPillPlanner`` with latency drawn from
+    `latency`; "device" is a real model on a connected device
+    (``device_planner``): no latency model, every call is measured.
     """
 
     name: str
     model: str
     placement: str  # "edge" | "cloud"
-    latency: LatencyModel
+    latency: LatencyModel | None
     timeout_s: float
     connect_timeout_s: float = 3.0
     evidence: str = ""
     concurrency: int = 1
+    source: str = "stand_in"  # "stand_in" | "device"
 
 
 @dataclass

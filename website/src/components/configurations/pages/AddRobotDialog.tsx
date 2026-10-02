@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 import type { FormEvent } from "react";
-import { useWorkspace } from "@/lib/configurations/client";
+import { offlineEvaluationIdsFor, useWorkspace } from "@/lib/configurations/client";
 import { addRobot } from "@/lib/configurations/mutations";
 import { platformPaths } from "@/lib/configurations/runs";
 import { CONFIGURED_DEVICE } from "@/lib/configurations/types";
@@ -10,7 +10,7 @@ import type { Configuration } from "@/lib/configurations/types";
 import type { Device, Project, Robot as PlatformRobot } from "@/lib/platform/client";
 import { Modal } from "../Overlay";
 import { usePlatform } from "../platform";
-import { OfflinePicker } from "./OfflineEvaluations";
+import { OfflinePicker, useOfflineChoices } from "./OfflineEvaluations";
 
 type Kind = "device" | "simulator" | "offline";
 const KINDS: ReadonlyArray<{ id: Kind; label: string }> = [{ id: "device", label: "Live device" }, { id: "simulator", label: "Simulator" }, { id: "offline", label: "Simulator · offline" }];
@@ -20,7 +20,8 @@ const KINDS: ReadonlyArray<{ id: Kind; label: string }> = [{ id: "device", label
  * account's devices) gives telemetry and traces; a control-plane project gives
  * evals, rollouts and replays from its real evaluations and episodes, optionally
  * only one platform robot's; offline evaluations (imported, unsigned) give evals
- * tagged "Offline sim". Robots are added for testing.
+ * tagged "Offline sim", offered when this configuration's robots link them or no
+ * configuration's do. Robots are added for testing.
  */
 export function AddRobotDialog({ config, onClose, onAdded }: { config: Configuration; onClose: () => void; onAdded: (name: string) => void }) {
   const ws = useWorkspace();
@@ -37,6 +38,9 @@ export function AddRobotDialog({ config, onClose, onAdded }: { config: Configura
   const devices = usePlatform<Device[]>(platformPaths.devices());
   const projects = usePlatform<Project[]>(platformPaths.projects());
   const robots = usePlatform<PlatformRobot[]>(projectId ? platformPaths.robots(projectId) : null);
+  const offlineChoices = useOfflineChoices(kind === "offline", config.id);
+  // A chosen eval that another configuration linked meanwhile is no longer offered, so it is not saved.
+  const chosenOffline = ws.workspace ? offlineEvaluationIdsFor(ws.workspace, config.id, offlineIds) : offlineIds;
   const deviceList = devices.state.status === "ready" && Array.isArray(devices.state.data)
     ? devices.state.data.filter(device => !device.simulated).toSorted((a, b) => Number(b.status === "online") - Number(a.status === "online") || a.name.localeCompare(b.name)) : [];
   const projectList = projects.state.status === "ready" && Array.isArray(projects.state.data) ? projects.state.data : [];
@@ -48,7 +52,7 @@ export function AddRobotDialog({ config, onClose, onAdded }: { config: Configura
   const errors = {
     name: !name.trim() ? "Enter a name." : ws.workspace?.robots.some(robot => robot.configId === config.id && robot.name.trim().toLowerCase() === name.trim().toLowerCase()) ? "This configuration has a robot with this name." : null,
     device: kind === "device" && !chosenDevice ? "Choose a device." : null,
-    offline: kind === "offline" && !offlineIds.length ? "Choose an offline eval." : null,
+    offline: kind === "offline" && !chosenOffline.length ? "Choose an offline eval." : null,
   };
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -61,7 +65,7 @@ export function AddRobotDialog({ config, onClose, onAdded }: { config: Configura
     const offline = kind === "offline";
     const input = {
       configId: config.id, name, deviceId: chosenDevice || null, projectId: !offline && projectId || null,
-      platformRobotId: !offline && projectId && platformRobotId ? platformRobotId : null, offlineEvaluationIds: offline ? offlineIds : null,
+      platformRobotId: !offline && projectId && platformRobotId ? platformRobotId : null, offlineEvaluationIds: offline ? chosenOffline : null,
     };
     const result = await ws.save(current => addRobot(current, input, Date.now()).workspace);
     setBusy(false);
@@ -98,7 +102,7 @@ export function AddRobotDialog({ config, onClose, onAdded }: { config: Configura
       </div>}
       {kind === "offline" && <fieldset className="cv-field" disabled={busy}>
         <legend>Offline evals</legend>
-        <OfflinePicker value={offlineIds} onChange={setOfflineIds} describedBy={checked && errors.offline ? `${id}-offline-error` : undefined} />
+        <OfflinePicker choices={offlineChoices} value={chosenOffline} onChange={setOfflineIds} describedBy={checked && errors.offline ? `${id}-offline-error` : undefined} />
         {checked && errors.offline && <span className="cv-field__error" id={`${id}-offline-error`}>{errors.offline}</span>}
       </fieldset>}
       {kind !== "offline" && <label className="cv-field">Evals from

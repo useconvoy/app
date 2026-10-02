@@ -11,7 +11,8 @@ sequences, observation continuity, 4-value actions in [-1, 1] and PNG frames of
 at most 768 KiB; the same rows can be posted to the recording upload endpoints.
 
 This task's additions are additive keys the reader ignores: ``planner_duration_ms``
-(modeled latency of planner calls that completed during the step) and
+(latency of planner calls that completed during the step: modeled, or the measured
+round trip for a planner on a connected device) and
 ``bimanual`` (both arms' commands, active skills, joint targets, planner calls)
 on each result row.
 
@@ -229,7 +230,8 @@ class JournalRecorder:
         plan = self.first_plan or {}
         reward_sum = sum(r["reward"] for r in self.rows)
         platform_summary = {
-            "execution_mode": "simulated_time_modeled_latency",
+            "execution_mode": ("simulated_time_measured_planner_latency" if cfg.skill_planner.source == "device"
+                               else "simulated_time_modeled_latency"),
             "evidence_scope": "simulated_physics_with_privileged_state",
             "profile": PROFILE,
             "seed": episode.spec.seed,
