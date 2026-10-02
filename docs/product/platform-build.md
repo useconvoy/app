@@ -447,3 +447,17 @@ Validation includes desktop/mobile project and fleet navigation, accessibility,
 creation and reload, deployment selection without accidental dispatch, and
 switching the configuration on the existing local MuJoCo runner. The release
 retains the existing hosted data and uses the existing Lightsail infrastructure.
+
+## One workspace frame for Configurations and Projects
+
+The project features keep their behaviour but follow the Configurations design: one slim
+top bar (breadcrumbs, a Configurations | Projects switch, an account menu showing initials
+with Sign out), no sidebar anywhere, project sections as tabs under the title, equal cards,
+and creation in dialogs (project, profile, fleet; robot registration stays an inline panel
+because its token flow runs on another computer). The Configurations journey shows no
+project context: its breadcrumbs are Configurations / configuration / robot / eval, runnable
+project configurations appear as one row under the cards when any exist, and a saved
+configuration's link to one is a single row under Details with a dialog. Both areas share
+one session, so switching between them does not check the session again. `/app` still
+redirects to `/app/projects`; a page load arriving through it continues to Configurations
+when the account has saved configurations.

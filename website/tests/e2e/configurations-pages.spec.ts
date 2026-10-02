@@ -118,7 +118,8 @@ test.describe("config dashboard", () => {
     await expect(section.locator(".cv-facts dd")).toHaveText([
       "Bimanual station", "2 × 6-DOF arms · wheeled base", "Head RGB-D, 2 × wrist RGB", "Jetson Orin Nano Super 8 GB", "Qwen2.5-1.5B (planner)", "–Not reported", "Testing",
     ]);
-    // It turns (VP9 in Chromium) until paused.
+    // It turns (VP9 in Chromium) until paused; Chromium plays a muted autoplay video only while it is on screen.
+    await video.scrollIntoViewIfNeeded();
     await expect.poll(() => video.evaluate((element: HTMLVideoElement) => !element.paused && element.currentTime > 0)).toBe(true);
     await section.getByRole("button", { name: "Pause rotation" }).click();
     await expect(section.getByRole("button", { name: "Play rotation" })).toBeVisible();

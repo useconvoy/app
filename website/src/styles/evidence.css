@@ -1,0 +1,114 @@
+/* Evidence panels (cv-ev, cv-lb, cv-au): the latency budget and autonomy cards on the eval page
+ * (Overview) and, compact, on the configuration dashboard. Imported by the panels themselves
+ * (components/configurations/evidence/EvidenceRow.tsx). Colours come from tokens only; the
+ * segment colours are --cfg-prefill, --cfg-decode and --cfg-relay. House rules as in
+ * configurations.css: hairlines, small radii, sentence case, single-line cells. Breakpoints 899 / 639. */
+
+/* ---------- the row: two cards side by side, equal in height, feet aligned ---------- */
+.cv-ev-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.cv-ev-row > .cv-ev:only-child { grid-column: 1 / -1; }
+.cv-ev-row--dashboard { margin: 24px 0; }
+.cv-tabpanel > .cv-ev-row + .cv-card { margin-top: 16px; }
+
+/* ---------- card: head, body and foot are three rows of the row's grid, shared by the cards beside it ---------- */
+.cv-card.cv-ev { display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 0; min-width: 0; margin-top: 0; }
+.cv-ev__head { gap: 12px; padding-right: 10px; }
+.cv-ev__title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.cv-ev__title h2 { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.cv-ev__info { flex: none; }
+.cv-ev__info[aria-expanded="true"] { background: var(--surface-subtle); color: var(--text-primary); }
+.cv-ev__info:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+.cv-card.cv-ev > .cv-ev__body { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 14px 20px 16px; }
+.cv-ev__sub { margin: 0; color: var(--text-secondary); font-size: .75rem; }
+.cv-ev__definitions { display: grid; gap: 6px; margin: 0; padding: 10px 12px; background: color-mix(in srgb, var(--surface-subtle) 55%, var(--surface)); border-radius: var(--radius); font-size: .75rem; }
+.cv-ev__definitions[hidden] { display: none; }
+.cv-ev__definitions > div { display: grid; grid-template-columns: 136px minmax(0, 1fr); gap: 12px; }
+.cv-ev__definitions dt { color: var(--text-secondary); }
+.cv-ev__definitions dd { margin: 0; }
+/* The foot: the card's last row, so side-by-side feet start on one line. */
+.cv-card.cv-ev > .cv-ev__foot { display: grid; align-content: start; gap: 6px; min-width: 0; padding: 11px 20px 14px; border-top: 1px solid var(--border-subtle); }
+.cv-ev__facts { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 0; font-size: .75rem; }
+.cv-ev__facts > div { display: flex; gap: 6px; min-width: 0; }
+.cv-ev__facts dt { color: var(--text-secondary); white-space: nowrap; }
+.cv-ev__facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.cv-ev__line { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+.cv-ev__note { margin: 0; color: var(--text-secondary); font-size: .75rem; }
+.cv-ev__source { margin-left: auto; font-size: .8125rem; white-space: nowrap; }
+.cv-ev__source .cv-link { min-height: 0; font-weight: 400; }
+
+/* ---------- latency budget: one grid of name | track | value on a linear axis from 0 ---------- */
+.cv-lb { --cv-lb-name: 152px; display: grid; grid-template-columns: fit-content(var(--cv-lb-name)) minmax(0, 1fr) max-content; align-items: center; gap: 8px 12px; }
+.cv-lb__ticks { position: relative; grid-column: 2; height: 14px; color: var(--text-secondary); font-size: .6875rem; line-height: 14px; font-variant-numeric: tabular-nums; }
+.cv-lb__ticks > span { position: absolute; top: 0; white-space: nowrap; transform: translateX(-50%); }
+.cv-lb__ticks > span:first-child { transform: none; }
+.cv-lb__ticks > span:last-child:not(:first-child) { transform: translateX(-100%); }
+/* Gridlines span every row of the track column, behind the bars. */
+.cv-lb__grid { position: relative; grid-column: 2; align-self: stretch; margin: -4px 0; pointer-events: none; }
+.cv-lb__grid > i { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border-subtle); }
+.cv-lb__name { grid-column: 1; overflow: hidden; color: var(--text-secondary); font-size: .75rem; white-space: nowrap; text-overflow: ellipsis; }
+.cv-lb__track { position: relative; z-index: 1; display: flex; grid-column: 2; align-items: center; min-width: 0; height: 20px; }
+.cv-lb__bar { display: flex; height: 16px; overflow: hidden; border-radius: 0 4px 4px 0; }
+.cv-lb__seg { display: block; flex: none; box-sizing: border-box; height: 100%; }
+.cv-lb__seg + .cv-lb__seg { border-left: 2px solid var(--surface); }
+.cv-lb__seg--prefill { background: var(--cfg-prefill); }
+.cv-lb__seg--decode { background: var(--cfg-decode); }
+/* On device, not split into prefill and decode (no first-token figure at this percentile). */
+.cv-lb__seg--device { background: repeating-linear-gradient(135deg, var(--cfg-prefill) 0 3px, var(--cfg-decode) 3px 6px); }
+.cv-lb__seg--network { background: var(--cfg-relay); }
+.cv-lb__value { grid-column: 3; font-size: .8125rem; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.cv-lb__track--target { height: 16px; }
+.cv-lb__value--target { color: var(--text-secondary); font-size: .75rem; }
+/* A reference: a hairline from 0 to the target with an end tick, in ink (it is not data). */
+.cv-lb__ref { position: relative; display: block; min-width: 2px; height: 2px; background: var(--text-secondary); }
+.cv-lb__ref::after { content: ""; position: absolute; top: -5px; right: 0; width: 2px; height: 12px; background: var(--text-secondary); }
+.cv-lb__swatch { display: inline-block; flex: none; width: 10px; height: 10px; margin-right: 8px; border-radius: 2px; vertical-align: -1px; }
+.cv-lb__table, .cv-au__table { width: 100%; border-collapse: collapse; font-size: .75rem; font-variant-numeric: tabular-nums; }
+.cv-lb__table th, .cv-lb__table td, .cv-au__table th, .cv-au__table td { height: 28px; padding: 0 0 0 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border-subtle); }
+.cv-lb__table :is(th, td):first-child, .cv-au__table :is(th, td):first-child { padding-left: 0; text-align: left; }
+.cv-lb__table thead th, .cv-au__table thead th { color: var(--text-secondary); font-weight: 500; }
+.cv-lb__table tbody th, .cv-au__table tbody th { color: var(--text-primary); font-weight: 400; }
+.cv-lb__table tbody tr:last-child > *, .cv-au__table tbody tr:last-child > * { border-bottom: 0; }
+.cv-lb__table tbody .cv-lb__total > * { font-weight: 600; }
+.cv-lb__legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding: 0; color: var(--text-secondary); font-size: .75rem; list-style: none; }
+.cv-lb__legend li { display: inline-flex; align-items: center; white-space: nowrap; }
+.cv-lb__legend b { margin-left: 6px; color: var(--text-primary); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* ---------- autonomy ---------- */
+.cv-au__kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 0; overflow: hidden; background: var(--border-subtle); border: 1px solid var(--border-subtle); border-radius: var(--radius); }
+.cv-au__kpi { display: flex; flex-direction: column; min-width: 0; padding: 10px 12px; background: var(--surface); }
+/* A label may wrap; the values of a row stay aligned at the bottom. */
+.cv-au__kpi dt { color: var(--text-secondary); font-size: .75rem; }
+.cv-au__kpi dd { display: grid; margin: auto 0 0; padding-top: 2px; }
+.cv-au__value { font-size: 1.25rem; font-weight: 500; line-height: 1.3; letter-spacing: -.01em; white-space: nowrap; }
+.cv-au__sub { overflow: hidden; color: var(--text-secondary); font-size: .75rem; white-space: nowrap; text-overflow: ellipsis; }
+.cv-au__table .cv-tag { margin-left: 8px; }
+.cv-au__table tbody .cv-au__uncounted > * { color: var(--text-secondary); }
+.cv-au__line { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; color: var(--text-secondary); font-size: .75rem; list-style: none; }
+.cv-au__line li { white-space: nowrap; }
+.cv-au__line b { margin-left: 6px; color: var(--text-primary); font-weight: 500; font-variant-numeric: tabular-nums; }
+.cv-au__line .cv-au__uncounted b { color: var(--text-secondary); font-weight: 400; }
+.cv-au__note { margin-left: 6px; }
+
+/* ---------- smaller screens ---------- */
+@media (max-width: 899px) {
+  /* Stacked: each card sizes to its own content. */
+  .cv-ev-row { grid-template-columns: minmax(0, 1fr); row-gap: 16px; }
+  .cv-card.cv-ev { display: flex; flex-direction: column; grid-row: auto; }
+}
+@media (max-width: 639px) {
+  .cv-ev__head { padding-right: 4px; }
+  .cv-card.cv-ev > .cv-ev__body { padding: 12px 14px 14px; }
+  .cv-card.cv-ev > .cv-ev__foot { padding: 10px 14px 12px; }
+  .cv-ev__definitions > div { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .cv-lb { --cv-lb-name: 128px; column-gap: 8px; }
+  .cv-au__kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cv-au__value { font-size: 1.125rem; }
+  /* Compact: one line per number. */
+  .cv-au__kpis--compact { grid-template-columns: minmax(0, 1fr); }
+  .cv-au__kpis--compact .cv-au__kpi { flex-direction: row; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 12px; }
+  .cv-au__kpis--compact .cv-au__kpi dd { display: flex; align-items: baseline; gap: 8px; margin: 0; padding: 0; }
+  .cv-au__kpis--compact .cv-au__value { font-size: 1rem; }
+}
+@media (forced-colors: active) {
+  .cv-lb__seg, .cv-lb__swatch, .cv-lb__ref, .cv-lb__ref::after { forced-color-adjust: none; }
+}

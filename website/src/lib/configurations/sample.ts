@@ -18,7 +18,7 @@
 import { EDGE_MODELS, HARDWARE, JETSON_FLAG_RULES, routeMode, routingFor } from "./create";
 import { wilson } from "./format";
 import { CONFIGURED_DEVICE, WORKSPACE_SCHEMA_VERSION } from "./types";
-import type { CloudModel, ConfigRevision, Configuration, ConvoyWorkspace, EdgeModel, EvalRun, EvalSuite, Robot, RobotSpec, Rollout, RolloutOutcome, SliceResult, StoredProvenance } from "./types";
+import type { CloudModel, ConfigRevision, Configuration, ConvoyWorkspace, EdgeModel, EvalRun, EvalSuite, LatencyTarget, Robot, RobotSpec, Rollout, RolloutOutcome, SliceResult, StoredProvenance } from "./types";
 
 export const SAMPLE_WORKSPACE_ID = "sample";
 
@@ -37,6 +37,9 @@ const ROBOT: RobotSpec = {
   preview: "bimanual-station", provenance: SAMPLE,
 };
 const [PLANNER, POLICY] = EDGE_MODELS;
+/** The sample's latency targets: teleoperation round trips from a near and a far operator (illustrative). */
+export const SAMPLE_LATENCY_TARGETS: readonly LatencyTarget[] = [{ label: "Teleop · near", ms: 60 }, { label: "Teleop · far", ms: 120 }];
+const LATENCY_TARGETS = SAMPLE_LATENCY_TARGETS.map(target => ({ ...target }));
 const CLOUD_PLANNER: CloudModel = { id: "cloud-planner", role: "planner", name: "Hosted LLM planner", shortName: "Hosted LLM", serving: "Managed endpoint", state: "active" };
 
 function revision(createdAt: string, edge: EdgeModel[], cloud: CloudModel[]): ConfigRevision {
@@ -79,6 +82,8 @@ export function createSampleWorkspace(now: number | Date = Date.now()): ConvoyWo
     { id: "edge-vla", name: "Edge VLA", purpose: "", status: "testing", recommended: false, productionRev: null, candidateRev: "r1",
       revisions: [revision(ago(8 * DAY), [POLICY], [])], suiteId: SUITE.id, createdAt: ago(8 * DAY), updatedAt: ago(4 * HOUR) },
   ];
+  // Declared reference latencies for the latency budget: neutral teleoperation round trips.
+  for (const config of configurations) config.latencyTargets = LATENCY_TARGETS;
 
   const robot = (id: string, name: string, configId: string, extra: Partial<Robot>): Robot => ({
     id, name, configId, role: "test", site: "Lab", rev: "r1", kind: "simulator", health: "not-reported", healthReason: null, flags: [], registeredAt: ago(7 * DAY), ...extra,

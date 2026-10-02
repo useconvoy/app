@@ -1,7 +1,10 @@
 # Configurations workspace
 
-Data layer for `/app/configurations`, the workspace's only area. Four pages share one
-top bar with breadcrumbs (no sidebar):
+Data layer for `/app/configurations`. Configurations and Projects (`/app/projects`) share
+one session (`WorkspaceRoot` in `/app`'s layout) and one slim top bar: wordmark,
+breadcrumbs, the two areas, and an account menu that shows initials, never the address,
+and holds Sign out. Neither area has a sidebar; a project's sections are tabs under its
+title. The Configurations journey is four pages:
 
 | Page | Route | Shows |
 | --- | --- | --- |
@@ -12,6 +15,16 @@ top bar with breadcrumbs (no sidebar):
 
 `/app/applications` (and the `/portal`, `/app/device` and `/console` redirects to it)
 stays reachable on the same session, but Configurations never links to it.
+
+**Entry.** The server redirects `/app` to `/app/projects` (it cannot see the session
+cookie, which is scoped to `/api`). A page load that arrives through that redirect goes on
+to Configurations once the account's saved workspace has configurations (`entry.ts`);
+Projects opened from the top bar or by its URL stays on Projects.
+
+**Projects in the journey.** Runnable project configurations (applications with
+immutable releases) appear on Configurations as one row under the cards, only when there
+are any. A saved configuration's link to one is a single row under Details (Link, Open,
+Change, Unlink in a dialog); it is hidden when there is nothing to link to.
 
 ## Data flow
 
@@ -96,6 +109,48 @@ whether an eval is running on it (`status.ts`).
 Measured values come only from a connected device and are never stored in the
 document: the validator rejects them, and a robot with a live binding stores no
 telemetry. A missing value reads "Not reported" (or a dash in a table), never 0.
+
+## Evidence panels
+
+Two panels, tagged "Measured", from recorded values only (`evidence.ts`, pure, unit-tested;
+components in `components/configurations/evidence/`, styles in `src/styles/evidence.css`):
+on the eval page (Overview) for an offline eval whose episodes report planner and safety
+metrics, and compact on the configuration dashboard (its newest such eval, else the live
+device's latest requests). The metric names are the simulator's
+(`integrations/simulation/…/bimanual_pill_task/offline_replay.py`, `device_metrics`).
+
+- **Latency budget** of one planner decision, at p50 and p95, as stacked bars on one linear
+  axis from 0: prefill ≈ time to first token (`planner_ttft_p50_ms`); decode ≈ on-device
+  latency − first token (`planner_device_*_ms`); network / relay ≈ end-to-end round trip −
+  on-device latency (`planner_e2e_*_ms`). The formulas apply to the percentile values, so the
+  segments add up to the end-to-end figure; a negative difference is not drawn. An eval's figure
+  is the median, across the episodes that report it, of each episode's own percentile. No
+  first-token p95 is recorded, so the p95 bar shows on-device time unsplit (striped). Live spans
+  have no end-to-end time: network / relay is Not reported there. Small facts: tokens in / out
+  (p50), the prefill share of on-device time, and the slowest episode's end-to-end p95.
+- **Latency targets.** `Configuration.latencyTargets` (`{ label, ms }[]`, at most 6, labels unique
+  ignoring case, 0 < ms ≤ 600 000) are drawn as labelled reference rows on the same axis.
+  They are declared, never measured; the sample declares "Teleop · near" 60 and "Teleop · far" 120.
+- **Autonomy.** An intervention is a recorded event where an operator would take over:
+  a failed decision (`planner_failed_decisions`: no usable reply after the decision's retries),
+  a protective stop (`protective_stops`: the simulator stops an arm when a contact force exceeds
+  its safety threshold, 10 N against the other arm, the bottle or the cap and 60 N against the
+  table, so an arm–arm contact above the threshold is counted here), or an unfinished episode
+  (outcome timeout, failure or safety stop; one per episode). `arm_arm_contacts` counts arm–arm
+  contacts at any force: it is shown "Not counted", since it has no threshold and the contacts
+  above it are already protective stops. Decisions are resolved decisions,
+  `planner_valid_replies + planner_failed_decisions` (a valid reply ends a decision; a decision
+  still open when the episode ended is not counted).
+  - Autonomous episodes: episodes with no intervention (count and share).
+  - Interventions per episode: interventions ÷ episodes; per 100 decisions: 100 × interventions ÷ decisions.
+  - Decisions between interventions: decisions ÷ interventions (none when there were no interventions).
+  - Accepted on the first call: Σ `planner_first_call_valid` ÷ decisions. The simulator's export
+    does not include that metric yet, so it reads Not reported.
+  - By type: events and episodes per type.
+
+  A count an episode does not report makes every total it feeds Not reported, never 0; an episode
+  with a reported intervention is not autonomous whatever else is missing. Definitions are behind
+  each panel's info toggle. End-to-end tests: `tests/e2e/configurations-evidence.spec.ts`.
 
 ## Tests
 

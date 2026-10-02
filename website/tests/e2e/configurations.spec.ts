@@ -1,11 +1,98 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { createSampleWorkspace } from "../../src/lib/configurations/sample";
-import { demoDocument, h1, mockApi, noOverflow } from "./support/configurations";
+import { demoDocument, h1, mockApi, noOverflow, PROJECT } from "./support/configurations";
 
 // The frame and the workspace document: sign-in, top bar, routes, fallbacks, import, accessibility.
 
 const crumbs = (page: Page) => page.getByRole("navigation", { name: "Breadcrumb" });
+const areas = (page: Page) => page.locator("header.cv-bar").getByRole("navigation", { name: "Workspace" });
+
+async function signIn(page: Page) {
+  await page.getByLabel("Email", { exact: true }).fill("fixture@example.test");
+  await page.getByLabel("Password", { exact: true }).fill("fixture-only");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+}
+
+test("the Configurations journey keeps the plain frame: no project sidebar or sections, no account address, its own breadcrumbs", async ({ page }) => {
+  const document = demoDocument();
+  // Even a configuration assigned to a project opens without the project's navigation.
+  document.configurations[2] = { ...document.configurations[2], projectId: PROJECT };
+  await mockApi(page, { document });
+  let applications = [{ id: "app_contract01", project_id: PROJECT, name: "Contract reach" }];
+  await page.route(/\/api\/platform\/applications\?project_id=/, route => route.fulfill({ json: applications }));
+  async function frame(trail: string[]) {
+    await expect(crumbs(page).getByRole("listitem")).toHaveText(trail);
+    await expect(page.locator("aside")).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "Project sections" })).toHaveCount(0);
+    await expect(page.getByText(/All projects/)).toHaveCount(0);
+    await expect(areas(page).getByRole("link", { name: "Configurations" })).toHaveAttribute("aria-current", /page|true/);
+    await expect(page.locator("header.cv-bar")).not.toContainText("fixture@example.test");
+    await expect(page.getByText("fixture@example.test")).toHaveCount(0);
+  }
+
+  await page.goto("/app/configurations");
+  await frame(["Configurations"]);
+  await expect(page.getByRole("combobox")).toHaveCount(0);
+  await expect(page.getByText(/Saved workspace configurations|Configuration releases pin|Create runnable configuration/)).toHaveCount(0);
+  // One compact row for the projects' runnable configurations, after the cards.
+  await expect(page.locator(".cv-config")).toHaveCount(3);
+  await expect(page.getByRole("link", { name: /^1 project configuration/ })).toHaveAttribute("href", "/app/configurations/app_contract01?source=project");
+
+  await page.locator(".cv-config").filter({ hasText: "Arm · Edge VLA" }).click();
+  await frame(["Configurations", "Arm · Edge VLA"]);
+  await expect(page.getByText(/Project execution|Link this saved setup/)).toHaveCount(0);
+  const link = page.getByRole("region", { name: "Project configuration" });
+  await expect(link, "the link lives under Details only").toHaveCount(0);
+  await page.getByRole("tab", { name: "Details" }).click();
+  await expect(link).toContainText("Not linked");
+  await expect(link.getByRole("button", { name: "Link" })).toBeVisible();
+  await page.getByRole("tab", { name: /^Robots/ }).click();
+
+  await page.getByRole("table", { name: "Robots" }).getByRole("link", { name: "Sim runner" }).click();
+  await frame(["Configurations", "Arm · Edge VLA", "Sim runner"]);
+  await page.getByRole("table", { name: "Evals" }).locator("tbody tr").first().click();
+  await expect(h1(page)).toHaveText(/^Eval \d+$/);
+  const label = (await h1(page).textContent()) ?? "";
+  await frame(["Configurations", "Arm · Edge VLA", "Sim runner", label]);
+  await crumbs(page).getByRole("link", { name: "Configurations" }).click();
+  await expect(h1(page)).toHaveText("Configurations");
+
+  // Without runnable configurations there is no row and no link.
+  applications = [];
+  await page.reload();
+  await expect(page.locator(".cv-config")).toHaveCount(3);
+  await expect(page.getByText(/project configuration/)).toHaveCount(0);
+  await page.goto("/app/configurations/arm-edge-vla?tab=details");
+  await expect(page.getByRole("region", { name: "Specification" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Project configuration" })).toHaveCount(0);
+});
+
+test("/app lands on Configurations for an account with saved configurations, after sign-in and for an open session", async ({ page }) => {
+  await mockApi(page, { signedIn: false, document: demoDocument() });
+  await page.goto("/app");
+  await expect(page).toHaveURL(/\/app\/projects\/?$/);
+  await signIn(page);
+  await expect(page).toHaveURL(/\/app\/configurations\/?$/);
+  await expect(h1(page)).toHaveText("Configurations");
+  // Projects from the bar stays on Projects.
+  await areas(page).getByRole("link", { name: "Projects" }).click();
+  await expect(h1(page)).toHaveText("Projects");
+  await expect(page).toHaveURL(/\/app\/projects\/?$/);
+  await page.reload();
+  await expect(h1(page)).toHaveText("Projects");
+  await page.goto("/app");
+  await expect(page).toHaveURL(/\/app\/configurations\/?$/);
+  await expect(h1(page)).toHaveText("Configurations");
+});
+
+test("/app keeps an account without saved configurations on Projects", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/app");
+  await expect(h1(page)).toHaveText("Projects");
+  await expect(page).toHaveURL(/\/app\/projects\/?$/);
+  await expect(areas(page).getByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
+});
 
 test("Configurations remains available behind the shared sign-in, in a top bar with no sidebar", async ({ page }) => {
   await mockApi(page, { signedIn: false });
@@ -18,12 +105,18 @@ test("Configurations remains available behind the shared sign-in, in a top bar w
   await expect(h1(page)).toHaveText("Configurations");
   expect(await page.title()).toBe("Convoy | Configurations");
   const bar = page.locator("header.cv-bar");
-  await expect(bar.getByRole("link", { name: "Convoy" })).toHaveAttribute("href", "/app/projects");
-  await expect(bar.getByText("fixture@example.test")).toBeVisible();
+  await expect(bar.getByRole("link", { name: "Convoy" })).toHaveAttribute("href", "/app/configurations");
   await expect(bar.getByText("Sample", { exact: true })).toBeVisible();
-  // Existing configuration URLs retain their session and sample behavior.
+  // The two areas in the bar; the account shows initials, never its address.
+  const areas = bar.getByRole("navigation", { name: "Workspace" });
+  await expect(areas.getByRole("link", { name: "Configurations" })).toHaveAttribute("aria-current", "page");
+  await expect(areas.getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/app/projects");
+  await expect(page.getByText("fixture@example.test")).toHaveCount(0);
   await expect(page.locator("aside")).toHaveCount(0);
   await expect(page.locator('a[href^="/app/applications"], a[href*="section=device"]')).toHaveCount(0);
+  const account = bar.getByRole("button", { name: "Account" });
+  await expect(account).toHaveText("F");
+  await account.click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("heading", { name: "One workspace for your robots." })).toBeVisible();
 });
@@ -109,7 +202,7 @@ test("the sample is never saved: New configuration starts the account's own work
   expect(documents.writes[0].body.configurations.map(config => config.name)).toEqual(["Arm · Edge planner"]);
   expect([documents.writes[0].body.robots, documents.writes[0].body.runs, documents.writes[0].body.meta.sample]).toEqual([[], [], undefined]);
   await expect(page.locator(".cv-sample")).toHaveCount(0);
-  await page.getByRole("link", { name: "Configurations" }).click();
+  await crumbs(page).getByRole("link", { name: "Configurations" }).click();
   await expect(page.locator(".cv-config h2")).toHaveText(["Arm · Edge planner"]);
 });
 

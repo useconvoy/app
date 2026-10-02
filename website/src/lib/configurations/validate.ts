@@ -212,6 +212,35 @@ const production = obj({
   safetyEvents: req(nullable(obj({ critical: req(count), major: req(count), minor: req(count), note: opt(str) }))),
   latency: req(obj({ edge: req(nullable(latencySeries)), cloud: req(nullable(latencySeries)) })),
 }, (v, p, ctx) => { if (typeof v.reporting === "number" && typeof v.robots === "number" && v.reporting > v.robots) ctx.issue(join(p, "reporting"), "must not exceed robots"); });
+/** At most this many latency targets per configuration: each is a labelled reference row on the latency budget. */
+export const MAX_LATENCY_TARGETS = 6;
+/** Longest latency target label, so its row stays one line. */
+export const MAX_LATENCY_TARGET_LABEL = 40;
+/** Longest latency target: 10 minutes. */
+export const MAX_LATENCY_TARGET_MS = 600_000;
+const latencyTarget = obj({
+  label: req((v, p, ctx) => {
+    str(v, p, ctx);
+    if (typeof v === "string" && v.length > MAX_LATENCY_TARGET_LABEL) ctx.issue(p, `expected at most ${MAX_LATENCY_TARGET_LABEL} characters`);
+  }),
+  ms: req((v, p, ctx) => {
+    if (typeof v !== "number" || !Number.isFinite(v)) return ctx.issue(p, "expected a finite number");
+    if (v <= 0) ctx.issue(p, "expected a number > 0");
+    else if (v > MAX_LATENCY_TARGET_MS) ctx.issue(p, `expected a number ≤ ${MAX_LATENCY_TARGET_MS}`);
+  }),
+});
+/** Declared reference latencies (`Configuration.latencyTargets`): at most `MAX_LATENCY_TARGETS`, labels unique ignoring case. */
+const latencyTargets: Check = (v, p, ctx) => {
+  arr(latencyTarget, { max: MAX_LATENCY_TARGETS })(v, p, ctx);
+  if (!Array.isArray(v)) return;
+  const seen = new Set<string>();
+  v.forEach((target, i) => {
+    if (!isRecord(target) || typeof target.label !== "string") return;
+    const key = target.label.trim().toLowerCase();
+    if (seen.has(key)) ctx.issue(`${join(p, i)}.label`, `duplicate label "${target.label}"`);
+    seen.add(key);
+  });
+};
 const configuration = obj({
   projectId: opt(nullableId),
   id: req((v, p, ctx) => { id(v, p, ctx); if (v === "new") ctx.issue(p, "\"new\" is reserved for the new-configuration route"); }),
@@ -220,6 +249,7 @@ const configuration = obj({
   suiteId: req(nullableId), createdAt: req(time), updatedAt: req(time),
   highlight: opt(obj({ tone: req(oneOf(["good", "warning", "blocked"])), lead: req(str), text: req(str), provenance: opt(provenance) })),
   production: opt(production),
+  latencyTargets: opt(latencyTargets),
 }, (v, p, ctx) => {
   const revs = Array.isArray(v.revisions) ? v.revisions.filter(isRecord).map(r => r.rev) : [];
   for (const key of ["productionRev", "candidateRev"] as const) {

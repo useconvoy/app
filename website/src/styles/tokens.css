@@ -52,6 +52,14 @@
   --cfg-cloud: #5089cd; /* information blue lifted so edge and cloud differ in lightness; 3.6:1 */
   --cfg-fallback: #b97f12; /* warning amber for marks (3.4:1); warning text stays --warning */
 
+  /* Configurations: latency budget segments, in bar order. Prefill and decode both run
+   * on the device (two steps of the edge teal); network / relay is the cloud path.
+   * Validated as a set (light, on surface): adjacent CVD dE 16.8, normal-vision dE 18.3.
+   * Decode is 2.4:1, so every segment is labelled with its value beside the chart. */
+  --cfg-prefill: var(--cfg-edge);
+  --cfg-decode: #45ba98;
+  --cfg-relay: var(--cfg-cloud);
+
   /* Spacing scale, px: 0 4 8 12 16 24 32 48 64 80 112 144 */
   --space-1: 4px;
   --space-2: 8px;

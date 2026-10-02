@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { Facts } from "@/components/configurations/Tiles";
 import { api, ApiError, errorText, type Device } from "@/lib/platform/client";
 import { useProjectResource } from "@/lib/projects/client";
 import { notifySessionExpired } from "@/lib/configurations/session-events";
@@ -9,6 +10,7 @@ interface Computer extends Device { hardware: Record<string, string | number | b
 interface SetupStatus { enrollment: { id: string; status: string; expires_at: string }; device: Computer | null }
 interface Setup extends SetupStatus { command: string; run_command: string; simulator_command?: string | null; data_dir: string }
 
+/** A one-use connection token for the computer, its command, and the enrolled computer once it connects. */
 export function ConnectionSetup({ projectId, name, simulated, onConnected }: {
   projectId: string; name: string; simulated: boolean; onConnected: (device: Device) => void;
 }) {
@@ -69,28 +71,28 @@ export function ConnectionSetup({ projectId, name, simulated, onConnected }: {
       setError(errorText(cause));
     } finally { locked.current = false; setBusy(false); }
   }
-  return <section className="project-connection" aria-label="Connect a computer">
+  return <section className="cv-subsection" aria-label="Connect a computer">
     <h3>Connect a {simulated ? "simulator computer" : "robot computer"}</h3>
-    <p>Run the Convoy agent on that computer to connect it over Wi-Fi or Ethernet.</p>
-    {error && <p role="alert">{error}</p>}
-    {(!current || ["expired", "revoked"].includes(current.enrollment.status)) && <button type="button" className="cv-btn cv-btn--secondary" disabled={busy || !name.trim()} onClick={() => void act()}>Create connection token</button>}
+    <p className="cv-muted">Run the Convoy agent on that computer to connect it over Wi-Fi or Ethernet.</p>
+    {error && <p className="cv-form-error" role="alert">{error}</p>}
+    {(!current || ["expired", "revoked"].includes(current.enrollment.status)) && <div><button type="button" className="cv-btn cv-btn--secondary cv-btn--small" disabled={busy || !name.trim()} onClick={() => void act()}>Create connection token</button></div>}
     {current?.enrollment.status === "open" && setup && <>
-      <p>Waiting for enrollment. This one-use token expires {new Date(current.enrollment.expires_at).toLocaleTimeString()}.</p>
-      <p>With the Convoy {simulated ? "simulator runtime" : "agent"} installed, run this in a terminal on the computer you want to connect:</p>
-      <pre className="project-spec project-command" aria-label="Connection command">{setup.command}</pre>
-      <div className="project-actions"><button type="button" className="cv-link" onClick={() => void navigator.clipboard.writeText(setup.command).catch(() => setError("Copy failed. Select and copy the command above."))}>Copy connection command</button>
-      <button type="button" className="cv-link" disabled={busy} onClick={() => void act(true)}>Cancel connection token</button></div>
+      <p>Waiting for enrollment. This one-use token expires {new Date(current.enrollment.expires_at).toLocaleTimeString()}. With the Convoy {simulated ? "simulator runtime" : "agent"} installed, run this on the computer:</p>
+      <pre className="cv-code" aria-label="Connection command">{setup.command}</pre>
+      <div className="cv-actions"><button type="button" className="cv-link" onClick={() => void navigator.clipboard.writeText(setup.command).catch(() => setError("Copy failed. Select and copy the command above."))}>Copy connection command</button>
+        <button type="button" className="cv-link" disabled={busy} onClick={() => void act(true)}>Cancel connection token</button>
+        <button type="button" className="cv-link" onClick={() => setRevision(n => n + 1)}>Check connection</button></div>
     </>}
     {current?.enrollment.status === "expired" && <p>The token expired. Create a new one to connect.</p>}
     {current?.enrollment.status === "revoked" && <p>The token was cancelled.</p>}
     {current?.enrollment.status === "consumed" && <>
       <p>{current.device ? `${current.device.name} enrolled and selected.` : "The token was used, but the connection is no longer available."}</p>
-      {setup && current.device && <><p>{setup.simulator_command ? "Start the simulator service. It reports computer health, verifies the robot model when requested, and runs deployed tasks:" : "Keep the agent running to report connection health and computer sensors:"}</p><pre className="project-spec project-command" aria-label="Agent run command">{setup.simulator_command ?? setup.run_command}</pre></>}
+      {setup && current.device && <><p>{setup.simulator_command ? "Start the simulator service. It reports computer health, verifies the robot model when requested, and runs deployed tasks:" : "Keep the agent running to report connection health and computer sensors:"}</p><pre className="cv-code" aria-label="Agent run command">{setup.simulator_command ?? setup.run_command}</pre></>}
     </>}
-    {pollingId && <button type="button" className="cv-link" onClick={() => setRevision(n => n + 1)}>Check connection</button>}
   </section>;
 }
 
+/** The enrolled computer's reported hardware (never the robot's mechanics, which come from its profile). */
 export function ComputerDetails({ deviceId }: { deviceId: string }) {
   const resource = useProjectResource<Computer>(deviceId ? `robot-connections/${deviceId}` : null, 0, true);
   if (!deviceId) return null;
@@ -98,19 +100,19 @@ export function ComputerDetails({ deviceId }: { deviceId: string }) {
   const hardware = device?.hardware ?? {};
   function value(key: string, suffix = "") {
     const v = hardware[key];
-    return typeof v === "string" && v ? v : typeof v === "number" && Number.isFinite(v) ? `${Math.round(v)}${suffix}` : "Not reported";
+    return typeof v === "string" && v ? v : typeof v === "number" && Number.isFinite(v) ? `${Math.round(v)}${suffix}` : null;
   }
-  return <section className="project-connection" aria-label="Computer details">
-    <h3>Reported computer hardware</h3>
-    {resource.error && <p role="alert">{resource.error}</p>}
-    {!device && !resource.error && <p>Reading connection…</p>}
+  return <section className="cv-subsection" aria-label="Computer details">
+    <h3>{device ? `${device.name} · ${device.status === "never_seen" ? "Enrolled; waiting for the agent heartbeat" : device.status}` : "Computer"}</h3>
+    {resource.error && <p className="cv-form-error" role="alert">{resource.error}</p>}
+    {!device && !resource.error && <p className="cv-muted">Reading connection…</p>}
     {device && <>
-      <p>{device.name} · {device.status === "never_seen" ? "Enrolled; waiting for the agent heartbeat" : device.status}</p>
-      {hardware.synthetic === true && <p>Synthetic demo hardware. These values are not measurements of the host.</p>}
-      <dl className="cv-facts"><div><dt>Architecture</dt><dd>{value("arch")}</dd></div><div><dt>Operating system</dt><dd>{value("os")}</dd></div>
-        <div><dt>CPU cores</dt><dd>{value("cpu_count")}</dd></div><div><dt>Memory</dt><dd>{value("mem_total_mb", " MiB")}</dd></div>
-        <div><dt>GPU</dt><dd>{value("gpu_name")}</dd></div><div><dt>Jetson model</dt><dd>{value("jetson_model")}</dd></div></dl>
-      <p>These are agent-reported computer details. The robot’s mechanics come from its separate profile.</p>
+      {hardware.synthetic === true && <p className="cv-muted">Synthetic demo hardware, not measured on the host.</p>}
+      <Facts items={[
+        { label: "Architecture", value: value("arch") }, { label: "Operating system", value: value("os") },
+        { label: "CPU cores", value: value("cpu_count") }, { label: "Memory", value: value("mem_total_mb", " MiB") },
+        { label: "GPU", value: value("gpu_name") }, { label: "Jetson model", value: value("jetson_model") },
+      ]} />
     </>}
   </section>;
 }

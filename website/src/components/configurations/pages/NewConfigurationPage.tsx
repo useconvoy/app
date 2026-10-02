@@ -22,9 +22,9 @@ const ROLES = ["planner", "policy"] as const;
 export function NewConfigurationPage({ projectId }: { projectId?: string }) {
   const ws = useWorkspace();
   const projects = useProjectResource<Project[]>(projectId ? "projects" : null);
-  if (projectId && !projects.data?.some(project => project.id === projectId)) return <AppShell crumbs={CRUMBS} projectId={projectId}>{projects.error || projects.data ? <p role="alert">This project is unavailable.</p> : <LoadingState />}</AppShell>;
+  if (projectId && !projects.data?.some(project => project.id === projectId)) return <AppShell crumbs={CRUMBS}>{projects.error || projects.data ? <Notice tone="error">This project is unavailable.</Notice> : <LoadingState />}</AppShell>;
   if (ws.status === "loading") return <AppShell crumbs={CRUMBS}><LoadingState /></AppShell>;
-  return <AppShell crumbs={CRUMBS} projectId={projectId}><NewConfigurationForm projectId={projectId} /></AppShell>;
+  return <AppShell crumbs={CRUMBS}><NewConfigurationForm projectId={projectId} /></AppShell>;
 }
 
 function NewConfigurationForm({ projectId }: { projectId?: string }) {
@@ -71,7 +71,6 @@ function NewConfigurationForm({ projectId }: { projectId?: string }) {
   return <>
     <PageHeader title="New configuration" />
     <WorkspaceNotice />
-    <p>Save a draft model setup. Model selection does not install software or make a robot ready to run. <Link className="cv-link" href={projectId ? `/app/projects/${projectId}?section=configurations` : "/app/projects"}>Configure and validate an executable release in your project</Link> before deployment.</p>
     <form ref={form} className="cv-form" onSubmit={event => void submit(event)} noValidate>
       <div className="cv-field">
         <label htmlFor={`${id}-name`}>Name</label>

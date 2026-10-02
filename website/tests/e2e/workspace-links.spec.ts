@@ -2,7 +2,7 @@ import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { demoDocument, mockApi, noOverflow, PROJECT } from "./support/configurations";
 
-test("a saved specification links to project execution, preserves its results, flags edits and can be unlinked", async ({ page }, testInfo) => {
+test("a saved configuration links to a project configuration from Details, preserves its results, flags edits and can be unlinked", async ({ page }, testInfo) => {
   const document = demoDocument();
   const config = document.configurations[0];
   const { documents } = await mockApi(page, { document, revision: 4 });
@@ -37,31 +37,39 @@ test("a saved specification links to project execution, preserves its results, f
     return route.fallback();
   });
   await page.goto(`/app/configurations/${config.id}`);
-  const linking = page.getByRole("region", { name: "Project execution" });
-  await expect(linking.getByRole("button", { name: "Link configuration", exact: true })).toBeDisabled();
-  await linking.getByLabel("Executable configuration").selectOption(application.id);
-  await linking.getByRole("button", { name: "Link configuration", exact: true }).click();
-  await expect(linking.getByRole("alert")).toContainText("workspace changed");
-  await expect(linking.getByRole("link", { name: "Open deployment configuration" })).toHaveCount(0);
+  // The link lives under Details as one row, not in the dashboard's main flow.
+  await expect(page.getByText("Project execution")).toHaveCount(0);
+  await page.getByRole("tab", { name: "Details" }).click();
+  const linking = page.getByRole("region", { name: "Project configuration" });
+  await expect(linking).toContainText("Not linked");
+  await linking.getByRole("button", { name: "Link", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Link to a project configuration" });
+  // The only runnable configuration is chosen; linking stays an explicit step.
+  await expect(dialog.getByLabel("Project configuration")).toHaveValue(application.id);
+  await dialog.getByRole("button", { name: "Link", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("workspace changed");
+  await expect(linking.getByRole("link", { name: "Open" })).toHaveCount(0);
   // A retry remains explicit; no deployment or workspace write is made.
-  await linking.getByRole("button", { name: "Link configuration", exact: true }).click();
-  await expect(linking.getByRole("link", { name: "Open deployment configuration" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Link", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(linking).toContainText(application.name);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  await linking.getByRole("link", { name: "Open deployment configuration" }).click();
+  await linking.getByRole("link", { name: "Open" }).click();
   await expect(page).toHaveURL(/app_execution\?source=project$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(application.name);
-  await page.getByRole("link", { name: "Open saved specification and results" }).click();
+  await page.getByRole("region", { name: "Linked saved configurations" }).getByRole("link", { name: config.name }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(config.name);
   await expect(page.getByRole("table", { name: "Robots", exact: true })).toContainText("Bench 01");
   association.source_state = "changed";
-  await page.reload();
-  await expect(linking).toContainText("The saved specification has changed.");
+  await page.goto(`/app/configurations/${config.id}?tab=details`);
+  await expect(linking).toContainText("Changed since linking");
   await page.setViewportSize({ width: 390, height: 844 });
   await noOverflow(page);
   await page.screenshot({ path: testInfo.outputPath("saved-configuration-link-mobile.png"), fullPage: true });
-  await linking.getByRole("button", { name: "Unlink saved specification" }).click();
-  await expect(linking.getByRole("link", { name: "Open deployment configuration" })).toHaveCount(0);
-  await expect(linking.getByLabel("Executable configuration")).toBeVisible();
+  await linking.getByRole("button", { name: "Unlink" }).click();
+  await expect(linking.getByRole("link", { name: "Open" })).toHaveCount(0);
+  await expect(linking).toContainText("Not linked");
+  await expect(linking.getByRole("button", { name: "Link", exact: true })).toBeVisible();
   expect(documents.writes).toHaveLength(0);
   expect(documents.document).toEqual(document);
   expect(writes.map(write => write.path)).toEqual(["workspace-configuration-links", "workspace-configuration-links", "workspace-configuration-links/wcl_one/remove"]);
