@@ -52,6 +52,39 @@ export function getSuite(ws: ConvoyWorkspace, suiteId: string | null | undefined
   return suiteId ? ws.suites.find(suite => suite.id === suiteId) ?? null : null;
 }
 
+/* ---------- offline evaluations ---------- */
+
+/**
+ * An offline evaluation (`oev_…`) belongs to the configuration whose robots link it; one
+ * that no robot in a configuration links is unassigned. For a robot in `configId`: the
+ * offline evaluations that belong to another configuration, each with that configuration's
+ * id (the first, should an older document link one in several).
+ */
+export function offlineEvaluationsElsewhere(ws: ConvoyWorkspace, configId: string | null): Map<string, string> {
+  const elsewhere = new Map<string, string>();
+  for (const robot of ws.robots) {
+    if (robot.configId === null || robot.configId === configId) continue;
+    for (const id of robot.offlineEvaluationIds ?? []) if (!elsewhere.has(id)) elsewhere.set(id, robot.configId);
+  }
+  return elsewhere;
+}
+
+/**
+ * The offline evaluations a robot in `configId` may link, in the order given: the ones this
+ * configuration's robots link and unassigned ones, never another configuration's. `keep`
+ * (the robot's own links) stay, so a link an older document shares with another
+ * configuration can still be removed.
+ */
+export function offlineEvaluationsFor<T extends { id: string }>(ws: ConvoyWorkspace, configId: string | null, evaluations: readonly T[], keep: readonly string[] = []): T[] {
+  const elsewhere = offlineEvaluationsElsewhere(ws, configId);
+  return evaluations.filter(evaluation => !elsewhere.has(evaluation.id) || keep.includes(evaluation.id));
+}
+
+/** `offlineEvaluationsFor` on ids: the ones among `ids` a robot in `configId` may link, in order (a chosen one linked elsewhere meanwhile drops out). */
+export function offlineEvaluationIdsFor(ws: ConvoyWorkspace, configId: string | null, ids: readonly string[], keep: readonly string[] = []): string[] {
+  return offlineEvaluationsFor(ws, configId, ids.map(id => ({ id })), keep).map(item => item.id);
+}
+
 /* ---------- traces ---------- */
 
 /** Stored action traces for a robot, newest first. */

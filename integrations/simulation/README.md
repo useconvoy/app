@@ -137,15 +137,22 @@ grippers) putting 20–30 capsule pills into an open bottle, with four
 planner/policy deployment configurations (Edge Qwen, Edge Qwen + GPT Astra,
 GPT Astra, Edge SmolVLA + GPT Astra), seeds × slices evaluation, and recordings
 in the offline import format above (or the hosted journal format). Its skills
-read simulator state and its planner decisions come from a deterministic
-stand-in; the configurations differ by modeled planner latency and outage
-behaviour, and SmolVLA, which has no checkpoint for this robot, places no pills.
-See [docs/bimanual-pill-task.md](docs/bimanual-pill-task.md) for the model, the
-physics note, metrics, results and the format mappings.
+read simulator state. Edge Qwen's planner decisions are real calls to
+Qwen2.5-1.5B-Instruct on a connected Jetson through Convoy's device chat API (a
+text description of the scene in, one JSON action out, latency measured); the
+other three use a deterministic stand-in and differ by modeled planner latency
+and outage behaviour, and SmolVLA, which has no checkpoint for this robot, places
+no pills. See [docs/bimanual-pill-task.md](docs/bimanual-pill-task.md) for the
+model, the physics note, the on-device planner, metrics, results and the format
+mappings.
 
 ```sh
 uv sync --frozen --extra video --extra managed
-uv run --frozen pytest -q tests/test_bimanual_pill_task.py
-uv run --frozen convoy-sim-pills episode --config edge_qwen_edge_skills --slice nominal --seed 0 --output runs/pills
-scripts/pill_task_eval.sh runs/pill-demo     # demo matrix, one importable directory per configuration
+uv run --frozen pytest -q tests/test_bimanual_pill_task.py tests/test_device_planner.py
+uv run --frozen convoy-sim-pills episode --config cloud_astra_only --slice nominal --seed 0 --output runs/pills
+scripts/pill_task_eval.sh runs/pill-demo     # modelled matrix, one importable directory per configuration
 ```
+
+`scripts/render_robot_preview.py` renders the robot alone in its idle pose as a turntable loop
+(VP9 and H.264) and a still, for the website's configuration page; it writes
+`website/public/sim/bimanual-station/` (needs OpenGL, e.g. `MUJOCO_GL=egl`, and `--extra video`).

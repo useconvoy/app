@@ -7,6 +7,13 @@ OUTPUT/<config>`` imports one offline evaluation per configuration. With
 ``seed_stride`` the i-th slice runs seeds ``i * seed_stride + seed``, which keeps
 every episode's seed distinct within a configuration (the platform groups an
 offline evaluation's episodes by seed).
+
+A configuration whose planner is the model on a connected device ("Edge Qwen")
+needs that connection (``planner``). Its episodes run one after another in this
+process, so the device only ever has one request; the device is checked before
+every episode, and the evaluation stops (and says so) when it goes offline. Every
+call is written to ``planner_calls.jsonl`` in its episode's directory and to
+``OUTPUT/<config>/calls.jsonl``.
 """
 
 from __future__ import annotations
@@ -55,27 +62,84 @@ def make_recorder(job: dict, out: Path):
                            preview_camera=job.get("preview_camera"))
 
 
-def run_job(job: dict) -> dict:
-    """Run one episode (in a worker process); writes summary.json and, if asked, the recording."""
+def run_job(job: dict, planner=None, planner_log=None) -> dict:
+    """Run one episode (in a worker process, or in this one with a device `planner`); writes summary.json,
+    the device planner's calls (planner_calls.jsonl) and, if asked, the recording."""
     if job.get("timestep"):
         P.TIMESTEP_S = float(job["timestep"])
-    from .episode import run_episode
+    from .episode import Episode
 
     config = CONFIGS[job["config"]]
     spec = EpisodeSpec(config, SLICES[job["slice"]], int(job["seed"]), float(job["horizon"]))
     out = Path(job["output"])
     out.mkdir(parents=True, exist_ok=False)
     recorder = make_recorder(job, out)
+    episode = None
     try:
-        summary = run_episode(spec, recorder)
+        episode = Episode(spec, recorder, planner, planner_log)
+        summary = episode.run()
         summary["status"] = "completed"
     except Exception as error:  # keep the denominator honest: errors are results
         summary = {"config": job["config"], "slice": job["slice"], "seed": job["seed"], "status": "error",
                    "error": f"{type(error).__name__}: {error}"[:1000], "success": False, "fraction_placed": 0.0,
                    "placed": 0, "pills": SLICES[job["slice"]].pills}
+    records = getattr(getattr(episode, "skill_planner", None), "records", None)
+    if records is not None and getattr(episode, "device", False):
+        with (out / "planner_calls.jsonl").open("w") as handle:
+            for record in records:
+                handle.write(json.dumps({"config": job["config"], "slice": job["slice"], "seed": int(job["seed"]),
+                                         **record}, ensure_ascii=False) + "\n")
     if not (out / "summary.json").exists():  # the offline recorder writes it with its replay details
         (out / "summary.json").write_text(json.dumps(summary, indent=2, default=float) + "\n")
     return summary
+
+
+def _device_problem(planner, attempts: int = 3, wait_s: float = 10.0) -> str | None:
+    """Why the device cannot take the next episode (None when it is online and eligible). A status that
+    cannot be read is asked again a few times before it counts as a problem."""
+    error = ""
+    for attempt in range(attempts):
+        try:
+            state = planner.device()
+        except Exception as failure:  # noqa: BLE001 - reported by class; a refused session stops at once
+            error = type(failure).__name__
+            if error == "SessionEnded":
+                return "the session was refused"
+            if attempt + 1 < attempts:
+                time.sleep(wait_s)
+            continue
+        if state.online and state.eligible:
+            return None
+        return f"device {'offline' if not state.online else 'not eligible'} at {state.checked_at}" + (
+            f": {state.reason}" if state.reason else "")
+    return f"device status unreadable ({error})"
+
+
+def _run_on_device(work: list[dict], planner, planner_log=None) -> list[dict]:
+    """The device planner's episodes, one after another (one request at a time on the device). The device
+    is checked before each episode; once it is offline, or an episode stops on the device (offline, model
+    changed, session ended), the remaining episodes are not run and are reported as such."""
+    summaries: list[dict] = []
+    stopped: str | None = None
+    for job in work:
+        if stopped is None:
+            stopped = _device_problem(planner)
+        if stopped is not None:
+            summary = {"config": job["config"], "slice": job["slice"], "seed": job["seed"], "status": "not_run",
+                       "reason": stopped, "success": False, "fraction_placed": 0.0, "placed": 0,
+                       "pills": SLICES[job["slice"]].pills}
+            summaries.append(summary)
+            print(f"[not run] {job['config']} {job['slice']} seed {job['seed']}: {stopped}", flush=True)
+            continue
+        summary = run_job(job, planner, planner_log)
+        summaries.append(summary)
+        outcome = str(summary.get("outcome", ""))
+        if outcome.startswith("planner_stopped:") and not outcome.endswith("planner_call_budget_exhausted"):
+            stopped = outcome.split(":", 1)[1]
+        print(f"[{len(summaries)}/{len(work)}] {summary['config']:26s} {summary['slice']:17s} seed {summary['seed']}: "
+              f"{summary.get('placed')}/{summary.get('pills')} placed, {summary.get('outcome', summary.get('error'))}",
+              flush=True)
+    return summaries
 
 
 def task_label(slices: list[str], seeds: dict[str, list[int]]) -> str:
@@ -91,6 +155,8 @@ def task_label(slices: list[str], seeds: dict[str, list[int]]) -> str:
 def aggregate(summaries: list[dict]) -> dict:
     table: dict[str, dict[str, dict]] = {}
     for s in summaries:
+        if s.get("status") == "not_run":  # never started (device offline): not in any denominator
+            continue
         table.setdefault(s["config"], {}).setdefault(s["slice"], []).append(s)
     out = {}
     for config, slices in table.items():
@@ -163,10 +229,17 @@ def markdown(results: dict, slices: list[str]) -> str:
 def evaluate(output: Path, configs: list[str], slices: list[str], seeds: list[int], *, jobs: int = 4,
              horizon: float = DEFAULT_HORIZON_S, record: set[tuple[str, str, int]] | str | None = None,
              timestep: float | None = None, preview_camera: str | None = None, replay: str = "journal",
-             seed_stride: int = 0, previews: set[tuple[str, str, int]] | None = None) -> dict:
+             seed_stride: int = 0, previews: set[tuple[str, str, int]] | None = None, planner=None,
+             planner_log=None, name: str | None = None) -> dict:
     """Run every (config, slice, seed). `record` is "all" or the (config, slice, seed) triples to
     record, and `previews` the recorded ones that also render `preview_camera` for a preview
-    video (all recorded ones when None). Seeds in triples are the episodes' own (after the stride)."""
+    video (all recorded ones when None). Seeds in triples are the episodes' own (after the stride).
+    `planner` is the device connection a device-planner configuration needs (run in this process,
+    one episode at a time); `name` overrides the offline evaluation's name."""
+    on_device = [c for c in configs if CONFIGS[c].skill_planner.source == "device"]
+    if on_device and planner is None:
+        raise ValueError(f"{', '.join(on_device)} call the model on a connected device: pass a device planner "
+                         "connection (there is no stand-in for it)")
     output.mkdir(parents=True, exist_ok=False)
     by_slice = {s: [i * seed_stride + n for n in seeds] for i, s in enumerate(slices)}
     triples = [(c, s, n) for c in configs for s in slices for n in by_slice[s]]
@@ -183,6 +256,17 @@ def evaluate(output: Path, configs: list[str], slices: list[str], seeds: list[in
         "evidence_scope": ("simulated physics; skills read simulator state; planner decisions are a deterministic "
                            "stand-in, configurations differ only by modeled planner latency and network availability"),
     }
+    if on_device:
+        from .device_planner import settings
+
+        state = planner.device()
+        manifest["evidence_scope"] = (
+            "simulated physics; skills read simulator state; " + ", ".join(on_device) + ": every skill decision is a "
+            "real call to the model on the connected device (text scene in, JSON action out), measured end to end; "
+            "other configurations: deterministic stand-in with modeled latency")
+        manifest["device_planner"] = {**settings(), "device_at_start": {
+            k: getattr(state, k) for k in ("online", "eligible", "reason", "release_id", "status", "max_tokens",
+                                           "context_window", "checked_at")}}
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     work = [{"config": c, "slice": s, "seed": n, "horizon": horizon, "timestep": timestep,
              "record": (c, s, n) in record, "replay": replay,
@@ -193,18 +277,31 @@ def evaluate(output: Path, configs: list[str], slices: list[str], seeds: list[in
         from .offline_replay import write_evaluation
 
         for c in configs:
-            write_evaluation(output / c, CONFIGS[c], task_label(slices, by_slice))
+            write_evaluation(output / c, CONFIGS[c], task_label(slices, by_slice), name=name)
     started = time.time()
     summaries = []
-    ctx = multiprocessing.get_context("spawn")
-    with ctx.Pool(processes=max(1, jobs)) as pool:
-        for summary in pool.imap_unordered(run_job, work):
-            summaries.append(summary)
-            print(f"[{len(summaries)}/{len(work)}] {summary['config']:26s} {summary['slice']:17s} seed {summary['seed']}: "
-                  f"{summary.get('placed')}/{summary.get('pills')} placed, {summary.get('outcome', summary.get('error'))}",
-                  flush=True)
+    if on_device:
+        summaries = _run_on_device(work, planner, planner_log)
+        for c in on_device:  # every call of the configuration, in order (prompts, replies, timings; no credentials)
+            with (output / c / "calls.jsonl").open("w") as handle:
+                for job in work:
+                    calls = Path(job["output"]) / "planner_calls.jsonl"
+                    if job["config"] == c and calls.exists():
+                        handle.write(calls.read_text())
+        late = getattr(planner, "late_results", None)
+        if late:
+            (output / "late_results.json").write_text(json.dumps(late, indent=2) + "\n")
+    else:
+        ctx = multiprocessing.get_context("spawn")
+        with ctx.Pool(processes=max(1, jobs)) as pool:
+            for summary in pool.imap_unordered(run_job, work):
+                summaries.append(summary)
+                print(f"[{len(summaries)}/{len(work)}] {summary['config']:26s} {summary['slice']:17s} seed "
+                      f"{summary['seed']}: {summary.get('placed')}/{summary.get('pills')} placed, "
+                      f"{summary.get('outcome', summary.get('error'))}", flush=True)
     results = aggregate(summaries)
     report = {"manifest": "manifest.json", "wall_s": round(time.time() - started, 1), "results": results,
+              "not_run": [s for s in summaries if s.get("status") == "not_run"],
               "episodes": sorted(summaries, key=lambda s: (s["config"], s["slice"], s["seed"]))}
     (output / "results.json").write_text(json.dumps(report, indent=2, default=float) + "\n")
     (output / "results.md").write_text(markdown(results, slices))

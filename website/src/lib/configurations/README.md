@@ -6,7 +6,7 @@ top bar with breadcrumbs (no sidebar):
 | Page | Route | Shows |
 | --- | --- | --- |
 | Configurations | `/app/configurations` (+ `/new`) | One equal-size card per configuration; create one in a single form. |
-| Configuration | `/[configId]` | Four tiles, the live device's telemetry, the robots; the specification under Details. |
+| Configuration | `/[configId]` | Four tiles, the live device's telemetry, the robots; the specification under Details; the robot turning beside its facts. |
 | Robot | `/[configId]/robots/[robotId]` | Test robots: evals. Live devices: telemetry and traces. Details tab. |
 | Eval | `…/evals/[runId]` | Metrics, slices and rollouts; a rollout with a real episode opens the replay (`?rollout=`). |
 
@@ -57,7 +57,11 @@ stays reachable on the same session, but Configurations never links to it.
     hosted runner and imported unsigned (`docs/v1/offline-evaluations.md`). The eval page
     shows their metrics and rollouts; the replay plays the uploaded frames (PNG or JPEG)
     with one label per action value. Add robot → "Simulator · offline" links them; a
-    simulator's Details → Offline evals changes the links.
+    simulator's Details → Offline evals changes the links. An offline evaluation belongs
+    to the configuration whose robots link it: both pickers offer only this
+    configuration's and unassigned ones (`offlineEvaluationsFor` in `selectors.ts`), a
+    robot keeps its own links, and `addRobot` and `linkOfflineEvaluations` refuse one
+    that another configuration's robot links, so a stale form cannot take it.
   - `EvalRun.recordedEvaluationId` (`eva_…`): a stored run whose metrics and rollouts
     come from that evaluation. `EvalRun.recordedEpisodeId` (`epi_…`): a one-episode run.
   - `Rollout.episodeId` (`epi_…`): a stored rollout backed by a real episode.
@@ -65,6 +69,16 @@ stays reachable on the same session, but Configurations never links to it.
   The replay plays the episode's recorded frames in a bottom sheet with
   `components/console/EpisodeReplay.tsx`, the same player as the console's
   evaluations, and says "No recording for this episode." when there are none.
+- **Robot preview.** `RobotSpec.preview` names a simulated robot the website ships, by id
+  (`ROBOT_PREVIEW_IDS`: `bimanual-station`); `previews.ts` maps the id to its committed files
+  under `public/sim/<id>/` (a VP9 and an H.264 turntable loop and a WebP still, rendered by
+  `integrations/simulation/scripts/render_robot_preview.py`). The validator accepts only those
+  ids or null, never a URL. The configuration page then shows a "Robot" section below the tabs:
+  the loop (muted, looping, inline, with a pause button; the still alone under reduced motion)
+  beside the robot, its body and cameras, the edge hardware, models and status, the two cards
+  equal in height (stacked below 900px). Without a preview the section is left out:
+  its facts alone would repeat Details. The sample's robot uses it; the New configuration form
+  sets none.
 - **Reading.** Pages use `useWorkspace()`, the selectors in `selectors.ts` (re-exported
   by `client.ts`), `runs.ts` and `status.ts` for evals, results and robot status,
   `format.ts` for numbers and times (UTC), and `routes.ts` for URLs.

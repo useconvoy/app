@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Reproduce the bimanual pill-task evidence: physics checks at 2 ms and 1 ms, still images, and the
-# demo matrix (4 configurations x 3 slices x 3 seeds) recorded in the offline replay format, one
-# directory per configuration, each checked with the import script's own reader (--dry-run).
+# modelled demo matrix (the three stand-in configurations x 3 slices x 3 seeds) recorded in the offline
+# replay format, one directory per configuration, each checked with the import script's own reader
+# (--dry-run). Edge Qwen is not part of it: its planner is the real model on a connected device, run
+# with `convoy-sim-pills evaluate --configs edge_qwen_edge_skills` and a device connection
+# (docs/bimanual-pill-task.md, "Edge Qwen: the real on-device planner").
 #
 #   scripts/pill_task_eval.sh OUTPUT_DIR [SEEDS] [JOBS]
 #
@@ -15,7 +18,8 @@ OUT="${1:?usage: pill_task_eval.sh OUTPUT_DIR [SEEDS] [JOBS]}"
 SEEDS="${2:-0-2}"
 JOBS="${3:-4}"
 SLICES="${SLICES:-nominal,network_outage,pill_count_30}"
-PREVIEWS="${PREVIEWS:-edge_qwen_edge_skills:network_outage:100,cloud_astra_only:network_outage:100}"
+CONFIGS="${CONFIGS:-edge_qwen_cloud_astra,cloud_astra_only,edge_smolvla_cloud_astra}"
+PREVIEWS="${PREVIEWS:-edge_qwen_cloud_astra:network_outage:100,cloud_astra_only:network_outage:100}"
 cd "$(dirname "$0")/.."
 [ -e "$OUT" ] && { echo "$OUT exists; choose a new directory" >&2; exit 2; }
 uv sync --frozen --extra video --extra managed
@@ -28,7 +32,7 @@ mkdir -p "$OUT"
 uv run --frozen convoy-sim-pills check-physics --output "$OUT/physics.json" > /dev/null
 uv run --frozen convoy-sim-pills --timestep 0.001 check-physics --output "$OUT/physics_1ms.json" > /dev/null
 ${GL[@]+"${GL[@]}"} uv run --frozen convoy-sim-pills render --output "$OUT/stills"
-${GL[@]+"${GL[@]}"} uv run --frozen convoy-sim-pills evaluate --configs all --slices "$SLICES" --seeds "$SEEDS" \
+${GL[@]+"${GL[@]}"} uv run --frozen convoy-sim-pills evaluate --configs "$CONFIGS" --slices "$SLICES" --seeds "$SEEDS" \
   --seed-stride 100 --jobs "$JOBS" --record all --replay offline --preview-camera photo --previews "$PREVIEWS" \
   --output "$OUT/eval"
 for config in "$OUT"/eval/*/evaluation.json; do

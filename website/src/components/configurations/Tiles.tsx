@@ -55,9 +55,9 @@ export function Sparkline({ points }: { points: ReadonlyArray<SeriesPoint | numb
   </svg>;
 }
 
-/** Label / value pairs on one grid; every value is one line. */
-export function Facts({ items }: { items: ReadonlyArray<{ label: string; value: ReactNode | null }> }) {
-  return <dl className="cv-facts">{items.map(item => <div key={item.label}><dt>{item.label}</dt><dd>{item.value === null || item.value === "" ? <Missing /> : item.value}</dd></div>)}</dl>;
+/** Label / value pairs on one grid; every value is one line. Two columns on wide screens; `single` keeps one (a side panel). */
+export function Facts({ items, single = false }: { items: ReadonlyArray<{ label: string; value: ReactNode | null }>; single?: boolean }) {
+  return <dl className={`cv-facts${single ? " cv-facts--single" : ""}`}>{items.map(item => <div key={item.label}><dt>{item.label}</dt><dd>{item.value === null || item.value === "" ? <Missing /> : item.value}</dd></div>)}</dl>;
 }
 
 /** A card; with a `title` it has a heading row (`action` sits at its right). A tab's only card goes untitled: the tab names it. */
