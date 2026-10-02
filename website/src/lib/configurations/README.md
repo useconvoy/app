@@ -1,7 +1,10 @@
 # Configurations workspace
 
-Data layer for `/app/configurations`, the workspace's only area. Four pages share one
-top bar with breadcrumbs (no sidebar):
+Data layer for `/app/configurations`. Configurations and Projects (`/app/projects`) share
+one session (`WorkspaceRoot` in `/app`'s layout) and one slim top bar: wordmark,
+breadcrumbs, the two areas, and an account menu that shows initials, never the address,
+and holds Sign out. Neither area has a sidebar; a project's sections are tabs under its
+title. The Configurations journey is four pages:
 
 | Page | Route | Shows |
 | --- | --- | --- |
@@ -12,6 +15,16 @@ top bar with breadcrumbs (no sidebar):
 
 `/app/applications` (and the `/portal`, `/app/device` and `/console` redirects to it)
 stays reachable on the same session, but Configurations never links to it.
+
+**Entry.** The server redirects `/app` to `/app/projects` (it cannot see the session
+cookie, which is scoped to `/api`). A page load that arrives through that redirect goes on
+to Configurations once the account's saved workspace has configurations (`entry.ts`);
+Projects opened from the top bar or by its URL stays on Projects.
+
+**Projects in the journey.** Runnable project configurations (applications with
+immutable releases) appear on Configurations as one row under the cards, only when there
+are any. A saved configuration's link to one is a single row under Details (Link, Open,
+Change, Unlink in a dialog); it is hidden when there is nothing to link to.
 
 ## Data flow
 

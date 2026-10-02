@@ -72,7 +72,7 @@ export function RobotConfigurationSummary({ projectId, robot, catalogue, compact
       : deployment ? <span>Configuration details unavailable</span>
         : <span>{robot.generation ? "Current configuration not reported" : "No configuration assigned"}</span>}
     <small>{deployment ? `${robotConfigurationState(deployment)}${release ? ` · release ${release.digest.slice(0, 12)}` : ""}` : robot.simulated === false ? "Execution interface unavailable" : "Select a configuration to deploy"}</small>
-    {!compact && <Link className="cv-link" href={`/app/projects/${encodeURIComponent(projectId)}/robots/${encodeURIComponent(robot.id)}#robot-configuration`}>Manage configuration →</Link>}
+    {!compact && <Link className="cv-link" href={`/app/projects/${encodeURIComponent(projectId)}/robots/${encodeURIComponent(robot.id)}#robot-configuration`}>Manage configuration</Link>}
   </div>;
 }
 

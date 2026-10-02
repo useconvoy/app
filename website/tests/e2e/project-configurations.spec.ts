@@ -58,7 +58,7 @@ test("project configuration creates an executable release, revises it and opens 
   });
   await page.goto("/app/projects/prj_lab");
   await page.getByRole("navigation", { name: "Project sections" }).getByRole("link", { name: "Configurations", exact: true }).click();
-  await page.getByRole("link", { name: "Create runnable configuration" }).click();
+  await page.getByRole("region", { name: "Runnable configurations" }).getByRole("link", { name: "New runnable configuration" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Create runnable configuration");
   await page.getByLabel("Configuration name", { exact: true }).fill("Arm target experiment");
   await page.getByLabel("Task instruction").fill("Reach the shoulder target");
@@ -68,12 +68,15 @@ test("project configuration creates an executable release, revises it and opens 
   await page.getByRole("button", { name: "Create configuration", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/configurations\/app_one\?source=project$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Arm target experiment");
-  await expect(page.getByText("Joint-position reference controller · no learned model inference", { exact: true })).toBeVisible();
+  const details = page.getByRole("region", { name: "Release details" });
+  await expect(details.getByText("Reference controller · no learned model", { exact: true })).toBeVisible();
   await page.getByText("Operator setup files", { exact: true }).click();
   const downloadEvent = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download release manifest" }).click();
   expect((await downloadEvent).suggestedFilename()).toBe("release-manifest.json");
-  await expect(page.getByText("Maximum observation age: 200 ms · Maximum physics lag: 20 ms · Fallback: simulated position hold", { exact: true })).toBeVisible();
+  for (const [label, value] of [["Observation age limit", "200 ms"], ["Physics lag limit", "20 ms"], ["Fallback", "Simulated position hold"]]) {
+    await expect(details.locator(".cv-facts > div").filter({ hasText: label })).toContainText(value);
+  }
   await page.getByRole("button", { name: "Create new release" }).click();
   await expect(page.getByLabel("Simulation timing")).toHaveValue("realtime");
   await page.getByLabel("shoulder (radians, -1 to 1)").fill("-0.4");
@@ -88,11 +91,13 @@ test("project configuration creates an executable release, revises it and opens 
   await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); window.scrollTo({ top: 0, behavior: "instant" }); });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
   await page.screenshot({ path: testInfo.outputPath("configuration-release-mobile.png"), fullPage: true });
-  await page.getByRole("link", { name: "Open deployment and task controls" }).click();
+  await page.getByRole("table", { name: "Matching verified simulators" }).getByRole("link", { name: "Arm simulation" }).click();
   await expect(page.getByRole("combobox", { name: "Configuration", exact: true })).toHaveValue("app_one");
   await expect(page.getByRole("combobox", { name: "Release", exact: true })).toHaveValue("apr_1");
   await expect(page.getByRole("button", { name: "Start task", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Deploy selected release", exact: true })).toBeEnabled();
+  // The Configurations page lists the runnable configuration as one compact row.
   await page.goto("/app/configurations");
-  await expect(page.getByRole("region", { name: "Project configurations", exact: true }).getByRole("link", { name: /Arm target experiment/ })).toBeVisible();
+  await page.getByRole("link", { name: /^1 project configuration/ }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Arm target experiment");
 });

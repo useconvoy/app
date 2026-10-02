@@ -74,7 +74,7 @@ function Dashboard({ config, views }: { config: Configuration; views: RobotView[
     setBusy(true); setError(null);
     const result = await ws.save(current => deleteConfiguration(current, config.id, Date.now()));
     setBusy(false);
-    if (result.ok) router.push(config.projectId ? `/app/projects/${config.projectId}?section=configurations` : routes.index()); else setError(result.error);
+    if (result.ok) router.push(routes.index()); else setError(result.error);
   }
 
   const columns: Array<Column<RobotView>> = [
@@ -89,7 +89,6 @@ function Dashboard({ config, views }: { config: Configuration; views: RobotView[
     <PageHeader title={config.name} badges={<ConfigStatusBadge status={config.status} />}
       actions={editable && <button className="cv-btn cv-btn--primary" type="button" onClick={() => { setAdded(null); setDialog("add"); }}>Add robot</button>} />
     <WorkspaceNotice />
-    {ws.source === "document" && ws.documentRevision !== null && <WorkspaceConfigurationLink configurationId={config.id} documentRevision={ws.documentRevision} saving={ws.saving} />}
     {attention.length > 0 && <Notice tone="warning">{attention.length === 1 ? `${attention[0].robot.name} needs attention.` : `${attention.length} robots need attention.`}</Notice>}
     {added && <Notice action={<button className="cv-link" type="button" onClick={() => setAdded(null)}>Dismiss</button>}>{added} added.</Notice>}
     <Tiles label="Summary">
@@ -125,6 +124,7 @@ function Dashboard({ config, views }: { config: Configuration; views: RobotView[
           { label: "Created", value: fmtDate(config.createdAt) },
         ]} />
       </Card>
+      <WorkspaceConfigurationLink configurationId={config.id} />
       {editable && <div className="cv-danger"><button className="cv-btn cv-btn--danger" type="button" onClick={() => { setError(null); setDialog("delete"); }}>Delete configuration</button></div>}
     </TabPanel>
     {preview && <RobotSection config={config} revision={revision} preview={preview} />}

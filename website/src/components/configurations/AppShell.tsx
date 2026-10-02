@@ -2,15 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ProjectNavigation, projectHref } from "@/components/projects/ProjectNavigation";
-import { useProjectResource } from "@/lib/projects/client";
-import type { Project } from "@/lib/platform/client";
 import type { ReactNode } from "react";
 import { useWorkspace } from "@/lib/configurations/client";
+import { routes } from "@/lib/configurations/routes";
+import { AccountMenu } from "./AccountMenu";
 import { ConvoyMark } from "./Icons";
 import { useSession } from "./Session";
 
 export interface Crumb { label: string; href?: string | null }
+export type Area = "configurations" | "projects";
+
+const AREAS: ReadonlyArray<{ id: Area; label: string; href: string }> = [
+  { id: "configurations", label: "Configurations", href: routes.index() },
+  { id: "projects", label: "Projects", href: "/app/projects" },
+];
 
 /** Breadcrumbs; the last crumb is the current page. */
 export function Breadcrumbs({ crumbs }: { crumbs: readonly Crumb[] }) {
@@ -21,44 +26,33 @@ export function Breadcrumbs({ crumbs }: { crumbs: readonly Crumb[] }) {
   </ol></nav>;
 }
 
-/** Shared account frame and persistent project navigation. */
-export function AppShell({ crumbs, children, projectId: explicitProject, section, navigation = true }: { crumbs: readonly Crumb[]; children: ReactNode; projectId?: string; section?: string; navigation?: boolean }) {
+/**
+ * The page frame: a slim top bar (wordmark, breadcrumbs, the two areas, the account menu)
+ * and `main#main`. No sidebar: a page names its own trail. `area` defaults from the URL;
+ * a project page under a Configurations URL (a project configuration) passes "projects".
+ */
+export function AppShell({ crumbs, children, area }: { crumbs: readonly Crumb[]; children: ReactNode; area?: Area }) {
   const session = useSession();
   const ws = useWorkspace();
   const pathname = usePathname();
-  const configurationId = pathname.match(/^\/app\/configurations\/([^/]+)/)?.[1];
-  const projectId = explicitProject ?? pathname.match(/^\/app\/projects\/([^/]+)/)?.[1] ?? ws.workspace?.configurations.find(c => c.id === configurationId)?.projectId ?? undefined;
-  const projects = useProjectResource<Project[]>(projectId ? "projects" : null);
-  const project = projects.data?.find(p => p.id === projectId);
-  const contextualCrumbs: readonly Crumb[] = projectId ? [
-    { label: "Projects", href: "/app/projects" }, { label: project?.name ?? "Project", href: projectHref(projectId) },
-    ...crumbs.filter(c => c.label !== project?.name && c.label !== "Projects").map(c => c.label === "Configurations" ? { ...c, href: projectHref(projectId, "Configurations") } : c),
-  ] : crumbs;
-  const sample = !projectId && pathname.startsWith("/app/configurations") && ws.status === "ready" && ws.source === "sample";
+  const current: Area = area ?? (pathname.startsWith("/app/projects") ? "projects" : "configurations");
+  const sample = current === "configurations" && ws.status === "ready" && ws.source === "sample";
   return <div className="cv-app">
     <a className="cv-skip" href="#main">Skip to content</a>
     <header className="cv-bar">
       <div className="cv-bar__in">
-        <Link className="cv-brand" href="/app/projects"><ConvoyMark />Convoy</Link>
-        <Breadcrumbs crumbs={contextualCrumbs} />
-
+        <Link className="cv-brand" href={routes.index()}><ConvoyMark /><span className="cv-brand__name">Convoy</span></Link>
+        <Breadcrumbs crumbs={crumbs} />
         {sample && <span className="cv-sample" title="Sample data: no workspace is saved for this account yet">Sample</span>}
-        <div className="cv-account">
-          <span className="cv-account__email">{session.email}</span>
-          <button className="cv-link" type="button" disabled={session.signingOut} onClick={() => void session.signOut()}>{session.signingOut ? "Signing out…" : "Sign out"}</button>
-        </div>
+        <nav className="cv-areas" aria-label="Workspace">
+          {AREAS.map(item => <Link key={item.id} href={item.href} aria-current={item.id !== current ? undefined : pathname.replace(/\/$/, "") === item.href ? "page" : "true"}>{item.label}</Link>)}
+        </nav>
+        <AccountMenu />
       </div>
     </header>
-    <main id="main" className={`cv-main${navigation && projectId ? " cv-main--project" : ""}`} tabIndex={-1}>
-      {navigation && projectId && <aside className="project-sidebar" aria-label="Project navigation">
-        <Link className="project-back" href="/app/projects">← All projects</Link>
-        <p className="project-sidebar__name">{project?.name ?? "Project workspace"}</p>
-        <ProjectNavigation projectId={projectId} selected={section ?? (configurationId ? "Configurations" : "Overview")} />
-      </aside>}
-      <div className="project-content">
-        {session.signOutError && <p className="cv-notice cv-notice--error" role="alert">{session.signOutError}</p>}
-        {children}
-      </div>
+    <main id="main" className="cv-main" tabIndex={-1}>
+      {session.signOutError && <p className="cv-notice cv-notice--error" role="alert">{session.signOutError}</p>}
+      {children}
     </main>
   </div>;
 }

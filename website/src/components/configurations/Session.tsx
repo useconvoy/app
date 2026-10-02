@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { createContext, Fragment, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Brand, Login } from "@/components/console/Console";
@@ -69,4 +70,15 @@ export function useSession(): WorkspaceSessionValue {
  */
 export function ConfigurationsRoot({ children }: { children: ReactNode }) {
   return <WorkspaceSession><WorkspaceProvider><LiveDeviceProvider><PlatformProvider>{children}</PlatformProvider></LiveDeviceProvider></WorkspaceProvider></WorkspaceSession>;
+}
+
+/**
+ * Mounted by the `/app` layout: Configurations and Projects share one `ConfigurationsRoot`,
+ * so moving between them keeps the session and the workspace document instead of checking
+ * the session again. Other `/app` pages (the applications console) keep their own sign-in.
+ */
+export function WorkspaceRoot({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const gated = /^\/app\/(configurations|projects)(\/|$)/.test(pathname);
+  return gated ? <ConfigurationsRoot>{children}</ConfigurationsRoot> : children;
 }

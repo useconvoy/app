@@ -6,7 +6,7 @@ import { noOverflow } from "./support/configurations";
 
 // Stateful HTTP fixtures cover navigation and project creation. Registration,
 // configuration compatibility and deployment acknowledgements have their own suites.
-test("projects have a separate creation area and fleets lead to their robots through the project sidebar", async ({ page }, info) => {
+test("projects are equal cards with a New project dialog; a project's sections are tabs under its title and fleets lead to their robots", async ({ page }, info) => {
   const projects = [
     { id: "prj_arm", name: "Assembly lab" },
     { id: "prj_warehouse", name: "Warehouse lab" },
@@ -76,22 +76,26 @@ test("projects have a separate creation area and fleets lead to their robots thr
   await page.goto("/app/projects");
   const listing = page.getByRole("region", { name: "Your projects", exact: true });
   const creation = page.getByRole("form", { name: "Create project", exact: true });
-  await expect(listing.getByRole("link", { name: /Assembly lab/ })).toBeVisible();
+  await expect(listing.getByRole("link", { name: /Assembly lab/ })).toContainText("1 · 1 simulated");
   await expect(listing.getByRole("link", { name: /Warehouse lab/ })).toBeVisible();
-  await expect(creation.getByLabel("Project name", { exact: true })).toBeVisible();
-  const listBox = await listing.boundingBox(), createBox = await creation.boundingBox();
-  expect(listBox).not.toBeNull(); expect(createBox).not.toBeNull();
-  expect(createBox!.x).toBeGreaterThanOrEqual(listBox!.x + listBox!.width);
+  // Equal cards, as on Configurations; creation is a dialog, not a standing form.
+  const heights = await listing.locator(".cv-config").evaluateAll(nodes => nodes.map(node => Math.round(node.getBoundingClientRect().height)));
+  expect(new Set(heights).size, `equal card heights ${heights.join(", ")}`).toBe(1);
+  await expect(creation).toHaveCount(0);
+  await expect(page.locator("aside")).toHaveCount(0);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await noOverflow(page);
   await page.screenshot({ path: info.outputPath("projects-desktop.png"), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await noOverflow(page);
-  await expect(creation.getByLabel("Project name", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "New project" }).click();
+  await expect(page.getByRole("dialog", { name: "New project" })).toBeVisible();
+  await expect(creation.getByLabel("Project name", { exact: true })).toBeFocused();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.screenshot({ path: info.outputPath("projects-mobile.png"), fullPage: true });
 
   await creation.getByLabel("Project name", { exact: true }).fill("New manipulation lab");
-  await creation.getByRole("button", { name: "Create project", exact: true }).click();
+  await page.getByRole("dialog", { name: "New project" }).getByRole("button", { name: "Create project", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/projects\/prj_new$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("New manipulation lab");
   expect(writes).toEqual([{ path: "projects", body: { name: "New manipulation lab" } }]);
@@ -102,15 +106,16 @@ test("projects have a separate creation area and fleets lead to their robots thr
   const navigation = page.getByRole("navigation", { name: "Project sections", exact: true });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Assembly lab");
   await expect(navigation.getByRole("link", { name: "Overview", exact: true })).toHaveAttribute("aria-current", "page");
+  // The sections are tabs under the title, in the same top-bar frame as Configurations: no sidebar.
   const navBox = await navigation.boundingBox(), titleBox = await page.getByRole("heading", { level: 1 }).boundingBox();
   expect(navBox).not.toBeNull(); expect(titleBox).not.toBeNull();
-  expect(navBox!.x + navBox!.width).toBeLessThanOrEqual(titleBox!.x);
-  const fleetNavigation = page.getByRole("navigation", { name: "Fleet robots", exact: true });
-  const sidebarFleet = fleetNavigation.locator("summary").filter({ hasText: "Assembly line" });
-  await expect(fleetNavigation.getByRole("link", { name: "Arm 01", exact: true })).toBeHidden();
-  await sidebarFleet.click();
-  await expect(fleetNavigation.getByRole("link", { name: "Arm 01", exact: true })).toBeVisible();
-  await sidebarFleet.click();
+  expect(navBox!.y).toBeGreaterThanOrEqual(titleBox!.y + titleBox!.height);
+  await expect(page.locator("aside")).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("listitem")).toHaveText(["Projects", "Assembly lab"]);
+  // The overview's fleets lead to their robots too.
+  const overview = page.getByRole("region", { name: "Project fleets", exact: true });
+  await overview.locator("summary").filter({ hasText: "Assembly line" }).click();
+  await expect(overview.getByRole("link", { name: "Arm 01", exact: true })).toBeVisible();
 
   await navigation.getByRole("link", { name: "Fleets", exact: true }).click();
   await expect(navigation.getByRole("link", { name: "Fleets", exact: true })).toHaveAttribute("aria-current", "page");
@@ -139,10 +144,12 @@ test("projects have a separate creation area and fleets lead to their robots thr
   await memberLink.click();
   await expect(page).toHaveURL(/\/app\/projects\/prj_arm\/robots\/rob_arm$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Arm 01");
-  await expect(navigation).toBeVisible();
+  const trail = page.getByRole("navigation", { name: "Breadcrumb" });
+  await expect(trail.getByRole("listitem")).toHaveText(["Projects", "Assembly lab", "Arm 01"]);
   await page.reload();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Arm 01");
-  await expect(navigation.getByRole("link", { name: "Robots", exact: true })).toHaveAttribute("aria-current", "page");
+  await trail.getByRole("link", { name: "Assembly lab" }).click();
+  await expect(navigation.getByRole("link", { name: "Overview", exact: true })).toHaveAttribute("aria-current", "page");
   await noOverflow(page);
   // Browsing a fleet and opening a robot must not deploy software or start motion.
   expect(writes).toHaveLength(1);

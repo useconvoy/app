@@ -83,11 +83,14 @@ test("project onboarding registers a physical robot and its simulated instance, 
   });
   await page.goto("/app");
   await expect(page).toHaveURL(/\/app\/projects$/);
-  await expect(page.getByRole("heading", { name: "Create your first project" })).toBeVisible();
+  await expect(page.getByText("No projects yet.")).toBeVisible();
+  await page.getByRole("button", { name: "New project" }).click();
   await page.getByLabel("Project name").fill("Manipulation lab");
   await page.getByRole("button", { name: "Create project" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Manipulation lab");
   await page.getByRole("link", { name: "Continue setup" }).click();
+  await expect(page.getByRole("navigation", { name: "Project sections" }).getByRole("link", { name: "Profiles", exact: true })).toHaveAttribute("aria-current", "page");
+  await page.getByRole("button", { name: "Import profile" }).click();
   await page.getByLabel("Profile name").fill("Custom arm");
   const spec = { embodiment: "arm", adapter: "ros2", command_interface: "joint-position", control_rate_hz: 50,
     joints: [{ name: "shoulder", kind: "revolute", lower: -1, upper: 1, evidence: { source: "imported" } }], sensors: [],
@@ -101,7 +104,7 @@ test("project onboarding registers a physical robot and its simulated instance, 
   await expect(page.getByRole("region", { name: "Simulation files for Custom arm revision 1" }).getByRole("alert")).toContainText("does not match the saved profile");
   expect(assetStored).toBe(false);
   await page.getByLabel("Upload mujoco model").setInputFiles({ name: "arm.xml", mimeType: "text/xml", buffer: model });
-  await expect(page.getByText(/mujoco · mjcf · Stored/)).toBeVisible();
+  await expect(page.getByText(/MuJoCo · MJCF · Stored/)).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("profile-assets-desktop.png"), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
@@ -163,6 +166,7 @@ test("project onboarding registers a physical robot and its simulated instance, 
   await expect(page.getByText("Connection changed — verify again", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Verify again", exact: true })).toBeEnabled();
   await page.getByRole("navigation", { name: "Project sections" }).getByRole("link", { name: "Fleets", exact: true }).click();
+  await page.getByRole("button", { name: "New fleet" }).click();
   await page.getByLabel("Fleet name").fill("Line 1");
   await page.getByRole("button", { name: "Create fleet" }).click();
   await expect(page.getByRole("heading", { name: "Line 1" })).toBeVisible();

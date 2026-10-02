@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { Icon } from "@/components/configurations/Icons";
+import { EmptyState, LoadingState } from "@/components/configurations/States";
 import type { Robot } from "@/lib/platform/client";
 import type { Fleet } from "@/lib/projects/client";
+import { engineLabel, robotHref } from "./ProjectNavigation";
 import { RobotConfigurationSummary, type ProjectRobotConfigurationCatalogue } from "./ProjectRobotConfigurations";
 
+/** Each fleet as a disclosure of its robots (with their configuration), then the robots in no fleet. */
 export function ProjectFleetDirectory({ projectId, fleets, robots, catalogue, onRemove, busy = false }: {
   projectId: string;
   fleets?: Fleet[];
@@ -13,32 +17,31 @@ export function ProjectFleetDirectory({ projectId, fleets, robots, catalogue, on
   onRemove?: (fleetId: string, robotId: string) => void;
   busy?: boolean;
 }) {
-  const unassigned = robots?.filter(robot => !robot.fleet_id || !fleets?.some(fleet => fleet.id === robot.fleet_id));
+  if (!fleets || !robots) return <section className="project-fleet-directory" aria-label="Project fleets"><LoadingState label="Loading fleets…" /></section>;
+  const unassigned = robots.filter(robot => !robot.fleet_id || !fleets.some(fleet => fleet.id === robot.fleet_id));
   function row(robot: Robot, fleet?: Fleet) {
     return <article className="project-robot-row" key={robot.id}>
       <div className="project-robot-row__identity">
-        <Link href={`/app/projects/${projectId}/robots/${robot.id}`}>{robot.name}</Link>
-        <span className="project-row-meta">{robot.simulated === false ? "Physical robot" : "Simulated robot"}{robot.simulation_engine ? ` · ${robot.simulation_engine === "isaac" ? "Isaac Sim" : "MuJoCo"}` : ""}</span>
+        <Link className="cv-cell-link" href={robotHref(projectId, robot.id)}>{robot.name}</Link>
+        <span className="project-row-meta">{robot.simulated === false ? "Physical robot" : "Simulated robot"}{robot.simulation_engine ? ` · ${engineLabel(robot.simulation_engine)}` : ""}</span>
       </div>
       <RobotConfigurationSummary projectId={projectId} robot={robot} catalogue={catalogue} compact={false} />
-      {fleet && onRemove && <button className="cv-link project-robot-row__remove" disabled={busy} onClick={() => onRemove(fleet.id, robot.id)}>Remove from {fleet.name}</button>}
+      {fleet && onRemove && <button className="cv-link project-robot-row__remove" type="button" disabled={busy} onClick={() => onRemove(fleet.id, robot.id)}>Remove from {fleet.name}</button>}
     </article>;
   }
+  const count = (n: number) => `${n} ${n === 1 ? "robot" : "robots"}`;
   return <section className="project-fleet-directory" aria-label="Project fleets">
-    {!fleets || !robots ? <p role="status">Loading fleets and robots…</p> : <>
-      {fleets.map(fleet => <details className="project-fleet" key={fleet.id}>
-        <summary><div><h2>{fleet.name}</h2><span className="cv-muted">{fleet.robot_ids.length} {fleet.robot_ids.length === 1 ? "robot" : "robots"}</span></div><span className="project-fleet__chevron" aria-hidden="true">⌄</span></summary>
-        <div className="project-fleet__members">
-          {fleet.robot_ids.map(id => { const robot = robots.find(item => item.id === id); return robot ? row(robot, fleet) : <p className="cv-muted" key={id}>Robot details unavailable</p>; })}
-          {fleet.robot_ids.length === 0 && <p className="project-fleet__empty">No robots in this fleet. Select robots from the Robots page to assign them.</p>}
-        </div>
-      </details>)}
-      {!!unassigned?.length && <section className="project-unassigned" aria-label="Unassigned robots">
-        <div className="project-section-heading"><h2>Unassigned robots</h2><span className="cv-muted">{unassigned.length} {unassigned.length === 1 ? "robot" : "robots"}</span></div>
-        <p className="project-unassigned__note">These robots are in your project and can be added to a fleet.</p>
-        {unassigned.map(robot => row(robot))}
-      </section>}
-      {fleets.length === 0 && robots.length === 0 && <div className="cv-empty"><h2>Your robots will appear here</h2><p>Register a robot, then organize it into a fleet.</p></div>}
-    </>}
+    {fleets.map(fleet => <details className="project-fleet" key={fleet.id}>
+      <summary><h2>{fleet.name}</h2><span className="cv-muted">{count(fleet.robot_ids.length)}</span><Icon name="chevron-right" className="project-fleet__chevron" /></summary>
+      <div className="project-fleet__members">
+        {fleet.robot_ids.map(id => { const robot = robots.find(item => item.id === id); return robot ? row(robot, fleet) : <p className="project-fleet__empty" key={id}>Robot details unavailable</p>; })}
+        {fleet.robot_ids.length === 0 && <p className="project-fleet__empty">No robots in this fleet. Select robots on the Robots tab to assign them.</p>}
+      </div>
+    </details>)}
+    {unassigned.length > 0 && <section className="project-unassigned" aria-label="Unassigned robots">
+      <div className="project-fleet__summary"><h2>{fleets.length ? "Not in a fleet" : "Robots"}</h2><span className="cv-muted">{count(unassigned.length)}</span></div>
+      {unassigned.map(robot => row(robot))}
+    </section>}
+    {fleets.length === 0 && robots.length === 0 && <EmptyState title="No robots yet." />}
   </section>;
 }

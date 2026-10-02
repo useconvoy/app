@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { WorkspaceRoot } from "@/components/configurations/Session";
 import "@/styles/workspace.css";
 import "@/styles/console.css";
 import "@/styles/portal.css";
@@ -11,10 +12,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, googleBot: { index: false, follow: false } },
 };
 /**
- * The workspace styles. The Configurations live-device poller and platform reads are
- * mounted inside its session gate (src/components/configurations/Session.tsx), so
- * they end with the session.
+ * The workspace styles, and one session for Configurations and Projects: their session
+ * gate, workspace document, live-device poller and platform reads are mounted once
+ * (src/components/configurations/Session.tsx), so they end with the session and survive
+ * moving between the two areas.
  */
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return <WorkspaceRoot>{children}</WorkspaceRoot>;
 }

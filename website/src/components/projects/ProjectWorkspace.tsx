@@ -1,63 +1,134 @@
 "use client";
+
 import Link from "next/link";
 import { useState } from "react";
-import { useWorkspace } from "@/lib/configurations/client";
-import { routes } from "@/lib/configurations/routes";
-import type { Robot, Mission, Episode } from "@/lib/platform/client";
-import { useProjectResource, type RobotProfile, type Fleet } from "@/lib/projects/client";
-import { projectHref } from "./ProjectNavigation";
+import { Badge, Missing } from "@/components/configurations/Badges";
+import { DataTable, type Column } from "@/components/configurations/DataTable";
+import { Notice } from "@/components/configurations/Notice";
+import { useSession } from "@/components/configurations/Session";
+import { EmptyState, LoadingState } from "@/components/configurations/States";
+import { Card, Facts, Tile, Tiles } from "@/components/configurations/Tiles";
 import { EpisodeReplay } from "@/components/console/EpisodeReplay";
 import { Portal } from "@/components/portal/Portal";
-import { useSession } from "@/components/configurations/Session";
+import { useWorkspace } from "@/lib/configurations/client";
+import { fmtCount, fmtSeconds, fmtWhen } from "@/lib/configurations/format";
+import { routes } from "@/lib/configurations/routes";
 import { notifySessionExpired } from "@/lib/configurations/session-events";
-import { TimingResult } from "./TimingResult";
+import type { Episode, Mission, Robot } from "@/lib/platform/client";
+import { useProjectResource, type Fleet, type RobotProfile } from "@/lib/projects/client";
 import { ProjectFleetDirectory } from "./ProjectFleetDirectory";
-import type { ProjectRobotConfigurationCatalogue } from "./ProjectRobotConfigurations";
+import { engineLabel, projectHref, robotHref } from "./ProjectNavigation";
+import { currentRobotConfiguration, robotConfigurationState, type ProjectRobotConfigurationCatalogue } from "./ProjectRobotConfigurations";
+import { readiness } from "./SimulatorReadiness";
+import { TimingResult } from "./TimingResult";
 
-export const robotHref = (projectId: string, robotId: string) => `/app/projects/${projectId}/robots/${robotId}`;
+export { robotHref };
 
-export function ProjectOverview({ projectId, robots, profiles, fleets, catalogue }: { projectId: string; robots?: Robot[]; profiles?: RobotProfile[]; fleets?: Fleet[]; catalogue: ProjectRobotConfigurationCatalogue }) {
-  const workspace = useWorkspace();
-  const setups = workspace.source === "document" ? workspace.workspace?.configurations.filter(c => c.projectId === projectId).length ?? 0 : 0;
-  const next = !robots?.length ? !profiles?.length ? ["Profiles", "Import a robot profile", "Add the physical model and controller interfaces for your first robot."] : ["Robots", "Register your first robot", "Connect a computer to the robot profile you have imported."] : catalogue.applications.length === 0 ? ["Configurations", "Set up a configuration", "Choose the models, policy, and timing for your robots."] : ["Runs", "Review task results", "Inspect completed tasks, timing measurements, and recordings."];
-  return <section className="project-section project-overview" aria-label="Project overview">
-    <p className="project-intro">Your fleet, each robot’s configuration, and its current deployment status in one place.</p>
-    <div className="project-metrics">{[["Robots", robots?.length, "Registered in this project"], ["Fleets", fleets?.length, "Groups of robots"], ["Configurations", catalogue.loading ? undefined : catalogue.applications.length + setups, `${catalogue.applications.length} runnable · ${setups} model setups`]].map(([label, count, detail]) => <Link className="project-metric" key={label} href={projectHref(projectId, String(label))}><span>{label}</span><strong>{count ?? "—"}</strong><small>{detail}</small></Link>)}</div>
-    {catalogue.error && <p className="cv-notice cv-notice--error" role="alert">Configuration status could not be loaded. Refresh to try again.</p>}
-    <div className="project-section-heading project-overview__heading"><div><h2>Fleets and robots</h2><p>Expand a fleet or open a robot to manage its configuration.</p></div><Link className="cv-link" href={projectHref(projectId, "Fleets")}>Manage fleets →</Link></div>
-    <ProjectFleetDirectory projectId={projectId} fleets={fleets} robots={robots} catalogue={catalogue} />
-    {!catalogue.loading && robots && profiles && <aside className="project-next-step"><div><h2>{next[1]}</h2><p>{next[2]}</p></div><Link className="cv-btn cv-btn--secondary" href={projectHref(projectId, next[0])}>{next[0] === "Runs" ? "View results" : "Continue setup"}</Link></aside>}
-  </section>;
+/** Overview: four counts, the next setup step while one remains, and the fleets with their robots. */
+export function ProjectOverview({ projectId, robots, profiles, fleets, catalogue, saved }: { projectId: string; robots?: Robot[]; profiles?: RobotProfile[]; fleets?: Fleet[]; catalogue: ProjectRobotConfigurationCatalogue; saved: number }) {
+  const simulated = robots?.filter(robot => robot.simulated).length ?? 0;
+  const assigned = robots?.filter(robot => fleets?.some(fleet => fleet.id === robot.fleet_id)).length ?? 0;
+  const next = !robots || !profiles || catalogue.loading ? null
+    : !profiles.length ? { section: "Profiles", text: "Import a robot profile to register your first robot." }
+      : !robots.length ? { section: "Robots", text: "Register a robot to the profile you imported." }
+        : !catalogue.applications.length ? { section: "Configurations", text: "Create a configuration to deploy to your robots." } : null;
+  return <>
+    <Tiles label="Summary">
+      <Tile label="Robots" value={robots ? fmtCount(robots.length) : null} sub={robots ? `${simulated} simulated` : undefined} />
+      <Tile label="Fleets" value={fleets ? fmtCount(fleets.length) : null} sub={robots && fleets ? `${assigned} of ${robots.length} robots assigned` : undefined} />
+      <Tile label="Configurations" value={catalogue.loading ? null : fmtCount(catalogue.applications.length)} sub={`${saved} saved`} />
+      <Tile label="Profiles" value={profiles ? fmtCount(profiles.length) : null} sub={profiles ? `${profiles.filter(profile => profile.simulation.engines.length).length} with simulation` : undefined} />
+    </Tiles>
+    {next && <div className="cv-strip cv-strip--static"><span>{next.text}</span><Link className="cv-btn cv-btn--secondary cv-btn--small" href={projectHref(projectId, next.section)}>Continue setup</Link></div>}
+    {catalogue.error && <Notice tone="error">Configuration status could not be loaded. Refresh to try again.</Notice>}
+    <section className="cv-row" aria-labelledby="po-fleets">
+      <div className="cv-row__head"><h2 id="po-fleets">Fleets and robots</h2></div>
+      <ProjectFleetDirectory projectId={projectId} fleets={fleets} robots={robots} catalogue={catalogue} />
+    </section>
+  </>;
 }
 
-export function ProjectSimulations({ projectId, robots }: { projectId: string; robots?: Robot[] }) {
-  const simulators = robots?.filter(r => r.simulated);
-  return <section className="project-section" aria-label="Simulations"><h2>Simulations</h2><p>Choose a simulated robot to verify its model, deploy a configuration and start a task. Registered execution currently supports MuJoCo joint-position tasks.</p><p><Link className="cv-btn cv-btn--primary" href={projectHref(projectId, "Robots")}>Register or select a simulator</Link> <Link className="cv-link" href={projectHref(projectId, "Profiles")}>Manage robot models</Link></p>
-    {simulators?.length === 0 && <p>No simulated robots yet. A physical robot’s simulated counterpart shares its profile revision and uses a separate runner.</p>}
-    <div className="cv-grid">{simulators?.map(robot => <Link className="cv-config" key={robot.id} href={robotHref(projectId, robot.id)}><h3>{robot.name}</h3><p>{robot.simulation_engine ?? "Existing simulator"}</p><p>{robot.qualification?.state === "passed" ? "Simulator verified" : robot.profile_id ? "Verification required" : "Existing runtime"}</p><p>Open task controls →</p></Link>)}</div>
-    <p className="cv-notice">Natural-language scene creation and Isaac execution are not available yet. Simulator verification checks the supplied model and interfaces; physical fidelity requires separate calibration.</p><SavedResults projectId={projectId} />
-  </section>;
+/** Simulations: one equal card per simulated robot, opening its deployment and task controls. */
+export function ProjectSimulations({ projectId, robots, profiles, catalogue }: { projectId: string; robots?: Robot[]; profiles?: RobotProfile[]; catalogue: ProjectRobotConfigurationCatalogue }) {
+  const simulators = robots?.filter(robot => robot.simulated);
+  if (!simulators) return <LoadingState />;
+  if (!simulators.length) return <EmptyState title="No simulated robots yet." action={<Link className="cv-btn cv-btn--secondary" href={projectHref(projectId, "Robots")}>Open robots</Link>} />;
+  return <section className="cv-grid" aria-label="Simulations">{simulators.map(robot => {
+    const state = readiness(robot);
+    const profile = profiles?.find(item => item.id === robot.profile_id);
+    const { deployment, application } = currentRobotConfiguration(robot, catalogue);
+    return <Link className="cv-config" key={robot.id} href={robotHref(projectId, robot.id)}>
+      <div className="cv-config__head"><h2>{robot.name}</h2><Badge tone={state.tone}>{state.label}</Badge></div>
+      <dl className="cv-config__facts cv-config__facts--wide">
+        <div><dt>Engine</dt><dd>{engineLabel(robot.simulation_engine) ?? <Missing />}</dd></div>
+        <div><dt>Profile</dt><dd>{profile ? `${profile.name} · revision ${profile.revision}` : <span className="cv-mono">{robot.profile}</span>}</dd></div>
+        <div><dt>Configuration</dt><dd>{catalogue.loading ? <Missing label="Loading" /> : application?.name ?? <Missing label="Not configured" />}</dd></div>
+        <div><dt>Deployment</dt><dd>{catalogue.loading ? <Missing label="Loading" /> : robotConfigurationState(deployment)}</dd></div>
+      </dl>
+    </Link>;
+  })}</section>;
 }
 
+const TASK_TONE: Record<string, "success" | "warning" | "info" | "neutral"> = { completed: "success", failed: "warning", unknown: "warning", running: "info", requested: "info", cancel_requested: "info" };
+/** "cancel_requested" → "Cancel requested". */
+export const sentence = (state: string) => { const text = state.replaceAll("_", " "); return text.charAt(0).toUpperCase() + text.slice(1); };
+
+/** Runs: the project's tasks, newest first; a finished task's result, timing and replay; the saved configurations' evals. */
 export function ProjectRuns({ projectId, robots }: { projectId: string; robots?: Robot[] }) {
   const tasks = useProjectResource<Mission[]>(`missions?project_id=${projectId}`, 0, true);
   const [selected, setSelected] = useState<Mission>();
   const episode = useProjectResource<Episode>(selected?.episode_id ? `episodes/${selected.episode_id}` : null);
-  return <section className="project-section" aria-label="Runs"><h2>Runs</h2><p>Task outcome and timing evidence are reported separately. Select a completed task to inspect its measurements.</p>
-    {tasks.error && <p role="alert">{tasks.error}</p>}{!tasks.data && !tasks.error && <p role="status">Loading runs…</p>}{tasks.data?.length === 0 && <p>No tasks yet. Open a robot to deploy a configuration and start one.</p>}
-    {!!tasks.data?.length && <div className="cv-table-wrap"><table className="cv-table"><thead><tr><th>Robot</th><th>Status</th><th>Updated</th><th>Result</th></tr></thead><tbody>{tasks.data.map(task => <tr key={task.id}><td><Link href={robotHref(projectId, task.robot_id)}>{robots?.find(r => r.id === task.robot_id)?.name ?? task.robot_id}</Link></td><td>{task.state}</td><td>{new Date(task.updated_at).toLocaleString()}</td><td>{task.episode_id ? <button className="cv-link" onClick={() => setSelected(task)}>View result</button> : task.detail || "Awaiting result"}</td></tr>)}</tbody></table></div>}
-    {selected && <article className="cv-card"><div><h3>Task result</h3><p>{selected.detail}</p>{episode.error && <p role="alert">{episode.error}</p>}{episode.data && <><p>Task success: {typeof episode.data.summary.final_success === "boolean" ? episode.data.summary.final_success ? "Yes" : "No" : "Not reported"}</p><p>Release: <code>{episode.data.release_digest}</code></p><TimingResult value={episode.data.summary.timing} /><EpisodeReplay key={episode.data.id} episodeId={episode.data.id} /><p>Simulation time: {String(episode.data.summary.simulated_duration_s ?? "Not reported")} s · Wall time: {String(episode.data.summary.wall_duration_s ?? "Not reported")} s</p>{!episode.data.summary.timing && <p>Independent real-time measurements were not reported for this task.</p>}<Link className="cv-link" href={robotHref(projectId, selected.robot_id)}>Open robot controls and full result</Link></>}</div></article>}<SavedResults projectId={projectId} />
+  const name = (task: Mission) => robots?.find(robot => robot.id === task.robot_id)?.name ?? task.robot_id;
+  const columns: Array<Column<Mission>> = [
+    { key: "robot", header: "Robot", cell: task => <Link className="cv-cell-link" href={robotHref(projectId, task.robot_id)}>{name(task)}</Link> },
+    { key: "status", header: "Status", cell: task => <Badge tone={TASK_TONE[task.state] ?? "neutral"}>{sentence(task.state)}</Badge> },
+    { key: "updated", header: "Updated (UTC)", wide: true, cell: task => fmtWhen(task.updated_at) },
+    { key: "result", header: "Result", cell: task => task.episode_id ? <button className="cv-link" type="button" onClick={() => setSelected(task)}>View result</button> : <span className="cv-muted">{task.detail || "Awaiting result"}</span> },
+  ];
+  const summary = episode.data?.summary;
+  return <>
+    {tasks.error && <Notice tone="error">{tasks.error}</Notice>}
+    <Card label="Runs" flush>{!tasks.data && !tasks.error ? <LoadingState label="Loading runs…" /> : <DataTable label="Runs" columns={columns} rows={tasks.data ?? []} rowKey={task => task.id} empty="No runs yet." />}</Card>
+    {selected && <Card title="Task result" action={<Link className="cv-link" href={robotHref(projectId, selected.robot_id)}>Open robot</Link>}>
+      {episode.error && <p className="cv-form-error" role="alert">{episode.error}</p>}
+      {!episode.data && !episode.error && <LoadingState />}
+      {episode.data && summary && <div className="cv-result">
+        <Facts items={[
+          { label: "Robot", value: name(selected) },
+          { label: "Task success", value: typeof summary.final_success === "boolean" ? summary.final_success ? "Yes" : "No" : null },
+          { label: "Simulated time", value: typeof summary.simulated_duration_s === "number" ? fmtSeconds(summary.simulated_duration_s) : null },
+          { label: "Wall time", value: typeof summary.wall_duration_s === "number" ? fmtSeconds(summary.wall_duration_s) : null },
+          { label: "Release", value: <span className="cv-mono">{episode.data.release_digest.slice(0, 12)}</span> },
+        ]} />
+        <TimingResult value={summary.timing} />
+        <EpisodeReplay key={episode.data.id} episodeId={episode.data.id} />
+      </div>}
+    </Card>}
+    <SavedResults projectId={projectId} />
+  </>;
+}
+
+/** The evals of the saved configurations assigned to this project, one row per robot. */
+function SavedResults({ projectId }: { projectId: string }) {
+  const ws = useWorkspace();
+  const configurations = ws.source === "document" ? ws.workspace?.configurations.filter(config => config.projectId === projectId) ?? [] : [];
+  const rows = configurations.flatMap(config => (ws.workspace?.robots ?? []).filter(robot => robot.configId === config.id).map(robot => ({ config, robot })));
+  if (!rows.length) return null;
+  return <section className="cv-row" aria-labelledby="pr-saved">
+    <div className="cv-row__head"><h2 id="pr-saved">Saved configurations</h2></div>
+    <Card label="Saved evaluations" flush><DataTable label="Saved evaluations" rows={rows} rowKey={row => row.robot.id} rowHref={row => routes.robot(row.config.id, row.robot.id)} columns={[
+      { key: "robot", header: "Robot", cell: row => row.robot.name },
+      { key: "configuration", header: "Configuration", cell: row => row.config.name },
+    ]} /></Card>
   </section>;
 }
 
-function SavedResults({ projectId }: { projectId: string }) {
-  const ws = useWorkspace();
-  const configurations = ws.source === "document" ? ws.workspace?.configurations.filter(c => c.projectId === projectId) ?? [] : [];
-  return <section className="project-section" aria-label="Saved evaluations"><h2>Evaluations and recordings</h2><p>Model setups retain their existing evaluation history, traces and available replay recordings.</p>{configurations.map(config => <article key={config.id} className="cv-card"><div><h3>{config.name}</h3>{ws.workspace?.robots.filter(r => r.configId === config.id).map(robot => <p key={robot.id}><Link className="cv-link" href={routes.robot(config.id, robot.id)}>{robot.name} · evaluations and traces →</Link></p>)}<Link className="cv-link" href={routes.configuration(config.id)}>Open configuration results</Link></div></article>)}{configurations.length === 0 && <p><Link className="cv-link" href={projectHref(projectId, "Configurations")}>Assign an existing model setup</Link> to include its evaluations here.</p>}</section>;
-}
-
+/** The workspace's configured device, inspected and tested on demand. */
 export function ProjectConnectionTools() {
   const [open, setOpen] = useState(false);
   const { operator } = useSession();
-  return <section className="project-create" aria-label="Connection diagnostics"><h2>Connection diagnostics</h2><p>Inspect and test the workspace’s configured device connection. The device shown here is named explicitly; registered robots keep their own computer connections.</p><button className="cv-btn cv-btn--secondary" onClick={() => setOpen(value => !value)}>{open ? "Close device tools" : "Open device tools"}</button>{open && <Portal active onSessionEnd={notifySessionExpired} canChat={operator} />}</section>;
+  return <section className="cv-row" aria-label="Connection diagnostics">
+    <div className="cv-strip cv-strip--static"><span>Workspace device</span><button className="cv-btn cv-btn--secondary cv-btn--small" type="button" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? "Close device tools" : "Open device tools"}</button></div>
+    {open && <div className="cv-embedded"><Portal active onSessionEnd={notifySessionExpired} canChat={operator} /></div>}
+  </section>;
 }

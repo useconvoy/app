@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, errorText } from "@/lib/platform/client";
+import type { Application, Project } from "@/lib/platform/client";
 import { notifySessionExpired } from "@/lib/configurations/session-events";
 
 export interface ProfileJoint { name: string; kind: string; lower: number | null; upper: number | null }
@@ -39,4 +40,34 @@ export function useProjectResource<T>(path: string | null, revision = 0, poll = 
     return () => { active = false; clearTimeout(timer); };
   }, [path, revision, poll]);
   return result?.path === path ? result : { path };
+}
+
+/** A runnable project configuration (an application with immutable releases) and its project. */
+export interface RunnableConfiguration { application: Application; project: Project }
+export interface RunnableConfigurations { items?: RunnableConfiguration[]; error?: string }
+
+/**
+ * Every runnable configuration in the account's projects: the projects, then each one's
+ * applications (the API lists applications per project). `items` is undefined until read.
+ */
+export function useRunnableConfigurations(enabled = true, revision = 0): RunnableConfigurations {
+  const key = enabled ? String(revision) : null;
+  const [result, setResult] = useState<RunnableConfigurations & { key: string | null }>();
+  useEffect(() => {
+    if (key === null) return;
+    let active = true;
+    void (async () => {
+      try {
+        const projects = await api<Project[]>("projects");
+        const lists = await Promise.all(projects.map(project => api<Application[]>(`applications?project_id=${encodeURIComponent(project.id)}`)));
+        if (active) setResult({ key, items: projects.flatMap((project, i) => lists[i].map(application => ({ application, project }))) });
+      } catch (cause) {
+        if (!active) return;
+        if (cause instanceof ApiError && cause.status === 401) { notifySessionExpired(); return; }
+        setResult({ key, error: errorText(cause) });
+      }
+    })();
+    return () => { active = false; };
+  }, [key]);
+  return result?.key === key && key !== null ? result : {};
 }

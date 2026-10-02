@@ -39,7 +39,7 @@ test("a project's imported evaluation replays exact planner state alongside acti
   });
 
   await page.goto(`/app/projects/${PROJECT}?section=runs`);
-  await page.getByRole("region", { name: "Saved evaluations" }).getByRole("link", { name: "Offline runner · evaluations and traces →" }).click();
+  await page.getByRole("region", { name: "Saved evaluations" }).getByRole("link", { name: "Offline runner", exact: true }).click();
   await page.getByRole("table", { name: "Evals", exact: true }).getByRole("link", { name: /^Eval 1/ }).click();
   await expect(page.locator(".cv-head .cv-tag")).toHaveText("Offline sim");
   await expect(page.getByRole("table", { name: "Metrics", exact: true })).toContainText("120.25");
