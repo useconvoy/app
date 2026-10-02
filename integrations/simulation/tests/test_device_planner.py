@@ -564,3 +564,26 @@ def test_evaluate_runs_device_episodes_one_after_another_and_stops_when_the_devi
     manifest = json.loads((tmp_path / "run" / "manifest.json").read_text())
     assert manifest["device_planner"]["prompt_version"] == PROMPT_VERSION
     assert manifest["device_planner"]["device_at_start"]["release_id"] == "rel_test"
+
+
+def test_an_unreadable_device_status_is_asked_again_before_it_stops_the_evaluation(monkeypatch):
+    from convoy_sim.bimanual_pill_task import evaluate as evaluation
+
+    monkeypatch.setattr(evaluation.time, "sleep", lambda seconds: None)
+
+    class Flaky(_ScriptedTransport):
+        def device(self):
+            self.checks += 1
+            if self.checks < 3:
+                raise ConnectionResetError("reset")
+            return super().device()
+
+    flaky = Flaky([])
+    assert evaluation._device_problem(flaky) is None and flaky.checks == 4  # two failures, then online
+
+    class Down(_ScriptedTransport):
+        def device(self):
+            raise TimeoutError("timed out")
+
+    assert evaluation._device_problem(Down([])) == "device status unreadable (TimeoutError)"
+    assert evaluation._device_problem(_ScriptedTransport([], online=False)).startswith("device offline")

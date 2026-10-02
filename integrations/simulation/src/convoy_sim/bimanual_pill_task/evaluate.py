@@ -94,6 +94,27 @@ def run_job(job: dict, planner=None, planner_log=None) -> dict:
     return summary
 
 
+def _device_problem(planner, attempts: int = 3, wait_s: float = 10.0) -> str | None:
+    """Why the device cannot take the next episode (None when it is online and eligible). A status that
+    cannot be read is asked again a few times before it counts as a problem."""
+    error = ""
+    for attempt in range(attempts):
+        try:
+            state = planner.device()
+        except Exception as failure:  # noqa: BLE001 - reported by class; a refused session stops at once
+            error = type(failure).__name__
+            if error == "SessionEnded":
+                return "the session was refused"
+            if attempt + 1 < attempts:
+                time.sleep(wait_s)
+            continue
+        if state.online and state.eligible:
+            return None
+        return f"device {'offline' if not state.online else 'not eligible'} at {state.checked_at}" + (
+            f": {state.reason}" if state.reason else "")
+    return f"device status unreadable ({error})"
+
+
 def _run_on_device(work: list[dict], planner, planner_log=None) -> list[dict]:
     """The device planner's episodes, one after another (one request at a time on the device). The device
     is checked before each episode; once it is offline, or an episode stops on the device (offline, model
@@ -102,10 +123,7 @@ def _run_on_device(work: list[dict], planner, planner_log=None) -> list[dict]:
     stopped: str | None = None
     for job in work:
         if stopped is None:
-            state = planner.device()
-            if not (state.online and state.eligible):
-                stopped = f"device {'offline' if not state.online else 'not eligible'} at {state.checked_at}" + (
-                    f": {state.reason}" if state.reason else "")
+            stopped = _device_problem(planner)
         if stopped is not None:
             summary = {"config": job["config"], "slice": job["slice"], "seed": job["seed"], "status": "not_run",
                        "reason": stopped, "success": False, "fraction_placed": 0.0, "placed": 0,
