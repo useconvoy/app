@@ -63,6 +63,7 @@ def create_app(settings: Settings | None = None, *, start_scheduler: bool | None
         robot_qualification,
         robot_registry,
         workspace_documents,
+        workspace_links,
     )
 
     app.include_router(platform.router)
@@ -72,6 +73,7 @@ def create_app(settings: Settings | None = None, *, start_scheduler: bool | None
     app.include_router(robot_qualification.router)
     app.include_router(evaluations.router)
     app.include_router(workspace_documents.router)
+    app.include_router(workspace_links.router)
     app.include_router(offline_evaluations.router)
     _include_optional(app)
 

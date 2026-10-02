@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { WorkspaceConfigurationLink } from "@/components/projects/WorkspaceConfigurationLink";
 import { useMemo, useState } from "react";
 import { currentRevision, getConfiguration, robotsFor, useWorkspace } from "@/lib/configurations/client";
 import { ROUTE_LABEL } from "@/lib/configurations/create";
@@ -81,6 +82,7 @@ function Dashboard({ config, views }: { config: Configuration; views: RobotView[
     <PageHeader title={config.name} badges={<ConfigStatusBadge status={config.status} />}
       actions={editable && <button className="cv-btn cv-btn--primary" type="button" onClick={() => { setAdded(null); setDialog("add"); }}>Add robot</button>} />
     <WorkspaceNotice />
+    {ws.source === "document" && ws.documentRevision !== null && <WorkspaceConfigurationLink configurationId={config.id} documentRevision={ws.documentRevision} saving={ws.saving} />}
     {attention.length > 0 && <Notice tone="warning">{attention.length === 1 ? `${attention[0].robot.name} needs attention.` : `${attention.length} robots need attention.`}</Notice>}
     {added && <Notice action={<button className="cv-link" type="button" onClick={() => setAdded(null)}>Dismiss</button>}>{added} added.</Notice>}
     <Tiles label="Summary">

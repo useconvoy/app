@@ -328,3 +328,34 @@ the preceding connection setup PR (#122) has all nine checks passing.
 This advances onboarding and local operation. Learned-model installation and edge/cloud pairing,
 legacy configuration reconciliation, scenario/chat tasking, registered visual replay, Isaac, fleet
 rollout and characterization remain required. No public rollout or cloud resources were created.
+
+## Saved workspace configuration links
+
+Branch: `codex/project-workspace-links`, stacked on the simulator service. An owner can explicitly link
+a saved workspace configuration to an executable configuration in an owned project. The saved setup
+now opens the project's release/deployment controls, and the executable configuration links back to
+the original specification and results. Linking, reviewing and unlinking do not rewrite the workspace,
+create robot identities, install policies, change immutable releases or deploy anything.
+
+The API stores the association separately, with the source configuration fingerprint and document
+revision. Source edits, missing configurations and unsupported document formats are reported rather
+than silently propagated into execution. Unrelated workspace activity does not invalidate the source
+fingerprint. Writes require an operator, current document revision and expected link identity; durable
+receipts make retries idempotent. Replacement produces a new link identity so an old unlink request
+cannot remove its replacement. Ownership covers both the source document and destination application.
+Sample workspaces are never linked. Deleting a document removes its links while preserving applications.
+
+PostgreSQL requires additive migration `0007_workspace_links`; SQLite creates the additive table using
+the existing startup mechanism. Verification: three link lifecycle/authority tests and 17 existing
+document/configuration API tests pass on SQLite; 43 selected PostgreSQL link, migration, workspace,
+evaluation and lifecycle checks pass, including schema/ORM parity. Twenty platform proxy checks and
+nine browser journeys pass, covering linking errors, navigation, preserved results, changed-source
+status, unlinking, existing configurations, accessibility and mobile overflow. The mobile rendering
+was inspected and its spacing improved. Frontend type checks, lint, token checks, production build and
+server lint pass. The preceding simulator-service PR (#123) now has all ten CI checks passing.
+
+This is explicit navigation reconciliation, not automatic translation of legacy model names or robot
+declarations into a runnable deployment. A newly created runnable configuration still requires profile,
+policy and target choices, followed by explicit linking from the saved setup. Broader project navigation,
+learned-policy installation and pairing, visual replay, task/scenario language, Isaac, staged fleets and
+characterization remain unfinished. No hosted rollout, new AWS resources or physical motion occurred.

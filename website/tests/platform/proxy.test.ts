@@ -5,6 +5,18 @@ import { allowedPlatformPath, platformOrigin, proxyPlatform } from "../../src/li
 const session = "convoy_session=cvs_abcdefghijklmnopqrstuvwx";
 const origin = "https://console.example.test";
 
+test("configuration links require one bounded lookup and expose only explicit mutations", () => {
+  for (const query of ["configuration_id=cfg_one", "application_id=app_one"]) {
+    assert.equal(allowedPlatformPath(["workspace-configuration-links"], "GET", new URLSearchParams(query)), `/api/v1/workspace-configuration-links?${query}`);
+  }
+  for (const query of ["", "configuration_id=a&application_id=b", "configuration_id=a&configuration_id=b", "owner_id=other", "configuration_id=../other"]) {
+    assert.equal(allowedPlatformPath(["workspace-configuration-links"], "GET", new URLSearchParams(query)), null);
+  }
+  assert.equal(allowedPlatformPath(["workspace-configuration-links"], "POST", new URLSearchParams()), "/api/v1/workspace-configuration-links");
+  assert.equal(allowedPlatformPath(["workspace-configuration-links", "wcl_one", "remove"], "POST", new URLSearchParams()), "/api/v1/workspace-configuration-links/wcl_one/remove");
+  assert.equal(allowedPlatformPath(["workspace-configuration-links", "wcl_one", "remove"], "GET", new URLSearchParams()), null);
+});
+
 test("robot asset uploads preserve bounded binary bytes and caller authentication", async () => {
   const original = globalThis.fetch;
   const path = "robot-profiles/rpf_one/simulation-assets/mujoco";

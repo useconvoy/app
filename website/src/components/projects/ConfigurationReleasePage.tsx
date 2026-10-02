@@ -8,6 +8,7 @@ import type { Application, Deployment, Release, Robot } from "@/lib/platform/cli
 import { useProjectResource } from "@/lib/projects/client";
 import { Shell } from "./Projects";
 import { ConfigurationEditor, REFERENCE_RUNTIME } from "./ConfigurationEditor";
+import { LinkedWorkspaceSpecifications } from "./WorkspaceConfigurationLink";
 
 function download(name: string, value: string) {
   const url = URL.createObjectURL(new Blob([value + "\n"], { type: "application/json" }));
@@ -62,6 +63,7 @@ export function ConfigurationReleasePage({ configurationId }: { configurationId:
       })}
     </section>}
     {manifest && !registered && <p>This release uses the existing {manifest.profile} execution interface. <Link className="cv-link" href="/app/applications">Open its existing application controls</Link>.</p>}
+    {application.data && <LinkedWorkspaceSpecifications applicationId={application.data.id} />}
     {editing && application.data && <section aria-label="New configuration release"><h2>New release</h2><p>Existing robots keep their deployed version until you explicitly deploy this release.</p>
       <ConfigurationEditor key={release?.id ?? "new"} projectId={application.data.project_id} application={application.data} initial={registered} onSaved={saved => { setSelected(saved.id); setRevision(n => n + 1); setEditing(false); }} />
     </section>}

@@ -23,7 +23,7 @@ test("project configuration creates an executable release, revises it and opens 
         "auth/me": { user: { email: "operator@example.test", role: "operator" }, installation: { simulator: true } },
         projects: [project], "robot-profiles": [profile], "robot-profiles/rpf_arm": profile, robots: [robot], "robots/rob_sim": robot,
         applications, "applications/app_one": applications[0], "applications/app_one/releases": releases,
-        deployments: [], missions: [], devices: [], "robot-connections": [], fleets: [],
+        deployments: [], missions: [], devices: [], "robot-connections": [], fleets: [], "workspace-configuration-links": [],
       };
       if (path.endsWith("/setup")) {
         const release = releases.find(r => path.includes(r.id))!;

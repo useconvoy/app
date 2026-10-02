@@ -304,6 +304,11 @@ body.cv-locked { overflow: hidden; }
 .project-connection { display: grid; gap: 12px; min-width: 0; border-top: 1px solid var(--border-subtle); padding-top: 20px; }
 .project-connection h3 { font-weight: 600; }
 .project-connection .project-actions { margin-top: 0; }
+.cv-card > .workspace-link-content { display: grid; gap: 12px; padding: 16px 20px; }
+.workspace-link-content .project-actions { margin-top: 0; gap: 8px; }
+.workspace-link-form { display: grid; gap: 12px; }
+.workspace-link-form .cv-btn { justify-self: start; }
+.cv-card:has(.workspace-link-content) { margin-bottom: 20px; }
 .project-command { padding: 12px; background: var(--background); border: 1px solid var(--border-subtle); }
 .robot-execution-content { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .robot-execution-content .project-actions { margin-top: 0; margin-bottom: 12px; }
